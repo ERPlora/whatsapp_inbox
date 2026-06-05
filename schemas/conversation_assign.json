@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "whatsapp_inbox.conversations.assign",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["conversation_id"],
+  "properties": {
+    "conversation_id": { "type": "string", "minLength": 1 },
+    "employee_id": { "type": "string", "default": "", "description": "'' para desasignar" }
+  }
+}

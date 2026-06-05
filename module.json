@@ -1,0 +1,184 @@
+{
+  "id": "whatsapp_inbox",
+  "name": "WhatsApp Inbox",
+  "version": "2.1.3",
+  "agent": {
+    "description": "Manages WhatsApp conversations, inbound requests, message templates, and channel settings: list and read conversations/messages, assign conversations, approve or reject requests, and configure the WhatsApp channel.",
+    "keywords": ["whatsapp", "inbox", "conversation", "message", "request", "template", "channel", "messaging"]
+  },
+  "depends_on": ["customers"],
+  "permissions": [
+    "whatsapp_inbox.view_conversation",
+    "whatsapp_inbox.send_message",
+    "whatsapp_inbox.view_request",
+    "whatsapp_inbox.change_request",
+    "whatsapp_inbox.delete_request",
+    "whatsapp_inbox.manage_settings",
+    "whatsapp_inbox.manage_connections"
+  ],
+  "role_permissions": {
+    "admin": ["*"],
+    "manager": [
+      "whatsapp_inbox.change_request",
+      "whatsapp_inbox.send_message",
+      "whatsapp_inbox.view_conversation",
+      "whatsapp_inbox.view_request"
+    ],
+    "employee": [
+      "whatsapp_inbox.send_message",
+      "whatsapp_inbox.view_conversation",
+      "whatsapp_inbox.view_request"
+    ]
+  },
+  "navigation": [
+    {
+      "id": "inbox",
+      "label": "Inbox",
+      "icon": "chatbubbles-outline",
+      "component": "erp-whatsapp-inbox-inbox"
+    },
+    {
+      "id": "requests",
+      "label": "Requests",
+      "icon": "clipboard-outline",
+      "component": "erp-whatsapp-inbox-requests"
+    },
+    {
+      "id": "templates",
+      "label": "Templates",
+      "icon": "document-text-outline",
+      "component": "erp-whatsapp-inbox-templates"
+    }
+  ],
+  "migrations": {
+    "sqlite": [
+      "migrations/sqlite/001_init.sql"
+    ]
+  },
+  "queries": {
+    "whatsapp_inbox.conversations.list": {
+      "permission": "whatsapp_inbox.view_conversation",
+      "sql": "queries/conversations_list.sql",
+      "schema": "schemas/conversations_list.json",
+      "ai": { "description": "Lists all WhatsApp conversations in the inbox" }
+    },
+    "whatsapp_inbox.conversations.get": {
+      "permission": "whatsapp_inbox.view_conversation",
+      "sql": "queries/conversation_get.sql",
+      "schema": "schemas/conversation_get.json",
+      "ai": { "description": "Retrieves the details of a WhatsApp conversation by its ID" }
+    },
+    "whatsapp_inbox.messages.list": {
+      "permission": "whatsapp_inbox.view_conversation",
+      "sql": "queries/messages_list.sql",
+      "schema": "schemas/messages_list.json",
+      "ai": { "description": "Lists the messages within a WhatsApp conversation" }
+    },
+    "whatsapp_inbox.requests.list": {
+      "permission": "whatsapp_inbox.view_request",
+      "sql": "queries/requests_list.sql",
+      "schema": "schemas/requests_list.json",
+      "ai": { "description": "Lists inbound requests received through the WhatsApp channel" }
+    },
+    "whatsapp_inbox.requests.get": {
+      "permission": "whatsapp_inbox.view_request",
+      "sql": "queries/request_get.sql",
+      "schema": "schemas/request_get.json",
+      "ai": { "description": "Retrieves the details of a WhatsApp request by its ID" }
+    },
+    "whatsapp_inbox.templates.list": {
+      "permission": "whatsapp_inbox.manage_settings",
+      "sql": "queries/templates_list.sql",
+      "schema": "schemas/templates_list.json",
+      "ai": { "description": "Lists the available WhatsApp message templates" }
+    },
+    "whatsapp_inbox.settings.get": {
+      "permission": "whatsapp_inbox.manage_settings",
+      "sql": "queries/settings_get.sql",
+      "ai": { "description": "Retrieves the current WhatsApp channel configuration" }
+    }
+  },
+  "commands": {
+    "whatsapp_inbox.conversations.assign": {
+      "permission": "whatsapp_inbox.manage_settings",
+      "transaction": true,
+      "sql": ["commands/conversation_assign.sql"],
+      "schema": "schemas/conversation_assign.json",
+      "emit": ["whatsapp_inbox.conversation.assigned"],
+      "ai": { "description": "Assigns a WhatsApp conversation to an agent or team" }
+    },
+    "whatsapp_inbox.requests.approve": {
+      "permission": "whatsapp_inbox.change_request",
+      "transaction": true,
+      "sql": ["commands/request_approve.sql"],
+      "schema": "schemas/request_approve.json",
+      "emit": ["whatsapp_inbox.request.approved"],
+      "ai": { "description": "Approves an inbound WhatsApp request" }
+    },
+    "whatsapp_inbox.requests.reject": {
+      "permission": "whatsapp_inbox.change_request",
+      "transaction": true,
+      "sql": ["commands/request_reject.sql"],
+      "schema": "schemas/request_reject.json",
+      "emit": ["whatsapp_inbox.request.rejected"],
+      "ai": { "description": "Rejects an inbound WhatsApp request" }
+    },
+    "whatsapp_inbox.requests.delete": {
+      "permission": "whatsapp_inbox.delete_request",
+      "transaction": true,
+      "sql": ["commands/request_delete.sql"],
+      "schema": "schemas/request_delete.json",
+      "emit": ["whatsapp_inbox.request.deleted"],
+      "ai": { "description": "Soft-deletes a WhatsApp request; already-fulfilled requests cannot be deleted" }
+    },
+    "whatsapp_inbox.requests.fulfill": {
+      "permission": "whatsapp_inbox.change_request",
+      "schema": "schemas/request_fulfill.json",
+      "handler": {
+        "type": "wasm",
+        "file": "dist/handler.wasm",
+        "function": "fulfill_request"
+      },
+      "emit": ["whatsapp_inbox.request.fulfilled"],
+      "ai": { "description": "Marks a WhatsApp request as fulfilled and executes its fulfillment logic" }
+    },
+    "whatsapp_inbox.templates.create": {
+      "permission": "whatsapp_inbox.manage_settings",
+      "transaction": true,
+      "sql": ["commands/template_create.sql"],
+      "schema": "schemas/template_create.json",
+      "emit": ["whatsapp_inbox.template.created"],
+      "ai": { "description": "Creates a new WhatsApp message template" }
+    },
+    "whatsapp_inbox.templates.update": {
+      "permission": "whatsapp_inbox.manage_settings",
+      "transaction": true,
+      "sql": ["commands/template_update.sql"],
+      "schema": "schemas/template_update.json",
+      "emit": ["whatsapp_inbox.template.updated"],
+      "ai": { "description": "Updates the content of an existing WhatsApp message template" }
+    },
+    "whatsapp_inbox.templates.delete": {
+      "permission": "whatsapp_inbox.manage_settings",
+      "transaction": true,
+      "sql": ["commands/template_delete.sql"],
+      "schema": "schemas/template_delete.json",
+      "emit": ["whatsapp_inbox.template.deleted"],
+      "ai": { "description": "Soft-deletes a WhatsApp message template" }
+    },
+    "whatsapp_inbox.settings.upsert": {
+      "permission": "whatsapp_inbox.manage_settings",
+      "transaction": true,
+      "sql": ["commands/settings_upsert.sql"],
+      "schema": "schemas/settings_upsert.json",
+      "emit": ["whatsapp_inbox.settings.updated"],
+      "ai": { "description": "Creates or updates the WhatsApp channel configuration" }
+    }
+  },
+  "events": {
+    "listen": []
+  },
+  "ui": {
+    "entry": "dist/whatsapp_inbox.esm.js"
+  }
+}

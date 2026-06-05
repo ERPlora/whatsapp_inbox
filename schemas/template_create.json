@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "whatsapp_inbox.templates.create",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name"],
+  "properties": {
+    "name": { "type": "string", "minLength": 1, "maxLength": 255 },
+    "language": { "type": "string", "default": "es", "maxLength": 10 },
+    "category": {
+      "type": "string",
+      "enum": ["MARKETING", "UTILITY", "AUTHENTICATION"],
+      "default": "UTILITY"
+    },
+    "header": { "type": "string", "default": "" },
+    "body": { "type": "string", "default": "" },
+    "footer": { "type": "string", "default": "" },
+    "variables": { "type": "string", "default": "[]", "description": "JSON array de nombres de variable" }
+  }
+}

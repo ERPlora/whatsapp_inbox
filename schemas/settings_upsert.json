@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "whatsapp_inbox.settings.upsert",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "is_enabled", "account_mode", "auto_reply_enabled", "approval_mode",
+    "require_confirmation", "request_schema", "gpt_system_prompt",
+    "input_modules", "output_modules", "auto_close_hours",
+    "notify_staff_new_request", "greeting_message", "out_of_hours_message"
+  ],
+  "properties": {
+    "is_enabled": { "type": "integer", "enum": [0, 1] },
+    "account_mode": { "type": "string", "enum": ["shared", "per_employee"] },
+    "auto_reply_enabled": { "type": "integer", "enum": [0, 1] },
+    "approval_mode": { "type": "string", "enum": ["auto", "manual"] },
+    "require_confirmation": { "type": "integer", "enum": [0, 1] },
+    "request_schema": { "type": "string", "description": "JSON: esquema dinámico de requests" },
+    "gpt_system_prompt": { "type": "string" },
+    "input_modules": { "type": "string", "description": "JSON array de module_id" },
+    "output_modules": { "type": "string", "description": "JSON array de module_id" },
+    "auto_close_hours": { "type": "integer", "minimum": 0 },
+    "notify_staff_new_request": { "type": "integer", "enum": [0, 1] },
+    "greeting_message": { "type": "string" },
+    "out_of_hours_message": { "type": "string" }
+  }
+}

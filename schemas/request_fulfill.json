@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "whatsapp_inbox.requests.fulfill",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["request_id"],
+  "properties": {
+    "request_id": { "type": "string", "minLength": 1 },
+    "create_linked_object": { "type": "boolean", "default": false }
+  }
+}

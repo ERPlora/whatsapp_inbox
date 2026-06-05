@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "whatsapp_inbox.templates.list",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "active_only": { "type": "integer", "enum": [0, 1], "default": 1 }
+  }
+}
