@@ -6,7 +6,3 @@ SELECT id, customer_id, assigned_to_id, phone_number_id, wa_contact_id,
        contact_name, contact_phone, status, last_message_at, unread_count
 FROM whatsapp_inbox_conversation
 WHERE hub_id = :hub_id AND is_deleted = 0
-  AND (:status = '' OR status = :status)
-  AND (:assigned_to_id = '' OR assigned_to_id = :assigned_to_id)
-  AND (:search = '' OR contact_name LIKE '%' || :search || '%')
-ORDER BY last_message_at DESC;

@@ -4,7 +4,7 @@
 -- Modelos: WhatsAppInboxSettings (config singleton por hub), EmployeeWhatsAppLink
 -- (mapea empleado→número), WhatsAppConversation, WhatsAppMessage, InboxRequest
 -- (request con esquema dinámico) y WhatsAppTemplate (plantillas aprobadas por Meta).
--- Contrato de fila estándar de hub-next (§2.5): hub_id + soft-delete + auditoría.
+-- Contrato de fila estándar de hub (§2.5): hub_id + soft-delete + auditoría.
 
 -- Configuración por hub (singleton: un único registro por hub_id).
 -- account_mode: shared|per_employee. approval_mode: auto|manual.
