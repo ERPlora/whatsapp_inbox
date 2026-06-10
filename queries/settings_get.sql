@@ -4,7 +4,8 @@
 SELECT id, is_enabled, account_mode, auto_reply_enabled, approval_mode,
        require_confirmation, request_schema, gpt_system_prompt,
        input_modules, output_modules, auto_close_hours,
-       notify_staff_new_request, greeting_message, out_of_hours_message
+       notify_staff_new_request, greeting_message, out_of_hours_message,
+       free_tier_monthly_limit
 FROM whatsapp_inbox_settings
 WHERE hub_id = :hub_id AND is_deleted = 0
 LIMIT 1;

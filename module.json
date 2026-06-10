@@ -65,7 +65,8 @@
   ],
   "migrations": {
     "sqlite": [
-      "migrations/sqlite/001_init.sql"
+      "migrations/sqlite/001_init.sql",
+      "migrations/sqlite/002_free_tier.sql"
     ]
   },
   "queries": {
@@ -444,6 +445,22 @@
         "description": "Soft-deletes a WhatsApp message template"
       }
     },
+    "whatsapp_inbox.messages.ingest": {
+      "permission": "whatsapp_inbox.manage_connections",
+      "transaction": true,
+      "sql": [
+        "commands/message_ingest_conv.sql",
+        "commands/message_ingest_msg.sql",
+        "commands/message_ingest_stats.sql"
+      ],
+      "schema": "schemas/message_ingest.json",
+      "emit": [
+        "whatsapp_inbox.message.received"
+      ],
+      "ai": {
+        "description": "Ingests an inbound WhatsApp message: upserts the conversation, persists the message, and emits whatsapp_inbox.message.received for other modules (e.g. communications inbox) to react. Enforces the free-tier monthly message limit when configured."
+      }
+    },
     "whatsapp_inbox.settings.upsert": {
       "permission": "whatsapp_inbox.manage_settings",
       "transaction": true,
@@ -460,7 +477,19 @@
     }
   },
   "events": {
-    "listen": []
+    "listen": [],
+    "emit": [
+      "whatsapp_inbox.message.received",
+      "whatsapp_inbox.conversation.assigned",
+      "whatsapp_inbox.request.approved",
+      "whatsapp_inbox.request.rejected",
+      "whatsapp_inbox.request.fulfilled",
+      "whatsapp_inbox.request.deleted",
+      "whatsapp_inbox.template.created",
+      "whatsapp_inbox.template.updated",
+      "whatsapp_inbox.template.deleted",
+      "whatsapp_inbox.settings.updated"
+    ]
   },
   "ui": {
     "entry": "dist/whatsapp_inbox.esm.js"
