@@ -22,6 +22,12 @@
     "auto_close_hours": { "type": "integer", "minimum": 0 },
     "notify_staff_new_request": { "type": "integer", "enum": [0, 1] },
     "greeting_message": { "type": "string" },
-    "out_of_hours_message": { "type": "string" }
+    "out_of_hours_message": { "type": "string" },
+    "free_tier_monthly_limit": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "description": "Límite mensual de mensajes entrantes de la capa gratuita. 0 = sin límite. Gestionado por marketplace/billing."
+    }
   }
 }

@@ -7,11 +7,13 @@ INSERT INTO whatsapp_inbox_settings
   (id, hub_id, is_enabled, account_mode, auto_reply_enabled, approval_mode,
    require_confirmation, request_schema, gpt_system_prompt, input_modules, output_modules,
    auto_close_hours, notify_staff_new_request, greeting_message, out_of_hours_message,
+   free_tier_monthly_limit,
    is_deleted, created_by, updated_by, created_at, updated_at)
 VALUES
   (:new_id, :hub_id, :is_enabled, :account_mode, :auto_reply_enabled, :approval_mode,
    :require_confirmation, :request_schema, :gpt_system_prompt, :input_modules, :output_modules,
    :auto_close_hours, :notify_staff_new_request, :greeting_message, :out_of_hours_message,
+   :free_tier_monthly_limit,
    0, :current_user_id, :current_user_id, :now, :now)
 ON CONFLICT(hub_id) DO UPDATE SET
    is_enabled               = excluded.is_enabled,
@@ -27,5 +29,6 @@ ON CONFLICT(hub_id) DO UPDATE SET
    notify_staff_new_request = excluded.notify_staff_new_request,
    greeting_message         = excluded.greeting_message,
    out_of_hours_message     = excluded.out_of_hours_message,
+   free_tier_monthly_limit  = excluded.free_tier_monthly_limit,
    updated_by               = :current_user_id,
    updated_at               = :now;

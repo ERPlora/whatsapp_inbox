@@ -83,7 +83,8 @@ export class ErpWhatsappInboxInbox extends LitElement {
     await this.ctrl.load();
     try {
       const off1 = erplora().on('whatsapp_inbox.conversation.assigned', () => this.ctrl.load());
-      this.unsub = () => off1();
+      const off2 = erplora().on('whatsapp_inbox.message.received', () => this.ctrl.load());
+      this.unsub = () => { off1(); off2(); };
     } catch {
       /* sin SDK (preview) → sin reactividad en vivo */
     }
