@@ -403,6 +403,12 @@
         "description": "Marks a WhatsApp request as fulfilled and executes its fulfillment logic"
       }
     },
+    "whatsapp_inbox._fulfill_transition": {
+      "permission": "whatsapp_inbox.change_request",
+      "sql": [
+        "commands/_fulfill_transition.sql"
+      ]
+    },
     "whatsapp_inbox.templates.create": {
       "permission": "whatsapp_inbox.manage_settings",
       "transaction": true,

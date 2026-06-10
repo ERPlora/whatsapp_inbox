@@ -17,8 +17,16 @@ sentencia SQL y debe convertirse en handler WASM (`handler/src/lib.rs` → `dist
 
 ---
 
-## 1. `fulfill_request` (command `whatsapp_inbox.requests.fulfill`) — IMPLEMENTADO como handler WASM en module.json
+## 1. `fulfill_request` (command `whatsapp_inbox.requests.fulfill`) — handler COMPILADO (`handler/src/lib.rs` → `dist/handler.wasm`); rama simple operativa, rama de dispatch PENDIENTE de runtime
 Origen: `RequestService.fulfill_request` + `actions.execute_action`.
+
+> Estado 2026-06-10: la rama `create_linked_object=false` está implementada (intención
+> `whatsapp_inbox._fulfill_transition`, guarda `confirmed`→`fulfilled` en el WHERE). La rama
+> `create_linked_object=true` devuelve el error `cross_module_dispatch_unsupported`: el
+> runtime actual **rechaza** operaciones de un handler sobre commands de otros módulos
+> (`validate_operation`, aislamiento ARQUITECTURA.md §5.3) y no existe aún la capacidad de
+> lecturas pre-cargadas (settings/request). Desbloquear el dispatch = decisión de modelo de
+> comandos (columna del humano), ver issue whatsapp_inbox#3.
 - Guarda de estado: **solo** desde `confirmed` (si no → error `invalid_status`).
 - Si `create_linked_object = false`: solo transicionar la request a `fulfilled`
  (`status='fulfilled'`, `fulfilled_at = now`). Esto NO necesita WASM por sí solo, pero
