@@ -1,7 +1,7 @@
 {
   "id": "whatsapp_inbox",
   "name": "WhatsApp Inbox",
-  "version": "2.1.5",
+  "version": "2.1.6",
   "agent": {
     "description": "Manages WhatsApp conversations, inbound requests, message templates, and channel settings: list and read conversations/messages, assign conversations, approve or reject requests, and configure the WhatsApp channel.",
     "keywords": [
@@ -505,6 +505,15 @@
     "type": "subscription",
     "trial_days": 15,
     "tiers": [
+      {
+        "slug": "free",
+        "name": "WhatsApp Free",
+        "price": 0,
+        "interval": "month",
+        "quota": {
+          "conversations_per_month": 30
+        }
+      },
       {
         "slug": "starter",
         "name": "WhatsApp Starter",
