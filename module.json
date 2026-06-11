@@ -1,7 +1,7 @@
 {
   "id": "whatsapp_inbox",
   "name": "WhatsApp Inbox",
-  "version": "2.1.6",
+  "version": "2.1.7",
   "agent": {
     "description": "Manages WhatsApp conversations, inbound requests, message templates, and channel settings: list and read conversations/messages, assign conversations, approve or reject requests, and configure the WhatsApp channel.",
     "keywords": [
@@ -529,7 +529,7 @@
         "price": 59.99,
         "interval": "month",
         "quota": {
-          "conversations_per_month": 1000
+          "conversations_per_month": 800
         }
       },
       {
@@ -538,9 +538,9 @@
         "price": 19.99,
         "interval": "month",
         "metered": true,
-        "overage_price": 0.15,
+        "overage_price": 0.075,
         "quota": {
-          "conversations_per_month": 200
+          "conversations_per_month": 270
         }
       }
     ]
