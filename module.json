@@ -1,7 +1,7 @@
 {
   "id": "whatsapp_inbox",
   "name": "WhatsApp Inbox",
-  "version": "2.1.3",
+  "version": "2.1.4",
   "agent": {
     "description": "Manages WhatsApp conversations, inbound requests, message templates, and channel settings: list and read conversations/messages, assign conversations, approve or reject requests, and configure the WhatsApp channel.",
     "keywords": [
@@ -499,5 +499,30 @@
   },
   "ui": {
     "entry": "dist/whatsapp_inbox.esm.js"
+  },
+  "billing": {
+    "tier": "premium",
+    "type": "subscription",
+    "trial_days": 15,
+    "tiers": [
+      {
+        "slug": "starter",
+        "name": "WhatsApp Starter",
+        "price": 14.99,
+        "interval": "month",
+        "quota": {
+          "conversations_per_month": 200
+        }
+      },
+      {
+        "slug": "business",
+        "name": "WhatsApp Business",
+        "price": 59.99,
+        "interval": "month",
+        "quota": {
+          "conversations_per_month": 1000
+        }
+      }
+    ]
   }
 }
