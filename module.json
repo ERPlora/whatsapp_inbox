@@ -66,7 +66,8 @@
   "migrations": {
     "sqlite": [
       "migrations/sqlite/001_init.sql",
-      "migrations/sqlite/002_free_tier.sql"
+      "migrations/sqlite/002_free_tier.sql",
+      "migrations/sqlite/003_request_counter.sql"
     ]
   },
   "queries": {
@@ -409,6 +410,33 @@
         "commands/_fulfill_transition.sql"
       ]
     },
+    "whatsapp_inbox.requests.ingest": {
+      "permission": "whatsapp_inbox.manage_connections",
+      "schema": "schemas/request_ingest.json",
+      "handler": {
+        "type": "wasm",
+        "file": "dist/handler.wasm",
+        "function": "parse_inbound_message"
+      },
+      "emit": [
+        "whatsapp_inbox.request.created"
+      ],
+      "ai": {
+        "description": "Creates the AI-parsed request from an inbound message already ingested by messages.ingest: validates parsed_data against the dynamic request_schema, maps confidence to confidence_score, generates the atomic WA-YYYYMMDD-NNNN reference number, and sets status from approval_mode (auto=confirmed, manual=pending_review)."
+      }
+    },
+    "whatsapp_inbox._bump_request_counter": {
+      "permission": "whatsapp_inbox.manage_connections",
+      "sql": [
+        "commands/_bump_request_counter.sql"
+      ]
+    },
+    "whatsapp_inbox._insert_request": {
+      "permission": "whatsapp_inbox.manage_connections",
+      "sql": [
+        "commands/_insert_request.sql"
+      ]
+    },
     "whatsapp_inbox.templates.create": {
       "permission": "whatsapp_inbox.manage_settings",
       "transaction": true,
@@ -486,6 +514,7 @@
     "listen": [],
     "emit": [
       "whatsapp_inbox.message.received",
+      "whatsapp_inbox.request.created",
       "whatsapp_inbox.conversation.assigned",
       "whatsapp_inbox.request.approved",
       "whatsapp_inbox.request.rejected",

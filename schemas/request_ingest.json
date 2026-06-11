@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "whatsapp_inbox.requests.ingest",
+  "description": "Crea la request parseada por el LLM a partir de un mensaje entrante ya ingerido (pipeline del webhook: messages.ingest persiste el mensaje; este command crea la request). El JSON del modelo llega ya resuelto vía el proxy AI del Cloud — el hub nunca habla con el LLM directamente.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["conversation_id", "parsed_data"],
+  "properties": {
+    "conversation_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "ID de la conversación (whatsapp_inbox_conversation) de la que procede el mensaje"
+    },
+    "parsed_data": {
+      "type": "object",
+      "description": "JSON estructurado devuelto por el LLM (datos de la request). Se persiste en `data`."
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0,
+      "description": "Confianza del parseo del modelo (0.0–1.0) → confidence_score"
+    },
+    "request_type": {
+      "type": "string",
+      "enum": ["order", "reservation", "appointment", "quote", "transport", "custom"],
+      "description": "Tipo de request; si falta se toma de parsed_data.request_type y, en último término, 'custom'"
+    },
+    "raw_summary": {
+      "type": "string",
+      "default": "",
+      "description": "Resumen en texto plano de la petición; si falta se toma de parsed_data.summary"
+    },
+    "request_schema": {
+      "type": "object",
+      "description": "Esquema dinámico de requests (whatsapp_inbox_settings.request_schema) aportado por el caller; el handler valida parsed_data contra required/properties.type (no-autoritativo, ADR-0021)"
+    }
+  }
+}

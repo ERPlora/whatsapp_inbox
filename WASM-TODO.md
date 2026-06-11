@@ -54,30 +54,42 @@ Origen: `RequestService.fulfill_request` + `actions.execute_action`.
 - **Regla de borrado relacionada** (ya en `request_delete.sql`): una request `fulfilled`
  no se puede soft-deletear (la cadena de auditoría hacia el objeto enlazado debe sobrevivir).
 
-## 2. Generación atómica de `reference_number`
+## 2. Generación atómica de `reference_number` — IMPLEMENTADO (2026-06-11, ADR-0008)
 Origen: las requests legacy llevan `reference_number` único por hub, indexado.
 - Debe ser atómico (sin ventana SELECT→UPDATE) en SQLite y Postgres.
-- Se resuelve como **capacidad del runtime** (counter UPSERT por hub, p.ej. `INSERT ... ON
- CONFLICT(hub_id, scope) DO UPDATE ... RETURNING`) invocada por el handler; el WASM solo
- formatea el número (p.ej. `WA-YYYYMMDD-NNNN`, 4 dígitos secuenciales por hub+día).
-- Necesario cuando se cree la request desde el pipeline de ingesta (pieza 5).
+- **Resuelto module-side** (ADR-0008: el contador NO es capacidad de runtime compartida;
+ mismo patrón que `sales_sale_counter` / `appointments_appointment_counter`):
+ tabla `whatsapp_inbox_request_counter` (migración `003_request_counter.sql`, único
+ `(hub_id, day)`) + command interno `_bump_request_counter.sql` (UPSERT +1) como primera
+ intención del handler; `_insert_request.sql` lee el contador por subquery en la MISMA
+ transacción y formatea `'WA-' || :day || '-' || printf('%04d', last_number)`
+ (4 dígitos secuenciales por hub+día; `printf()` es SQLite → Postgres usará `lpad()`).
 
-## 3. Parseo de IA del mensaje entrante → `InboxRequest` (`parse_inbound_message`)
+## 3. Parseo de IA del mensaje entrante → `InboxRequest` (`parse_inbound_message`) — IMPLEMENTADO (2026-06-11)
 Origen: `bot.build_system_prompt` + `parsed_data`/`confidence` del response de GPT.
 - hub **NUNCA habla con LLMs directamente** (§9.3): la llamada al modelo va por el
  proxy del Cloud Portal (metered). El handler WASM recibe el **JSON ya devuelto por el
- modelo** (vía capacidad host `ai.generate` mediada por el runtime), no llama al LLM él mismo.
-- Lógica WASM:
- - Validar `parsed_data` contra el `request_schema` dinámico de settings (JSON Schema
- embebido en `whatsapp_inbox_settings.request_schema`). Ver `bot.validate_request_schema`.
- - Mapear `confidence` (0.0–1.0) a `confidence_score`.
- - Decidir `request_type` (order|reservation|appointment|quote|transport|custom) según el
- esquema/uso configurado.
- - Devolver la intención de INSERT de la `InboxRequest` (con `reference_number` de pieza 2,
- `status='pending_review'` salvo que `approval_mode='auto'` → `confirmed`), más la
- intención de INSERT del `WhatsAppMessage` inbound.
-- Sustituye los `DEFAULT_SCHEMAS` legacy (order/reservation/appointment/quote): se cargan
- como JSON de plantilla en el handler.
+ modelo** en el payload del command, no llama al LLM él mismo.
+- Command público `whatsapp_inbox.requests.ingest` (permiso `manage_connections`, mismo
+ caller que `messages.ingest`: el pipeline del webhook) → handler `parse_inbound_message`
+ (`handler/src/lib.rs`), emite `whatsapp_inbox.request.created`:
+ - Valida `parsed_data` contra el `request_schema` dinámico **aportado por el caller** en
+ el payload (subconjunto JSON Schema: `required` + `properties.*.type`) — el runtime no
+ pre-carga lecturas para el guest, así que la validación de forma es no-autoritativa
+ (patrón ADR-0021/appointments); error `schema_validation_failed` si no cumple.
+ - Mapea `confidence` (0.0–1.0, clamp) a `confidence_score`.
+ - Decide `request_type` (payload > `parsed_data.request_type` > `custom`; desconocido →
+ `custom`) y `raw_summary` (payload > `parsed_data.summary`).
+ - Devuelve las intenciones `_bump_request_counter` + `_insert_request` (id de
+ `context.new_ids`). Las garantías **autoritativas** viven en el SQL de
+ `_insert_request`: `reference_number` (pieza 2), `status` decidido por subquery sobre
+ `whatsapp_inbox_settings.approval_mode` (`auto`→`confirmed` + `confirmed_at`; `manual`
+ o sin settings→`pending_review`), `customer_id` heredado de la conversación y guarda
+ de conversación viva del hub (0 filas si no existe).
+ - La parte de mensaje inbound + conversación la cubre el command Tier-0
+ `whatsapp_inbox.messages.ingest` (no se duplica aquí).
+- Los `DEFAULT_SCHEMAS` legacy (order/reservation/appointment/quote) pertenecen a la pieza
+ 6 (`configure` por caso de uso), que los sembrará en `settings.request_schema`.
 
 ## 4. Construcción de contexto del bot (`build_catalog_context` / `build_output_context`)
 Origen: `bot.INPUT_MODULE_REGISTRY` + `build_catalog_context_async` + `build_output_context`.
