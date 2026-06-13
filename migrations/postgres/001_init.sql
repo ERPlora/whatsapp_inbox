@@ -126,7 +126,7 @@ CREATE TABLE IF NOT EXISTS whatsapp_inbox_request (
     status           TEXT NOT NULL DEFAULT 'pending_review',
     data             TEXT NOT NULL DEFAULT '{}',        -- JSON: datos estructurados parseados por IA
     raw_summary      TEXT NOT NULL DEFAULT '',
-    confidence_score NUMERIC NOT NULL DEFAULT 0,
+    confidence_score REAL NOT NULL DEFAULT 0,         -- confianza IA 0.0–1.0 (no es dinero) → REAL portable (ADR-0007)
     notes            TEXT NOT NULL DEFAULT '',
     assigned_to_id   TEXT,
     linked_module    TEXT NOT NULL DEFAULT '',

@@ -28,6 +28,6 @@ WHERE NOT EXISTS (
     AND (
       SELECT COUNT(*) FROM whatsapp_inbox_message m
       WHERE m.hub_id = :hub_id AND m.direction = 'inbound' AND m.is_deleted = 0
-        AND m.created_at >= datetime(:now, 'start of month')
+        AND m.created_at >= erp_month_start(:now)
     ) >= s.free_tier_monthly_limit
 );

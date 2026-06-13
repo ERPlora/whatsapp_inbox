@@ -14,7 +14,7 @@
 --  * customer_id: heredado de la conversación (referencia blanda a customers).
 --  * Guarda de conversación: el SELECT exterior produce 0 filas si la conversación no
 --    existe en este hub o está borrada → el runtime devuelve error al caller.
--- printf() es de SQLite; Postgres usará lpad() (portabilidad SQL §14, ADR-0007).
+-- Padding portable: erp_pad(valor, ancho) (ADR-0007) → printf/lpad por dialecto en el shim.
 INSERT INTO whatsapp_inbox_request
   (id, hub_id, conversation_id, customer_id, reference_number, request_type, status,
    data, raw_summary, confidence_score, notes, assigned_to_id, linked_module,
@@ -25,10 +25,10 @@ SELECT
   :hub_id,
   c.id,
   c.customer_id,
-  'WA-' || :day || '-' || printf('%04d', (
+  'WA-' || :day || '-' || erp_pad((
       SELECT last_number FROM whatsapp_inbox_request_counter
       WHERE hub_id = :hub_id AND day = :day
-  )),
+  ), 4),
   :request_type,
   CASE WHEN (SELECT s.approval_mode FROM whatsapp_inbox_settings s
              WHERE s.hub_id = :hub_id AND s.is_deleted = 0) = 'auto'
