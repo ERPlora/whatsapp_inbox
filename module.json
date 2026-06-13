@@ -511,7 +511,7 @@
     }
   },
   "events": {
-    "listen": [],
+    "listen": {},
     "emit": [
       "whatsapp_inbox.message.received",
       "whatsapp_inbox.request.created",
