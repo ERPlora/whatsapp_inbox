@@ -1,0 +1,14 @@
+{
+  "name": "Bandeja de WhatsApp",
+  "navigation": {
+    "inbox": {
+      "label": "Bandeja de entrada"
+    },
+    "requests": {
+      "label": "Solicitudes"
+    },
+    "templates": {
+      "label": "Plantillas"
+    }
+  }
+}

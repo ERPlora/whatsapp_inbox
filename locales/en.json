@@ -1,0 +1,14 @@
+{
+  "name": "WhatsApp Inbox",
+  "navigation": {
+    "inbox": {
+      "label": "Inbox"
+    },
+    "requests": {
+      "label": "Requests"
+    },
+    "templates": {
+      "label": "Templates"
+    }
+  }
+}
