@@ -1,7 +1,7 @@
 {
   "id": "whatsapp_inbox",
   "name": "WhatsApp Inbox",
-  "version": "2.1.8",
+  "version": "2.1.9",
   "agent": {
     "description": "Manages WhatsApp conversations, inbound requests, message templates, and channel settings: list and read conversations/messages, assign conversations, approve or reject requests, and configure the WhatsApp channel.",
     "keywords": [
@@ -74,7 +74,6 @@
     "whatsapp_inbox.conversations.list": {
       "permission": "whatsapp_inbox.view_conversation",
       "sql": "queries/conversations_list.sql",
-      "schema": "schemas/conversations_list.json",
       "list": {
         "search": [
           "customer_id",
@@ -142,7 +141,6 @@
     "whatsapp_inbox.messages.list": {
       "permission": "whatsapp_inbox.view_conversation",
       "sql": "queries/messages_list.sql",
-      "schema": "schemas/messages_list.json",
       "list": {
         "sort": [
           "id",
@@ -192,7 +190,6 @@
     "whatsapp_inbox.requests.list": {
       "permission": "whatsapp_inbox.view_request",
       "sql": "queries/requests_list.sql",
-      "schema": "schemas/requests_list.json",
       "list": {
         "search": [
           "reference_number",
@@ -258,7 +255,6 @@
     "whatsapp_inbox.templates.list": {
       "permission": "whatsapp_inbox.manage_settings",
       "sql": "queries/templates_list.sql",
-      "schema": "schemas/templates_list.json",
       "list": {
         "search": [
           "name"
