@@ -29,6 +29,7 @@
     "colCategory": "Category",
     "colMetaStatus": "Meta status",
     "colActive": "Active",
+    "colBody": "Body",
     "statusActive": "Active",
     "statusClosed": "Closed",
     "typeOrder": "Order",
