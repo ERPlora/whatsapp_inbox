@@ -5,12 +5,17 @@ import '@erplora/outfitkit/ok-data-table';
 import type { DataTableColumn } from '@erplora/outfitkit';
 import { createListController } from '@erplora/module-sdk';
 import type { ListController, ListClient, ListParams, ListPage } from '@erplora/module-sdk';
+import esLocale from '../../../locales/es.json';
+import enLocale from '../../../locales/en.json';
+const CATALOG: Record<string, unknown> = { es: esLocale, en: enLocale };
 
 interface ErploraClientLike extends ListClient {
   query<T = unknown>(name: string, params?: Record<string, unknown>): Promise<T>;
   queryPage<R = unknown>(name: string, params: ListParams): Promise<ListPage<R>>;
   command<T = unknown>(name: string, payload?: Record<string, unknown>): Promise<T>;
   on(event: string, cb: (payload: unknown) => void): () => void;
+  locale: string;
+  t(catalog: Record<string, unknown>, key: string, params?: Record<string, unknown>): string;
 }
 
 interface Template {
@@ -56,42 +61,48 @@ export class ErpWhatsappInboxTemplates extends LitElement {
 
   private unsub?: () => void;
 
-  private columns: DataTableColumn[] = [
-    { key: 'name', header: 'Nombre', sortable: true, filterable: true, filterType: 'text' },
-    { key: 'language', header: 'Idioma', sortable: true, filterable: true, filterType: 'text' },
+  private get columns(): DataTableColumn[] {
+    const t = (k: string): string => erplora().t(CATALOG, k);
+    return [
+    { key: 'name', header: t('ui.colName'), sortable: true, filterable: true, filterType: 'text' },
+    { key: 'language', header: t('ui.colLanguage'), sortable: true, filterable: true, filterType: 'text' },
     {
       key: 'category',
-      header: 'Categoría',
+      header: t('ui.colCategory'),
       sortable: true,
       filterable: true,
       filterType: 'select',
       options: [
-        { value: 'UTILITY', label: 'Utility' },
-        { value: 'MARKETING', label: 'Marketing' },
-        { value: 'AUTHENTICATION', label: 'Authentication' },
+        { value: 'UTILITY', label: t('ui.categoryUtility') },
+        { value: 'MARKETING', label: t('ui.categoryMarketing') },
+        { value: 'AUTHENTICATION', label: t('ui.categoryAuthentication') },
       ],
     },
-    { key: 'meta_status', header: 'Estado Meta', sortable: true, filterable: true, filterType: 'text' },
+    { key: 'meta_status', header: t('ui.colMetaStatus'), sortable: true, filterable: true, filterType: 'text' },
     {
       key: 'is_active',
-      header: 'Activa',
+      header: t('ui.colActive'),
       align: 'right',
       sortable: true,
       filterable: true,
       filterType: 'select',
       options: [
-        { value: '1', label: 'Sí' },
-        { value: '0', label: 'No' },
+        { value: '1', label: t('ui.yes') },
+        { value: '0', label: t('ui.no') },
       ],
-      format: (r) => (Number(r.is_active) ? 'Sí' : 'No'),
+      format: (r) => (Number(r.is_active) ? t('ui.yes') : t('ui.no')),
     },
-  ];
+    ];
+  }
+
+  private readonly onLocaleChange = (): void => this.requestUpdate();
 
   // TODO-LIT: componentWillLoad → connectedCallback. Recuerda: connectedCallback se dispara
   // en CADA reconexión al DOM (no solo en el primer montaje). Si la init debe correr una
   // sola vez tras el primer render, considera firstUpdated() en su lugar.
   async connectedCallback() {
     super.connectedCallback();
+    window.addEventListener('erplora:locale-changed', this.onLocaleChange);
     this.ctrl = createListController<Template>(erplora(), 'whatsapp_inbox.templates.list', () => this.requestUpdate(), {
       pageSize: 50,
       sort: 'created_at',
@@ -111,6 +122,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
   }
 
   disconnectedCallback() {
+    window.removeEventListener('erplora:locale-changed', this.onLocaleChange);
     super.disconnectedCallback();
     this.unsub?.();
   }
@@ -134,31 +146,32 @@ export class ErpWhatsappInboxTemplates extends LitElement {
       this.newBody = '';
       await this.ctrl.load();
     } catch (e) {
-      this.formError = e instanceof Error ? e.message : 'No se pudo crear la plantilla';
+      this.formError = e instanceof Error ? e.message : erplora().t(CATALOG, 'ui.errCreateTemplate');
     } finally {
       this.saving = false;
     }
   }
 
   render() {
+    const t = (k: string): string => erplora().t(CATALOG, k);
     return html`<div>
         <header>
-          <h2>Plantillas WhatsApp</h2>
+          <h2>${t('ui.templatesTitle')}</h2>
         </header>
         <form class="form" @submit=${(e) => this.createTemplate(e)}>
-          <ion-input placeholder="Nombre" .value=${this.newName} @ionInput=${(e: any) => (this.newName = e.target.value)}></ion-input>
-          <ion-input placeholder="Idioma (es)" .value=${this.newLanguage} @ionInput=${(e: any) => (this.newLanguage = e.target.value)}></ion-input>
-          <ion-select placeholder="Categoría…" .value=${this.newCategory} @ionChange=${(e: any) => (this.newCategory = e.target.value)}>
-            <ion-select-option value="UTILITY">Utility</ion-select-option>
-            <ion-select-option value="MARKETING">Marketing</ion-select-option>
-            <ion-select-option value="AUTHENTICATION">Authentication</ion-select-option>
+          <ion-input placeholder=${t('ui.placeholderName')} .value=${this.newName} @ionInput=${(e: any) => (this.newName = e.target.value)}></ion-input>
+          <ion-input placeholder=${t('ui.placeholderLanguage')} .value=${this.newLanguage} @ionInput=${(e: any) => (this.newLanguage = e.target.value)}></ion-input>
+          <ion-select placeholder=${t('ui.placeholderCategory')} .value=${this.newCategory} @ionChange=${(e: any) => (this.newCategory = e.target.value)}>
+            <ion-select-option value="UTILITY">${t('ui.categoryUtility')}</ion-select-option>
+            <ion-select-option value="MARKETING">${t('ui.categoryMarketing')}</ion-select-option>
+            <ion-select-option value="AUTHENTICATION">${t('ui.categoryAuthentication')}</ion-select-option>
           </ion-select>
-          <ion-textarea placeholder="Cuerpo del mensaje" .value=${this.newBody} @ionInput=${(e: any) => (this.newBody = e.target.value)}></ion-textarea>
-          <ion-button type="submit" size="small" ?disabled=${this.saving || !this.newName}>${this.saving ? 'Guardando…' : 'Añadir'}</ion-button>
+          <ion-textarea placeholder=${t('ui.placeholderBody')} .value=${this.newBody} @ionInput=${(e: any) => (this.newBody = e.target.value)}></ion-textarea>
+          <ion-button type="submit" size="small" ?disabled=${this.saving || !this.newName}>${this.saving ? t('ui.saving') : t('ui.add')}</ion-button>
         </form>
         ${this.formError ? html`<p class="err">${this.formError}</p>` : nothing}
         ${this.ctrl?.error ? html`<p class="err">${this.ctrl.error}</p>` : nothing}
-        <ok-data-table .serverSide=${true} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? 'desc'} .searchable=${true} .searchPlaceholder=${"Buscar nombre o categoría…"} .emptyMessage=${this.ctrl?.loading ? 'Cargando…' : 'Sin plantillas.'} @pageChange=${(e: CustomEvent<number>) => this.ctrl.setPage(e.detail)} @sortChange=${(e: CustomEvent<{ sort: string; dir: 'asc' | 'desc' }>) => this.ctrl.setSort(e.detail.sort, e.detail.dir)} @searchChange=${(e: CustomEvent<string>) => this.ctrl.setSearch(e.detail)} @filterChange=${(e: CustomEvent<{ col: string; value: unknown }>) => this.ctrl.setFilter(e.detail.col, e.detail.value)}></ok-data-table>
+        <ok-data-table .serverSide=${true} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? 'desc'} .searchable=${true} .searchPlaceholder=${t('ui.searchTemplates')} .emptyMessage=${this.ctrl?.loading ? t('ui.loading') : t('ui.emptyTemplates')} @pageChange=${(e: CustomEvent<number>) => this.ctrl.setPage(e.detail)} @sortChange=${(e: CustomEvent<{ sort: string; dir: 'asc' | 'desc' }>) => this.ctrl.setSort(e.detail.sort, e.detail.dir)} @searchChange=${(e: CustomEvent<string>) => this.ctrl.setSearch(e.detail)} @filterChange=${(e: CustomEvent<{ col: string; value: unknown }>) => this.ctrl.setFilter(e.detail.col, e.detail.value)}></ok-data-table>
       </div>`;
   }
 }
