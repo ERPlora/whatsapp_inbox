@@ -128,7 +128,8 @@
       },
       "ai": {
         "description": "Lists all WhatsApp conversations in the inbox"
-      }
+      },
+      "expose_api": true
     },
     "whatsapp_inbox.conversations.get": {
       "permission": "whatsapp_inbox.view_conversation",
@@ -136,7 +137,8 @@
       "schema": "schemas/conversation_get.json",
       "ai": {
         "description": "Retrieves the details of a WhatsApp conversation by its ID"
-      }
+      },
+      "expose_api": true
     },
     "whatsapp_inbox.messages.list": {
       "permission": "whatsapp_inbox.view_conversation",
@@ -185,7 +187,8 @@
       },
       "ai": {
         "description": "Lists the messages within a WhatsApp conversation"
-      }
+      },
+      "expose_api": true
     },
     "whatsapp_inbox.requests.list": {
       "permission": "whatsapp_inbox.view_request",
@@ -242,7 +245,8 @@
       },
       "ai": {
         "description": "Lists inbound requests received through the WhatsApp channel"
-      }
+      },
+      "expose_api": true
     },
     "whatsapp_inbox.requests.get": {
       "permission": "whatsapp_inbox.view_request",
@@ -250,7 +254,8 @@
       "schema": "schemas/request_get.json",
       "ai": {
         "description": "Retrieves the details of a WhatsApp request by its ID"
-      }
+      },
+      "expose_api": true
     },
     "whatsapp_inbox.templates.list": {
       "permission": "whatsapp_inbox.manage_settings",
