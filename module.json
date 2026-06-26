@@ -63,6 +63,13 @@
       "component": "erp-whatsapp-inbox-templates"
     }
   ],
+  "settings": {
+    "title": "WhatsApp",
+    "icon": "logo-whatsapp",
+    "schema": "schemas/settings_upsert.json",
+    "get": "whatsapp_inbox.settings.get",
+    "set": "whatsapp_inbox.settings.upsert"
+  },
   "migrations": {
     "sqlite": [
       "migrations/sqlite/001_init.sql",

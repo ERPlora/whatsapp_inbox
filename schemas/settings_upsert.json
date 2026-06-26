@@ -1,32 +1,28 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "whatsapp_inbox.settings.upsert",
+  "description": "Configuración del módulo WhatsApp Inbox (singleton por hub). La UI envía el snapshot completo (upsert).",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "is_enabled", "account_mode", "auto_reply_enabled", "approval_mode",
-    "require_confirmation", "request_schema", "gpt_system_prompt",
-    "input_modules", "output_modules", "auto_close_hours",
-    "notify_staff_new_request", "greeting_message", "out_of_hours_message"
-  ],
   "properties": {
-    "is_enabled": { "type": "integer", "enum": [0, 1] },
-    "account_mode": { "type": "string", "enum": ["shared", "per_employee"] },
-    "auto_reply_enabled": { "type": "integer", "enum": [0, 1] },
-    "approval_mode": { "type": "string", "enum": ["auto", "manual"] },
-    "require_confirmation": { "type": "integer", "enum": [0, 1] },
-    "request_schema": { "type": "string", "description": "JSON: esquema dinámico de requests" },
-    "gpt_system_prompt": { "type": "string" },
-    "input_modules": { "type": "string", "description": "JSON array de module_id" },
-    "output_modules": { "type": "string", "description": "JSON array de module_id" },
-    "auto_close_hours": { "type": "integer", "minimum": 0 },
-    "notify_staff_new_request": { "type": "integer", "enum": [0, 1] },
-    "greeting_message": { "type": "string" },
-    "out_of_hours_message": { "type": "string" },
+    "is_enabled": { "type": "integer", "enum": [0, 1], "title": "Activar WhatsApp Inbox", "default": 0 },
+    "account_mode": { "type": "string", "enum": ["shared", "per_employee"], "title": "Modo de cuenta", "default": "shared" },
+    "auto_reply_enabled": { "type": "integer", "enum": [0, 1], "title": "Respuesta automática", "default": 0 },
+    "approval_mode": { "type": "string", "enum": ["auto", "manual"], "title": "Modo de aprobación", "default": "manual" },
+    "require_confirmation": { "type": "integer", "enum": [0, 1], "title": "Exigir confirmación", "default": 1 },
+    "request_schema": { "type": "string", "title": "Esquema de solicitud (JSON)", "default": "", "description": "JSON: esquema dinámico de requests" },
+    "gpt_system_prompt": { "type": "string", "title": "Prompt de sistema (IA)", "default": "" },
+    "input_modules": { "type": "string", "title": "Módulos de entrada (JSON)", "default": "[]", "description": "JSON array de module_id" },
+    "output_modules": { "type": "string", "title": "Módulos de salida (JSON)", "default": "[]", "description": "JSON array de module_id" },
+    "auto_close_hours": { "type": "integer", "minimum": 0, "title": "Cierre automático (horas)", "default": 0 },
+    "notify_staff_new_request": { "type": "integer", "enum": [0, 1], "title": "Avisar al personal de nuevas solicitudes", "default": 1 },
+    "greeting_message": { "type": "string", "title": "Mensaje de bienvenida", "default": "" },
+    "out_of_hours_message": { "type": "string", "title": "Mensaje fuera de horario", "default": "" },
     "free_tier_monthly_limit": {
       "type": "integer",
       "minimum": 0,
       "default": 0,
+      "title": "Límite mensual de la capa gratuita",
       "description": "Límite mensual de mensajes entrantes de la capa gratuita. 0 = sin límite. Gestionado por marketplace/billing."
     }
   }
