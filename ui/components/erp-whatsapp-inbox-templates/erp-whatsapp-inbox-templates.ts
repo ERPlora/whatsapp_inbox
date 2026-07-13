@@ -33,13 +33,29 @@ function erplora(): ErploraClientLike {
   return c;
 }
 
+// Estado de revisión de Meta (enum de la migración) → clave i18n. El `value=` que viaja al runtime
+// NUNCA se traduce; solo la etiqueta que ve el usuario.
+const META_STATUS_KEYS = ['pending', 'approved', 'rejected'];
+const META_STATUS_LABEL_KEYS: Record<string, string> = {
+  pending: 'ui.metaPending',
+  approved: 'ui.metaApproved',
+  rejected: 'ui.metaRejected',
+};
+
+function metaStatusLabel(status: string): string {
+  const key = META_STATUS_LABEL_KEYS[status];
+  return key ? erplora().t(CATALOG, key) : status;
+}
+
 export class ErpWhatsappInboxTemplates extends LitElement {
   static styles = css`
-    :host { display:block; font-family: system-ui, sans-serif; color: var(--ion-text-color, #1c1b18); }
-    header { display:flex; gap:.5rem; align-items:center; margin-bottom:.75rem; }
-    h2 { margin:0; font-size:1.15rem; flex:1; }
-    .form { display:flex; gap:.75rem; flex-wrap:wrap; align-items:end; margin:.5rem 0 1.25rem; }
-    .form ion-input, .form ion-select, .form ion-textarea { flex:1 1 11rem; min-width:9rem; }
+    :host { display:flex; flex-direction:column; height:100%; min-height:0; font-family: system-ui, sans-serif; color: var(--ion-text-color, #1c1b18); }
+    /* La vista llena el alto: el data-table ocupa el resto (scroll interno, pie fijo). */
+    .page { display:flex; flex-direction:column; min-height:0; flex:1 1 auto; }
+    .page > ok-data-table { flex:1 1 auto; min-height:0; }
+    /* El alta va en el panel lateral de la tabla (estrecho) → columna, no fila. */
+    .form { display:flex; flex-direction:column; gap:.7rem; }
+    .form ion-button { align-self:flex-end; }
     .err { color:#d9480f; font-weight:600; }
   `;
 
@@ -78,7 +94,17 @@ export class ErpWhatsappInboxTemplates extends LitElement {
         { value: 'AUTHENTICATION', label: t('ui.categoryAuthentication') },
       ],
     },
-    { key: 'meta_status', header: t('ui.colMetaStatus'), sortable: true, filterable: true, filterType: 'text' },
+    {
+      // El estado de Meta es dominio cerrado de la migración (pending|approved|rejected) y el
+      // servidor lo filtra por igualdad exacta: tecleándolo, un "aprobado" no casaría nunca.
+      key: 'meta_status',
+      header: t('ui.colMetaStatus'),
+      sortable: true,
+      filterable: true,
+      filterType: 'select',
+      options: META_STATUS_KEYS.map((value) => ({ value, label: metaStatusLabel(value) })),
+      format: (r) => metaStatusLabel(String(r.meta_status ?? '')),
+    },
     {
       key: 'is_active',
       header: t('ui.colActive'),
@@ -127,6 +153,13 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     this.unsub?.();
   }
 
+  // Referencia al ok-data-table para cerrar su panel lateral (el alta vive dentro).
+  private dataTable(): { open(p?: 'filters' | 'create'): void; close(): void } | null {
+    return this.renderRoot.querySelector('ok-data-table') as
+      | { open(p?: 'filters' | 'create'): void; close(): void }
+      | null;
+  }
+
   private async createTemplate(ev: Event) {
     ev.preventDefault();
     if (!this.newName.trim()) return;
@@ -144,6 +177,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
       });
       this.newName = '';
       this.newBody = '';
+      this.dataTable()?.close(); // cierra el panel lateral tras crear
       await this.ctrl.load();
     } catch (e) {
       this.formError = e instanceof Error ? e.message : erplora().t(CATALOG, 'ui.errCreateTemplate');
@@ -154,24 +188,24 @@ export class ErpWhatsappInboxTemplates extends LitElement {
 
   render() {
     const t = (k: string): string => erplora().t(CATALOG, k);
-    return html`<div>
-        <header>
-          <h2>${t('ui.templatesTitle')}</h2>
-        </header>
-        <form class="form" @submit=${(e) => this.createTemplate(e)}>
-          <ion-input fill="outline" label-placement="floating" label=${t('ui.colName')} .value=${this.newName} @ionInput=${(e: any) => (this.newName = e.target.value)}></ion-input>
-          <ion-input fill="outline" label-placement="floating" label=${t('ui.colLanguage')} placeholder=${t('ui.placeholderLanguage')} .value=${this.newLanguage} @ionInput=${(e: any) => (this.newLanguage = e.target.value)}></ion-input>
-          <ion-select fill="outline" label-placement="floating" label=${t('ui.colCategory')} .value=${this.newCategory} @ionChange=${(e: any) => (this.newCategory = e.target.value)}>
-            <ion-select-option value="UTILITY">${t('ui.categoryUtility')}</ion-select-option>
-            <ion-select-option value="MARKETING">${t('ui.categoryMarketing')}</ion-select-option>
-            <ion-select-option value="AUTHENTICATION">${t('ui.categoryAuthentication')}</ion-select-option>
-          </ion-select>
-          <ion-textarea fill="outline" label-placement="floating" label=${t('ui.colBody')} placeholder=${t('ui.placeholderBody')} .value=${this.newBody} @ionInput=${(e: any) => (this.newBody = e.target.value)}></ion-textarea>
-          <ion-button type="submit" size="small" ?disabled=${this.saving || !this.newName}>${this.saving ? t('ui.saving') : t('ui.add')}</ion-button>
-        </form>
+    return html`<div class="page">
         ${this.formError ? html`<p class="err">${this.formError}</p>` : nothing}
         ${this.ctrl?.error ? html`<p class="err">${this.ctrl.error}</p>` : nothing}
-        <ok-data-table .serverSide=${true} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? 'desc'} .searchable=${true} .searchPlaceholder=${t('ui.searchTemplates')} .emptyMessage=${this.ctrl?.loading ? t('ui.loading') : t('ui.emptyTemplates')} @pageChange=${(e: CustomEvent<number>) => this.ctrl.setPage(e.detail)} @sortChange=${(e: CustomEvent<{ sort: string; dir: 'asc' | 'desc' }>) => this.ctrl.setSort(e.detail.sort, e.detail.dir)} @searchChange=${(e: CustomEvent<string>) => this.ctrl.setSearch(e.detail)} @filterChange=${(e: CustomEvent<{ col: string; value: unknown }>) => this.ctrl.setFilter(e.detail.col, e.detail.value)}></ok-data-table>
+        <ok-data-table .serverSide=${true} .fill=${true} .addable=${true} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? 'desc'} .searchable=${true} .searchPlaceholder=${t('ui.searchTemplates')} .emptyMessage=${this.ctrl?.loading ? t('ui.loading') : t('ui.emptyTemplates')} @pageChange=${(e: CustomEvent<number>) => this.ctrl.setPage(e.detail)} @pageSizeChange=${(e: CustomEvent<number>) => this.ctrl.setPageSize(e.detail)} @sortChange=${(e: CustomEvent<{ sort: string; dir: 'asc' | 'desc' }>) => this.ctrl.setSort(e.detail.sort, e.detail.dir)} @searchChange=${(e: CustomEvent<string>) => this.ctrl.setSearch(e.detail)} @filterChange=${(e: CustomEvent<{ col: string; value: unknown }>) => this.ctrl.setFilter(e.detail.col, e.detail.value)}>
+          <!-- Alta: se proyecta SIEMPRE (aunque el panel esté cerrado). Si solo se renderizara con el
+               panel abierto, el «+» de la barra desplegaría un panel vacío. -->
+          <form slot="create" class="form" @submit=${(e: Event) => this.createTemplate(e)}>
+            <ion-input fill="outline" label-placement="floating" label=${t('ui.colName')} .value=${this.newName} @ionInput=${(e: any) => (this.newName = e.target.value)}></ion-input>
+            <ion-input fill="outline" label-placement="floating" label=${t('ui.colLanguage')} placeholder=${t('ui.placeholderLanguage')} .value=${this.newLanguage} @ionInput=${(e: any) => (this.newLanguage = e.target.value)}></ion-input>
+            <ion-select fill="outline" label-placement="floating" label=${t('ui.colCategory')} .value=${this.newCategory} @ionChange=${(e: any) => (this.newCategory = e.target.value)}>
+              <ion-select-option value="UTILITY">${t('ui.categoryUtility')}</ion-select-option>
+              <ion-select-option value="MARKETING">${t('ui.categoryMarketing')}</ion-select-option>
+              <ion-select-option value="AUTHENTICATION">${t('ui.categoryAuthentication')}</ion-select-option>
+            </ion-select>
+            <ion-textarea fill="outline" label-placement="floating" label=${t('ui.colBody')} placeholder=${t('ui.placeholderBody')} .value=${this.newBody} @ionInput=${(e: any) => (this.newBody = e.target.value)}></ion-textarea>
+            <ion-button type="submit" ?disabled=${this.saving || !this.newName}>${this.saving ? t('ui.saving') : t('ui.add')}</ion-button>
+          </form>
+        </ok-data-table>
       </div>`;
   }
 }
