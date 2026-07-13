@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "module": "whatsapp_inbox",
+  "consumes": {
+    "queries": [
+      "whatsapp_inbox.conversations.list",
+      "whatsapp_inbox.requests.list",
+      "whatsapp_inbox.templates.list"
+    ],
+    "optional_queries": [],
+    "commands": [
+      "whatsapp_inbox.requests.approve",
+      "whatsapp_inbox.requests.reject",
+      "whatsapp_inbox.templates.create"
+    ],
+    "events": [
+      "whatsapp_inbox.conversation.assigned",
+      "whatsapp_inbox.message.received",
+      "whatsapp_inbox.request.approved",
+      "whatsapp_inbox.request.deleted",
+      "whatsapp_inbox.request.fulfilled",
+      "whatsapp_inbox.request.rejected",
+      "whatsapp_inbox.template.created",
+      "whatsapp_inbox.template.deleted",
+      "whatsapp_inbox.template.updated"
+    ],
+    "slots": []
+  }
+}
