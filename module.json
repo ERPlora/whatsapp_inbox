@@ -112,7 +112,7 @@
             "op": "eq"
           },
           "contact_phone": {
-            "op": "eq"
+            "op": "like"
           },
           "status": {
             "op": "eq"
@@ -169,7 +169,7 @@
             "op": "eq"
           },
           "body": {
-            "op": "eq"
+            "op": "like"
           },
           "media_url": {
             "op": "eq"
@@ -278,7 +278,7 @@
         "default_dir": "desc",
         "filters": {
           "name": {
-            "op": "eq"
+            "op": "like"
           },
           "language": {
             "op": "eq"
@@ -290,7 +290,7 @@
             "op": "eq"
           },
           "body": {
-            "op": "eq"
+            "op": "like"
           },
           "footer": {
             "op": "eq"
