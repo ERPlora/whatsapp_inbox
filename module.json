@@ -68,6 +68,11 @@
       "migrations/sqlite/001_init.sql",
       "migrations/sqlite/002_free_tier.sql",
       "migrations/sqlite/003_request_counter.sql"
+    ],
+    "postgres": [
+      "migrations/postgres/001_init.sql",
+      "migrations/postgres/002_free_tier.sql",
+      "migrations/postgres/003_request_counter.sql"
     ]
   },
   "queries": {
