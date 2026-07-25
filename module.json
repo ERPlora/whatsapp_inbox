@@ -1,7 +1,7 @@
 {
   "id": "whatsapp_inbox",
   "name": "WhatsApp Inbox",
-  "version": "2.1.11",
+  "version": "2.1.12",
   "agent": {
     "description": "Manages WhatsApp conversations, inbound requests, message templates, and channel settings: list and read conversations/messages, assign conversations, approve or reject requests, and configure the WhatsApp channel.",
     "keywords": [
@@ -64,10 +64,10 @@
     }
   ],
   "migrations": {
-    "sqlite": [
-      "migrations/sqlite/001_init.sql",
-      "migrations/sqlite/002_free_tier.sql",
-      "migrations/sqlite/003_request_counter.sql"
+    "postgres": [
+      "migrations/postgres/001_init.sql",
+      "migrations/postgres/002_free_tier.sql",
+      "migrations/postgres/003_request_counter.sql"
     ]
   },
   "queries": {
