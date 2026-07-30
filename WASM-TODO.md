@@ -26,7 +26,8 @@ Origen: `RequestService.fulfill_request` + `actions.execute_action`.
 > runtime actual **rechaza** operaciones de un handler sobre commands de otros módulos
 > (`validate_operation`, aislamiento ARQUITECTURA.md §5.3) y no existe aún la capacidad de
 > lecturas pre-cargadas (settings/request). Desbloquear el dispatch = decisión de modelo de
-> comandos (columna del humano), ver issue whatsapp_inbox#3.
+> comandos — delegable a la IA con TDD + documentar en `architecture/` + decision-log (división
+> de labor humano/IA derogada, ERPlora/pm#43), ver issue whatsapp_inbox#3.
 - Guarda de estado: **solo** desde `confirmed` (si no → error `invalid_status`).
 - Si `create_linked_object = false`: solo transicionar la request a `fulfilled`
  (`status='fulfilled'`, `fulfilled_at = now`). Esto NO necesita WASM por sí solo, pero
