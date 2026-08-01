@@ -4,4 +4,5 @@
 -- aporta el handler (YYYYMMDD derivado de context.now).
 INSERT INTO whatsapp_inbox_request_counter (id, hub_id, day, last_number)
 VALUES (:new_id, :hub_id, :day, 1)
-ON CONFLICT (hub_id, day) DO UPDATE SET last_number = last_number + 1;
+ON CONFLICT (hub_id, day) DO UPDATE
+SET last_number = whatsapp_inbox_request_counter.last_number + 1;
