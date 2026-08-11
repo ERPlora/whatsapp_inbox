@@ -60,7 +60,7 @@ curl -X PUT "$HUB/api/hub/flows/$FLOW_ID/grants" -H "Authorization: Bearer $SESS
      -H 'content-type: application/json' -d @appointment-from-whatsapp.grants.json
 ```
 
-La vía declarativa para que un blueprint la reparta está propuesta en **ERPlora/pm#118** (clave
+La vía declarativa para que un blueprint la reparta está propuesta en **ERPlora/pm#126** (clave
 `flows[]` en el manifest, aplicada por la misma puerta que la API de admin — el patrón de
 `active_roles`), no se fuerza aquí.
 
