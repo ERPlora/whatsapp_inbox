@@ -1,0 +1,19 @@
+{
+  "grants": [
+    { "kind": "notify", "value": "whatsapp" },
+    { "kind": "recipient_query", "value": "whatsapp_inbox.conversations.list#contact_phone" },
+
+    { "kind": "query", "value": "customers.list" },
+    { "kind": "query", "value": "services.services.list" },
+    { "kind": "query", "value": "appointments.availability.slots" },
+    { "kind": "query", "value": "appointments.availability.check" },
+    { "kind": "query", "value": "appointments.appointments.conflicting" },
+    { "kind": "query", "value": "appointments.schedules.list" },
+    { "kind": "query", "value": "staff.members.list" },
+    { "kind": "query", "value": "staff.schedules.list_for_member" },
+    { "kind": "query", "value": "schedules.business_hours.list" },
+
+    { "kind": "command", "value": "customers.create" },
+    { "kind": "command", "value": "appointments.appointments.create" }
+  ]
+}
