@@ -1,5 +1,37 @@
 # whatsapp_inbox — lógica para handler Rust→WASM (Tier 2)
 
+> ## ⚠️ Revisión 2026-08-11 (pm#112): el kernel de flujos existe, y tres piezas de esta lista SOBRAN
+>
+> Esta lista se escribió cuando el hub no tenía **kernel de automatización**. Con ADR-0283
+> implementado (triggers, grants, executor, step `http`, step `ai` con bandeja de aprobación, step
+> `notify` con grant `recipient_query`), el reparto cambió: **el producto son flujos, no un handler
+> WASM que reimplemente medio motor dentro de un módulo.** Lo que este módulo aporta al caso
+> estrella ya está entero y es una línea de manifest:
+>
+> ```json
+> "events": { "listen": { "hub.whatsapp.message_received": { "command": "whatsapp_inbox._ingest_inbound_message" } } }
+> ```
+>
+> Decisiones tomadas (y por qué), pieza por pieza:
+>
+> | Pieza | Decisión | Por qué |
+> | --- | --- | --- |
+> | **§1 dispatch cross-módulo** de `fulfill_request` | ❌ **DESCARTADA** | No está «bloqueada por el runtime»: está **prohibida a propósito** y esa prohibición se reforzó (hub#659, ADR-0283 §7). Reaccionar ejecutando el command de otro módulo es territorio de un **flujo con grant explícito**, que además es auditable y revocable — un handler que lo hiciera sería una capacidad sin dueño. `whatsapp_inbox#3` deja de tener sentido como issue de este módulo. |
+> | **§4 `build_catalog_context` / `build_output_context`** | ❌ **DESCARTADA** | El step `ai` ya ofrece al modelo las **tools reales** del hub (`assemble_tools` ∩ lo que declara el step ∩ los grants vivos) y es el modelo quien decide qué leer. Precocinar un bloque de texto con los `input_modules` configurados es estrictamente peor: no puede contestar a lo que el modelo pregunte, y el guest **no tiene lecturas pre-cargadas** (ADR-0069 nunca se implementó). |
+> | **§5 `auto_reply`** | ❌ **DESCARTADA** | El step `notify` (hub#821) escribe al cliente por el **outbox**, con reintentos, backoff y dead-letter, y por el proxy del SaaS. La versión WASM exigía `http.fetch` a la Graph API **con credenciales de Meta en el hub**, que es justo lo que la arquitectura prohíbe (§9.3: el hub nunca guarda credenciales de Meta/SES). No era una pieza pendiente: era una pieza imposible. |
+> | **§6 `configure` por caso de uso** | ❌ **DESCARTADA** | Lo que hacía (elegir módulos de entrada/salida, esquema y prompt **por vertical**) es exactamente lo que hoy es una **plantilla de flujo** distribuida con el blueprint del sector. Mantener las dos sería tener dos fuentes de verdad para «cómo se comporta el bot de esta peluquería», y solo una de ellas se puede editar, versionar y revocar. |
+> | §2 contador atómico | ✅ implementada (ADR-0008) | — |
+> | §3 `parse_inbound_message` | ✅ implementada, **fuera del camino del caso estrella** | Sigue siendo el pipeline de `whatsapp_inbox_request`. La cita que propone la IA **no** pasa por ahí: vive en `_flow_approvals`, la bandeja del kernel, que es la que emite `flow.approval.created` y la que re-chequea el grant al aprobar. |
+> | §7 `sync_with_meta`, §8 per-empleado | ⏸ sin cambios | Ni bloquean el caso estrella ni los toca el kernel. |
+>
+> **Columnas de settings que quedan sin dueño** (`input_modules`, `output_modules`,
+> `gpt_system_prompt`, `auto_reply_enabled`, `greeting_message`, `out_of_hours_message`,
+> `require_confirmation`, `auto_close_hours`): **no se borran de paso**. Son contrato externo —
+> columna de BD, campos requeridos del schema de `settings.upsert` y pantalla de ajustes—, y
+> quitarlas rompe a quien ya las escribe. Su contenido lo dice ahora el **documento del flujo**
+> (el prompt, el texto de la respuesta inmediata, qué tools se ofrecen), que además el dueño puede
+> editar sin republicar el módulo. Retirarlas es un cambio propio, con su deprecación.
+
 El CRUD plano (plantillas, settings, asignación de conversación) y las transiciones de
 estado simples con guarda (`approve`/`reject`/`delete` de requests) ya están en SQL
 declarativo Tier 0 (`commands/*.sql`). Lo que sigue es lógica de IA / dispatch

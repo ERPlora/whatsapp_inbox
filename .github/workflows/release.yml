@@ -53,8 +53,28 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # ERPlora/pm#107 — nothing reaches the marketplace without passing `erplora validate --pg`. The
+  # `pull_request` gate guards the door people walk through; THIS file is the one that publishes
+  # (the SaaS republishes when it sees the bump commit), so a red gate must mean no bump: the
+  # marketplace keeps serving the last version that WAS valid.
+  #
+  # Same anti-loop condition as `bump`, so a `chore(release)` commit does not pay for a gate run
+  # either — and a skipped `gate` skips `bump` with it, which is the behaviour that was already
+  # there.
+  gate:
+    if: ${{ !startsWith(github.event.head_commit.message, 'chore(release)') }}
+    uses: ERPlora/module-toolkit/.github/workflows/module-gate.yml@main
+
   bump:
-    runs-on: ubuntu-latest
+    needs: gate
+    # Same switch as the gate it depends on: the organization's own runner when `CI_RUNNER_LABEL`
+    # is set, GitHub's image when it is not. Without this the job is INVISIBLY the weak link — the
+    # gate would go green on the org runner and the bump would die on a hosted image the Actions
+    # budget no longer pays for, so main would carry the merge with NO version bump. And no bump
+    # means no republish: the SaaS only uploads `modules/{id}/v{version}.zip` when that version does
+    # not exist yet, so the marketplace would keep serving the old code as if nothing had happened.
+    # `python3` (used below) ships with the runner's Ubuntu; bare `python` does not, hence python3.
+    runs-on: ${{ vars.CI_RUNNER_LABEL || 'ubuntu-latest' }}
     # Anti-loop layer 2: never bump on top of a release commit.
     if: ${{ !startsWith(github.event.head_commit.message, 'chore(release)') }}
     steps:

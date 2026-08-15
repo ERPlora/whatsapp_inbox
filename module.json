@@ -1,7 +1,7 @@
 {
   "id": "whatsapp_inbox",
   "name": "WhatsApp Inbox",
-  "version": "2.1.13",
+  "version": "2.1.19",
   "description": "WhatsApp conversations, inbound requests, message templates and channel settings.",
   "agent": {
     "description": "Manages WhatsApp conversations, inbound requests, message templates, and channel settings: list and read conversations/messages, assign conversations, approve or reject requests, and configure the WhatsApp channel.",
@@ -492,6 +492,20 @@
         "description": "Ingests an inbound WhatsApp message: upserts the conversation, persists the message, and emits whatsapp_inbox.message.received for other modules (e.g. communications inbox) to react. Enforces the free-tier monthly message limit when configured."
       }
     },
+    "whatsapp_inbox._ingest_inbound_message": {
+      "permission": "whatsapp_inbox.manage_connections",
+      "internal": true,
+      "transaction": true,
+      "sql": [
+        "commands/inbound_conversation_upsert.sql",
+        "commands/inbound_message_insert.sql",
+        "commands/inbound_conversation_stats.sql"
+      ],
+      "schema": "schemas/ingest_inbound_message.json",
+      "emit": [
+        "whatsapp_inbox.message.received"
+      ]
+    },
     "whatsapp_inbox.settings.upsert": {
       "permission": "whatsapp_inbox.manage_settings",
       "transaction": true,
@@ -508,8 +522,12 @@
     }
   },
   "events": {
-    "listen": {},
-    "emit": [
+    "listen": {
+      "hub.whatsapp.message_received": {
+        "command": "whatsapp_inbox._ingest_inbound_message"
+      }
+    },
+    "emits": [
       "whatsapp_inbox.message.received",
       "whatsapp_inbox.request.created",
       "whatsapp_inbox.conversation.assigned",

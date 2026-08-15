@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "whatsapp_inbox._ingest_inbound_message",
+  "description": "The payload of the CORE event `hub.whatsapp.message_received`, verbatim. A manifest listener has no mapping layer — the relay hands the event payload straight to the command — so this schema is not free to describe a shape of its own: it describes what `crates/server/src/inbound_poll.rs::event_payload` emits. Anything stricter than the event does not degrade a feature, it dead-letters every inbound WhatsApp message.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["wa_message_id", "from"],
+  "properties": {
+    "wa_message_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Meta's `wamid.…`. It is the idempotency key of the whole inbound chain (`_event_outbox.id = wa-<wa_message_id>`), so it is the one field worth refusing the message over."
+    },
+    "from": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The sender's WhatsApp id as Meta reports it — digits, NO leading `+` (`34600111222`). It is stored as `wa_contact_id` and normalised to E.164 for `contact_phone`, which is the column a `recipient_query` grant addresses."
+    },
+    "text": {
+      "type": "string",
+      "description": "The body of a text message, `\"\"` for anything else (`inbound_poll.rs::text` never returns null)."
+    },
+    "received_at": {
+      "type": "string",
+      "description": "When the SaaS stored the message (ISO-8601). Kept for the record; the row's own clock is the runtime's `:now`, which is the one every other timestamp in this hub is ordered by."
+    },
+    "message": {
+      "type": ["object", "null"],
+      "description": "Meta's message object, verbatim — the source of truth for anything the two convenience fields above do not cover (media, interactive replies, referrals). `null` when Meta sent nothing the SaaS could store. A scalar here is refused on purpose: it would reach Postgres as invalid JSON and blow up mid-transaction instead of at the door."
+    }
+  }
+}
