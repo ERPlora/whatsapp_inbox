@@ -1,5 +1,6 @@
 {
   "name": "Bandeja de WhatsApp",
+  "description": "Conversaciones de WhatsApp, solicitudes entrantes, plantillas de mensaje y ajustes del canal.",
   "navigation": {
     "inbox": {
       "label": "Bandeja de entrada"
