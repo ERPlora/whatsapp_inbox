@@ -69,6 +69,10 @@
     "placeholderCategory": "Category…",
     "placeholderBody": "Message body",
     "saving": "Saving…",
-    "add": "Add"
+    "add": "Add",
+    "bookingOpen": "Book",
+    "bookingClose": "Close",
+    "bookingRetry": "Book again",
+    "bookingFailedTitle": "The booking did not go through"
   }
 }

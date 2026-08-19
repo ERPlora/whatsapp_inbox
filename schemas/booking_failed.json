@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "whatsapp_inbox._booking_failed",
+  "description": "The payload of `appointments.booking_request.failed`, verbatim. Same rule as its twin: a listener receives the event payload untouched, system params included, so `additionalProperties` stays TRUE. Only `request_id` is required — a refusal that arrived without a reason still has to reopen the request, because a request stuck on `confirmed` with no appointment is precisely the silent failure this is here to prevent.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["request_id"],
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The request whose booking was refused. It goes back to `pending_review` so the operator can pick another slot and approve again."
+    },
+    "reason_code": {
+      "type": "string",
+      "description": "The stable namespaced code of the refusal (`appointments.overlapping_appointment`). Stored as `failure_code`: a screen or a flow can branch on it, and the module that emitted it can translate it."
+    },
+    "reason": {
+      "type": "string",
+      "description": "The sentence, written by whoever refused — the one who knows why. Stored as `failure_reason` and painted as-is in the inbox."
+    }
+  }
+}

@@ -68,7 +68,8 @@
     "postgres": [
       "migrations/postgres/001_init.sql",
       "migrations/postgres/002_free_tier.sql",
-      "migrations/postgres/003_request_counter.sql"
+      "migrations/postgres/003_request_counter.sql",
+      "migrations/postgres/004_booking_handoff.sql"
     ]
   },
   "queries": {
@@ -407,6 +408,24 @@
         "commands/_fulfill_transition.sql"
       ]
     },
+    "whatsapp_inbox._link_fulfilled": {
+      "permission": "whatsapp_inbox.change_request",
+      "internal": true,
+      "transaction": true,
+      "sql": [
+        "commands/_link_fulfilled.sql"
+      ],
+      "schema": "schemas/link_fulfilled.json"
+    },
+    "whatsapp_inbox._booking_failed": {
+      "permission": "whatsapp_inbox.change_request",
+      "internal": true,
+      "transaction": true,
+      "sql": [
+        "commands/_booking_failed.sql"
+      ],
+      "schema": "schemas/booking_failed.json"
+    },
     "whatsapp_inbox.requests.ingest": {
       "permission": "whatsapp_inbox.manage_connections",
       "schema": "schemas/request_ingest.json",
@@ -525,6 +544,12 @@
     "listen": {
       "hub.whatsapp.message_received": {
         "command": "whatsapp_inbox._ingest_inbound_message"
+      },
+      "appointments.booking_request.fulfilled": {
+        "command": "whatsapp_inbox._link_fulfilled"
+      },
+      "appointments.booking_request.failed": {
+        "command": "whatsapp_inbox._booking_failed"
       }
     },
     "emits": [
