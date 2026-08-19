@@ -1,10 +1,42 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "whatsapp_inbox.requests.approve",
+  "description": "Approves an inbound request AND, when it is one that another module has to materialise, carries the records a person bound it to (appointments#38). This payload is emitted VERBATIM as `whatsapp_inbox.request.approved`, and a manifest listener has no mapping layer, so whatever is not accepted here can never reach the module that books. The four booking fields are OPTIONAL: an `order` or a `quote` has nothing to bind and is approved bare, exactly as before.",
   "type": "object",
   "additionalProperties": false,
   "required": ["request_id"],
   "properties": {
-    "request_id": { "type": "string", "minLength": 1 }
+    "request_id": { "type": "string", "minLength": 1 },
+    "customer_id": {
+      "type": "string",
+      "description": "The customer this request belongs to, as a LINK to the `customers` module — never the name the LLM read in the message. It is also persisted on the request row, so the binding survives the screen. Empty or absent leaves whatever the row already had.",
+      "default": ""
+    },
+    "service_id": {
+      "type": "string",
+      "description": "The service to book, as a link to the `services` catalogue. Absent = nothing to book.",
+      "default": ""
+    },
+    "staff_id": {
+      "type": "string",
+      "description": "The professional who will perform it, as a link to `staff`.",
+      "default": ""
+    },
+    "start_datetime": {
+      "type": "string",
+      "description": "When it starts, ISO-8601. The slot a person picked against the live agenda, not the «tomorrow at 10» of the message.",
+      "default": ""
+    },
+    "duration_minutes": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Optional override. When absent the booking module falls back to the professional's override, then the service's catalogue duration — the salon's numbers, never the model's guess."
+    },
+    "notes": {
+      "type": "string",
+      "description": "What the customer asked for, in their own words, to travel onto the appointment.",
+      "default": "",
+      "maxLength": 2000
+    }
   }
 }

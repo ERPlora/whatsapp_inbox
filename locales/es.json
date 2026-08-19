@@ -70,6 +70,10 @@
     "placeholderCategory": "Categoría…",
     "placeholderBody": "Cuerpo del mensaje",
     "saving": "Guardando…",
-    "add": "Añadir"
+    "add": "Añadir",
+    "bookingOpen": "Reservar",
+    "bookingClose": "Cerrar",
+    "bookingRetry": "Reservar de nuevo",
+    "bookingFailedTitle": "La reserva no se pudo hacer"
   }
 }

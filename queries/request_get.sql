@@ -4,6 +4,9 @@ SELECT r.id, r.conversation_id, r.customer_id, r.reference_number, r.request_typ
        r.status, r.data, r.raw_summary, r.confidence_score, r.notes,
        r.assigned_to_id, r.linked_module, r.linked_object_id,
        r.confirmed_at, r.fulfilled_at, r.created_at,
+       -- appointments#38: por qué NO se materializó la petición. `failure_code` es el código
+       -- estable (para decidir), `failure_reason` la frase (para pintar).
+       r.failure_code, r.failure_reason,
        c.contact_name AS contact_name
 FROM whatsapp_inbox_request r
 LEFT JOIN whatsapp_inbox_conversation c

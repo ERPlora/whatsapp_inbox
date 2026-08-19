@@ -9,7 +9,7 @@ var __decorateClass = (decorators, target, key, kind) => {
   return result;
 };
 
-// module-toolkit/node_modules/@lit-labs/ssr-dom-shim/lib/element-internals.js
+// ../module-toolkit/node_modules/@lit-labs/ssr-dom-shim/lib/element-internals.js
 var ElementInternalsShim = class ElementInternals {
   get shadowRoot() {
     return this.__host.__shadowRoot;
@@ -88,7 +88,7 @@ var ElementInternalsShim = class ElementInternals {
   }
 };
 
-// module-toolkit/node_modules/@lit-labs/ssr-dom-shim/lib/events.js
+// ../module-toolkit/node_modules/@lit-labs/ssr-dom-shim/lib/events.js
 var __classPrivateFieldSet = function(receiver, state, value, kind, f3) {
   if (kind === "m") throw new TypeError("Private method is not writable");
   if (kind === "a" && !f3) throw new TypeError("Private accessor was defined without a setter");
@@ -246,7 +246,7 @@ Object.defineProperties(CustomEventShim.prototype, {
 var EventShimWithRealType = EventShim;
 var CustomEventShimWithRealType = CustomEventShim;
 
-// module-toolkit/node_modules/@lit-labs/ssr-dom-shim/lib/css.js
+// ../module-toolkit/node_modules/@lit-labs/ssr-dom-shim/lib/css.js
 var _a2;
 var CSSRuleShim = (_a2 = class CSSRule {
   constructor() {
@@ -277,7 +277,7 @@ var CSSRuleShim = (_a2 = class CSSRule {
   }
 }, _a2.STYLE_RULE = 1, _a2.CHARSET_RULE = 2, _a2.IMPORT_RULE = 3, _a2.MEDIA_RULE = 4, _a2.FONT_FACE_RULE = 5, _a2.PAGE_RULE = 6, _a2.NAMESPACE_RULE = 10, _a2.KEYFRAMES_RULE = 7, _a2.KEYFRAME_RULE = 8, _a2.SUPPORTS_RULE = 12, _a2.COUNTER_STYLE_RULE = 11, _a2.FONT_FEATURE_VALUES_RULE = 14, _a2.MARGIN_RULE = 9, _a2);
 
-// module-toolkit/node_modules/@lit-labs/ssr-dom-shim/index.js
+// ../module-toolkit/node_modules/@lit-labs/ssr-dom-shim/index.js
 globalThis.Event ??= EventShimWithRealType;
 globalThis.CustomEvent ??= CustomEventShimWithRealType;
 var constructionToken = Symbol();
@@ -674,7 +674,7 @@ var CustomElementRegistryShimWithRealType = CustomElementRegistry;
 var customElements2 = new CustomElementRegistryShimWithRealType();
 var windowShim = new WindowShim(constructionToken);
 
-// module-toolkit/node_modules/@lit/reactive-element/node/css-tag.js
+// ../module-toolkit/node_modules/@lit/reactive-element/node/css-tag.js
 var t = globalThis;
 var e = t.ShadowRoot && (void 0 === t.ShadyCSS || t.ShadyCSS.nativeShadow) && "adoptedStyleSheets" in Document.prototype && "replace" in CSSStyleSheet.prototype;
 var s = Symbol();
@@ -719,7 +719,7 @@ var c = e || void 0 === t.CSSStyleSheet ? (t5) => t5 : (t5) => t5 instanceof CSS
   return r(e5);
 })(t5) : t5;
 
-// module-toolkit/node_modules/@lit/reactive-element/node/reactive-element.js
+// ../module-toolkit/node_modules/@lit/reactive-element/node/reactive-element.js
 var { is: h, defineProperty: r2, getOwnPropertyDescriptor: o2, getOwnPropertyNames: n2, getOwnPropertySymbols: a, getPrototypeOf: c2 } = Object;
 var l = globalThis;
 l.customElements ??= customElements2;
@@ -942,7 +942,7 @@ var g = class extends (globalThis.HTMLElement ?? HTMLElementShimWithRealType) {
 };
 g.elementStyles = [], g.shadowRootOptions = { mode: "open" }, g[f("elementProperties")] = /* @__PURE__ */ new Map(), g[f("finalized")] = /* @__PURE__ */ new Map(), u?.({ ReactiveElement: g }), (l.reactiveElementVersions ??= []).push("2.1.2");
 
-// modules-workspace/node_modules/.pnpm/lit-html@3.3.3/node_modules/lit-html/lit-html.js
+// node_modules/.pnpm/lit-html@3.3.3/node_modules/lit-html/lit-html.js
 var t2 = globalThis;
 var i2 = (t5) => t5;
 var s2 = t2.trustedTypes;
@@ -1197,7 +1197,7 @@ var D = (t5, i7, s5) => {
   return h4._$AI(t5), h4;
 };
 
-// modules-workspace/node_modules/.pnpm/lit-element@4.2.2/node_modules/lit-element/lit-element.js
+// node_modules/.pnpm/lit-element@4.2.2/node_modules/lit-element/lit-element.js
 var s3 = globalThis;
 var i3 = class extends g {
   constructor() {
@@ -1226,7 +1226,7 @@ var o4 = s3.litElementPolyfillSupport;
 o4?.({ LitElement: i3 });
 (s3.litElementVersions ??= []).push("4.2.2");
 
-// module-toolkit/node_modules/@lit/reactive-element/node/decorators/property.js
+// ../module-toolkit/node_modules/@lit/reactive-element/node/decorators/property.js
 var o5 = { attribute: true, type: String, converter: b, reflect: false, hasChanged: m };
 var r4 = (t5 = o5, e5, r6) => {
   const { kind: n6, metadata: i7 } = r6;
@@ -1256,19 +1256,19 @@ function n4(t5) {
   })(t5, e5, o7);
 }
 
-// module-toolkit/node_modules/@lit/reactive-element/node/decorators/state.js
+// ../module-toolkit/node_modules/@lit/reactive-element/node/decorators/state.js
 function r5(r6) {
   return n4({ ...r6, state: true, attribute: false });
 }
 
-// outfitkit/dist/define.js
+// ../outfitkit/dist/define.js
 function define(tag, ctor) {
   if (typeof customElements !== "undefined" && !customElements.get(tag)) {
     customElements.define(tag, ctor);
   }
 }
 
-// modules-workspace/node_modules/.pnpm/lit-html@3.3.3/node_modules/lit-html/directive.js
+// node_modules/.pnpm/lit-html@3.3.3/node_modules/lit-html/directive.js
 var t3 = { ATTRIBUTE: 1, CHILD: 2, PROPERTY: 3, BOOLEAN_ATTRIBUTE: 4, EVENT: 5, ELEMENT: 6 };
 var e4 = (t5) => (...e5) => ({ _$litDirective$: t5, values: e5 });
 var i4 = class {
@@ -1288,7 +1288,7 @@ var i4 = class {
   }
 };
 
-// modules-workspace/node_modules/.pnpm/lit-html@3.3.3/node_modules/lit-html/directive-helpers.js
+// node_modules/.pnpm/lit-html@3.3.3/node_modules/lit-html/directive-helpers.js
 var { I: t4 } = j;
 var i5 = (o7) => o7;
 var s4 = () => document.createComment("");
@@ -1321,7 +1321,7 @@ var h3 = (o7) => {
   o7._$AR(), o7._$AA.remove();
 };
 
-// modules-workspace/node_modules/.pnpm/lit-html@3.3.3/node_modules/lit-html/directives/repeat.js
+// node_modules/.pnpm/lit-html@3.3.3/node_modules/lit-html/directives/repeat.js
 var u4 = (e5, s5, t5) => {
   const r6 = /* @__PURE__ */ new Map();
   for (let l3 = s5; l3 <= t5; l3++) r6.set(e5[l3], l3);
@@ -1374,7 +1374,7 @@ var c4 = e4(class extends i4 {
   }
 });
 
-// modules-workspace/node_modules/.pnpm/lit-html@3.3.3/node_modules/lit-html/directives/style-map.js
+// node_modules/.pnpm/lit-html@3.3.3/node_modules/lit-html/directives/style-map.js
 var n5 = "important";
 var i6 = " !" + n5;
 var o6 = e4(class extends i4 {
@@ -1403,7 +1403,7 @@ var o6 = e4(class extends i4 {
   }
 });
 
-// outfitkit/dist/shared/icons.js
+// ../outfitkit/dist/shared/icons.js
 var rawAdd = '<svg viewBox="0 0 512 512" width="1.2em" height="1.2em" ><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="32" d="M256 112v288m144-144H112"/></svg>';
 var rawAlertCircle = '<svg viewBox="0 0 512 512" width="1.2em" height="1.2em" ><path fill="currentColor" d="M256 48C141.31 48 48 141.31 48 256s93.31 208 208 208s208-93.31 208-208S370.69 48 256 48m0 319.91a20 20 0 1 1 20-20a20 20 0 0 1-20 20m21.72-201.15l-5.74 122a16 16 0 0 1-32 0l-5.74-121.94v-.05a21.74 21.74 0 1 1 43.44 0Z"/></svg>';
 var rawAlertCircleOutline = '<svg viewBox="0 0 512 512" width="1.2em" height="1.2em" ><path fill="none" stroke="currentColor" stroke-miterlimit="10" stroke-width="32" d="M448 256c0-106-86-192-192-192S64 150 64 256s86 192 192 192s192-86 192-192Z"/><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="32" d="M250.26 166.05L256 288l5.73-121.95a5.74 5.74 0 0 0-5.79-6h0a5.74 5.74 0 0 0-5.68 6"/><path fill="currentColor" d="M256 367.91a20 20 0 1 1 20-20a20 20 0 0 1-20 20"/></svg>';
@@ -1551,7 +1551,7 @@ function okIcon(value) {
   return BY_NAME[value] ?? value;
 }
 
-// outfitkit/dist/ok-data-table.js
+// ../outfitkit/dist/ok-data-table.js
 var CSV_BOM = "\uFEFF";
 function decodeCsvBuffer(buf) {
   let text;
@@ -2979,7 +2979,7 @@ __decorateClass2([
 var OkDataTable = _OkDataTable;
 define("ok-data-table", OkDataTable);
 
-// hub/packages/module-sdk/src/index.ts
+// ../hub/packages/module-sdk/src/index.ts
 function isEmpty(v3) {
   return v3 === null || v3 === void 0 || v3 === "";
 }
@@ -3097,9 +3097,10 @@ function createListController(client, queryName, onChange = () => {
   return new ListController(client, queryName, onChange, opts);
 }
 
-// .worktrees/module-66-whatsapp_inbox/locales/es.json
+// modules/whatsapp_inbox/locales/es.json
 var es_default = {
   name: "Bandeja de WhatsApp",
+  description: "Conversaciones de WhatsApp, solicitudes entrantes, plantillas de mensaje y ajustes del canal.",
   navigation: {
     inbox: {
       label: "Bandeja de entrada"
@@ -3169,11 +3170,15 @@ var es_default = {
     placeholderCategory: "Categor\xEDa\u2026",
     placeholderBody: "Cuerpo del mensaje",
     saving: "Guardando\u2026",
-    add: "A\xF1adir"
+    add: "A\xF1adir",
+    bookingOpen: "Reservar",
+    bookingClose: "Cerrar",
+    bookingRetry: "Reservar de nuevo",
+    bookingFailedTitle: "La reserva no se pudo hacer"
   }
 };
 
-// .worktrees/module-66-whatsapp_inbox/locales/en.json
+// modules/whatsapp_inbox/locales/en.json
 var en_default = {
   name: "WhatsApp Inbox",
   navigation: {
@@ -3245,11 +3250,15 @@ var en_default = {
     placeholderCategory: "Category\u2026",
     placeholderBody: "Message body",
     saving: "Saving\u2026",
-    add: "Add"
+    add: "Add",
+    bookingOpen: "Book",
+    bookingClose: "Close",
+    bookingRetry: "Book again",
+    bookingFailedTitle: "The booking did not go through"
   }
 };
 
-// .worktrees/module-66-whatsapp_inbox/ui/components/erp-whatsapp-inbox-inbox/erp-whatsapp-inbox-inbox.ts
+// modules/whatsapp_inbox/ui/components/erp-whatsapp-inbox-inbox/erp-whatsapp-inbox-inbox.ts
 var CATALOG = { es: es_default, en: en_default };
 function erplora() {
   const c5 = globalThis.erplora;
@@ -3342,8 +3351,226 @@ __decorateClass([
 ], ErpWhatsappInboxInbox.prototype, "tick", 2);
 define("erp-whatsapp-inbox-inbox", ErpWhatsappInboxInbox);
 
-// .worktrees/module-66-whatsapp_inbox/ui/components/erp-whatsapp-inbox-requests/erp-whatsapp-inbox-requests.ts
+// ../outfitkit/dist/ok-inline-feedback.js
+var __defProp3 = Object.defineProperty;
+var __decorateClass3 = (decorators, target, key, kind) => {
+  var result = void 0;
+  for (var i7 = decorators.length - 1, decorator; i7 >= 0; i7--)
+    if (decorator = decorators[i7])
+      result = decorator(target, key, result) || result;
+  if (result) __defProp3(target, key, result);
+  return result;
+};
+var DEFAULT_LABELS2 = {
+  dismiss: "Dismiss"
+};
+var OkInlineFeedback = class extends i3 {
+  constructor() {
+    super(...arguments);
+    this.tone = "info";
+    this.dismissible = false;
+    this.hidden = false;
+    this.labels = {};
+    this.hasActions = false;
+    this.onActionsSlotChange = (e5) => {
+      const slot = e5.target;
+      this.hasActions = slot.assignedNodes({ flatten: true }).length > 0;
+    };
+  }
+  static {
+    this.styles = i`
+    :host {
+      /* Vars overridable (estilo Ionic), default = cadena --ok-* → --ion-* → hex.
+         --tone-color y --tone-icon se reasignan por tone abajo. */
+      --tone-color: var(--ok-primary, var(--ion-color-primary, #3880ff));
+      --background-opacity: 0.1;
+      --color: var(--ok-text, var(--ion-text-color, #1c1b17));
+      --border-radius: var(--ok-radius, var(--ion-border-radius, 8px));
+      --padding: var(--ok-spacing, var(--ion-padding, 16px));
+      --accent-width: 4px;
+      --font: var(--ok-font, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif);
+
+      /* Responsive: el banner ocupa el ancho del contenedor. */
+      display: block;
+      width: 100%;
+      font-family: var(--font);
+      box-sizing: border-box;
+    }
+    :host([hidden]) { display: none; }
+
+    /* Mapa de tonos → color Ionic + icono por defecto. */
+    :host([tone='success']) { --tone-color: var(--ok-success, var(--ion-color-success, #2dd55b)); }
+    :host([tone='warning']) { --tone-color: var(--ok-warning, var(--ion-color-warning, #ffc409)); }
+    :host([tone='danger'])  { --tone-color: var(--ok-danger, var(--ion-color-danger, #c5000f)); }
+    :host([tone='neutral']) { --tone-color: var(--ok-medium, var(--ion-color-medium, #5f5f5f)); }
+    /* info / sin tono → primary (default ya aplicado en :host). */
+
+    .box {
+      position: relative;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      padding: var(--padding);
+      border-radius: var(--border-radius);
+      border-inline-start: var(--accent-width) solid var(--tone-color);
+      /* Fondo tonal: el color del tono con baja opacidad (color-mix con fallback al borde fino). */
+      background: color-mix(in srgb, var(--tone-color) calc(var(--background-opacity) * 100%), transparent);
+      color: var(--color);
+    }
+
+    .icon {
+      flex: 0 0 auto;
+      font-size: 1.4rem;
+      line-height: 1;
+      color: var(--tone-color);
+      margin-top: 0.05rem;
+    }
+
+    .content {
+      flex: 1 1 auto;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .row {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+    }
+    .text {
+      flex: 1 1 auto;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+    .heading {
+      font-weight: 700;
+      font-size: 0.98rem;
+      line-height: 1.3;
+    }
+    .body {
+      font-size: 0.92rem;
+      line-height: 1.45;
+    }
+    .actions {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    /* Si no hay actions, el slot queda vacío y no ocupa espacio. */
+    .actions.empty { display: none; }
+
+    .close {
+      flex: 0 0 auto;
+      background: none;
+      border: 0;
+      cursor: pointer;
+      padding: 0.15rem;
+      margin: -0.15rem -0.15rem 0 0;
+      color: inherit;
+      opacity: 0.6;
+      font-size: 1.2rem;
+      line-height: 1;
+      border-radius: 4px;
+      transition: background-color var(--ok-transition, 150ms ease), color var(--ok-transition, 150ms ease),
+        border-color var(--ok-transition, 150ms ease), box-shadow var(--ok-transition, 150ms ease),
+        opacity 0.15s ease, transform 120ms ease;
+    }
+    @media (hover: hover) {
+      .close:hover { opacity: 1; background: rgba(var(--ion-text-color-rgb, 24, 24, 27), 0.07); }
+    }
+    .close:active { transform: scale(var(--ok-press-scale, 0.97)); }
+
+    /* Móvil: las actions bajan bajo el texto (apiladas a ancho completo). */
+    @media (max-width: 640px) {
+      .row { flex-direction: column; align-items: stretch; }
+      .actions { width: 100%; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .close:hover,
+      .close:active { transform: none; }
+    }
+  `;
+  }
+  // Textos efectivos: defaults en inglés + overrides del consumidor.
+  get t() {
+    return { ...DEFAULT_LABELS2, ...this.labels };
+  }
+  // Icono por defecto según el tono (overridable por la prop `icon`).
+  defaultIcon() {
+    switch (this.tone) {
+      case "success":
+        return iconCheckmarkCircle;
+      case "warning":
+        return iconWarning;
+      case "danger":
+        return iconAlertCircle;
+      case "neutral":
+        return iconInformationCircle;
+      case "info":
+      default:
+        return iconInformationCircle;
+    }
+  }
+  // Oculta el banner y avisa al consumidor; éste puede revertir restaurando `hidden=false`.
+  dismiss() {
+    this.hidden = true;
+    this.dispatchEvent(new CustomEvent("ok-dismiss", { bubbles: true, composed: true }));
+  }
+  render() {
+    const iconName = this.icon ?? this.defaultIcon();
+    return b2`
+      <div class="box" role="status">
+        <ion-icon class="icon" .icon=${okIcon(iconName)} aria-hidden="true"></ion-icon>
+        <div class="content">
+          <div class="row">
+            <div class="text">
+              ${this.heading ? b2`<div class="heading">${this.heading}</div>` : null}
+              <div class="body"><slot></slot></div>
+            </div>
+            <div class="actions ${this.hasActions ? "" : "empty"}">
+              <slot name="actions" @slotchange=${this.onActionsSlotChange}></slot>
+            </div>
+          </div>
+        </div>
+        ${this.dismissible ? b2`
+              <button class="close" aria-label=${this.t.dismiss} @click=${this.dismiss}>
+                <ion-icon .icon=${iconClose} aria-hidden="true"></ion-icon>
+              </button>
+            ` : null}
+      </div>
+    `;
+  }
+};
+__decorateClass3([
+  n4({ type: String, reflect: true })
+], OkInlineFeedback.prototype, "tone");
+__decorateClass3([
+  n4({ type: String })
+], OkInlineFeedback.prototype, "heading");
+__decorateClass3([
+  n4({ type: String })
+], OkInlineFeedback.prototype, "icon");
+__decorateClass3([
+  n4({ type: Boolean, reflect: true })
+], OkInlineFeedback.prototype, "dismissible");
+__decorateClass3([
+  n4({ type: Boolean, reflect: true })
+], OkInlineFeedback.prototype, "hidden");
+__decorateClass3([
+  n4({ attribute: false })
+], OkInlineFeedback.prototype, "labels");
+__decorateClass3([
+  r5()
+], OkInlineFeedback.prototype, "hasActions");
+define("ok-inline-feedback", OkInlineFeedback);
+
+// modules/whatsapp_inbox/ui/components/erp-whatsapp-inbox-requests/erp-whatsapp-inbox-requests.ts
 var CATALOG2 = { es: es_default, en: en_default };
+var BOOKABLE_TYPES = /* @__PURE__ */ new Set(["appointment", "reservation"]);
 function erplora2() {
   const c5 = globalThis.erplora;
   if (!c5) throw new Error("erplora SDK no inicializado por el shell");
@@ -3354,7 +3581,12 @@ var ErpWhatsappInboxRequests = class extends i3 {
     super(...arguments);
     this.formError = "";
     this.busyId = "";
-    this.tick = 0;
+    this.bookingFor = "";
+    /** HOST of the `whatsapp_inbox.request.booking` slot (ADR-0043 §3bis). Resolved once, mounted on
+     *  demand, told WHICH request is open by a `CustomEvent` on the filler element — never by props
+     *  or calls, and never by importing anything of the module that fills it. */
+    this.bookingFillers = [];
+    this.bookingSlotResolved = false;
     this.onLocaleChange = () => this.requestUpdate();
   }
   static {
@@ -3363,7 +3595,15 @@ var ErpWhatsappInboxRequests = class extends i3 {
     header { display:flex; gap:.5rem; align-items:center; margin-bottom:.75rem; }
     h2 { margin:0; font-size:1.15rem; flex:1; }
     .err { color:#d9480f; font-weight:600; }
-    .actions { display:flex; gap:.35rem; }
+    .actions { display:flex; gap:.35rem; align-items:center; flex-wrap:wrap; }
+    .pending-row { border:1px solid var(--ion-color-step-150, #e5e3df); border-radius:.5rem; padding:.6rem .7rem; margin:.45rem 0; }
+    .who { display:flex; gap:.4rem; align-items:baseline; flex-wrap:wrap; }
+    .ref { font-weight:600; }
+    .summary { margin:.25rem 0 .5rem; color: var(--ion-color-step-600, #5b5852); }
+    /* 44px minimum touch target: this screen is used one-handed, at a counter. */
+    ion-button { --min-height: 44px; }
+    .booking-slot { margin-top:.5rem; }
+    .booking-slot:empty { display:none; }
   `;
   }
   get columns() {
@@ -3412,7 +3652,9 @@ var ErpWhatsappInboxRequests = class extends i3 {
       {
         key: "id",
         header: t5("ui.colActions"),
-        format: (r6) => r6.status === "pending_review" ? "\u23F3" : ""
+        // A booking that did not happen must not read like a request that simply arrived: the row
+        // says so in the table too, not only inside the pending block.
+        format: (r6) => r6.failure_reason ? "\u26A0" : r6.status === "pending_review" ? "\u23F3" : ""
       }
     ];
   }
@@ -3428,12 +3670,18 @@ var ErpWhatsappInboxRequests = class extends i3 {
       dir: "desc"
     });
     await this.ctrl.load();
+    void this.resolveBookingSlot();
     try {
       const offs = [
         erplora2().on("whatsapp_inbox.request.approved", () => this.ctrl.load()),
         erplora2().on("whatsapp_inbox.request.rejected", () => this.ctrl.load()),
         erplora2().on("whatsapp_inbox.request.fulfilled", () => this.ctrl.load()),
-        erplora2().on("whatsapp_inbox.request.deleted", () => this.ctrl.load())
+        erplora2().on("whatsapp_inbox.request.deleted", () => this.ctrl.load()),
+        // The answers from whoever books. They arrive SECONDS after the approval (the outbox relay
+        // is asynchronous), so without these the screen would show `confirmed` and the operator
+        // would never see the refusal that reopened the request under their nose.
+        erplora2().on("appointments.booking_request.fulfilled", () => this.ctrl.load()),
+        erplora2().on("appointments.booking_request.failed", () => this.ctrl.load())
       ];
       this.unsub = () => offs.forEach((o7) => o7());
     } catch {
@@ -3444,11 +3692,65 @@ var ErpWhatsappInboxRequests = class extends i3 {
     super.disconnectedCallback();
     this.unsub?.();
   }
-  async approve(id) {
+  /** Resolves the fillers ONCE. No filler (no diary installed) = no booking panel, plain Approve. */
+  async resolveBookingSlot() {
+    if (this.bookingSlotResolved) return;
+    this.bookingSlotResolved = true;
+    const sdk = erplora2();
+    if (!sdk.loadSlot) return;
+    let resolved = [];
+    try {
+      resolved = await sdk.loadSlot("whatsapp_inbox.request.booking") ?? [];
+    } catch {
+      resolved = [];
+    }
+    this.bookingFillers = resolved.map((f3) => {
+      const el = document.createElement(f3.component);
+      el.addEventListener("erp:booking-resolved", (ev) => {
+        const detail = ev.detail;
+        void this.approve(detail.request_id, detail);
+      });
+      el.addEventListener("erp:booking-cancelled", () => {
+        this.bookingFor = "";
+      });
+      return { component: f3.component, el };
+    });
+    this.requestUpdate();
+  }
+  get canBook() {
+    return this.bookingFillers.length > 0;
+  }
+  /** (Re)mounts the fillers under the open request and tells them which one it is. Idempotent. */
+  ensureBookingSlotMounted() {
+    const host = this.renderRoot.querySelector(".booking-slot");
+    if (!host || !this.bookingFor) return;
+    const row = (this.ctrl?.rows ?? []).find((r6) => r6.id === this.bookingFor);
+    if (!row) return;
+    for (const f3 of this.bookingFillers) {
+      if (f3.el.parentElement !== host) host.appendChild(f3.el);
+      f3.el.dispatchEvent(new CustomEvent("erp:whatsapp-request", {
+        detail: {
+          request_id: row.id,
+          request_type: row.request_type,
+          customer_id: row.customer_id ?? "",
+          contact_name: row.contact_name,
+          contact_phone: row.contact_phone,
+          raw_summary: row.raw_summary
+        },
+        bubbles: false
+      }));
+    }
+  }
+  updated() {
+    this.ensureBookingSlotMounted();
+  }
+  /** Approves, optionally BOUND to the records a person chose. Bare = nothing to materialise. */
+  async approve(id, booking) {
     this.busyId = id;
     this.formError = "";
     try {
-      await erplora2().command("whatsapp_inbox.requests.approve", { request_id: id });
+      await erplora2().command("whatsapp_inbox.requests.approve", { request_id: id, ...booking ?? {} });
+      this.bookingFor = "";
       await this.ctrl.load();
     } catch (e5) {
       this.formError = e5 instanceof Error ? e5.message : erplora2().t(CATALOG2, "ui.errApprove");
@@ -3468,6 +3770,36 @@ var ErpWhatsappInboxRequests = class extends i3 {
       this.busyId = "";
     }
   }
+  renderPending(r6) {
+    const t5 = (k2) => erplora2().t(CATALOG2, k2);
+    const bookable = BOOKABLE_TYPES.has(r6.request_type) && this.canBook;
+    const open = this.bookingFor === r6.id;
+    return b2`<div class="pending-row">
+      ${r6.failure_reason ? b2`<ok-inline-feedback tone="warning" heading=${t5("ui.bookingFailedTitle")}>
+        ${r6.failure_reason}
+      </ok-inline-feedback>` : A}
+      <div class="who">
+        <span class="ref">${r6.reference_number}</span>
+        <span>·</span>
+        <span>${r6.request_type}</span>
+        <span>·</span>
+        <span>${r6.contact_name}</span>
+      </div>
+      ${r6.raw_summary ? b2`<p class="summary">${r6.raw_summary}</p>` : A}
+      <div class="actions">
+        ${bookable ? b2`<ion-button size="small" ?disabled=${this.busyId === r6.id}
+              @click=${() => {
+      this.bookingFor = open ? "" : r6.id;
+    }}>
+              ${open ? t5("ui.bookingClose") : r6.failure_reason ? t5("ui.bookingRetry") : t5("ui.bookingOpen")}
+            </ion-button>` : b2`<ion-button size="small" ?disabled=${this.busyId === r6.id}
+              @click=${() => this.approve(r6.id)}>${t5("ui.approve")}</ion-button>`}
+        <ion-button size="small" color="medium" ?disabled=${this.busyId === r6.id}
+          @click=${() => this.reject(r6.id)}>${t5("ui.reject")}</ion-button>
+      </div>
+      ${open ? b2`<div class="booking-slot"></div>` : A}
+    </div>`;
+  }
   render() {
     const t5 = (k2) => erplora2().t(CATALOG2, k2);
     const pending = (this.ctrl?.rows ?? []).filter((r6) => r6.status === "pending_review");
@@ -3479,17 +3811,7 @@ var ErpWhatsappInboxRequests = class extends i3 {
         ${this.ctrl?.error ? b2`<p class="err">${this.ctrl.error}</p>` : A}
         ${pending.length > 0 ? b2`<div>
           <h3>${t5("ui.pendingReview")}</h3>
-          ${pending.map((r6) => b2`<div class="actions" style="margin:.35rem 0">
-            <span style="flex:1">
-              ${r6.reference_number}
-              ·
-              ${r6.request_type}
-              ·
-              ${r6.contact_name}
-            </span>
-            <ion-button size="small" ?disabled=${this.busyId === r6.id} @click=${() => this.approve(r6.id)}>${t5("ui.approve")}</ion-button>
-            <ion-button size="small" color="medium" ?disabled=${this.busyId === r6.id} @click=${() => this.reject(r6.id)}>${t5("ui.reject")}</ion-button>
-          </div>`)}
+          ${pending.map((r6) => this.renderPending(r6))}
         </div>` : A}
         <ok-data-table .serverSide=${true} .views=${true} .cardTitle=${(row) => String(row.reference_number ?? row.contact_name ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "desc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchRequests")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyRequests")} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}></ok-data-table>
       </div>`;
@@ -3503,10 +3825,10 @@ __decorateClass([
 ], ErpWhatsappInboxRequests.prototype, "busyId", 2);
 __decorateClass([
   r5()
-], ErpWhatsappInboxRequests.prototype, "tick", 2);
+], ErpWhatsappInboxRequests.prototype, "bookingFor", 2);
 define("erp-whatsapp-inbox-requests", ErpWhatsappInboxRequests);
 
-// .worktrees/module-66-whatsapp_inbox/ui/components/erp-whatsapp-inbox-templates/erp-whatsapp-inbox-templates.ts
+// modules/whatsapp_inbox/ui/components/erp-whatsapp-inbox-templates/erp-whatsapp-inbox-templates.ts
 var CATALOG3 = { es: es_default, en: en_default };
 function erplora3() {
   const c5 = globalThis.erplora;

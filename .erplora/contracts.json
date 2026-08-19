@@ -14,6 +14,8 @@
       "whatsapp_inbox.templates.create"
     ],
     "events": [
+      "appointments.booking_request.failed",
+      "appointments.booking_request.fulfilled",
       "whatsapp_inbox.conversation.assigned",
       "whatsapp_inbox.message.received",
       "whatsapp_inbox.request.approved",
@@ -24,6 +26,8 @@
       "whatsapp_inbox.template.deleted",
       "whatsapp_inbox.template.updated"
     ],
-    "slots": []
+    "slots": [
+      "whatsapp_inbox.request.booking"
+    ]
   }
 }

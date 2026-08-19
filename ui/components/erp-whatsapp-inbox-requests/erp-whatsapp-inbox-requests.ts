@@ -2,6 +2,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { state } from 'lit/decorators.js';
 import { define } from '@erplora/outfitkit/define';
 import '@erplora/outfitkit/ok-data-table';
+import '@erplora/outfitkit/ok-inline-feedback';
 import type { DataTableColumn } from '@erplora/outfitkit';
 import { createListController } from '@erplora/module-sdk';
 import type { ListController, ListClient, ListParams, ListPage } from '@erplora/module-sdk';
@@ -9,11 +10,35 @@ import esLocale from '../../../locales/es.json';
 import enLocale from '../../../locales/en.json';
 const CATALOG: Record<string, unknown> = { es: esLocale, en: enLocale };
 
+// erp-whatsapp-inbox-requests — the INBOX of what customers asked for by WhatsApp, and the place
+// where a request stops being a sentence and becomes a booking (appointments#38).
+//
+// What changed and why. Approving used to be one button that moved a row to `confirmed`, and that
+// was the end of it: nobody materialised anything, so a customer who wrote at 3 AM got no
+// appointment. The far end (a listener in `appointments` that books) is only half the fix — the
+// harder half is HERE, because what the LLM stored in `data` is free text: a service NAME, «tomorrow
+// at 10», a first name. Since appointments#11/#10 `appointments.appointments.create` resolves
+// customer/service/professional against the hub's own records and FAILS CLOSED, so a hand-over
+// carrying names instead of ids can never succeed.
+//
+// The market decided the shape (Square Messages, Booksy, Fresha, Podium): an inbound message becomes
+// a DRAFT that a person completes against the real diary, never an automatic confirmed booking. So
+// the approval carries the ids, and the panel that picks them is NOT ours: `appointments` fills the
+// `whatsapp_inbox.request.booking` slot (ADR-0043 §3bis) with a component that knows services, staff
+// and availability. This module never learns what an appointment is — a shop that sells by WhatsApp
+// and has no diary simply gets the plain Approve button, exactly as before.
+//
+// And the answer comes back: `appointments` replies on the bus, and a refusal (the slot was taken
+// between the message and the approval — the normal case) reopens the request with the reason
+// written on it. That banner is the whole point: a failure has to be visible where the person who
+// can fix it already is.
+
 interface ErploraClientLike extends ListClient {
   query<T = unknown>(name: string, params?: Record<string, unknown>): Promise<T>;
   queryPage<R = unknown>(name: string, params: ListParams): Promise<ListPage<R>>;
   command<T = unknown>(name: string, payload?: Record<string, unknown>): Promise<T>;
   on(event: string, cb: (payload: unknown) => void): () => void;
+  loadSlot?(slot: string): Promise<Array<Record<string, unknown> & { component: string }>>;
   locale: string;
   t(catalog: Record<string, unknown>, key: string, params?: Record<string, unknown>): string;
 }
@@ -24,10 +49,27 @@ interface InboxRequest {
   request_type: string;
   status: string;
   contact_name: string;
+  contact_phone: string;
+  customer_id: string | null;
   raw_summary: string;
   confidence_score: number;
+  failure_code: string;
+  failure_reason: string;
   created_at: string;
 }
+
+/** What the slot filler hands back: the request bound to REAL records of this hub. */
+interface ResolvedBooking {
+  customer_id: string;
+  service_id: string;
+  staff_id: string;
+  start_datetime: string;
+  duration_minutes?: number;
+  notes?: string;
+}
+
+/** The request types that another module materialises. Everything else is approved bare. */
+const BOOKABLE_TYPES = new Set(['appointment', 'reservation']);
 
 function erplora(): ErploraClientLike {
   const c = (globalThis as { erplora?: ErploraClientLike }).erplora;
@@ -41,18 +83,34 @@ export class ErpWhatsappInboxRequests extends LitElement {
     header { display:flex; gap:.5rem; align-items:center; margin-bottom:.75rem; }
     h2 { margin:0; font-size:1.15rem; flex:1; }
     .err { color:#d9480f; font-weight:600; }
-    .actions { display:flex; gap:.35rem; }
+    .actions { display:flex; gap:.35rem; align-items:center; flex-wrap:wrap; }
+    .pending-row { border:1px solid var(--ion-color-step-150, #e5e3df); border-radius:.5rem; padding:.6rem .7rem; margin:.45rem 0; }
+    .who { display:flex; gap:.4rem; align-items:baseline; flex-wrap:wrap; }
+    .ref { font-weight:600; }
+    .summary { margin:.25rem 0 .5rem; color: var(--ion-color-step-600, #5b5852); }
+    /* 44px minimum touch target: this screen is used one-handed, at a counter. */
+    ion-button { --min-height: 44px; }
+    .booking-slot { margin-top:.5rem; }
+    .booking-slot:empty { display:none; }
   `;
 
   @state() formError = '';
 
   @state() busyId = '';
 
-  @state() tick = 0;
+  /** Which pending request has its booking panel open. One at a time, like a till. */
+  @state() bookingFor = '';
 
   private ctrl!: ListController<InboxRequest>;
 
   private unsub?: () => void;
+
+  /** HOST of the `whatsapp_inbox.request.booking` slot (ADR-0043 §3bis). Resolved once, mounted on
+   *  demand, told WHICH request is open by a `CustomEvent` on the filler element — never by props
+   *  or calls, and never by importing anything of the module that fills it. */
+  private bookingFillers: Array<{ component: string; el: HTMLElement }> = [];
+
+  private bookingSlotResolved = false;
 
   private get columns(): DataTableColumn[] {
     const t = (k: string): string => erplora().t(CATALOG, k);
@@ -100,7 +158,9 @@ export class ErpWhatsappInboxRequests extends LitElement {
     {
       key: 'id',
       header: t('ui.colActions'),
-      format: (r) => (r.status === 'pending_review' ? '⏳' : ''),
+      // A booking that did not happen must not read like a request that simply arrived: the row
+      // says so in the table too, not only inside the pending block.
+      format: (r) => (r.failure_reason ? '⚠' : r.status === 'pending_review' ? '⏳' : ''),
     },
     ];
   }
@@ -119,12 +179,18 @@ export class ErpWhatsappInboxRequests extends LitElement {
       dir: 'desc',
     });
     await this.ctrl.load();
+    void this.resolveBookingSlot();
     try {
       const offs = [
         erplora().on('whatsapp_inbox.request.approved', () => this.ctrl.load()),
         erplora().on('whatsapp_inbox.request.rejected', () => this.ctrl.load()),
         erplora().on('whatsapp_inbox.request.fulfilled', () => this.ctrl.load()),
         erplora().on('whatsapp_inbox.request.deleted', () => this.ctrl.load()),
+        // The answers from whoever books. They arrive SECONDS after the approval (the outbox relay
+        // is asynchronous), so without these the screen would show `confirmed` and the operator
+        // would never see the refusal that reopened the request under their nose.
+        erplora().on('appointments.booking_request.fulfilled', () => this.ctrl.load()),
+        erplora().on('appointments.booking_request.failed', () => this.ctrl.load()),
       ];
       this.unsub = () => offs.forEach((o) => o());
     } catch {
@@ -138,11 +204,66 @@ export class ErpWhatsappInboxRequests extends LitElement {
     this.unsub?.();
   }
 
-  private async approve(id: string) {
+  /** Resolves the fillers ONCE. No filler (no diary installed) = no booking panel, plain Approve. */
+  private async resolveBookingSlot(): Promise<void> {
+    if (this.bookingSlotResolved) return;
+    this.bookingSlotResolved = true;
+    const sdk = erplora();
+    if (!sdk.loadSlot) return;
+    let resolved: Array<Record<string, unknown> & { component: string }> = [];
+    // The slot name is a LITERAL on purpose (ADR-0127): the interop contract of this module is
+    // extracted statically, and a name behind a constant is a contract nobody can see.
+    try { resolved = (await sdk.loadSlot('whatsapp_inbox.request.booking')) ?? []; } catch { resolved = []; }
+    this.bookingFillers = resolved.map((f) => {
+      const el = document.createElement(f.component) as HTMLElement;
+      // The filler answers with the request bound to real records; approving is OURS to do.
+      el.addEventListener('erp:booking-resolved', (ev: Event) => {
+        const detail = (ev as CustomEvent<ResolvedBooking & { request_id: string }>).detail;
+        void this.approve(detail.request_id, detail);
+      });
+      el.addEventListener('erp:booking-cancelled', () => { this.bookingFor = ''; });
+      return { component: f.component, el };
+    });
+    this.requestUpdate();
+  }
+
+  private get canBook(): boolean {
+    return this.bookingFillers.length > 0;
+  }
+
+  /** (Re)mounts the fillers under the open request and tells them which one it is. Idempotent. */
+  private ensureBookingSlotMounted(): void {
+    const host = this.renderRoot.querySelector('.booking-slot') as HTMLElement | null;
+    if (!host || !this.bookingFor) return;
+    const row = (this.ctrl?.rows ?? []).find((r) => r.id === this.bookingFor);
+    if (!row) return;
+    for (const f of this.bookingFillers) {
+      if (f.el.parentElement !== host) host.appendChild(f.el);
+      f.el.dispatchEvent(new CustomEvent('erp:whatsapp-request', {
+        detail: {
+          request_id: row.id,
+          request_type: row.request_type,
+          customer_id: row.customer_id ?? '',
+          contact_name: row.contact_name,
+          contact_phone: row.contact_phone,
+          raw_summary: row.raw_summary,
+        },
+        bubbles: false,
+      }));
+    }
+  }
+
+  protected updated(): void {
+    this.ensureBookingSlotMounted();
+  }
+
+  /** Approves, optionally BOUND to the records a person chose. Bare = nothing to materialise. */
+  private async approve(id: string, booking?: ResolvedBooking) {
     this.busyId = id;
     this.formError = '';
     try {
-      await erplora().command('whatsapp_inbox.requests.approve', { request_id: id });
+      await erplora().command('whatsapp_inbox.requests.approve', { request_id: id, ...(booking ?? {}) });
+      this.bookingFor = '';
       await this.ctrl.load();
     } catch (e) {
       this.formError = e instanceof Error ? e.message : erplora().t(CATALOG, 'ui.errApprove');
@@ -164,6 +285,37 @@ export class ErpWhatsappInboxRequests extends LitElement {
     }
   }
 
+  private renderPending(r: InboxRequest) {
+    const t = (k: string): string => erplora().t(CATALOG, k);
+    const bookable = BOOKABLE_TYPES.has(r.request_type) && this.canBook;
+    const open = this.bookingFor === r.id;
+    return html`<div class="pending-row">
+      ${r.failure_reason ? html`<ok-inline-feedback tone="warning" heading=${t('ui.bookingFailedTitle')}>
+        ${r.failure_reason}
+      </ok-inline-feedback>` : nothing}
+      <div class="who">
+        <span class="ref">${r.reference_number}</span>
+        <span>·</span>
+        <span>${r.request_type}</span>
+        <span>·</span>
+        <span>${r.contact_name}</span>
+      </div>
+      ${r.raw_summary ? html`<p class="summary">${r.raw_summary}</p>` : nothing}
+      <div class="actions">
+        ${bookable
+          ? html`<ion-button size="small" ?disabled=${this.busyId === r.id}
+              @click=${() => { this.bookingFor = open ? '' : r.id; }}>
+              ${open ? t('ui.bookingClose') : r.failure_reason ? t('ui.bookingRetry') : t('ui.bookingOpen')}
+            </ion-button>`
+          : html`<ion-button size="small" ?disabled=${this.busyId === r.id}
+              @click=${() => this.approve(r.id)}>${t('ui.approve')}</ion-button>`}
+        <ion-button size="small" color="medium" ?disabled=${this.busyId === r.id}
+          @click=${() => this.reject(r.id)}>${t('ui.reject')}</ion-button>
+      </div>
+      ${open ? html`<div class="booking-slot"></div>` : nothing}
+    </div>`;
+  }
+
   render() {
     const t = (k: string): string => erplora().t(CATALOG, k);
     const pending = (this.ctrl?.rows ?? []).filter((r) => r.status === 'pending_review');
@@ -175,17 +327,7 @@ export class ErpWhatsappInboxRequests extends LitElement {
         ${this.ctrl?.error ? html`<p class="err">${this.ctrl.error}</p>` : nothing}
         ${pending.length > 0 ? html`<div>
           <h3>${t('ui.pendingReview')}</h3>
-          ${pending.map((r) => html`<div class="actions" style="margin:.35rem 0">
-            <span style="flex:1">
-              ${r.reference_number}
-              ·
-              ${r.request_type}
-              ·
-              ${r.contact_name}
-            </span>
-            <ion-button size="small" ?disabled=${this.busyId === r.id} @click=${() => this.approve(r.id)}>${t('ui.approve')}</ion-button>
-            <ion-button size="small" color="medium" ?disabled=${this.busyId === r.id} @click=${() => this.reject(r.id)}>${t('ui.reject')}</ion-button>
-          </div>`)}
+          ${pending.map((r) => this.renderPending(r))}
         </div>` : nothing}
         <ok-data-table .serverSide=${true} .views=${true} .cardTitle=${(row: Record<string, unknown>) => String(row.reference_number ?? row.contact_name ?? '—')} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? 'desc'} .searchable=${true} .searchPlaceholder=${t('ui.searchRequests')} .emptyMessage=${this.ctrl?.loading ? t('ui.loading') : t('ui.emptyRequests')} @pageChange=${(e: CustomEvent<number>) => this.ctrl.setPage(e.detail)} @sortChange=${(e: CustomEvent<{ sort: string; dir: 'asc' | 'desc' }>) => this.ctrl.setSort(e.detail.sort, e.detail.dir)} @searchChange=${(e: CustomEvent<string>) => this.ctrl.setSearch(e.detail)} @filterChange=${(e: CustomEvent<{ col: string; value: unknown }>) => this.ctrl.setFilter(e.detail.col, e.detail.value)}></ok-data-table>
       </div>`;
