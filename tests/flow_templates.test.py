@@ -72,17 +72,39 @@ def declared_grants(path):
 
 
 def workspace_contracts():
-    """Every query and command declared by the modules next to this one, or None if absent."""
+    """Every query and command declared by the modules next to this one, or None if absent.
+
+    🔴 `WORKSPACE_MODULES.is_dir()` is NOT the question. This module is always inside SOME
+    directory, so that probe answers True everywhere — on a CI runner it is
+    `/home/runner/work/whatsapp_inbox/`, holding exactly one module: ours. The glob then found one
+    manifest, and every cross-module name in the templates (`appointments.*`, `customers.*`,
+    `staff.*`, `services.*`, `schedules.*`) was reported as «no installed module declares it»: 22
+    FAILs on a battery whose job is to check GRANTS, and the module's gate red on a runner that is
+    simply not the monorepo (whatsapp_inbox#31).
+
+    The real question is whether the SIBLINGS are there. A workspace is a directory holding modules
+    OTHER than this one; anything else is a bare checkout, and the check has to skip loudly rather
+    than fail for something the templates did not do wrong.
+    """
     if not WORKSPACE_MODULES.is_dir():
         return None
     queries, commands = set(), set()
+    siblings = 0
     for manifest in WORKSPACE_MODULES.glob("*/module.json"):
+        if manifest.parent == MODULE_DIR:
+            continue
         try:
             m = json.loads(manifest.read_text())
         except json.JSONDecodeError:
             continue
+        siblings += 1
         queries |= set(m.get("queries", {}))
         commands |= set(m.get("commands", {}))
+    if not siblings:
+        return None
+    # Our own names count too — a template may call this module's commands.
+    queries |= set(MANIFEST.get("queries", {}))
+    commands |= set(MANIFEST.get("commands", {}))
     return queries, commands
 
 
