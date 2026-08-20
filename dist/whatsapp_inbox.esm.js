@@ -3229,6 +3229,9 @@ var es_default = {
     },
     templates: {
       label: "Plantillas"
+    },
+    settings: {
+      label: "Ajustes"
     }
   },
   ui: {
@@ -3317,7 +3320,29 @@ var es_default = {
     editTemplate: "Editar plantilla",
     errUpdateTemplate: "No se pudo actualizar la plantilla",
     confirmDeleteTemplate: "\xBFBorrar esta plantilla?",
-    errDeleteTemplate: "No se pudo borrar la plantilla"
+    errDeleteTemplate: "No se pudo borrar la plantilla",
+    settingsTitle: "Ajustes del canal",
+    settingsSaved: "Ajustes guardados.",
+    sectionChannel: "Canal",
+    sectionRequests: "Peticiones entrantes",
+    labelMonthlyAllowance: "Mensajes entrantes incluidos al mes",
+    allowanceUnlimited: "Sin tope en este plan",
+    helpAllowance: "Lo fija el plan que contrataste para este m\xF3dulo. Se cuenta por mes natural y no se edita aqu\xED.",
+    helpChannelLivesInAccount: "El n\xFAmero, el nombre visible, la calificaci\xF3n de calidad y las plantillas aprobadas por Meta viven en tu cuenta de ERPlora \u2014 el hub no guarda las credenciales del canal.",
+    labelApprovalMode: "Una petici\xF3n que lee el asistente",
+    approvalAuto: "Se confirma directamente",
+    approvalManual: "Queda en revisi\xF3n",
+    helpApprovalMode: "El asistente lee el mensaje y apunta lo que pide el cliente. \xABQueda en revisi\xF3n\xBB la deja en la pantalla de Peticiones para que una persona la apruebe; \xABse confirma directamente\xBB acepta lo que entendi\xF3 el asistente.",
+    helpConversationLivesInFlow: "El saludo, la respuesta autom\xE1tica y el texto de fuera de horario son parte del flujo que contesta, no de esta pantalla: se editan en Automatizaciones, donde se cambian sin republicar el m\xF3dulo.",
+    errorLoadSettings: "No se han podido cargar los ajustes del canal",
+    errorSave: "No se han podido guardar los ajustes del canal",
+    open: "Abrir",
+    requestDetail: "Petici\xF3n",
+    labelParsedData: "Lo que entendi\xF3 el asistente",
+    labelNotes: "Notas",
+    labelLinkedObject: "Registro creado",
+    errLoadRequest: "No se ha podido cargar la petici\xF3n",
+    labelUsedThisMonth: "Consumidos este mes"
   }
 };
 
@@ -3333,6 +3358,9 @@ var en_default = {
     },
     templates: {
       label: "Templates"
+    },
+    settings: {
+      label: "Settings"
     }
   },
   ui: {
@@ -3421,7 +3449,29 @@ var en_default = {
     editTemplate: "Edit template",
     errUpdateTemplate: "Could not update the template",
     confirmDeleteTemplate: "Delete this template?",
-    errDeleteTemplate: "Could not delete the template"
+    errDeleteTemplate: "Could not delete the template",
+    settingsTitle: "Channel settings",
+    settingsSaved: "Settings saved.",
+    sectionChannel: "Channel",
+    sectionRequests: "Incoming requests",
+    labelMonthlyAllowance: "Inbound messages included each month",
+    allowanceUnlimited: "No cap on this plan",
+    helpAllowance: "Set by the plan you bought for this module. It is counted per calendar month and it is not edited here.",
+    helpChannelLivesInAccount: "The phone number, the display name, the quality rating and the templates Meta approved live in your ERPlora account \u2014 the hub never stores the channel credentials.",
+    labelApprovalMode: "A request the assistant reads",
+    approvalAuto: "Is confirmed straight away",
+    approvalManual: "Waits in review",
+    helpApprovalMode: "The assistant reads a message and files what the customer asked for. \xABWaits in review\xBB leaves it on the Requests screen for a person to approve; \xABconfirmed straight away\xBB accepts what the assistant understood.",
+    helpConversationLivesInFlow: "The greeting, the automatic reply and the out-of-hours text are part of the flow that answers, not of this screen: edit them in Automations, where they can be changed without republishing the module.",
+    errorLoadSettings: "Could not load the channel settings",
+    errorSave: "Could not save the channel settings",
+    open: "Open",
+    requestDetail: "Request",
+    labelParsedData: "What the assistant understood",
+    labelNotes: "Notes",
+    labelLinkedObject: "Created record",
+    errLoadRequest: "Could not load the request",
+    labelUsedThisMonth: "Used this month"
   }
 };
 
@@ -3902,6 +3952,7 @@ var ErpWhatsappInboxRequests = class extends i3 {
     this.busyId = "";
     this.bookingFor = "";
     this.pendingDelete = null;
+    this.openRequest = null;
     /** HOST of the `whatsapp_inbox.request.booking` slot (ADR-0043 §3bis). Resolved once, mounted on
      *  demand, told WHICH request is open by a `CustomEvent` on the filler element — never by props
      *  or calls, and never by importing anything of the module that fills it. */
@@ -3924,6 +3975,12 @@ var ErpWhatsappInboxRequests = class extends i3 {
     ion-button { --min-height: 44px; }
     .booking-slot { margin-top:.5rem; }
     .booking-slot:empty { display:none; }
+    .detail { border:1px solid var(--ion-border-color,#e7e2d6); border-radius: var(--ok-radius-sm, 10px);
+      padding:.75rem 1rem; margin:0 0 1rem; background:var(--ok-surface-2, var(--ion-color-step-50, rgba(0,0,0,.04))); }
+    .detail h4 { margin:.6rem 0 .2rem; font-size:.85rem; color: var(--ion-color-medium,#6b6557); }
+    .parsed { display:grid; grid-template-columns:auto 1fr; gap:.15rem .75rem; margin:0; }
+    .parsed dt { font-weight:600; }
+    .parsed dd { margin:0; }
     .confirm { border:1px solid var(--ion-border-color,#e7e2d6); border-radius: var(--ok-radius-sm, 10px);
       padding:.75rem 1rem; margin:0 0 1rem; background:var(--ok-surface-2, var(--ion-color-step-50, rgba(0,0,0,.04))); }
   `;
@@ -3938,6 +3995,12 @@ var ErpWhatsappInboxRequests = class extends i3 {
   get rowActions() {
     const t5 = (k2) => erplora2().t(CATALOG2, k2);
     return [
+      {
+        id: "open",
+        label: t5("ui.open"),
+        icon: "open-outline",
+        color: "primary"
+      },
       {
         id: "fulfil",
         label: t5("ui.markFulfilled"),
@@ -4134,6 +4197,21 @@ var ErpWhatsappInboxRequests = class extends i3 {
       this.busyId = "";
     }
   }
+  /** Reads the request in full. The permission is the same `view_request` the list already needed,
+   *  so this opens no door that was not open. */
+  async openDetail(row) {
+    this.busyId = row.id;
+    this.formError = "";
+    try {
+      const rows = await erplora2().query("whatsapp_inbox.requests.get", { request_id: row.id });
+      const detail = Array.isArray(rows) ? rows[0] : rows;
+      this.openRequest = detail ?? null;
+    } catch (e5) {
+      this.formError = e5 instanceof Error ? e5.message : erplora2().t(CATALOG2, "ui.errLoadRequest");
+    } finally {
+      this.busyId = "";
+    }
+  }
   /** Deleting asks first, in the page — never `window.confirm`, which a POS webview swallows. */
   async confirmDelete() {
     const r6 = this.pendingDelete;
@@ -4152,6 +4230,7 @@ var ErpWhatsappInboxRequests = class extends i3 {
   }
   onRowAction(ev) {
     const row = ev.detail.row;
+    if (ev.detail.actionId === "open") void this.openDetail(row);
     if (ev.detail.actionId === "fulfil") void this.fulfil(row);
     if (ev.detail.actionId === "delete") {
       this.pendingDelete = row;
@@ -4166,6 +4245,50 @@ var ErpWhatsappInboxRequests = class extends i3 {
       <ion-button size="small" color="danger" ?disabled=${this.busyId === this.pendingDelete.id}
         @click=${() => this.confirmDelete()}>${t5("ui.delete")}</ion-button>
       <ion-button size="small" fill="clear" @click=${() => this.pendingDelete = null}>${t5("ui.cancel")}</ion-button>
+    </section>`;
+  }
+  /** The parsed payload, field by field. It is free JSON by design (the schema is dynamic), so it
+   *  is rendered as the pairs it is — inventing a shape here would hide whatever the assistant
+   *  actually stored, which is the one thing this panel exists to show. */
+  renderParsed(raw) {
+    let parsed;
+    try {
+      parsed = JSON.parse(raw || "{}");
+    } catch {
+      parsed = null;
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return raw ? b2`<p class="summary">${raw}</p>` : A;
+    }
+    const pairs = Object.entries(parsed);
+    if (pairs.length === 0) return A;
+    return b2`<dl class="parsed">
+      ${pairs.map(([k2, v3]) => b2`<dt>${k2}</dt><dd>${typeof v3 === "object" ? JSON.stringify(v3) : String(v3)}</dd>`)}
+    </dl>`;
+  }
+  renderDetail() {
+    const r6 = this.openRequest;
+    if (!r6) return A;
+    const t5 = (k2) => erplora2().t(CATALOG2, k2);
+    return b2`<section class="detail">
+      <div class="who">
+        <span class="ref">${r6.reference_number}</span>
+        <span>·</span>
+        <span>${r6.request_type}</span>
+        <span>·</span>
+        <span>${r6.contact_name}</span>
+      </div>
+      ${r6.raw_summary ? b2`<p class="summary">${r6.raw_summary}</p>` : A}
+      <h4>${t5("ui.labelParsedData")}</h4>
+      ${this.renderParsed(r6.data)}
+      ${r6.notes ? b2`<h4>${t5("ui.labelNotes")}</h4><p class="summary">${r6.notes}</p>` : A}
+      ${r6.failure_reason ? b2`<ok-inline-feedback tone="warning" heading=${t5("ui.bookingFailedTitle")}>
+        ${r6.failure_reason}
+      </ok-inline-feedback>` : A}
+      ${r6.linked_object_id ? b2`<p class="summary">${t5("ui.labelLinkedObject")}: ${r6.linked_module} · ${r6.linked_object_id}</p>` : A}
+      <ion-button size="small" fill="clear" @click=${() => {
+      this.openRequest = null;
+    }}>${t5("ui.closeView")}</ion-button>
     </section>`;
   }
   renderPending(r6) {
@@ -4208,6 +4331,7 @@ var ErpWhatsappInboxRequests = class extends i3 {
         ${this.formError ? b2`<p class="err">${this.formError}</p>` : A}
         ${this.ctrl?.error ? b2`<p class="err">${this.ctrl.error}</p>` : A}
         ${this.renderDeleteConfirm()}
+        ${this.renderDetail()}
         ${pending.length > 0 ? b2`<div>
           <h3>${t5("ui.pendingReview")}</h3>
           ${pending.map((r6) => this.renderPending(r6))}
@@ -4228,11 +4352,214 @@ __decorateClass([
 __decorateClass([
   r5()
 ], ErpWhatsappInboxRequests.prototype, "pendingDelete", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxRequests.prototype, "openRequest", 2);
 define("erp-whatsapp-inbox-requests", ErpWhatsappInboxRequests);
 
-// modules/whatsapp_inbox/ui/components/erp-whatsapp-inbox-templates/erp-whatsapp-inbox-templates.ts
+// modules/whatsapp_inbox/ui/components/erp-whatsapp-inbox-settings/erp-whatsapp-inbox-settings.ts
 var CATALOG3 = { es: es_default, en: en_default };
+var DEFAULTS = {
+  is_enabled: 0,
+  account_mode: "shared",
+  auto_reply_enabled: 1,
+  approval_mode: "manual",
+  require_confirmation: 1,
+  request_schema: "{}",
+  gpt_system_prompt: "",
+  input_modules: "[]",
+  output_modules: "[]",
+  auto_close_hours: 24,
+  notify_staff_new_request: 1,
+  greeting_message: "",
+  out_of_hours_message: "",
+  free_tier_monthly_limit: 0
+};
 function erplora3() {
+  const c5 = globalThis.erplora;
+  if (!c5) throw new Error("erplora SDK no inicializado por el shell");
+  return c5;
+}
+function flag(value, fallback) {
+  const n6 = Number(value);
+  return n6 === 0 || n6 === 1 ? n6 : fallback;
+}
+var ErpWhatsappInboxSettings = class extends i3 {
+  constructor() {
+    super(...arguments);
+    this.s = { ...DEFAULTS };
+    this.loading = true;
+    this.saving = false;
+    this.error = "";
+    this.saved = false;
+    this.usage = null;
+    this.onLocaleChange = () => this.requestUpdate();
+  }
+  static {
+    this.styles = i`
+    :host { display:block; font-family: system-ui, sans-serif; color: var(--ion-text-color, #1c1b18); }
+    header { display:flex; gap:.5rem; align-items:center; margin-bottom:.75rem; }
+    h2 { margin:0; font-size:1.15rem; flex:1; }
+    h3 { margin:0 0 .35rem; font-size:.95rem; }
+    section { border:1px solid var(--ion-border-color,#e7e2d6); border-radius: var(--ok-radius-sm, 10px);
+      padding:.75rem 1rem; margin:0 0 1rem; background:var(--ok-surface-2, var(--ion-color-step-50, rgba(0,0,0,.04))); }
+    .field { display:flex; flex-direction:column; gap:.25rem; margin-bottom:.75rem; }
+    .help { margin:.25rem 0 0; font-size:.85rem; color: var(--ion-color-medium,#6b6557); }
+    .readonly { display:flex; justify-content:space-between; gap:1rem; align-items:baseline;
+      padding:.35rem 0; border-bottom:1px dashed var(--ion-border-color,#e7e2d6); }
+    .readonly:last-of-type { border-bottom:0; }
+    .readonly b { font-variant-numeric: tabular-nums; }
+    .err { color:#d9480f; font-weight:600; }
+    .ok { color:#2b8a3e; font-weight:600; }
+    .actions { display:flex; gap:.5rem; }
+    /* 44px minimum touch target: this screen is used one-handed, at a counter. */
+    ion-button { --min-height: 44px; }
+  `;
+  }
+  async connectedCallback() {
+    super.connectedCallback();
+    window.addEventListener("erplora:locale-changed", this.onLocaleChange);
+    await this.refresh();
+  }
+  disconnectedCallback() {
+    window.removeEventListener("erplora:locale-changed", this.onLocaleChange);
+    super.disconnectedCallback();
+  }
+  async refresh() {
+    this.loading = true;
+    this.error = "";
+    try {
+      const rows = await erplora3().query("whatsapp_inbox.settings.get");
+      const row = Array.isArray(rows) ? rows[0] : rows;
+      this.s = row ? { ...DEFAULTS, ...row } : { ...DEFAULTS };
+      const usage = await erplora3().query(
+        "whatsapp_inbox.usage.get"
+      );
+      this.usage = Array.isArray(usage) ? usage[0] ?? null : usage;
+    } catch (e5) {
+      this.error = e5 instanceof Error ? e5.message : erplora3().t(CATALOG3, "ui.errorLoadSettings");
+    } finally {
+      this.loading = false;
+    }
+  }
+  set(key, value) {
+    this.s = { ...this.s, [key]: value };
+    this.saved = false;
+  }
+  /** `settings.upsert` writes EVERY column of the singleton row, so what the screen does not show
+   *  travels back exactly as it was read. That is not politeness: omitting the free-tier meter or
+   *  the flow's texts would blank them on the first save. */
+  async save(ev) {
+    ev.preventDefault();
+    this.saving = true;
+    this.error = "";
+    this.saved = false;
+    try {
+      await erplora3().command("whatsapp_inbox.settings.upsert", {
+        // The one decision this screen owns.
+        approval_mode: this.s.approval_mode === "auto" ? "auto" : "manual",
+        // Carried, never offered — see the header comment.
+        is_enabled: flag(this.s.is_enabled, DEFAULTS.is_enabled),
+        account_mode: this.s.account_mode || DEFAULTS.account_mode,
+        auto_reply_enabled: flag(this.s.auto_reply_enabled, DEFAULTS.auto_reply_enabled),
+        require_confirmation: flag(this.s.require_confirmation, DEFAULTS.require_confirmation),
+        request_schema: this.s.request_schema ?? DEFAULTS.request_schema,
+        gpt_system_prompt: this.s.gpt_system_prompt ?? DEFAULTS.gpt_system_prompt,
+        input_modules: this.s.input_modules ?? DEFAULTS.input_modules,
+        output_modules: this.s.output_modules ?? DEFAULTS.output_modules,
+        auto_close_hours: Number(this.s.auto_close_hours) || 0,
+        notify_staff_new_request: flag(this.s.notify_staff_new_request, DEFAULTS.notify_staff_new_request),
+        greeting_message: this.s.greeting_message ?? DEFAULTS.greeting_message,
+        out_of_hours_message: this.s.out_of_hours_message ?? DEFAULTS.out_of_hours_message,
+        // The invoice. Read here, written back unchanged, never typed by anybody.
+        free_tier_monthly_limit: Number(this.s.free_tier_monthly_limit) || 0
+      });
+      this.saved = true;
+      await this.refresh();
+    } catch (e5) {
+      this.error = e5 instanceof Error ? e5.message : erplora3().t(CATALOG3, "ui.errorSave");
+    } finally {
+      this.saving = false;
+    }
+  }
+  renderChannel() {
+    const t5 = (k2) => erplora3().t(CATALOG3, k2);
+    const limit = Number(this.s.free_tier_monthly_limit) || 0;
+    return b2`<section>
+      <h3>${t5("ui.sectionChannel")}</h3>
+      <div class="readonly">
+        <span>${t5("ui.labelUsedThisMonth")}</span>
+        <b>${String(Number(this.usage?.inbound_this_month ?? 0))}</b>
+      </div>
+      <div class="readonly">
+        <span>${t5("ui.labelMonthlyAllowance")}</span>
+        <b>${limit > 0 ? String(limit) : t5("ui.allowanceUnlimited")}</b>
+      </div>
+      <p class="help">${t5("ui.helpAllowance")}</p>
+      <p class="help">${t5("ui.helpChannelLivesInAccount")}</p>
+      <p class="help">${t5("ui.noReplyHere")}</p>
+    </section>`;
+  }
+  renderRequests() {
+    const t5 = (k2) => erplora3().t(CATALOG3, k2);
+    return b2`<section>
+      <h3>${t5("ui.sectionRequests")}</h3>
+      <div class="field">
+        <ion-select
+          mode="md"
+          fill="outline"
+          label-placement="floating"
+          label=${t5("ui.labelApprovalMode")}
+          .value=${this.s.approval_mode === "auto" ? "auto" : "manual"}
+          @ionChange=${(e5) => this.set("approval_mode", String(e5.target.value))}
+        >
+          <ion-select-option value="auto">${t5("ui.approvalAuto")}</ion-select-option>
+          <ion-select-option value="manual">${t5("ui.approvalManual")}</ion-select-option>
+        </ion-select>
+        <p class="help">${t5("ui.helpApprovalMode")}</p>
+      </div>
+      <p class="help">${t5("ui.helpConversationLivesInFlow")}</p>
+    </section>`;
+  }
+  render() {
+    const t5 = (k2) => erplora3().t(CATALOG3, k2);
+    return b2`<form @submit=${(e5) => this.save(e5)}>
+        <header><h2>${t5("ui.settingsTitle")}</h2></header>
+        ${this.error ? b2`<p class="err">${this.error}</p>` : A}
+        ${this.saved ? b2`<p class="ok">${t5("ui.settingsSaved")}</p>` : A}
+        ${this.renderChannel()}
+        ${this.renderRequests()}
+        <div class="actions">
+          <ion-button type="submit" ?disabled=${this.saving || this.loading}>
+            ${this.saving ? t5("ui.saving") : t5("ui.save")}
+          </ion-button>
+        </div>
+      </form>`;
+  }
+};
+__decorateClass([
+  r5()
+], ErpWhatsappInboxSettings.prototype, "s", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxSettings.prototype, "loading", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxSettings.prototype, "saving", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxSettings.prototype, "error", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxSettings.prototype, "saved", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxSettings.prototype, "usage", 2);
+define("erp-whatsapp-inbox-settings", ErpWhatsappInboxSettings);
+
+// modules/whatsapp_inbox/ui/components/erp-whatsapp-inbox-templates/erp-whatsapp-inbox-templates.ts
+var CATALOG4 = { es: es_default, en: en_default };
+function erplora4() {
   const c5 = globalThis.erplora;
   if (!c5) throw new Error("erplora SDK no inicializado por el shell");
   return c5;
@@ -4245,7 +4572,7 @@ var META_STATUS_LABEL_KEYS = {
 };
 function metaStatusLabel(status) {
   const key = META_STATUS_LABEL_KEYS[status];
-  return key ? erplora3().t(CATALOG3, key) : status;
+  return key ? erplora4().t(CATALOG4, key) : status;
 }
 var ErpWhatsappInboxTemplates = class extends i3 {
   constructor() {
@@ -4287,14 +4614,14 @@ var ErpWhatsappInboxTemplates = class extends i3 {
   `;
   }
   get rowActions() {
-    const t5 = (k2) => erplora3().t(CATALOG3, k2);
+    const t5 = (k2) => erplora4().t(CATALOG4, k2);
     return [
       { id: "edit", label: t5("ui.edit"), icon: "create-outline", color: "primary" },
       { id: "delete", label: t5("ui.delete"), icon: "trash-outline", color: "danger" }
     ];
   }
   get columns() {
-    const t5 = (k2) => erplora3().t(CATALOG3, k2);
+    const t5 = (k2) => erplora4().t(CATALOG4, k2);
     return [
       { key: "name", header: t5("ui.colName"), sortable: true, filterable: true, filterType: "text" },
       { key: "language", header: t5("ui.colLanguage"), sortable: true, filterable: true, filterType: "text" },
@@ -4342,7 +4669,7 @@ var ErpWhatsappInboxTemplates = class extends i3 {
   async connectedCallback() {
     super.connectedCallback();
     window.addEventListener("erplora:locale-changed", this.onLocaleChange);
-    this.ctrl = createListController(erplora3(), "whatsapp_inbox.templates.list", () => this.requestUpdate(), {
+    this.ctrl = createListController(erplora4(), "whatsapp_inbox.templates.list", () => this.requestUpdate(), {
       pageSize: 50,
       sort: "created_at",
       dir: "desc"
@@ -4350,9 +4677,9 @@ var ErpWhatsappInboxTemplates = class extends i3 {
     await this.ctrl.load();
     try {
       const offs = [
-        erplora3().on("whatsapp_inbox.template.created", () => this.ctrl.load()),
-        erplora3().on("whatsapp_inbox.template.updated", () => this.ctrl.load()),
-        erplora3().on("whatsapp_inbox.template.deleted", () => this.ctrl.load())
+        erplora4().on("whatsapp_inbox.template.created", () => this.ctrl.load()),
+        erplora4().on("whatsapp_inbox.template.updated", () => this.ctrl.load()),
+        erplora4().on("whatsapp_inbox.template.deleted", () => this.ctrl.load())
       ];
       this.unsub = () => offs.forEach((o7) => o7());
     } catch {
@@ -4377,7 +4704,7 @@ var ErpWhatsappInboxTemplates = class extends i3 {
     this.saving = true;
     this.formError = "";
     try {
-      await erplora3().command("whatsapp_inbox.templates.create", {
+      await erplora4().command("whatsapp_inbox.templates.create", {
         name: this.newName.trim(),
         language: this.newLanguage.trim() || "es",
         category: this.newCategory,
@@ -4390,7 +4717,7 @@ var ErpWhatsappInboxTemplates = class extends i3 {
       this.dataTable()?.close();
       await this.ctrl.load();
     } catch (e5) {
-      this.formError = e5 instanceof Error ? e5.message : erplora3().t(CATALOG3, "ui.errCreateTemplate");
+      this.formError = e5 instanceof Error ? e5.message : erplora4().t(CATALOG4, "ui.errCreateTemplate");
     } finally {
       this.saving = false;
     }
@@ -4430,7 +4757,7 @@ var ErpWhatsappInboxTemplates = class extends i3 {
     this.saving = true;
     this.formError = "";
     try {
-      await erplora3().command("whatsapp_inbox.templates.update", {
+      await erplora4().command("whatsapp_inbox.templates.update", {
         template_id: this.editingId,
         name: this.newName.trim(),
         language: this.newLanguage.trim() || "es",
@@ -4445,7 +4772,7 @@ var ErpWhatsappInboxTemplates = class extends i3 {
       this.dataTable()?.close();
       await this.ctrl.load();
     } catch (e5) {
-      this.formError = e5 instanceof Error ? e5.message : erplora3().t(CATALOG3, "ui.errUpdateTemplate");
+      this.formError = e5 instanceof Error ? e5.message : erplora4().t(CATALOG4, "ui.errUpdateTemplate");
     } finally {
       this.saving = false;
     }
@@ -4458,12 +4785,12 @@ var ErpWhatsappInboxTemplates = class extends i3 {
     this.saving = true;
     this.formError = "";
     try {
-      await erplora3().command("whatsapp_inbox.templates.delete", { template_id: row.id });
+      await erplora4().command("whatsapp_inbox.templates.delete", { template_id: row.id });
       if (this.editingId === row.id) this.resetForm();
       this.pendingDelete = null;
       await this.ctrl.load();
     } catch (e5) {
-      this.formError = e5 instanceof Error ? e5.message : erplora3().t(CATALOG3, "ui.errDeleteTemplate");
+      this.formError = e5 instanceof Error ? e5.message : erplora4().t(CATALOG4, "ui.errDeleteTemplate");
     } finally {
       this.saving = false;
     }
@@ -4478,7 +4805,7 @@ var ErpWhatsappInboxTemplates = class extends i3 {
   }
   renderDeleteConfirm() {
     if (!this.pendingDelete) return A;
-    const t5 = (k2) => erplora3().t(CATALOG3, k2);
+    const t5 = (k2) => erplora4().t(CATALOG4, k2);
     return b2`<section class="panel">
       <p>${t5("ui.confirmDeleteTemplate")} <strong>${this.pendingDelete.name}</strong></p>
       <ion-button size="small" color="danger" ?disabled=${this.saving}
@@ -4487,7 +4814,7 @@ var ErpWhatsappInboxTemplates = class extends i3 {
     </section>`;
   }
   render() {
-    const t5 = (k2) => erplora3().t(CATALOG3, k2);
+    const t5 = (k2) => erplora4().t(CATALOG4, k2);
     return b2`<div class="page">
         ${this.formError ? b2`<p class="err">${this.formError}</p>` : A}
         ${this.ctrl?.error ? b2`<p class="err">${this.ctrl.error}</p>` : A}

@@ -10,6 +10,9 @@
     },
     "templates": {
       "label": "Plantillas"
+    },
+    "settings": {
+      "label": "Ajustes"
     }
   },
   "ui": {
@@ -98,6 +101,28 @@
     "editTemplate": "Editar plantilla",
     "errUpdateTemplate": "No se pudo actualizar la plantilla",
     "confirmDeleteTemplate": "¿Borrar esta plantilla?",
-    "errDeleteTemplate": "No se pudo borrar la plantilla"
+    "errDeleteTemplate": "No se pudo borrar la plantilla",
+    "settingsTitle": "Ajustes del canal",
+    "settingsSaved": "Ajustes guardados.",
+    "sectionChannel": "Canal",
+    "sectionRequests": "Peticiones entrantes",
+    "labelMonthlyAllowance": "Mensajes entrantes incluidos al mes",
+    "allowanceUnlimited": "Sin tope en este plan",
+    "helpAllowance": "Lo fija el plan que contrataste para este módulo. Se cuenta por mes natural y no se edita aquí.",
+    "helpChannelLivesInAccount": "El número, el nombre visible, la calificación de calidad y las plantillas aprobadas por Meta viven en tu cuenta de ERPlora — el hub no guarda las credenciales del canal.",
+    "labelApprovalMode": "Una petición que lee el asistente",
+    "approvalAuto": "Se confirma directamente",
+    "approvalManual": "Queda en revisión",
+    "helpApprovalMode": "El asistente lee el mensaje y apunta lo que pide el cliente. «Queda en revisión» la deja en la pantalla de Peticiones para que una persona la apruebe; «se confirma directamente» acepta lo que entendió el asistente.",
+    "helpConversationLivesInFlow": "El saludo, la respuesta automática y el texto de fuera de horario son parte del flujo que contesta, no de esta pantalla: se editan en Automatizaciones, donde se cambian sin republicar el módulo.",
+    "errorLoadSettings": "No se han podido cargar los ajustes del canal",
+    "errorSave": "No se han podido guardar los ajustes del canal",
+    "open": "Abrir",
+    "requestDetail": "Petición",
+    "labelParsedData": "Lo que entendió el asistente",
+    "labelNotes": "Notas",
+    "labelLinkedObject": "Registro creado",
+    "errLoadRequest": "No se ha podido cargar la petición",
+    "labelUsedThisMonth": "Consumidos este mes"
   }
 }

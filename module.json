@@ -59,6 +59,12 @@
       "label": "Templates",
       "icon": "document-text-outline",
       "component": "erp-whatsapp-inbox-templates"
+    },
+    {
+      "id": "settings",
+      "label": "Settings",
+      "icon": "settings-outline",
+      "component": "erp-whatsapp-inbox-settings"
     }
   ],
   "migrations": {
@@ -325,6 +331,13 @@
       "sql": "queries/settings_get.sql",
       "ai": {
         "description": "Retrieves the current WhatsApp channel configuration"
+      }
+    },
+    "whatsapp_inbox.usage.get": {
+      "permission": "whatsapp_inbox.manage_settings",
+      "sql": "queries/usage_get.sql",
+      "ai": {
+        "description": "Inbound WhatsApp messages consumed this calendar month and the monthly allowance of the plan (0 = no cap). Read-only: the allowance is set by billing, never from the hub."
       }
     }
   },
