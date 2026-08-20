@@ -137,3 +137,66 @@ describe('marcar como atendida (`requests.fulfill`)', () => {
     ).toBeUndefined();
   });
 });
+
+// whatsapp_inbox#6 — the LAST name of this module with no door: `whatsapp_inbox.requests.get`.
+//
+// The list projects what a table needs (reference, type, status, contact, confidence). What the
+// customer actually ASKED FOR does not fit in a column and is not in the list at all: `data`, the
+// JSON the LLM parsed, plus `notes`, `linked_module`/`linked_object_id` and the timestamps. So the
+// person deciding whether to approve was deciding from a one-line summary while the structured
+// answer sat in a query nobody called.
+//
+// Opening a request therefore READS it — it does not paint the row it already has. That is the
+// difference between a detail and a tooltip, and it is also what keeps the screen correct when the
+// row is stale: the approval that failed seconds ago arrives on the bus, and the open detail is the
+// one place where the reason has to be true.
+describe('abrir una solicitud la LEE con `requests.get` (whatsapp_inbox#6)', () => {
+  const DETALLE = {
+    ...PENDING,
+    data: '{"service":"tinte","when":"mañana a las 10"}',
+    notes: 'Prefiere por la mañana',
+    linked_module: '',
+    linked_object_id: null,
+    confirmed_at: null,
+    fulfilled_at: null,
+  };
+  const consultas: { name: string; params: Record<string, unknown> }[] = [];
+
+  beforeEach(() => {
+    consultas.length = 0;
+    const base = (globalThis as Record<string, unknown>).erplora as Record<string, unknown>;
+    (globalThis as Record<string, unknown>).erplora = {
+      ...base,
+      query: async (name: string, params: Record<string, unknown>) => {
+        consultas.push({ name, params });
+        return [DETALLE];
+      },
+    };
+  });
+
+  it('pide el detalle por su id', async () => {
+    const el = await montar();
+    await accionar(el, 'open', PENDING);
+    const leida = consultas.find((c) => c.name === 'whatsapp_inbox.requests.get');
+    expect(leida, 'abrir la solicitud no llamó a `whatsapp_inbox.requests.get`').toBeTruthy();
+    expect(leida!.params.request_id).toBe('r1');
+  });
+
+  it('pinta lo que SOLO trae el detalle (los datos parseados y las notas)', async () => {
+    const el = await montar();
+    await accionar(el, 'open', PENDING);
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    const texto = el.shadowRoot.textContent ?? '';
+    expect(texto, 'el detalle no enseña los datos parseados: es la fila de la lista otra vez').toContain('tinte');
+    expect(texto).toContain('Prefiere por la mañana');
+  });
+
+  it('cerrarlo lo quita de la pantalla', async () => {
+    const el = await montar();
+    await accionar(el, 'open', PENDING);
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    (el as unknown as { openRequest: unknown }).openRequest = null;
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    expect(el.shadowRoot.textContent ?? '').not.toContain('Prefiere por la mañana');
+  });
+});

@@ -58,6 +58,21 @@ interface InboxRequest {
   created_at: string;
 }
 
+/** The whole request, as `whatsapp_inbox.requests.get` projects it (whatsapp_inbox#6).
+ *
+ *  The list gives a table what a table needs. What the customer actually ASKED FOR does not fit in
+ *  a column and is not in the list at all: `data` — the JSON the assistant parsed — plus `notes`,
+ *  the link to whatever was created, and the timestamps. Deciding whether to approve from a
+ *  one-line summary was deciding with the answer sitting in a query nobody called. */
+interface RequestDetail extends InboxRequest {
+  data: string;
+  notes: string;
+  linked_module: string;
+  linked_object_id: string | null;
+  confirmed_at: string | null;
+  fulfilled_at: string | null;
+}
+
 /** What the slot filler hands back: the request bound to REAL records of this hub. */
 interface ResolvedBooking {
   customer_id: string;
@@ -92,6 +107,12 @@ export class ErpWhatsappInboxRequests extends LitElement {
     ion-button { --min-height: 44px; }
     .booking-slot { margin-top:.5rem; }
     .booking-slot:empty { display:none; }
+    .detail { border:1px solid var(--ion-border-color,#e7e2d6); border-radius: var(--ok-radius-sm, 10px);
+      padding:.75rem 1rem; margin:0 0 1rem; background:var(--ok-surface-2, var(--ion-color-step-50, rgba(0,0,0,.04))); }
+    .detail h4 { margin:.6rem 0 .2rem; font-size:.85rem; color: var(--ion-color-medium,#6b6557); }
+    .parsed { display:grid; grid-template-columns:auto 1fr; gap:.15rem .75rem; margin:0; }
+    .parsed dt { font-weight:600; }
+    .parsed dd { margin:0; }
     .confirm { border:1px solid var(--ion-border-color,#e7e2d6); border-radius: var(--ok-radius-sm, 10px);
       padding:.75rem 1rem; margin:0 0 1rem; background:var(--ok-surface-2, var(--ion-color-step-50, rgba(0,0,0,.04))); }
   `;
@@ -106,6 +127,11 @@ export class ErpWhatsappInboxRequests extends LitElement {
   /** The request whose delete is awaiting confirmation, in the page (whatsapp_inbox#29). */
   @state() pendingDelete: InboxRequest | null = null;
 
+  /** The request being READ in full, or `null`. Opening one always re-reads it with
+   *  `requests.get`: the row in hand can be seconds old — an approval that failed arrives on the
+   *  bus — and the detail is the one place where the reason has to be true. */
+  @state() openRequest: RequestDetail | null = null;
+
   /** Row actions of the table — the doors `requests.delete` and `requests.fulfill` never had.
    *
    *  Both are `disabled` and not hidden when the state does not allow them. The guard is the SQL's
@@ -116,6 +142,12 @@ export class ErpWhatsappInboxRequests extends LitElement {
   private get rowActions() {
     const t = (k: string): string => erplora().t(CATALOG, k);
     return [
+      {
+        id: 'open',
+        label: t('ui.open'),
+        icon: 'open-outline',
+        color: 'primary',
+      },
       {
         id: 'fulfil',
         label: t('ui.markFulfilled'),
@@ -334,6 +366,22 @@ export class ErpWhatsappInboxRequests extends LitElement {
     }
   }
 
+  /** Reads the request in full. The permission is the same `view_request` the list already needed,
+   *  so this opens no door that was not open. */
+  private async openDetail(row: InboxRequest) {
+    this.busyId = row.id;
+    this.formError = '';
+    try {
+      const rows = await erplora().query<RequestDetail[]>('whatsapp_inbox.requests.get', { request_id: row.id });
+      const detail = Array.isArray(rows) ? rows[0] : (rows as unknown as RequestDetail | undefined);
+      this.openRequest = detail ?? null;
+    } catch (e) {
+      this.formError = e instanceof Error ? e.message : erplora().t(CATALOG, 'ui.errLoadRequest');
+    } finally {
+      this.busyId = '';
+    }
+  }
+
   /** Deleting asks first, in the page — never `window.confirm`, which a POS webview swallows. */
   private async confirmDelete() {
     const r = this.pendingDelete;
@@ -353,6 +401,7 @@ export class ErpWhatsappInboxRequests extends LitElement {
 
   private onRowAction(ev: CustomEvent<{ actionId: string; row: Record<string, unknown> }>) {
     const row = ev.detail.row as unknown as InboxRequest;
+    if (ev.detail.actionId === 'open') void this.openDetail(row);
     if (ev.detail.actionId === 'fulfil') void this.fulfil(row);
     if (ev.detail.actionId === 'delete') {
       this.pendingDelete = row;
@@ -368,6 +417,48 @@ export class ErpWhatsappInboxRequests extends LitElement {
       <ion-button size="small" color="danger" ?disabled=${this.busyId === this.pendingDelete.id}
         @click=${() => this.confirmDelete()}>${t('ui.delete')}</ion-button>
       <ion-button size="small" fill="clear" @click=${() => (this.pendingDelete = null)}>${t('ui.cancel')}</ion-button>
+    </section>`;
+  }
+
+  /** The parsed payload, field by field. It is free JSON by design (the schema is dynamic), so it
+   *  is rendered as the pairs it is — inventing a shape here would hide whatever the assistant
+   *  actually stored, which is the one thing this panel exists to show. */
+  private renderParsed(raw: string) {
+    let parsed: unknown;
+    try { parsed = JSON.parse(raw || '{}'); } catch { parsed = null; }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return raw ? html`<p class="summary">${raw}</p>` : nothing;
+    }
+    const pairs = Object.entries(parsed as Record<string, unknown>);
+    if (pairs.length === 0) return nothing;
+    return html`<dl class="parsed">
+      ${pairs.map(([k, v]) => html`<dt>${k}</dt><dd>${typeof v === 'object' ? JSON.stringify(v) : String(v)}</dd>`)}
+    </dl>`;
+  }
+
+  private renderDetail() {
+    const r = this.openRequest;
+    if (!r) return nothing;
+    const t = (k: string): string => erplora().t(CATALOG, k);
+    return html`<section class="detail">
+      <div class="who">
+        <span class="ref">${r.reference_number}</span>
+        <span>·</span>
+        <span>${r.request_type}</span>
+        <span>·</span>
+        <span>${r.contact_name}</span>
+      </div>
+      ${r.raw_summary ? html`<p class="summary">${r.raw_summary}</p>` : nothing}
+      <h4>${t('ui.labelParsedData')}</h4>
+      ${this.renderParsed(r.data)}
+      ${r.notes ? html`<h4>${t('ui.labelNotes')}</h4><p class="summary">${r.notes}</p>` : nothing}
+      ${r.failure_reason ? html`<ok-inline-feedback tone="warning" heading=${t('ui.bookingFailedTitle')}>
+        ${r.failure_reason}
+      </ok-inline-feedback>` : nothing}
+      ${r.linked_object_id
+        ? html`<p class="summary">${t('ui.labelLinkedObject')}: ${r.linked_module} · ${r.linked_object_id}</p>`
+        : nothing}
+      <ion-button size="small" fill="clear" @click=${() => { this.openRequest = null; }}>${t('ui.closeView')}</ion-button>
     </section>`;
   }
 
@@ -412,6 +503,7 @@ export class ErpWhatsappInboxRequests extends LitElement {
         ${this.formError ? html`<p class="err">${this.formError}</p>` : nothing}
         ${this.ctrl?.error ? html`<p class="err">${this.ctrl.error}</p>` : nothing}
         ${this.renderDeleteConfirm()}
+        ${this.renderDetail()}
         ${pending.length > 0 ? html`<div>
           <h3>${t('ui.pendingReview')}</h3>
           ${pending.map((r) => this.renderPending(r))}

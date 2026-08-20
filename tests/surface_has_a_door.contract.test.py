@@ -50,17 +50,6 @@ PENDING = {
         "same intake point, one step later: the caller hands over the payload the LLM already "
         "parsed (WASM-TODO.md §3)"
     ),
-    "whatsapp_inbox.settings.get": (
-        "no settings screen exists yet — the channel is configured by whoever installs it. "
-        "Tracked in whatsapp_inbox#6"
-    ),
-    "whatsapp_inbox.settings.upsert": (
-        "same missing screen as `settings.get`. Tracked in whatsapp_inbox#6"
-    ),
-    "whatsapp_inbox.requests.get": (
-        "the requests screen renders the row it already has from `requests.list`; the single-request "
-        "read waits for the settings/detail screen. Tracked in whatsapp_inbox#6"
-    ),
 }
 
 

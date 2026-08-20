@@ -6,8 +6,11 @@
       "whatsapp_inbox.conversations.get",
       "whatsapp_inbox.conversations.list",
       "whatsapp_inbox.messages.list",
+      "whatsapp_inbox.requests.get",
       "whatsapp_inbox.requests.list",
-      "whatsapp_inbox.templates.list"
+      "whatsapp_inbox.settings.get",
+      "whatsapp_inbox.templates.list",
+      "whatsapp_inbox.usage.get"
     ],
     "optional_queries": [],
     "commands": [
@@ -16,6 +19,7 @@
       "whatsapp_inbox.requests.delete",
       "whatsapp_inbox.requests.fulfill",
       "whatsapp_inbox.requests.reject",
+      "whatsapp_inbox.settings.upsert",
       "whatsapp_inbox.templates.create",
       "whatsapp_inbox.templates.delete",
       "whatsapp_inbox.templates.update"

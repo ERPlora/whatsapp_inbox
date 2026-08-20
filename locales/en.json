@@ -9,6 +9,9 @@
     },
     "templates": {
       "label": "Templates"
+    },
+    "settings": {
+      "label": "Settings"
     }
   },
   "ui": {
@@ -97,6 +100,28 @@
     "editTemplate": "Edit template",
     "errUpdateTemplate": "Could not update the template",
     "confirmDeleteTemplate": "Delete this template?",
-    "errDeleteTemplate": "Could not delete the template"
+    "errDeleteTemplate": "Could not delete the template",
+    "settingsTitle": "Channel settings",
+    "settingsSaved": "Settings saved.",
+    "sectionChannel": "Channel",
+    "sectionRequests": "Incoming requests",
+    "labelMonthlyAllowance": "Inbound messages included each month",
+    "allowanceUnlimited": "No cap on this plan",
+    "helpAllowance": "Set by the plan you bought for this module. It is counted per calendar month and it is not edited here.",
+    "helpChannelLivesInAccount": "The phone number, the display name, the quality rating and the templates Meta approved live in your ERPlora account — the hub never stores the channel credentials.",
+    "labelApprovalMode": "A request the assistant reads",
+    "approvalAuto": "Is confirmed straight away",
+    "approvalManual": "Waits in review",
+    "helpApprovalMode": "The assistant reads a message and files what the customer asked for. «Waits in review» leaves it on the Requests screen for a person to approve; «confirmed straight away» accepts what the assistant understood.",
+    "helpConversationLivesInFlow": "The greeting, the automatic reply and the out-of-hours text are part of the flow that answers, not of this screen: edit them in Automations, where they can be changed without republishing the module.",
+    "errorLoadSettings": "Could not load the channel settings",
+    "errorSave": "Could not save the channel settings",
+    "open": "Open",
+    "requestDetail": "Request",
+    "labelParsedData": "What the assistant understood",
+    "labelNotes": "Notes",
+    "labelLinkedObject": "Created record",
+    "errLoadRequest": "Could not load the request",
+    "labelUsedThisMonth": "Used this month"
   }
 }
