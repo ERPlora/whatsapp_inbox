@@ -53,6 +53,7 @@ These fail as **silent no-ops**:
 | Maximum rows a paginated request may ask for | 500 |
 | Requests per day per hub, by numbering | 9999 |
 | Conversations per contact | 1 — the ingest upserts by contact |
+| Live messages per `wa_message_id` and hub | 1 — unique index, both ingestion doors absorb the repeat (whatsapp_inbox#30) |
 
 ## Permissions per action
 
