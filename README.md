@@ -11,17 +11,27 @@ canal.
 >   **bloqueado**: el runtime prohíbe que el handler de un módulo escriba en otro, así que la rama de
 >   dispatch devuelve `cross_module_dispatch_unsupported` y lo único que ocurre es el cambio de
 >   estado a `fulfilled`.
-> - **No se puede ENVIAR un mensaje**: existe el permiso `send_message` y **no existe el command**.
-> - **Nada trae los mensajes**: no hay webhook ni allowlist de red a Meta declarada en el manifest.
+> - **No se puede ENVIAR un mensaje desde el módulo**: no hay command de envío y el manifest no
+>   declara `capabilities`, así que el runtime tampoco llegaría a Meta. Quien contesta es el paso
+>   **`notify`** de un flujo (hub#821), por el outbox y el proxy del SaaS — donde viven las
+>   credenciales. El permiso `send_message` se **retiró** en whatsapp_inbox#29: no gateaba nada.
+> - **No hay pantalla de ajustes del canal** (whatsapp_inbox#6).
 > - **Las auto-respuestas se configuran y no se envían.** Las plantillas guardan su estado en Meta y
 >   **nadie lo sincroniza**.
+>
+> ✅ **Lo que SÍ funciona y antes no**: los mensajes entran solos (evento core
+> `hub.whatsapp.message_received`, [#27](https://github.com/ERPlora/whatsapp_inbox/pull/27)) y
+> **exactamente una vez** (índice único parcial sobre `(hub_id, wa_message_id)`,
+> whatsapp_inbox#30); y la conversación **se abre y se lee** desde la bandeja
+> (whatsapp_inbox#29).
 
 <!-- -->
 
 > **Module id:** `whatsapp_inbox`. **Depende de:** `customers` (referencia blanda, por queries
 > públicas, sin FK). Módulo híbrido: SQL + handler WASM **parcial**
 > (`fulfill_request`, `parse_inbound_message`).
-> ❄️ **Congelado**: su doc de arquitectura vive en `architecture/_frozen/modules/whatsapp_inbox.md`.
+> ⚠️ Su doc de arquitectura sigue en `architecture/_frozen/modules/whatsapp_inbox.md` — el módulo
+> salió de `_frozen/` (pm#112, ADR-0283) pero el `.md` no se ha movido todavía.
 
 ## Documentación de usuario — [`docs/`](docs/)
 
@@ -43,7 +53,8 @@ versión instalada y cita la de TU versión, no la de la última publicada. En i
 | `manager` | ver conversaciones y peticiones; **aprobar/rechazar/cumplir**. **No** puede asignar conversación, **ni ver plantillas**, **ni** ver/guardar ajustes, ni ingerir, ni borrar |
 | `employee` | solo leer conversaciones y peticiones |
 
-⚠️ `send_message` lo tienen los tres roles y **no da acceso a nada** (no hay command detrás).
+⚠️ `send_message` **ya no existe** (whatsapp_inbox#29): no había command detrás, y un permiso que no
+gatea nada contesta «sí» a una auditoría que debería decir que no.
 
 ## Qué expone hoy
 
@@ -57,7 +68,7 @@ versión instalada y cita la de TU versión, no la de la última publicada. En i
 | command | `conversations.assign` · `templates.create/update/delete` · `settings.upsert` | `manage_settings` |
 | command | `messages.ingest` · `requests.ingest` (WASM) | `manage_connections` |
 | emite | `message.received`, `request.created/approved/rejected/fulfilled/deleted`, `conversation.assigned`, `template.*`, `settings.updated` | — |
-| escucha | — (bloque declarado y **vacío**) | — |
+| escucha | `hub.whatsapp.message_received` (core) · `appointments.booking_request.fulfilled` / `.failed` | — |
 
 Navegación: `erp-whatsapp-inbox-inbox`, `-requests`, `-templates`.
 
@@ -76,9 +87,15 @@ docs/                         # documentación de usuario + corpus del asistente
 
 ## Estado y trabajo abierto
 
-Módulo **congelado**. El bloqueo de fondo es una decisión del **modelo de comandos del runtime**
-(whatsapp_inbox#3): mientras `validate_operation` rechace operaciones hacia commands de otros
-módulos, `fulfill_request` no puede cumplir su función. El `reference_number` sí quedó resuelto
-**module-side** (ADR-0008, whatsapp_inbox#5).
+**Ya no está congelado** (pm#112, ADR-0283): es el caso estrella del kernel de automatización.
 
-Doc de arquitectura: `architecture/_frozen/modules/whatsapp_inbox.md`.
+El «bloqueo» del dispatch cross-módulo de `fulfill_request` **no es un pendiente**: está prohibido a
+propósito y la prohibición se reforzó (hub#659, ADR-0283 §7). Reaccionar ejecutando el command de
+otro módulo es territorio de un **flujo con grant explícito** —auditable y revocable—, no de un
+handler. Ver la tabla de decisiones al principio de [`WASM-TODO.md`](WASM-TODO.md), donde tres piezas
+de esa lista quedaron descartadas por la misma razón.
+
+Abierto: pantalla de ajustes del canal (whatsapp_inbox#6) y el emit condicional del runtime
+([hub#1076](https://github.com/ERPlora/hub/issues/1076)).
+
+Doc de arquitectura: `architecture/_frozen/modules/whatsapp_inbox.md` (pendiente de mover).

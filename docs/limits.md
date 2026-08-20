@@ -65,15 +65,14 @@ These fail as **silent no-ops**:
 | Delete a request | `whatsapp_inbox.delete_request` |
 | Assign a conversation; list, create, update or delete templates; read or save the settings | `whatsapp_inbox.manage_settings` |
 | Ingest a message or a request | `whatsapp_inbox.manage_connections` |
-| — (grants nothing today) | `whatsapp_inbox.send_message` |
 
 By role:
 
 - **admin** — everything.
-- **manager** — view conversations and requests, and approve / reject / fulfil. **Cannot** assign a
-  conversation, cannot see templates, cannot see or change the settings, cannot ingest, cannot
-  delete.
-- **employee** — read conversations and requests. Nothing else.
+- **manager** — view conversations and requests (thread included), and approve / reject / mark as
+  handled. **Cannot** assign a conversation, cannot see templates, cannot see or change the
+  settings, cannot ingest, cannot delete.
+- **employee** — read conversations, their threads and requests. Nothing else.
 
 ## Dependencies
 
@@ -90,12 +89,23 @@ dispatch does not run**, so those modules are not really dependencies — nothin
 **"I fulfilled a request and no reservation appeared."** Expected. Cross-module dispatch is blocked.
 Create it by hand in `reservations`.
 
-**"I cannot reply to a customer."** There is no send command. The permission is a placeholder.
+**"I cannot reply to a customer."** Not from this screen, and there is no `send_message` permission
+any more (whatsapp_inbox#29 retired it — it gated nothing). The hub answers WhatsApp through a
+flow's **notify** step, which is where the channel credentials are.
 
-**"No messages are arriving."** Nothing brings them in. There is no webhook and no declared network
-access to Meta; something outside must call the ingest command.
+**"No messages are arriving."** The hub polls the SaaS and raises `hub.whatsapp.message_received`,
+which this module listens to — check that the channel is connected on the SaaS side. What is NOT
+declared here is a webhook receiver or network access to Meta.
 
-**"The auto-reply never went out."** Nothing sends messages, auto-replies included.
+**"The same message appears twice."** It cannot since whatsapp_inbox#30: a partial unique index over
+`(hub_id, wa_message_id)` sits under both ingestion doors. On a hub that carried duplicates from
+before, migration 005 kept the oldest copy of each and soft-deleted the rest.
+
+**"The auto-reply never went out."** This module sends nothing, auto-replies included — that is a
+flow's notify step, and the auto-reply settings here have no owner (WASM-TODO.md §5).
+
+**"I cannot find the channel settings screen."** There is none yet
+([whatsapp_inbox#6](https://github.com/ERPlora/whatsapp_inbox/issues/6)).
 
 **"A manager cannot see the templates."** Correct — templates are behind the settings permission,
 which is admin-only.

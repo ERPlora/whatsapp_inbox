@@ -14,24 +14,33 @@ happens is the request's status moving to `fulfilled`.
 **Read a fulfilled request as "a human dealt with this elsewhere."** The link fields, which would say
 which object was created and where, stay empty.
 
-## There is no way to send a message
+## Replying does not happen here, and that is on purpose
 
-The module defines a `send_message` permission and grants it to everybody, including employees.
-**There is no command behind it.** No outbound message can be created, no reply can be sent, and the
-auto-reply settings describe behaviour that nothing performs.
+This module cannot send a WhatsApp message: no command sends anything, and the manifest declares no
+`capabilities`, so the runtime could not reach Meta even if one existed. The credentials live in the
+SaaS proxy — architecture §9.3 is explicit that the hub never stores Meta's.
 
-An inbox you can read and not answer is what this module currently is.
+What answers a customer is a flow's **notify** step (hub#821): it goes out through the outbox, with
+retries, backoff and dead-letter, and it addresses the contact through a `recipient_query` grant
+over `whatsapp_inbox.conversations.list#contact_phone`. That is why the ingest normalises the phone
+to E.164 — a number without its `+` is a customer the hub cannot answer.
 
-## Nothing brings messages in on its own
+The `send_message` permission was **retired in whatsapp_inbox#29**. It named nothing, and a
+permission that gates nothing is not a restriction: it is a label on an empty box that answers *yes*
+to an audit of "can this employee reply?".
 
-There is an ingest command, and it works — it upserts the conversation from the contact, stores the
-message and emits an event. But:
+## Messages arrive on their own; requests do not
 
-- no webhook receiver is declared;
-- no network access to Meta's API is declared in the manifest.
+Since [#27](https://github.com/ERPlora/whatsapp_inbox/pull/27) the hub polls the SaaS for inbound
+messages and raises the core event `hub.whatsapp.message_received`; this module listens to it and
+runs its own internal ingest command. So an inbound message lands in a conversation by itself.
 
-So messages arrive only if something outside calls that command. It requires the connections
-permission precisely because it is a channel intake point, not a user action.
+The public ingest command is still there for the channel pipeline. Both doors require the
+connections permission precisely because they are a channel intake point, not a user action, and
+neither declares a webhook receiver or network access to Meta.
+
+What does **not** happen on its own is turning a message into a structured request — that is the
+flow template shipped in `flows/`.
 
 ## One `wa_message_id` is one message, whichever door it comes through
 
@@ -52,7 +61,8 @@ Soft-deleting a message releases its `wa_message_id` again — the index is part
 declarative command emits on every execution, so a second ingest of the same message emits a second
 event even though it wrote no row. Nothing listens to it today, and the exactly-once guarantee for
 reactions lives one level up, on the core event `hub.whatsapp.message_received`
-(`id = "wa-<wa_message_id>"` in the outbox), which is what the shipped flow triggers on.
+(`id = "wa-<wa_message_id>"` in the outbox), which is what the shipped flow triggers on. The missing
+primitive is tracked in [hub#1076](https://github.com/ERPlora/hub/issues/1076).
 
 ## The request schema is supplied, not enforced by the module
 

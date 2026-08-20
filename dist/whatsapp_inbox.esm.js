@@ -2979,6 +2979,125 @@ __decorateClass2([
 var OkDataTable = _OkDataTable;
 define("ok-data-table", OkDataTable);
 
+// ../outfitkit/dist/ok-status-pill.js
+var __defProp3 = Object.defineProperty;
+var __decorateClass3 = (decorators, target, key, kind) => {
+  var result = void 0;
+  for (var i7 = decorators.length - 1, decorator; i7 >= 0; i7--)
+    if (decorator = decorators[i7])
+      result = decorator(target, key, result) || result;
+  if (result) __defProp3(target, key, result);
+  return result;
+};
+var OkStatusPill = class extends i3 {
+  constructor() {
+    super(...arguments);
+    this.tone = "neutral";
+    this.dot = false;
+    this.size = "md";
+  }
+  static {
+    this.styles = i`
+    :host {
+      /* Vars overridable (estilo Ionic), default = cadena --ok-* → --ion-* → hex.
+         --tone-color (base: fondo/punto/icono) y --tone-shade (texto) se reasignan por tone abajo. */
+      --tone-color: var(--ok-medium, var(--ion-color-medium, #5f5f5f));
+      --tone-shade: var(--ok-medium, var(--ion-color-medium-shade, #545454));
+      --background-opacity: var(--ok-pill-bg-opacity, 0.14);
+      --border-radius: var(--ok-pill-radius, 999px);
+      --font: var(--ok-font, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif);
+
+      /* Inline: el pill vive en celdas de tabla, cabeceras y listados. */
+      display: inline-flex;
+      vertical-align: middle;
+      font-family: var(--font);
+      box-sizing: border-box;
+    }
+
+    /* Mapa de tonos → color Ionic (base + shade para el texto). */
+    :host([tone='success']) {
+      --tone-color: var(--ok-success, var(--ion-color-success, #2dd55b));
+      --tone-shade: var(--ok-success, var(--ion-color-success-shade, #28bb50));
+    }
+    :host([tone='warning']) {
+      --tone-color: var(--ok-warning, var(--ion-color-warning, #ffc409));
+      --tone-shade: var(--ok-warning-shade, var(--ion-color-warning-shade, #e0ac08));
+    }
+    :host([tone='danger']) {
+      --tone-color: var(--ok-danger, var(--ion-color-danger, #c5000f));
+      --tone-shade: var(--ok-danger, var(--ion-color-danger-shade, #ad000d));
+    }
+    :host([tone='info']) {
+      --tone-color: var(--ok-info, var(--ion-color-secondary, #0163aa));
+      --tone-shade: var(--ok-info, var(--ion-color-secondary-shade, #015896));
+    }
+    :host([tone='primary']) {
+      --tone-color: var(--ok-primary, var(--ion-color-primary, #3880ff));
+      --tone-shade: var(--ok-primary, var(--ion-color-primary-shade, #3171e0));
+    }
+    /* neutral / sin tono → medium (default ya aplicado en :host). */
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4em;
+      padding: 0.25em 0.7em;
+      border-radius: var(--border-radius);
+      /* Fondo tonal: el color del tono con baja opacidad. */
+      background: color-mix(in srgb, var(--tone-color) calc(var(--background-opacity) * 100%), transparent);
+      color: var(--ok-pill-color, var(--tone-shade));
+      font-size: 0.8125rem;
+      font-weight: 600;
+      line-height: 1.4;
+      white-space: nowrap;
+    }
+    :host([size='sm']) .pill {
+      font-size: 0.72rem;
+      padding: 0.2em 0.6em;
+    }
+
+    ion-icon {
+      flex: 0 0 auto;
+      font-size: 1.05em;
+      pointer-events: none;
+    }
+
+    /* Punto de color (estilo Linear) en vez de icono. */
+    .dot {
+      flex: 0 0 auto;
+      width: 0.5em;
+      height: 0.5em;
+      border-radius: 50%;
+      background: var(--tone-color);
+    }
+  `;
+  }
+  render() {
+    return b2`
+      <span class="pill" part="pill">
+        ${this.dot ? b2`<span class="dot" part="dot" aria-hidden="true"></span>` : this.icon ? b2`<ion-icon .icon=${okIcon(this.icon)} aria-hidden="true"></ion-icon>` : null}
+        <slot>${this.label ?? ""}</slot>
+      </span>
+    `;
+  }
+};
+__decorateClass3([
+  n4({ type: String, reflect: true })
+], OkStatusPill.prototype, "tone");
+__decorateClass3([
+  n4({ type: String })
+], OkStatusPill.prototype, "label");
+__decorateClass3([
+  n4({ type: String })
+], OkStatusPill.prototype, "icon");
+__decorateClass3([
+  n4({ type: Boolean, reflect: true })
+], OkStatusPill.prototype, "dot");
+__decorateClass3([
+  n4({ type: String, reflect: true })
+], OkStatusPill.prototype, "size");
+define("ok-status-pill", OkStatusPill);
+
 // ../hub/packages/module-sdk/src/index.ts
 function isEmpty(v3) {
   return v3 === null || v3 === void 0 || v3 === "";
@@ -3174,7 +3293,31 @@ var es_default = {
     bookingOpen: "Reservar",
     bookingClose: "Cerrar",
     bookingRetry: "Reservar de nuevo",
-    bookingFailedTitle: "La reserva no se pudo hacer"
+    bookingFailedTitle: "La reserva no se pudo hacer",
+    openConversation: "Abrir",
+    closeView: "Cerrar",
+    emptyThread: "Esta conversaci\xF3n todav\xEDa no tiene mensajes.",
+    attachment: "Adjunto",
+    assignedTo: "Asignada a",
+    assignPlaceholder: "Id del empleado (vac\xEDo = nadie)",
+    assign: "Asignar",
+    unassign: "Desasignar",
+    noReplyHere: "Desde esta pantalla no se responde: el hub contesta por WhatsApp con el paso \xABnotify\xBB de un flujo, que es donde viven las credenciales del canal.",
+    errLoadThread: "No se pudo cargar la conversaci\xF3n",
+    errAssign: "No se pudo asignar la conversaci\xF3n",
+    delete: "Borrar",
+    confirmDeleteRequest: "\xBFBorrar esta solicitud? Una solicitud cumplida no se puede borrar.",
+    errDeleteRequest: "No se pudo borrar la solicitud",
+    markFulfilled: "Marcar como atendida",
+    confirmFulfil: "\xBFMarcar la solicitud como atendida? No se crea nada en otro m\xF3dulo: es una nota de que alguien la resolvi\xF3.",
+    errFulfil: "No se pudo marcar la solicitud como atendida",
+    edit: "Editar",
+    save: "Guardar",
+    cancel: "Cancelar",
+    editTemplate: "Editar plantilla",
+    errUpdateTemplate: "No se pudo actualizar la plantilla",
+    confirmDeleteTemplate: "\xBFBorrar esta plantilla?",
+    errDeleteTemplate: "No se pudo borrar la plantilla"
   }
 };
 
@@ -3254,31 +3397,93 @@ var en_default = {
     bookingOpen: "Book",
     bookingClose: "Close",
     bookingRetry: "Book again",
-    bookingFailedTitle: "The booking did not go through"
+    bookingFailedTitle: "The booking did not go through",
+    openConversation: "Open",
+    closeView: "Close",
+    emptyThread: "No messages in this conversation yet.",
+    attachment: "Attachment",
+    assignedTo: "Assigned to",
+    assignPlaceholder: "Employee id (empty = nobody)",
+    assign: "Assign",
+    unassign: "Unassign",
+    noReplyHere: "Replies do not go out from this screen: the hub answers WhatsApp through a flow's notify step, which is where the channel credentials live.",
+    errLoadThread: "Could not load the conversation",
+    errAssign: "Could not assign the conversation",
+    delete: "Delete",
+    confirmDeleteRequest: "Delete this request? A fulfilled request cannot be deleted.",
+    errDeleteRequest: "Could not delete the request",
+    markFulfilled: "Mark as handled",
+    confirmFulfil: "Mark this request as handled? Nothing is created in another module \u2014 it is a note that somebody dealt with it.",
+    errFulfil: "Could not mark the request as handled",
+    edit: "Edit",
+    save: "Save",
+    cancel: "Cancel",
+    editTemplate: "Edit template",
+    errUpdateTemplate: "Could not update the template",
+    confirmDeleteTemplate: "Delete this template?",
+    errDeleteTemplate: "Could not delete the template"
   }
 };
 
 // modules/whatsapp_inbox/ui/components/erp-whatsapp-inbox-inbox/erp-whatsapp-inbox-inbox.ts
 var CATALOG = { es: es_default, en: en_default };
+var THREAD_PAGE = 200;
 function erplora() {
   const c5 = globalThis.erplora;
   if (!c5) throw new Error("erplora SDK no inicializado por el shell");
   return c5;
 }
+function can(permission) {
+  const client = erplora();
+  return typeof client.hasPermission === "function" ? client.hasPermission(permission) : true;
+}
 var ErpWhatsappInboxInbox = class extends i3 {
   constructor() {
     super(...arguments);
     this.tick = 0;
+    this.detail = null;
+    this.messages = [];
+    this.detailError = "";
+    this.detailBusy = false;
+    this.assignTo = "";
     this.onLocaleChange = () => this.requestUpdate();
   }
   static {
     this.styles = i`
-    :host { display:block; font-family: system-ui, sans-serif; color: var(--ion-text-color, #1c1b18); }
+    :host { display:flex; flex-direction:column; height:100%; min-height:0; font-family: system-ui, sans-serif; color: var(--ion-text-color, #1c1b18); }
+    .page { display:flex; flex-direction:column; min-height:0; flex:1 1 auto; }
+    .page > ok-data-table { flex:1 1 auto; min-height:0; }
     header { display:flex; gap:.5rem; align-items:center; margin-bottom:.75rem; }
     h2 { margin:0; font-size:1.15rem; flex:1; }
     .err { color:#d9480f; font-weight:600; }
     .unread { color:#1971c2; font-weight:700; }
+    /* The thread lives ABOVE the list and scrolls on its own, so a long conversation never pushes
+       the table footer off the screen. Same shape as the tickets detail. */
+    .detail { flex:0 1 auto; overflow:auto; border:1px solid var(--ion-border-color,#e7e2d6);
+      border-radius:12px; padding:1rem; margin:0 0 1rem; background:var(--ion-card-background,#fffdf7); }
+    .detail-head { display:flex; gap:.6rem; align-items:center; flex-wrap:wrap; margin-bottom:.5rem; }
+    .detail-head h3 { margin:0; font-size:1.05rem; }
+    .detail-head .phone { color:var(--ion-color-medium,#6f6a5e); }
+    .detail-head .spacer { flex:1; }
+    .thread { display:flex; flex-direction:column; gap:.4rem; margin:.6rem 0; }
+    .msg { max-width:min(38rem, 85%); padding:.45rem .7rem; border-radius:12px;
+      background:var(--ok-surface-2, var(--ion-color-step-50, rgba(0,0,0,.04))); }
+    .msg.inbound { align-self:flex-start; }
+    .msg.outbound { align-self:flex-end; background:var(--ion-color-primary-tint, #d0ebff); }
+    .msg .body { white-space:pre-wrap; margin:0; }
+    .msg .when { display:block; font-size:.75rem; color:var(--ion-color-medium,#6f6a5e); margin-top:.15rem; }
+    .msg .kind { font-size:.75rem; font-weight:600; color:var(--ion-color-medium,#6f6a5e); }
+    .empty { color:var(--ion-color-medium,#6f6a5e); }
+    .assign { display:flex; gap:.5rem; align-items:end; flex-wrap:wrap; margin-top:.75rem; }
+    .note { font-size:.85rem; color:var(--ion-color-medium,#6f6a5e); margin:.5rem 0 0; }
+    /* 44px minimum touch target: this screen is used one-handed, at a counter. */
+    ion-button { --min-height: 44px; }
   `;
+  }
+  get rowActions() {
+    return [
+      { id: "open", label: erplora().t(CATALOG, "ui.openConversation"), icon: "open-outline", color: "primary" }
+    ];
   }
   get columns() {
     const t5 = (k2) => erplora().t(CATALOG, k2);
@@ -3321,8 +3526,8 @@ var ErpWhatsappInboxInbox = class extends i3 {
     });
     await this.ctrl.load();
     try {
-      const off1 = erplora().on("whatsapp_inbox.conversation.assigned", () => this.ctrl.load());
-      const off2 = erplora().on("whatsapp_inbox.message.received", () => this.ctrl.load());
+      const off1 = erplora().on("whatsapp_inbox.conversation.assigned", () => this.onDomainEvent());
+      const off2 = erplora().on("whatsapp_inbox.message.received", () => this.onDomainEvent());
       this.unsub = () => {
         off1();
         off2();
@@ -3335,30 +3540,144 @@ var ErpWhatsappInboxInbox = class extends i3 {
     super.disconnectedCallback();
     this.unsub?.();
   }
+  /** A new message must land in the thread the operator is READING, not only in the list. */
+  onDomainEvent() {
+    void this.ctrl.load();
+    if (this.detail) void this.loadDetail(this.detail.id);
+  }
+  // ── The thread ────────────────────────────────────────────────────────────
+  async loadDetail(conversationId) {
+    this.detailError = "";
+    try {
+      const rows = await erplora().query("whatsapp_inbox.conversations.get", {
+        conversation_id: conversationId
+      });
+      const conversation = Array.isArray(rows) ? rows[0] : rows;
+      if (!conversation) {
+        this.closeDetail();
+        return;
+      }
+      this.detail = conversation;
+      this.assignTo = conversation.assigned_to_id ?? "";
+      const page = await erplora().queryPage("whatsapp_inbox.messages.list", {
+        limit: THREAD_PAGE,
+        sort: "created_at",
+        dir: "asc",
+        filters: { conversation_id: conversationId }
+      });
+      this.messages = page?.rows ?? [];
+    } catch (e5) {
+      this.detailError = e5 instanceof Error ? e5.message : erplora().t(CATALOG, "ui.errLoadThread");
+    }
+  }
+  closeDetail() {
+    this.detail = null;
+    this.messages = [];
+    this.detailError = "";
+    this.assignTo = "";
+  }
+  /** Assigns the open conversation, or unassigns it: `employee_id: ''` is the SQL's own contract. */
+  async assign() {
+    if (!this.detail) return;
+    this.detailBusy = true;
+    this.detailError = "";
+    try {
+      await erplora().command("whatsapp_inbox.conversations.assign", {
+        conversation_id: this.detail.id,
+        employee_id: this.assignTo.trim()
+      });
+      await this.ctrl.load();
+      await this.loadDetail(this.detail.id);
+    } catch (e5) {
+      this.detailError = e5 instanceof Error ? e5.message : erplora().t(CATALOG, "ui.errAssign");
+    } finally {
+      this.detailBusy = false;
+    }
+  }
+  onRowAction(ev) {
+    if (ev.detail.actionId === "open") void this.loadDetail(String(ev.detail.row.id));
+  }
+  // ── Render ────────────────────────────────────────────────────────────────
+  renderMessage(m4) {
+    const t5 = (k2) => erplora().t(CATALOG, k2);
+    const outbound = m4.direction === "outbound";
+    const bodyless = !m4.body && m4.message_type && m4.message_type !== "text";
+    return b2`<div class=${`msg ${outbound ? "outbound" : "inbound"}`}>
+      ${bodyless ? b2`<span class="kind">${m4.message_type}</span>` : A}
+      ${m4.body ? b2`<p class="body">${m4.body}</p>` : A}
+      ${m4.media_url ? b2`<span class="kind">${t5("ui.attachment")}</span>` : A}
+      <span class="when">${m4.created_at}</span>
+    </div>`;
+  }
+  renderDetail() {
+    const c5 = this.detail;
+    if (!c5) return A;
+    const t5 = (k2) => erplora().t(CATALOG, k2);
+    return b2`<section class="detail">
+      <div class="detail-head">
+        <h3>${c5.contact_name || c5.contact_phone}</h3>
+        <span class="phone">${c5.contact_phone}</span>
+        <ok-status-pill tone=${c5.status === "closed" ? "neutral" : "success"} size="sm">
+          ${c5.status === "closed" ? t5("ui.statusClosed") : t5("ui.statusActive")}
+        </ok-status-pill>
+        <span class="spacer"></span>
+        <ion-button size="small" fill="clear" @click=${() => this.closeDetail()}>${t5("ui.closeView")}</ion-button>
+      </div>
+      ${this.detailError ? b2`<p class="err">${this.detailError}</p>` : A}
+      <div class="thread">
+        ${this.messages.length ? this.messages.map((m4) => this.renderMessage(m4)) : b2`<p class="empty">${t5("ui.emptyThread")}</p>`}
+      </div>
+      ${can("whatsapp_inbox.manage_settings") ? b2`<div class="assign">
+            <ion-input mode="md" fill="outline" label-placement="floating" label=${t5("ui.assignedTo")}
+              placeholder=${t5("ui.assignPlaceholder")} .value=${this.assignTo}
+              @ionInput=${(e5) => this.assignTo = e5.target.value ?? ""}></ion-input>
+            <ion-button size="small" ?disabled=${this.detailBusy} @click=${() => this.assign()}>
+              ${this.assignTo.trim() ? t5("ui.assign") : t5("ui.unassign")}
+            </ion-button>
+          </div>` : A}
+      <p class="note">${t5("ui.noReplyHere")}</p>
+    </section>`;
+  }
   render() {
     const t5 = (k2) => erplora().t(CATALOG, k2);
-    return b2`<div>
+    return b2`<div class="page">
         <header>
           <h2>${t5("ui.inboxTitle")}</h2>
         </header>
         ${this.ctrl?.error ? b2`<p class="err">${this.ctrl.error}</p>` : A}
-        <ok-data-table .serverSide=${true} .views=${true} .cardTitle=${(row) => String(row.contact_name ?? row.contact_phone ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "asc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchInbox")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyInbox")} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}></ok-data-table>
+        ${this.renderDetail()}
+        <ok-data-table .serverSide=${true} .views=${true} .fill=${true} .actions=${this.rowActions} .cardTitle=${(row) => String(row.contact_name ?? row.contact_phone ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "asc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchInbox")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyInbox")} @rowAction=${(e5) => this.onRowAction(e5)} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @pageSizeChange=${(e5) => this.ctrl.setPageSize(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}></ok-data-table>
       </div>`;
   }
 };
 __decorateClass([
   r5()
 ], ErpWhatsappInboxInbox.prototype, "tick", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxInbox.prototype, "detail", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxInbox.prototype, "messages", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxInbox.prototype, "detailError", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxInbox.prototype, "detailBusy", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxInbox.prototype, "assignTo", 2);
 define("erp-whatsapp-inbox-inbox", ErpWhatsappInboxInbox);
 
 // ../outfitkit/dist/ok-inline-feedback.js
-var __defProp3 = Object.defineProperty;
-var __decorateClass3 = (decorators, target, key, kind) => {
+var __defProp4 = Object.defineProperty;
+var __decorateClass4 = (decorators, target, key, kind) => {
   var result = void 0;
   for (var i7 = decorators.length - 1, decorator; i7 >= 0; i7--)
     if (decorator = decorators[i7])
       result = decorator(target, key, result) || result;
-  if (result) __defProp3(target, key, result);
+  if (result) __defProp4(target, key, result);
   return result;
 };
 var DEFAULT_LABELS2 = {
@@ -3545,25 +3864,25 @@ var OkInlineFeedback = class extends i3 {
     `;
   }
 };
-__decorateClass3([
+__decorateClass4([
   n4({ type: String, reflect: true })
 ], OkInlineFeedback.prototype, "tone");
-__decorateClass3([
+__decorateClass4([
   n4({ type: String })
 ], OkInlineFeedback.prototype, "heading");
-__decorateClass3([
+__decorateClass4([
   n4({ type: String })
 ], OkInlineFeedback.prototype, "icon");
-__decorateClass3([
+__decorateClass4([
   n4({ type: Boolean, reflect: true })
 ], OkInlineFeedback.prototype, "dismissible");
-__decorateClass3([
+__decorateClass4([
   n4({ type: Boolean, reflect: true })
 ], OkInlineFeedback.prototype, "hidden");
-__decorateClass3([
+__decorateClass4([
   n4({ attribute: false })
 ], OkInlineFeedback.prototype, "labels");
-__decorateClass3([
+__decorateClass4([
   r5()
 ], OkInlineFeedback.prototype, "hasActions");
 define("ok-inline-feedback", OkInlineFeedback);
@@ -3582,6 +3901,7 @@ var ErpWhatsappInboxRequests = class extends i3 {
     this.formError = "";
     this.busyId = "";
     this.bookingFor = "";
+    this.pendingDelete = null;
     /** HOST of the `whatsapp_inbox.request.booking` slot (ADR-0043 §3bis). Resolved once, mounted on
      *  demand, told WHICH request is open by a `CustomEvent` on the filler element — never by props
      *  or calls, and never by importing anything of the module that fills it. */
@@ -3604,7 +3924,35 @@ var ErpWhatsappInboxRequests = class extends i3 {
     ion-button { --min-height: 44px; }
     .booking-slot { margin-top:.5rem; }
     .booking-slot:empty { display:none; }
+    .confirm { border:1px solid var(--ion-border-color,#e7e2d6); border-radius: var(--ok-radius-sm, 10px);
+      padding:.75rem 1rem; margin:0 0 1rem; background:var(--ok-surface-2, var(--ion-color-step-50, rgba(0,0,0,.04))); }
   `;
+  }
+  /** Row actions of the table — the doors `requests.delete` and `requests.fulfill` never had.
+   *
+   *  Both are `disabled` and not hidden when the state does not allow them. The guard is the SQL's
+   *  and stays there (`request_delete.sql` refuses a `fulfilled` row, `_fulfill_transition.sql`
+   *  only moves a `confirmed` one); what the table does is refrain from OFFERING what the guard
+   *  would silently refuse — a command that affects 0 rows explains nothing to the person who
+   *  pressed it. Keeping the button visible teaches the rule instead of hiding it. */
+  get rowActions() {
+    const t5 = (k2) => erplora2().t(CATALOG2, k2);
+    return [
+      {
+        id: "fulfil",
+        label: t5("ui.markFulfilled"),
+        icon: "checkmark-done-outline",
+        color: "success",
+        disabled: (row) => String(row.status ?? "") !== "confirmed"
+      },
+      {
+        id: "delete",
+        label: t5("ui.delete"),
+        icon: "trash-outline",
+        color: "danger",
+        disabled: (row) => String(row.status ?? "") === "fulfilled"
+      }
+    ];
   }
   get columns() {
     const t5 = (k2) => erplora2().t(CATALOG2, k2);
@@ -3770,6 +4118,56 @@ var ErpWhatsappInboxRequests = class extends i3 {
       this.busyId = "";
     }
   }
+  /** Marks a request as handled. NEVER `create_linked_object`: that branch is forbidden on purpose
+   *  (hub#659, ADR-0283 §7) and returns `cross_module_dispatch_unsupported`. Materialising a
+   *  request into another module is a flow with an explicit grant — auditable and revocable — or,
+   *  for an appointment, the booking panel above. */
+  async fulfil(r6) {
+    this.busyId = r6.id;
+    this.formError = "";
+    try {
+      await erplora2().command("whatsapp_inbox.requests.fulfill", { request_id: r6.id });
+      await this.ctrl.load();
+    } catch (e5) {
+      this.formError = e5 instanceof Error ? e5.message : erplora2().t(CATALOG2, "ui.errFulfil");
+    } finally {
+      this.busyId = "";
+    }
+  }
+  /** Deleting asks first, in the page — never `window.confirm`, which a POS webview swallows. */
+  async confirmDelete() {
+    const r6 = this.pendingDelete;
+    if (!r6) return;
+    this.busyId = r6.id;
+    this.formError = "";
+    try {
+      await erplora2().command("whatsapp_inbox.requests.delete", { request_id: r6.id });
+      this.pendingDelete = null;
+      await this.ctrl.load();
+    } catch (e5) {
+      this.formError = e5 instanceof Error ? e5.message : erplora2().t(CATALOG2, "ui.errDeleteRequest");
+    } finally {
+      this.busyId = "";
+    }
+  }
+  onRowAction(ev) {
+    const row = ev.detail.row;
+    if (ev.detail.actionId === "fulfil") void this.fulfil(row);
+    if (ev.detail.actionId === "delete") {
+      this.pendingDelete = row;
+      this.formError = "";
+    }
+  }
+  renderDeleteConfirm() {
+    if (!this.pendingDelete) return A;
+    const t5 = (k2) => erplora2().t(CATALOG2, k2);
+    return b2`<section class="confirm">
+      <p>${t5("ui.confirmDeleteRequest")} <strong>${this.pendingDelete.reference_number}</strong></p>
+      <ion-button size="small" color="danger" ?disabled=${this.busyId === this.pendingDelete.id}
+        @click=${() => this.confirmDelete()}>${t5("ui.delete")}</ion-button>
+      <ion-button size="small" fill="clear" @click=${() => this.pendingDelete = null}>${t5("ui.cancel")}</ion-button>
+    </section>`;
+  }
   renderPending(r6) {
     const t5 = (k2) => erplora2().t(CATALOG2, k2);
     const bookable = BOOKABLE_TYPES.has(r6.request_type) && this.canBook;
@@ -3809,11 +4207,12 @@ var ErpWhatsappInboxRequests = class extends i3 {
         </header>
         ${this.formError ? b2`<p class="err">${this.formError}</p>` : A}
         ${this.ctrl?.error ? b2`<p class="err">${this.ctrl.error}</p>` : A}
+        ${this.renderDeleteConfirm()}
         ${pending.length > 0 ? b2`<div>
           <h3>${t5("ui.pendingReview")}</h3>
           ${pending.map((r6) => this.renderPending(r6))}
         </div>` : A}
-        <ok-data-table .serverSide=${true} .views=${true} .cardTitle=${(row) => String(row.reference_number ?? row.contact_name ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "desc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchRequests")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyRequests")} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}></ok-data-table>
+        <ok-data-table .serverSide=${true} .views=${true} .actions=${this.rowActions} .cardTitle=${(row) => String(row.reference_number ?? row.contact_name ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "desc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchRequests")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyRequests")} @rowAction=${(e5) => this.onRowAction(e5)} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @pageSizeChange=${(e5) => this.ctrl.setPageSize(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}></ok-data-table>
       </div>`;
   }
 };
@@ -3826,6 +4225,9 @@ __decorateClass([
 __decorateClass([
   r5()
 ], ErpWhatsappInboxRequests.prototype, "bookingFor", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxRequests.prototype, "pendingDelete", 2);
 define("erp-whatsapp-inbox-requests", ErpWhatsappInboxRequests);
 
 // modules/whatsapp_inbox/ui/components/erp-whatsapp-inbox-templates/erp-whatsapp-inbox-templates.ts
@@ -3855,6 +4257,16 @@ var ErpWhatsappInboxTemplates = class extends i3 {
     this.saving = false;
     this.formError = "";
     this.tick = 0;
+    this.editingId = "";
+    this.pendingDelete = null;
+    /** Carried through an edit so `templates.update` — whose schema requires every field — can send
+     *  back untouched what this panel does not show. */
+    this.editingRest = {
+      header: "",
+      footer: "",
+      variables: "[]",
+      is_active: 1
+    };
     this.onLocaleChange = () => this.requestUpdate();
   }
   static {
@@ -3867,7 +4279,19 @@ var ErpWhatsappInboxTemplates = class extends i3 {
     .form { display:flex; flex-direction:column; gap:.7rem; }
     .form ion-button { align-self:flex-end; }
     .err { color:#d9480f; font-weight:600; }
+    .panel { flex:0 0 auto; border:1px solid var(--ion-border-color,#e7e2d6);
+      border-radius: var(--ok-radius-sm, 10px); padding:.75rem 1rem; margin:0 0 1rem;
+      background:var(--ok-surface-2, var(--ion-color-step-50, rgba(0,0,0,.04))); }
+    /* 44px minimum touch target: this screen is used one-handed, at a counter. */
+    ion-button { --min-height: 44px; }
   `;
+  }
+  get rowActions() {
+    const t5 = (k2) => erplora3().t(CATALOG3, k2);
+    return [
+      { id: "edit", label: t5("ui.edit"), icon: "create-outline", color: "primary" },
+      { id: "delete", label: t5("ui.delete"), icon: "trash-outline", color: "danger" }
+    ];
   }
   get columns() {
     const t5 = (k2) => erplora3().t(CATALOG3, k2);
@@ -3946,6 +4370,10 @@ var ErpWhatsappInboxTemplates = class extends i3 {
   async createTemplate(ev) {
     ev.preventDefault();
     if (!this.newName.trim()) return;
+    if (this.editingId) {
+      await this.updateTemplate();
+      return;
+    }
     this.saving = true;
     this.formError = "";
     try {
@@ -3958,8 +4386,7 @@ var ErpWhatsappInboxTemplates = class extends i3 {
         footer: "",
         variables: "[]"
       });
-      this.newName = "";
-      this.newBody = "";
+      this.resetForm();
       this.dataTable()?.close();
       await this.ctrl.load();
     } catch (e5) {
@@ -3968,24 +4395,118 @@ var ErpWhatsappInboxTemplates = class extends i3 {
       this.saving = false;
     }
   }
+  /** Loads a row into the panel and turns it into an edit. */
+  startEdit(row) {
+    this.editingId = row.id;
+    this.newName = row.name ?? "";
+    this.newLanguage = row.language ?? "es";
+    this.newCategory = row.category ?? "UTILITY";
+    this.newBody = row.body ?? "";
+    this.editingRest = {
+      header: row.header ?? "",
+      footer: row.footer ?? "",
+      variables: row.variables ?? "[]",
+      is_active: Number(row.is_active ?? 1)
+    };
+    this.formError = "";
+    this.dataTable()?.open("create");
+  }
+  resetForm() {
+    this.editingId = "";
+    this.newName = "";
+    this.newBody = "";
+    this.newLanguage = "es";
+    this.newCategory = "UTILITY";
+    this.editingRest = { header: "", footer: "", variables: "[]", is_active: 1 };
+  }
+  cancelEdit() {
+    this.resetForm();
+    this.formError = "";
+    this.dataTable()?.close();
+  }
+  /** `templates.update` requires EVERY field: what the panel does not show travels back unchanged
+   *  (`editingRest`), so editing the body never silently blanks a header somebody set. */
+  async updateTemplate() {
+    this.saving = true;
+    this.formError = "";
+    try {
+      await erplora3().command("whatsapp_inbox.templates.update", {
+        template_id: this.editingId,
+        name: this.newName.trim(),
+        language: this.newLanguage.trim() || "es",
+        category: this.newCategory,
+        header: this.editingRest.header,
+        body: this.newBody,
+        footer: this.editingRest.footer,
+        variables: this.editingRest.variables,
+        is_active: this.editingRest.is_active
+      });
+      this.resetForm();
+      this.dataTable()?.close();
+      await this.ctrl.load();
+    } catch (e5) {
+      this.formError = e5 instanceof Error ? e5.message : erplora3().t(CATALOG3, "ui.errUpdateTemplate");
+    } finally {
+      this.saving = false;
+    }
+  }
+  /** Deleting asks first, in the page — never `window.confirm`, which a POS webview swallows. Same
+   *  in-page confirm panel `customers` uses for its tags. */
+  async confirmDelete() {
+    const row = this.pendingDelete;
+    if (!row) return;
+    this.saving = true;
+    this.formError = "";
+    try {
+      await erplora3().command("whatsapp_inbox.templates.delete", { template_id: row.id });
+      if (this.editingId === row.id) this.resetForm();
+      this.pendingDelete = null;
+      await this.ctrl.load();
+    } catch (e5) {
+      this.formError = e5 instanceof Error ? e5.message : erplora3().t(CATALOG3, "ui.errDeleteTemplate");
+    } finally {
+      this.saving = false;
+    }
+  }
+  onRowAction(ev) {
+    const row = ev.detail.row;
+    if (ev.detail.actionId === "edit") this.startEdit(row);
+    if (ev.detail.actionId === "delete") {
+      this.pendingDelete = row;
+      this.formError = "";
+    }
+  }
+  renderDeleteConfirm() {
+    if (!this.pendingDelete) return A;
+    const t5 = (k2) => erplora3().t(CATALOG3, k2);
+    return b2`<section class="panel">
+      <p>${t5("ui.confirmDeleteTemplate")} <strong>${this.pendingDelete.name}</strong></p>
+      <ion-button size="small" color="danger" ?disabled=${this.saving}
+        @click=${() => this.confirmDelete()}>${t5("ui.delete")}</ion-button>
+      <ion-button size="small" fill="clear" @click=${() => this.pendingDelete = null}>${t5("ui.cancel")}</ion-button>
+    </section>`;
+  }
   render() {
     const t5 = (k2) => erplora3().t(CATALOG3, k2);
     return b2`<div class="page">
         ${this.formError ? b2`<p class="err">${this.formError}</p>` : A}
         ${this.ctrl?.error ? b2`<p class="err">${this.ctrl.error}</p>` : A}
-        <ok-data-table .serverSide=${true} .fill=${true} .addable=${true} .views=${true} .cardTitle=${(row) => String(row.name ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "desc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchTemplates")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyTemplates")} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @pageSizeChange=${(e5) => this.ctrl.setPageSize(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}>
+        ${this.renderDeleteConfirm()}
+        <ok-data-table .serverSide=${true} .fill=${true} .addable=${true} .views=${true} .actions=${this.rowActions} .cardTitle=${(row) => String(row.name ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "desc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchTemplates")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyTemplates")} @rowAction=${(e5) => this.onRowAction(e5)} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @pageSizeChange=${(e5) => this.ctrl.setPageSize(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}>
           <!-- Alta: se proyecta SIEMPRE (aunque el panel esté cerrado). Si solo se renderizara con el
                panel abierto, el «+» de la barra desplegaría un panel vacío. -->
           <form slot="create" class="form" @submit=${(e5) => this.createTemplate(e5)}>
-            <ion-input fill="outline" label-placement="floating" label=${t5("ui.colName")} .value=${this.newName} @ionInput=${(e5) => this.newName = e5.target.value}></ion-input>
-            <ion-input fill="outline" label-placement="floating" label=${t5("ui.colLanguage")} placeholder=${t5("ui.placeholderLanguage")} .value=${this.newLanguage} @ionInput=${(e5) => this.newLanguage = e5.target.value}></ion-input>
-            <ion-select fill="outline" label-placement="floating" label=${t5("ui.colCategory")} .value=${this.newCategory} @ionChange=${(e5) => this.newCategory = e5.target.value}>
+            <ion-input mode="md" fill="outline" label-placement="floating" label=${t5("ui.colName")} .value=${this.newName} @ionInput=${(e5) => this.newName = e5.target.value}></ion-input>
+            <ion-input mode="md" fill="outline" label-placement="floating" label=${t5("ui.colLanguage")} placeholder=${t5("ui.placeholderLanguage")} .value=${this.newLanguage} @ionInput=${(e5) => this.newLanguage = e5.target.value}></ion-input>
+            <ion-select mode="md" fill="outline" label-placement="floating" label=${t5("ui.colCategory")} .value=${this.newCategory} @ionChange=${(e5) => this.newCategory = e5.target.value}>
               <ion-select-option value="UTILITY">${t5("ui.categoryUtility")}</ion-select-option>
               <ion-select-option value="MARKETING">${t5("ui.categoryMarketing")}</ion-select-option>
               <ion-select-option value="AUTHENTICATION">${t5("ui.categoryAuthentication")}</ion-select-option>
             </ion-select>
-            <ion-textarea fill="outline" label-placement="floating" label=${t5("ui.colBody")} placeholder=${t5("ui.placeholderBody")} .value=${this.newBody} @ionInput=${(e5) => this.newBody = e5.target.value}></ion-textarea>
-            <ion-button type="submit" ?disabled=${this.saving || !this.newName}>${this.saving ? t5("ui.saving") : t5("ui.add")}</ion-button>
+            <ion-textarea mode="md" fill="outline" label-placement="floating" label=${t5("ui.colBody")} placeholder=${t5("ui.placeholderBody")} .value=${this.newBody} @ionInput=${(e5) => this.newBody = e5.target.value}></ion-textarea>
+            <ion-button type="submit" ?disabled=${this.saving || !this.newName}>${this.saving ? t5("ui.saving") : this.editingId ? t5("ui.save") : t5("ui.add")}</ion-button>
+            ${this.editingId ? b2`<ion-button fill="clear" size="small" ?disabled=${this.saving}
+                  @click=${() => this.cancelEdit()}>${t5("ui.cancel")}</ion-button>` : A}
           </form>
         </ok-data-table>
       </div>`;
@@ -4012,4 +4533,10 @@ __decorateClass([
 __decorateClass([
   r5()
 ], ErpWhatsappInboxTemplates.prototype, "tick", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxTemplates.prototype, "editingId", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxTemplates.prototype, "pendingDelete", 2);
 define("erp-whatsapp-inbox-templates", ErpWhatsappInboxTemplates);

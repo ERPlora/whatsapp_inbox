@@ -13,10 +13,13 @@ A request goes through review: it is created, approved or rejected, and finally 
 
 This module is a **data model and a workflow**, and several pieces you would expect are not wired:
 
-- **It cannot send a WhatsApp message.** There is a `send_message` permission and there is **no
-  command that sends anything**. No outbound message exists.
-- **It does not receive messages by itself.** There is an ingest command, but nothing declares a
-  webhook or the network access to Meta's API — the manifest declares no network allowlist.
+- **It cannot send a WhatsApp message.** No command sends anything and the manifest declares no
+  `capabilities`, so the runtime could not reach Meta either. Replying is a flow's **notify** step
+  (hub#821), which goes by the outbox and the SaaS proxy — where the credentials live. The
+  `send_message` permission was retired in whatsapp_inbox#29 because it gated nothing.
+- **It does not talk to Meta at all.** No webhook receiver and no network allowlist are declared
+  here. Inbound messages reach the module through the hub's own poll and the core event
+  `hub.whatsapp.message_received`, not through this manifest.
 - **Fulfilling a request cannot create anything in another module.** This is the module's central
   purpose and it **does not work** — see below.
 - **It does not call an LLM.** The parsed data is expected to arrive already parsed.

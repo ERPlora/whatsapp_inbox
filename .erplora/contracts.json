@@ -3,15 +3,22 @@
   "module": "whatsapp_inbox",
   "consumes": {
     "queries": [
+      "whatsapp_inbox.conversations.get",
       "whatsapp_inbox.conversations.list",
+      "whatsapp_inbox.messages.list",
       "whatsapp_inbox.requests.list",
       "whatsapp_inbox.templates.list"
     ],
     "optional_queries": [],
     "commands": [
+      "whatsapp_inbox.conversations.assign",
       "whatsapp_inbox.requests.approve",
+      "whatsapp_inbox.requests.delete",
+      "whatsapp_inbox.requests.fulfill",
       "whatsapp_inbox.requests.reject",
-      "whatsapp_inbox.templates.create"
+      "whatsapp_inbox.templates.create",
+      "whatsapp_inbox.templates.delete",
+      "whatsapp_inbox.templates.update"
     ],
     "events": [
       "appointments.booking_request.failed",
