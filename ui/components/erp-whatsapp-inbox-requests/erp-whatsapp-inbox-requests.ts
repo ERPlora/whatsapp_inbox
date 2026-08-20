@@ -92,6 +92,8 @@ export class ErpWhatsappInboxRequests extends LitElement {
     ion-button { --min-height: 44px; }
     .booking-slot { margin-top:.5rem; }
     .booking-slot:empty { display:none; }
+    .confirm { border:1px solid var(--ion-border-color,#e7e2d6); border-radius: var(--ok-radius-sm, 10px);
+      padding:.75rem 1rem; margin:0 0 1rem; background:var(--ok-surface-2, var(--ion-color-step-50, rgba(0,0,0,.04))); }
   `;
 
   @state() formError = '';
@@ -100,6 +102,36 @@ export class ErpWhatsappInboxRequests extends LitElement {
 
   /** Which pending request has its booking panel open. One at a time, like a till. */
   @state() bookingFor = '';
+
+  /** The request whose delete is awaiting confirmation, in the page (whatsapp_inbox#29). */
+  @state() pendingDelete: InboxRequest | null = null;
+
+  /** Row actions of the table — the doors `requests.delete` and `requests.fulfill` never had.
+   *
+   *  Both are `disabled` and not hidden when the state does not allow them. The guard is the SQL's
+   *  and stays there (`request_delete.sql` refuses a `fulfilled` row, `_fulfill_transition.sql`
+   *  only moves a `confirmed` one); what the table does is refrain from OFFERING what the guard
+   *  would silently refuse — a command that affects 0 rows explains nothing to the person who
+   *  pressed it. Keeping the button visible teaches the rule instead of hiding it. */
+  private get rowActions() {
+    const t = (k: string): string => erplora().t(CATALOG, k);
+    return [
+      {
+        id: 'fulfil',
+        label: t('ui.markFulfilled'),
+        icon: 'checkmark-done-outline',
+        color: 'success',
+        disabled: (row: Record<string, unknown>) => String(row.status ?? '') !== 'confirmed',
+      },
+      {
+        id: 'delete',
+        label: t('ui.delete'),
+        icon: 'trash-outline',
+        color: 'danger',
+        disabled: (row: Record<string, unknown>) => String(row.status ?? '') === 'fulfilled',
+      },
+    ];
+  }
 
   private ctrl!: ListController<InboxRequest>;
 
@@ -285,6 +317,60 @@ export class ErpWhatsappInboxRequests extends LitElement {
     }
   }
 
+  /** Marks a request as handled. NEVER `create_linked_object`: that branch is forbidden on purpose
+   *  (hub#659, ADR-0283 §7) and returns `cross_module_dispatch_unsupported`. Materialising a
+   *  request into another module is a flow with an explicit grant — auditable and revocable — or,
+   *  for an appointment, the booking panel above. */
+  private async fulfil(r: InboxRequest) {
+    this.busyId = r.id;
+    this.formError = '';
+    try {
+      await erplora().command('whatsapp_inbox.requests.fulfill', { request_id: r.id });
+      await this.ctrl.load();
+    } catch (e) {
+      this.formError = e instanceof Error ? e.message : erplora().t(CATALOG, 'ui.errFulfil');
+    } finally {
+      this.busyId = '';
+    }
+  }
+
+  /** Deleting asks first, in the page — never `window.confirm`, which a POS webview swallows. */
+  private async confirmDelete() {
+    const r = this.pendingDelete;
+    if (!r) return;
+    this.busyId = r.id;
+    this.formError = '';
+    try {
+      await erplora().command('whatsapp_inbox.requests.delete', { request_id: r.id });
+      this.pendingDelete = null;
+      await this.ctrl.load();
+    } catch (e) {
+      this.formError = e instanceof Error ? e.message : erplora().t(CATALOG, 'ui.errDeleteRequest');
+    } finally {
+      this.busyId = '';
+    }
+  }
+
+  private onRowAction(ev: CustomEvent<{ actionId: string; row: Record<string, unknown> }>) {
+    const row = ev.detail.row as unknown as InboxRequest;
+    if (ev.detail.actionId === 'fulfil') void this.fulfil(row);
+    if (ev.detail.actionId === 'delete') {
+      this.pendingDelete = row;
+      this.formError = '';
+    }
+  }
+
+  private renderDeleteConfirm() {
+    if (!this.pendingDelete) return nothing;
+    const t = (k: string): string => erplora().t(CATALOG, k);
+    return html`<section class="confirm">
+      <p>${t('ui.confirmDeleteRequest')} <strong>${this.pendingDelete.reference_number}</strong></p>
+      <ion-button size="small" color="danger" ?disabled=${this.busyId === this.pendingDelete.id}
+        @click=${() => this.confirmDelete()}>${t('ui.delete')}</ion-button>
+      <ion-button size="small" fill="clear" @click=${() => (this.pendingDelete = null)}>${t('ui.cancel')}</ion-button>
+    </section>`;
+  }
+
   private renderPending(r: InboxRequest) {
     const t = (k: string): string => erplora().t(CATALOG, k);
     const bookable = BOOKABLE_TYPES.has(r.request_type) && this.canBook;
@@ -325,11 +411,12 @@ export class ErpWhatsappInboxRequests extends LitElement {
         </header>
         ${this.formError ? html`<p class="err">${this.formError}</p>` : nothing}
         ${this.ctrl?.error ? html`<p class="err">${this.ctrl.error}</p>` : nothing}
+        ${this.renderDeleteConfirm()}
         ${pending.length > 0 ? html`<div>
           <h3>${t('ui.pendingReview')}</h3>
           ${pending.map((r) => this.renderPending(r))}
         </div>` : nothing}
-        <ok-data-table .serverSide=${true} .views=${true} .cardTitle=${(row: Record<string, unknown>) => String(row.reference_number ?? row.contact_name ?? '—')} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? 'desc'} .searchable=${true} .searchPlaceholder=${t('ui.searchRequests')} .emptyMessage=${this.ctrl?.loading ? t('ui.loading') : t('ui.emptyRequests')} @pageChange=${(e: CustomEvent<number>) => this.ctrl.setPage(e.detail)} @sortChange=${(e: CustomEvent<{ sort: string; dir: 'asc' | 'desc' }>) => this.ctrl.setSort(e.detail.sort, e.detail.dir)} @searchChange=${(e: CustomEvent<string>) => this.ctrl.setSearch(e.detail)} @filterChange=${(e: CustomEvent<{ col: string; value: unknown }>) => this.ctrl.setFilter(e.detail.col, e.detail.value)}></ok-data-table>
+        <ok-data-table .serverSide=${true} .views=${true} .actions=${this.rowActions} .cardTitle=${(row: Record<string, unknown>) => String(row.reference_number ?? row.contact_name ?? '—')} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? 'desc'} .searchable=${true} .searchPlaceholder=${t('ui.searchRequests')} .emptyMessage=${this.ctrl?.loading ? t('ui.loading') : t('ui.emptyRequests')} @rowAction=${(e: CustomEvent<{ actionId: string; row: Record<string, unknown> }>) => this.onRowAction(e)} @pageChange=${(e: CustomEvent<number>) => this.ctrl.setPage(e.detail)} @pageSizeChange=${(e: CustomEvent<number>) => this.ctrl.setPageSize(e.detail)} @sortChange=${(e: CustomEvent<{ sort: string; dir: 'asc' | 'desc' }>) => this.ctrl.setSort(e.detail.sort, e.detail.dir)} @searchChange=${(e: CustomEvent<string>) => this.ctrl.setSearch(e.detail)} @filterChange=${(e: CustomEvent<{ col: string; value: unknown }>) => this.ctrl.setFilter(e.detail.col, e.detail.value)}></ok-data-table>
       </div>`;
   }
 }

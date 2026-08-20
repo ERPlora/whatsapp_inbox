@@ -23,6 +23,10 @@ interface Template {
   name: string;
   language: string;
   category: string;
+  header: string;
+  body: string;
+  footer: string;
+  variables: string;
   meta_status: string;
   is_active: number;
 }
@@ -57,6 +61,11 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     .form { display:flex; flex-direction:column; gap:.7rem; }
     .form ion-button { align-self:flex-end; }
     .err { color:#d9480f; font-weight:600; }
+    .panel { flex:0 0 auto; border:1px solid var(--ion-border-color,#e7e2d6);
+      border-radius: var(--ok-radius-sm, 10px); padding:.75rem 1rem; margin:0 0 1rem;
+      background:var(--ok-surface-2, var(--ion-color-step-50, rgba(0,0,0,.04))); }
+    /* 44px minimum touch target: this screen is used one-handed, at a counter. */
+    ion-button { --min-height: 44px; }
   `;
 
   @state() newName = '';
@@ -73,9 +82,34 @@ export class ErpWhatsappInboxTemplates extends LitElement {
 
   @state() tick = 0;
 
+  /** The template being edited, or `''` while the panel is an ADD. One panel, two jobs — the same
+   *  gesture the rest of the Hub uses, and the reason `templates.update` finally has a caller
+   *  (whatsapp_inbox#29). */
+  @state() editingId = '';
+
+  /** The template whose delete is awaiting confirmation, in the page. */
+  @state() pendingDelete: Template | null = null;
+
+  /** Carried through an edit so `templates.update` — whose schema requires every field — can send
+   *  back untouched what this panel does not show. */
+  private editingRest: Pick<Template, 'header' | 'footer' | 'variables' | 'is_active'> = {
+    header: '',
+    footer: '',
+    variables: '[]',
+    is_active: 1,
+  };
+
   private ctrl!: ListController<Template>;
 
   private unsub?: () => void;
+
+  private get rowActions() {
+    const t = (k: string): string => erplora().t(CATALOG, k);
+    return [
+      { id: 'edit', label: t('ui.edit'), icon: 'create-outline', color: 'primary' },
+      { id: 'delete', label: t('ui.delete'), icon: 'trash-outline', color: 'danger' },
+    ];
+  }
 
   private get columns(): DataTableColumn[] {
     const t = (k: string): string => erplora().t(CATALOG, k);
@@ -163,6 +197,10 @@ export class ErpWhatsappInboxTemplates extends LitElement {
   private async createTemplate(ev: Event) {
     ev.preventDefault();
     if (!this.newName.trim()) return;
+    if (this.editingId) {
+      await this.updateTemplate();
+      return;
+    }
     this.saving = true;
     this.formError = '';
     try {
@@ -175,8 +213,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
         footer: '',
         variables: '[]',
       });
-      this.newName = '';
-      this.newBody = '';
+      this.resetForm();
       this.dataTable()?.close(); // cierra el panel lateral tras crear
       await this.ctrl.load();
     } catch (e) {
@@ -186,24 +223,127 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     }
   }
 
+  /** Loads a row into the panel and turns it into an edit. */
+  private startEdit(row: Template) {
+    this.editingId = row.id;
+    this.newName = row.name ?? '';
+    this.newLanguage = row.language ?? 'es';
+    this.newCategory = row.category ?? 'UTILITY';
+    this.newBody = row.body ?? '';
+    this.editingRest = {
+      header: row.header ?? '',
+      footer: row.footer ?? '',
+      variables: row.variables ?? '[]',
+      is_active: Number(row.is_active ?? 1),
+    };
+    this.formError = '';
+    this.dataTable()?.open('create');
+  }
+
+  private resetForm() {
+    this.editingId = '';
+    this.newName = '';
+    this.newBody = '';
+    this.newLanguage = 'es';
+    this.newCategory = 'UTILITY';
+    this.editingRest = { header: '', footer: '', variables: '[]', is_active: 1 };
+  }
+
+  private cancelEdit() {
+    this.resetForm();
+    this.formError = '';
+    this.dataTable()?.close();
+  }
+
+  /** `templates.update` requires EVERY field: what the panel does not show travels back unchanged
+   *  (`editingRest`), so editing the body never silently blanks a header somebody set. */
+  private async updateTemplate() {
+    this.saving = true;
+    this.formError = '';
+    try {
+      await erplora().command('whatsapp_inbox.templates.update', {
+        template_id: this.editingId,
+        name: this.newName.trim(),
+        language: this.newLanguage.trim() || 'es',
+        category: this.newCategory,
+        header: this.editingRest.header,
+        body: this.newBody,
+        footer: this.editingRest.footer,
+        variables: this.editingRest.variables,
+        is_active: this.editingRest.is_active,
+      });
+      this.resetForm();
+      this.dataTable()?.close();
+      await this.ctrl.load();
+    } catch (e) {
+      this.formError = e instanceof Error ? e.message : erplora().t(CATALOG, 'ui.errUpdateTemplate');
+    } finally {
+      this.saving = false;
+    }
+  }
+
+  /** Deleting asks first, in the page — never `window.confirm`, which a POS webview swallows. Same
+   *  in-page confirm panel `customers` uses for its tags. */
+  private async confirmDelete() {
+    const row = this.pendingDelete;
+    if (!row) return;
+    this.saving = true;
+    this.formError = '';
+    try {
+      await erplora().command('whatsapp_inbox.templates.delete', { template_id: row.id });
+      if (this.editingId === row.id) this.resetForm();
+      this.pendingDelete = null;
+      await this.ctrl.load();
+    } catch (e) {
+      this.formError = e instanceof Error ? e.message : erplora().t(CATALOG, 'ui.errDeleteTemplate');
+    } finally {
+      this.saving = false;
+    }
+  }
+
+  private onRowAction(ev: CustomEvent<{ actionId: string; row: Record<string, unknown> }>) {
+    const row = ev.detail.row as unknown as Template;
+    if (ev.detail.actionId === 'edit') this.startEdit(row);
+    if (ev.detail.actionId === 'delete') {
+      this.pendingDelete = row;
+      this.formError = '';
+    }
+  }
+
+  private renderDeleteConfirm() {
+    if (!this.pendingDelete) return nothing;
+    const t = (k: string): string => erplora().t(CATALOG, k);
+    return html`<section class="panel">
+      <p>${t('ui.confirmDeleteTemplate')} <strong>${this.pendingDelete.name}</strong></p>
+      <ion-button size="small" color="danger" ?disabled=${this.saving}
+        @click=${() => this.confirmDelete()}>${t('ui.delete')}</ion-button>
+      <ion-button size="small" fill="clear" @click=${() => (this.pendingDelete = null)}>${t('ui.cancel')}</ion-button>
+    </section>`;
+  }
+
   render() {
     const t = (k: string): string => erplora().t(CATALOG, k);
     return html`<div class="page">
         ${this.formError ? html`<p class="err">${this.formError}</p>` : nothing}
         ${this.ctrl?.error ? html`<p class="err">${this.ctrl.error}</p>` : nothing}
-        <ok-data-table .serverSide=${true} .fill=${true} .addable=${true} .views=${true} .cardTitle=${(row: Record<string, unknown>) => String(row.name ?? '—')} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? 'desc'} .searchable=${true} .searchPlaceholder=${t('ui.searchTemplates')} .emptyMessage=${this.ctrl?.loading ? t('ui.loading') : t('ui.emptyTemplates')} @pageChange=${(e: CustomEvent<number>) => this.ctrl.setPage(e.detail)} @pageSizeChange=${(e: CustomEvent<number>) => this.ctrl.setPageSize(e.detail)} @sortChange=${(e: CustomEvent<{ sort: string; dir: 'asc' | 'desc' }>) => this.ctrl.setSort(e.detail.sort, e.detail.dir)} @searchChange=${(e: CustomEvent<string>) => this.ctrl.setSearch(e.detail)} @filterChange=${(e: CustomEvent<{ col: string; value: unknown }>) => this.ctrl.setFilter(e.detail.col, e.detail.value)}>
+        ${this.renderDeleteConfirm()}
+        <ok-data-table .serverSide=${true} .fill=${true} .addable=${true} .views=${true} .actions=${this.rowActions} .cardTitle=${(row: Record<string, unknown>) => String(row.name ?? '—')} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? 'desc'} .searchable=${true} .searchPlaceholder=${t('ui.searchTemplates')} .emptyMessage=${this.ctrl?.loading ? t('ui.loading') : t('ui.emptyTemplates')} @rowAction=${(e: CustomEvent<{ actionId: string; row: Record<string, unknown> }>) => this.onRowAction(e)} @pageChange=${(e: CustomEvent<number>) => this.ctrl.setPage(e.detail)} @pageSizeChange=${(e: CustomEvent<number>) => this.ctrl.setPageSize(e.detail)} @sortChange=${(e: CustomEvent<{ sort: string; dir: 'asc' | 'desc' }>) => this.ctrl.setSort(e.detail.sort, e.detail.dir)} @searchChange=${(e: CustomEvent<string>) => this.ctrl.setSearch(e.detail)} @filterChange=${(e: CustomEvent<{ col: string; value: unknown }>) => this.ctrl.setFilter(e.detail.col, e.detail.value)}>
           <!-- Alta: se proyecta SIEMPRE (aunque el panel esté cerrado). Si solo se renderizara con el
                panel abierto, el «+» de la barra desplegaría un panel vacío. -->
           <form slot="create" class="form" @submit=${(e: Event) => this.createTemplate(e)}>
-            <ion-input fill="outline" label-placement="floating" label=${t('ui.colName')} .value=${this.newName} @ionInput=${(e: any) => (this.newName = e.target.value)}></ion-input>
-            <ion-input fill="outline" label-placement="floating" label=${t('ui.colLanguage')} placeholder=${t('ui.placeholderLanguage')} .value=${this.newLanguage} @ionInput=${(e: any) => (this.newLanguage = e.target.value)}></ion-input>
-            <ion-select fill="outline" label-placement="floating" label=${t('ui.colCategory')} .value=${this.newCategory} @ionChange=${(e: any) => (this.newCategory = e.target.value)}>
+            <ion-input mode="md" fill="outline" label-placement="floating" label=${t('ui.colName')} .value=${this.newName} @ionInput=${(e: any) => (this.newName = e.target.value)}></ion-input>
+            <ion-input mode="md" fill="outline" label-placement="floating" label=${t('ui.colLanguage')} placeholder=${t('ui.placeholderLanguage')} .value=${this.newLanguage} @ionInput=${(e: any) => (this.newLanguage = e.target.value)}></ion-input>
+            <ion-select mode="md" fill="outline" label-placement="floating" label=${t('ui.colCategory')} .value=${this.newCategory} @ionChange=${(e: any) => (this.newCategory = e.target.value)}>
               <ion-select-option value="UTILITY">${t('ui.categoryUtility')}</ion-select-option>
               <ion-select-option value="MARKETING">${t('ui.categoryMarketing')}</ion-select-option>
               <ion-select-option value="AUTHENTICATION">${t('ui.categoryAuthentication')}</ion-select-option>
             </ion-select>
-            <ion-textarea fill="outline" label-placement="floating" label=${t('ui.colBody')} placeholder=${t('ui.placeholderBody')} .value=${this.newBody} @ionInput=${(e: any) => (this.newBody = e.target.value)}></ion-textarea>
-            <ion-button type="submit" ?disabled=${this.saving || !this.newName}>${this.saving ? t('ui.saving') : t('ui.add')}</ion-button>
+            <ion-textarea mode="md" fill="outline" label-placement="floating" label=${t('ui.colBody')} placeholder=${t('ui.placeholderBody')} .value=${this.newBody} @ionInput=${(e: any) => (this.newBody = e.target.value)}></ion-textarea>
+            <ion-button type="submit" ?disabled=${this.saving || !this.newName}>${this.saving ? t('ui.saving') : this.editingId ? t('ui.save') : t('ui.add')}</ion-button>
+            ${this.editingId
+              ? html`<ion-button fill="clear" size="small" ?disabled=${this.saving}
+                  @click=${() => this.cancelEdit()}>${t('ui.cancel')}</ion-button>`
+              : nothing}
           </form>
         </ok-data-table>
       </div>`;

@@ -7,21 +7,34 @@ The module contributes three tabs to the hub navigation: **Inbox**, **Requests**
 Every WhatsApp conversation of the hub (`whatsapp_inbox.conversations.list`, 50 rows per page).
 Requires `whatsapp_inbox.view_conversation` — an employee can read this.
 
-Open a conversation for its detail (`whatsapp_inbox.conversations.get`) and its messages
-(`whatsapp_inbox.messages.list`).
-
 A conversation carries the contact, a soft reference to the customer, who it is assigned to, its
 status, the time of the last message, the unread count, and the bot's context.
 
+### Open a conversation and read the thread
+
+The **Open** action of a row loads the conversation (`whatsapp_inbox.conversations.get`) and its
+messages (`whatsapp_inbox.messages.list`, oldest first) into a panel above the list. Requires
+`whatsapp_inbox.view_conversation`, the same as the list — an employee can read a thread.
+
+Messages that carry no text (a photo, a location, a button reply) show the **kind** Meta reported
+instead of an empty bubble.
+
+Until whatsapp_inbox#29 those two reads had no caller and a module called *inbox* could not open a
+message. That matters since appointments#38: approving a request creates a real appointment, so
+whoever approves has to be able to read what the customer actually wrote.
+
 ### Assign a conversation
 
-Assigns it to an agent or a team. Requires `whatsapp_inbox.manage_settings` — **admin only**, which
-means a manager cannot assign conversations.
+From the open thread. Empty employee id = **unassign**, which is the SQL's own contract. Requires
+`whatsapp_inbox.manage_settings` — **admin only**, which means a manager cannot assign conversations.
 
 ### Reply to a customer
 
-**You cannot.** There is no command that sends a message. The `send_message` permission exists and
-grants access to nothing. See [limits.md](limits.md).
+**Not from this screen.** The module declares no send command and no `capabilities`, so the runtime
+could not reach Meta even if it did. The hub answers WhatsApp through a flow's **notify** step
+(hub#821), which goes by the outbox and the SaaS proxy — the only place the channel credentials
+live. The `send_message` permission was retired in whatsapp_inbox#29: it gated nothing, and a
+permission that gates nothing answers *yes* to an audit that should say no.
 
 ### How a message gets in
 
@@ -29,7 +42,13 @@ An ingest command upserts the conversation from the contact, stores the message 
 `whatsapp_inbox.message.received`. It requires `whatsapp_inbox.manage_connections` — **admin only** —
 because it is the channel's intake point, not a user action.
 
-**Nothing calls it automatically**: no webhook receiver and no network access to Meta are declared.
+Since [#27](https://github.com/ERPlora/whatsapp_inbox/pull/27) the hub's own poll of the SaaS raises
+the core event `hub.whatsapp.message_received` and this module listens to it, so an inbound message
+lands in a conversation by itself. **Exactly once**: since whatsapp_inbox#30 a partial unique index
+over `(hub_id, wa_message_id)` sits under both ingestion doors, so the same message arriving twice
+leaves one row, one unit on the free-tier meter and one unread bump.
+
+There is still no webhook receiver and no network access to Meta declared here.
 
 ## Requests
 
@@ -58,20 +77,25 @@ Requires `whatsapp_inbox.manage_connections` — **admin only**.
 Both are guarded by the request's current status and both emit their event. Requires
 `whatsapp_inbox.change_request` — a manager has it, an employee does not.
 
-### Fulfil a request
+### Mark a request as handled
 
-Marks the request `fulfilled`, and only from `confirmed`.
+The **Mark as handled** row action moves the request to `fulfilled`, and only from `confirmed` — on
+any other status the button is visible but disabled, because the guard lives in the SQL and a
+command that matches 0 rows explains nothing to whoever pressed it.
 
-> ⚠️ **Nothing is created in another module.** The dispatch branch that would create the reservation,
-> the order or the quote **cannot run** and returns `cross_module_dispatch_unsupported`. The link
-> fields stay empty. Do the real work by hand in the destination module.
+> ⚠️ **Nothing is created in another module,** and that is by design, not a gap waiting to be
+> filled: cross-module dispatch from a handler is forbidden (hub#659, ADR-0283 §7) precisely because
+> it would be a capability with no owner. The link fields stay empty, and a fulfilled request means
+> *somebody dealt with this by hand*. To materialise a request, use a flow with an explicit grant —
+> auditable and revocable — or, for an appointment, the booking panel above.
 
 Requires `whatsapp_inbox.change_request`.
 
 ### Delete a request
 
-Soft-deletes it. **A request that is already fulfilled cannot be deleted.** Requires
-`whatsapp_inbox.delete_request` — **admin only**.
+The **Delete** row action asks for confirmation in the page, then soft-deletes it. **A request that
+is already fulfilled cannot be deleted** (the audit chain to the linked object has to survive), so
+the action is disabled on those rows. Requires `whatsapp_inbox.delete_request` — **admin only**.
 
 ## Templates
 
@@ -82,12 +106,24 @@ A template has a **category** (`MARKETING`, `UTILITY`, `AUTHENTICATION`), a lang
 body, a footer, its Meta template id, its **status at Meta** (`pending`, `approved`, `rejected`), its
 variables, and an active flag.
 
-Create, update and delete are all admin-only.
+Create, update and delete are all admin-only. Create and **edit** share the panel behind the «+» of
+the table's toolbar — the **Edit** row action loads the template into it, and the fields the panel
+does not show (header, footer, variables, active flag) travel back unchanged, so editing a body
+never blanks a header somebody set. **Delete** asks for confirmation in the page.
+
+> Editing a template resets its Meta status to `pending`: Meta re-approves content.
 
 > The Meta status is stored, not synchronised. Nothing checks with Meta whether a template was
 > approved.
 
 ## Settings — the channel
+
+> ⚠️ **There is no settings screen.** `whatsapp_inbox.settings.get` and
+> `whatsapp_inbox.settings.upsert` exist and nothing in the UI calls them — the channel is
+> configured by whoever installs the module. Tracked in
+> [whatsapp_inbox#6](https://github.com/ERPlora/whatsapp_inbox/issues/6), and listed with its reason
+> in the `PENDING` block of `tests/surface_has_a_door.contract.test.py`. What follows is what the
+> settings mean, not a screen you can open.
 
 Read with `whatsapp_inbox.settings.get` and saved with `whatsapp_inbox.settings.upsert`. Requires
 `whatsapp_inbox.manage_settings` — **admin only**.

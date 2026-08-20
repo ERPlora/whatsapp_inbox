@@ -1,0 +1,139 @@
+// Two commands of this module had no caller anywhere, and the screen that should offer them is this
+// one (whatsapp_inbox#29):
+//
+//   * `whatsapp_inbox.requests.delete` — declared, with its own permission (`delete_request`), its
+//     schema and a guard in the SQL that refuses a `fulfilled` request. Nothing called it, so
+//     `delete_request` was a permission that gated nothing a person could reach.
+//   * `whatsapp_inbox.requests.fulfill` — its simple branch works and means something real: since
+//     the cross-module dispatch is forbidden on purpose (hub#659, ADR-0283 §7), a fulfilled request
+//     is *a note that somebody handled it by hand*. That is a state a merchant needs to be able to
+//     set, and nothing offered it.
+//
+// The guard lives in the SQL both times and stays there — the UI only refrains from offering what
+// the guard would refuse, which is what makes the screen honest rather than authoritative.
+import { beforeEach, describe, expect, it } from 'vitest';
+
+const PENDING = {
+  id: 'r1', reference_number: 'WA-20260820-0001', request_type: 'appointment',
+  status: 'pending_review', contact_name: 'Ana', contact_phone: '+34600111222',
+  customer_id: null, raw_summary: 'Cita para un tinte', confidence_score: 0.8,
+  failure_code: '', failure_reason: '', created_at: '2026-08-20T09:00:00+00:00',
+};
+const CONFIRMED = { ...PENDING, id: 'r2', reference_number: 'WA-20260820-0002', status: 'confirmed' };
+const FULFILLED = { ...PENDING, id: 'r3', reference_number: 'WA-20260820-0003', status: 'fulfilled' };
+
+const ROWS = [PENDING, CONFIRMED, FULFILLED];
+
+const comandos: { name: string; payload: Record<string, unknown> }[] = [];
+
+beforeEach(() => {
+  comandos.length = 0;
+  (globalThis as Record<string, unknown>).erplora = {
+    query: async () => [],
+    queryPage: async () => ({ rows: ROWS, total: ROWS.length }),
+    command: async (name: string, payload: Record<string, unknown>) => {
+      comandos.push({ name, payload });
+      return {};
+    },
+    on: () => () => {},
+    hasPermission: () => true,
+    loadSlot: async () => [],
+    locale: 'es',
+    t: (_catalog: unknown, key: string) => key,
+  };
+});
+
+async function montar() {
+  await import('./erp-whatsapp-inbox-requests');
+  const el = document.createElement('erp-whatsapp-inbox-requests');
+  document.body.appendChild(el);
+  const wc = el as unknown as { updateComplete: Promise<unknown> };
+  await wc.updateComplete;
+  await new Promise((r) => setTimeout(r, 0));
+  await wc.updateComplete;
+  return el as HTMLElement & { shadowRoot: ShadowRoot };
+}
+
+// `DataTableAction` offers `disabled` and `loading` per row — there is no `hidden`, and inventing
+// one would be a change to OutfitKit, not to this module. Disabled is also the better answer here:
+// the action stays visible, so the operator learns the request has to be CONFIRMED first instead of
+// wondering where the button went.
+const tabla = (el: HTMLElement & { shadowRoot: ShadowRoot }) =>
+  el.shadowRoot.querySelector('ok-data-table') as (HTMLElement & {
+    actions: { id: string; disabled?: (row: Record<string, unknown>) => boolean }[];
+  }) | null;
+
+async function accionar(el: HTMLElement & { shadowRoot: ShadowRoot }, actionId: string, row: unknown) {
+  tabla(el)!.dispatchEvent(new CustomEvent('rowAction', { detail: { actionId, row } }));
+  await new Promise((r) => setTimeout(r, 0));
+  await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+}
+
+describe('borrar una solicitud (`requests.delete`)', () => {
+  it('la tabla ofrece la acción de borrar', async () => {
+    const el = await montar();
+    expect((tabla(el)?.actions ?? []).map((a) => a.id)).toContain('delete');
+  });
+
+  it('borrar PREGUNTA antes, en la página (nunca `window.confirm`)', async () => {
+    const el = await montar();
+    await accionar(el, 'delete', PENDING);
+    expect(
+      comandos.find((c) => c.name === 'whatsapp_inbox.requests.delete'),
+      'se borró sin preguntar',
+    ).toBeFalsy();
+    const panel = el.shadowRoot.querySelector('.confirm');
+    expect(panel, 'no aparece la confirmación en la página').toBeTruthy();
+    expect(panel!.textContent).toContain('WA-20260820-0001');
+  });
+
+  it('confirmar manda `whatsapp_inbox.requests.delete` con su request', async () => {
+    const el = await montar();
+    await accionar(el, 'delete', PENDING);
+    const wc = el as unknown as { confirmDelete: () => Promise<void> };
+    await wc.confirmDelete();
+    const borrado = comandos.find((c) => c.name === 'whatsapp_inbox.requests.delete');
+    expect(borrado, 'no se mandó `whatsapp_inbox.requests.delete`').toBeTruthy();
+    expect(borrado!.payload.request_id).toBe('r1');
+  });
+
+  it('una solicitud CUMPLIDA no se puede borrar (la guarda vive en el SQL, la UI no la ofrece)', async () => {
+    const el = await montar();
+    const accion = (tabla(el)?.actions ?? []).find((a) => a.id === 'delete');
+    expect(
+      accion?.disabled?.(FULFILLED as unknown as Record<string, unknown>),
+      'ofrece borrar una solicitud cumplida: el command devolvería 0 filas y el usuario no sabría por qué',
+    ).toBe(true);
+    expect(accion?.disabled?.(PENDING as unknown as Record<string, unknown>)).toBe(false);
+  });
+});
+
+describe('marcar como atendida (`requests.fulfill`)', () => {
+  it('la tabla ofrece la acción', async () => {
+    const el = await montar();
+    expect((tabla(el)?.actions ?? []).map((a) => a.id)).toContain('fulfil');
+  });
+
+  it('solo se habilita sobre una solicitud CONFIRMADA (la transición del SQL sale de ahí)', async () => {
+    const el = await montar();
+    const accion = (tabla(el)?.actions ?? []).find((a) => a.id === 'fulfil');
+    expect(accion?.disabled?.(CONFIRMED as unknown as Record<string, unknown>)).toBe(false);
+    expect(
+      accion?.disabled?.(PENDING as unknown as Record<string, unknown>),
+      'ofrece atender una solicitud sin confirmar: el WHERE del SQL casa 0 filas y nada explica por qué',
+    ).toBe(true);
+    expect(accion?.disabled?.(FULFILLED as unknown as Record<string, unknown>)).toBe(true);
+  });
+
+  it('manda el command SIN `create_linked_object`: esa rama está prohibida a propósito', async () => {
+    const el = await montar();
+    await accionar(el, 'fulfil', CONFIRMED);
+    const cumplida = comandos.find((c) => c.name === 'whatsapp_inbox.requests.fulfill');
+    expect(cumplida, 'no se mandó `whatsapp_inbox.requests.fulfill`').toBeTruthy();
+    expect(cumplida!.payload.request_id).toBe('r2');
+    expect(
+      cumplida!.payload.create_linked_object,
+      'pide el dispatch cross-módulo, que devuelve `cross_module_dispatch_unsupported` (hub#659)',
+    ).toBeUndefined();
+  });
+});

@@ -21,7 +21,6 @@
   ],
   "permissions": [
     "whatsapp_inbox.view_conversation",
-    "whatsapp_inbox.send_message",
     "whatsapp_inbox.view_request",
     "whatsapp_inbox.change_request",
     "whatsapp_inbox.delete_request",
@@ -34,12 +33,10 @@
     ],
     "manager": [
       "whatsapp_inbox.change_request",
-      "whatsapp_inbox.send_message",
       "whatsapp_inbox.view_conversation",
       "whatsapp_inbox.view_request"
     ],
     "employee": [
-      "whatsapp_inbox.send_message",
       "whatsapp_inbox.view_conversation",
       "whatsapp_inbox.view_request"
     ]
@@ -400,7 +397,7 @@
         "whatsapp_inbox.request.fulfilled"
       ],
       "ai": {
-        "description": "Marks a WhatsApp request as fulfilled and executes its fulfillment logic"
+        "description": "Marks a CONFIRMED WhatsApp request as fulfilled — a note that a person handled it. It creates nothing in another module and never has: cross-module dispatch from a handler is forbidden by design (hub#659, ADR-0283 §7), so `create_linked_object: true` returns `cross_module_dispatch_unsupported` and changes nothing. To materialise a request, use a flow with an explicit grant, or the booking panel of the Requests screen for an appointment."
       }
     },
     "whatsapp_inbox._fulfill_transition": {
