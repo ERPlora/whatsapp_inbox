@@ -21,6 +21,13 @@
 -- reasoning. 0 rows = over the limit; the stats statement that follows checks whether the row
 -- actually landed instead of assuming it did.
 --
+-- **`ON CONFLICT DO NOTHING` against `uq_wa_msg_hub_wamsgid`** (migration 005, whatsapp_inbox#30).
+-- Same reason as its twin in `commands/message_ingest_msg.sql`, from the other side: a message
+-- already ingested through the public command must not be written again here, and a relay that
+-- redelivers after a crash must not either. The relay is the caller, so raising would dead-letter a
+-- message the hub already has — absorbing is what «at-least-once delivery» is owed. The `WHERE`
+-- repeats the index predicate because the index is PARTIAL over `is_deleted = 0`.
+--
 -- Runtime injects :new_id, :hub_id, :current_user_id, :now.
 INSERT INTO whatsapp_inbox_message
   (id, hub_id, conversation_id, direction, wa_message_id, extra_metadata,
@@ -49,4 +56,5 @@ WHERE NOT EXISTS (
       WHERE m.hub_id = :hub_id AND m.direction = 'inbound' AND m.is_deleted = 0
         AND m.created_at >= substr(:now, 1, 7) || '-01'
     ) >= s.free_tier_monthly_limit
-);
+)
+ON CONFLICT (hub_id, wa_message_id) WHERE is_deleted = 0 DO NOTHING;

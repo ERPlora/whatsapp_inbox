@@ -33,6 +33,27 @@ message and emits an event. But:
 So messages arrive only if something outside calls that command. It requires the connections
 permission precisely because it is a channel intake point, not a user action.
 
+## One `wa_message_id` is one message, whichever door it comes through
+
+Two commands write the same message row: the public `messages.ingest` and the internal
+`_ingest_inbound_message` that the core event runs. Since **whatsapp_inbox#30** a partial unique
+index over `(hub_id, wa_message_id)` sits underneath both, and both absorb the conflict silently —
+so the same message delivered twice leaves **one row, one unit off the free-tier meter and one
+unread bump**, and neither caller gets an error for having tried.
+
+That last part is what the meter needs. The free tier is measured by counting inbound messages of
+the month, so a duplicate row is not an untidy inbox: it is the merchant's quota being spent twice
+on one message, and the bill arriving early.
+
+Soft-deleting a message releases its `wa_message_id` again — the index is partial over
+`is_deleted = 0` — so deleting is not a one-way door.
+
+**What is still per-call, not per-message:** the `whatsapp_inbox.message.received` **event**. A
+declarative command emits on every execution, so a second ingest of the same message emits a second
+event even though it wrote no row. Nothing listens to it today, and the exactly-once guarantee for
+reactions lives one level up, on the core event `hub.whatsapp.message_received`
+(`id = "wa-<wa_message_id>"` in the outbox), which is what the shipped flow triggers on.
+
 ## The request schema is supplied, not enforced by the module
 
 When a request is ingested, its parsed data is validated against the hub's **dynamic request

@@ -1,5 +1,16 @@
 -- Inserts the inbound message. The runtime injects :new_id (message id), :hub_id,
--- :current_user_id and :now. The free tier is enforced when free_tier_monthly_limit > 0:
+-- :current_user_id and :now.
+--
+-- **`ON CONFLICT DO NOTHING` against `uq_wa_msg_hub_wamsgid`** (migration 005, whatsapp_inbox#30).
+-- This is not the only door into this table — `_ingest_inbound_message` writes the same row from
+-- the core event — and the same message reaching both wrote it twice: two rows, and two units off
+-- the free-tier meter below, which is the merchant being billed twice for one message. The
+-- conflict is ABSORBED and not raised: the callers here are a webhook and the outbox relay, and
+-- for both of them «I already have this one» is the successful answer, not an error to retry.
+-- The `WHERE` of the ON CONFLICT repeats the index predicate because the index is PARTIAL:
+-- Postgres infers the target from it, and without it there is no unique index to point at.
+--
+-- The free tier is enforced when free_tier_monthly_limit > 0:
 -- it counts every inbound message of the current calendar month (the month of :now) and
 -- blocks the INSERT once count >= limit → the runtime returns an error to the caller.
 -- 0 rows = limit exceeded; the caller (webhook handler) must record the rejection.
@@ -47,4 +58,5 @@ WHERE NOT EXISTS (
         --     (`day_from_now`, handler/src/lib.rs).
         AND m.created_at >= substr(:now, 1, 7) || '-01'
     ) >= s.free_tier_monthly_limit
-);
+)
+ON CONFLICT (hub_id, wa_message_id) WHERE is_deleted = 0 DO NOTHING;
