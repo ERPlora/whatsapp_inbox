@@ -6,12 +6,16 @@
 //
 // The three things this screen must NOT get wrong, and why each one is a test:
 //
-// 1. **The meter is not editable.** `free_tier_monthly_limit` is what the two ingest guards read to
-//    stop counting inbound messages on the free tier (`commands/message_ingest_msg.sql`,
-//    `commands/inbound_message_insert.sql`), and the module is billed per conversation. A field that
-//    let an admin type `0` there would be a switch that turns the invoice off. It is shown, it is
-//    read-only, and it travels back to `settings.upsert` EXACTLY as it was read — the upsert writes
-//    every column, so «not sending it» would silently blank the merchant's plan.
+// 1. **The meter is not this screen's to send.** `free_tier_monthly_limit` is what the two ingest
+//    guards read to stop counting inbound messages on the free tier
+//    (`commands/message_ingest_msg.sql`, `commands/inbound_message_insert.sql`), and the module is
+//    billed per message. It is shown, and it is read-only.
+//    🔄 This test used to assert the opposite — that the value read travelled back UNCHANGED in the
+//    upsert payload — because `settings_upsert.sql` wrote every column and omitting the meter would
+//    have blanked the merchant's plan. whatsapp_inbox#37 moved the column out of that command
+//    altogether: its only writer is now `whatsapp_inbox._quota.set`, internal, fed by the Cloud that
+//    decides the allowance. So the screen must NOT send the field — a guarantee that lives in the
+//    browser is not a guarantee, and the payload echoing the invoice back is the shape of the hole.
 // 2. **No credentials here, ever.** Meta's token lives Fernet-sealed in the SaaS and the hub never
 //    sees it (`architecture/modules/whatsapp_inbox.md` §9.3; the notify proxy is
 //    `POST /api/v1/hub/device/notify/whatsapp/`). There is no secret to type in this screen, so
@@ -129,15 +133,16 @@ describe('the screen is the door of settings.get / settings.upsert', () => {
 });
 
 describe('the billing meter cannot be touched from here', () => {
-  it('saving sends back the SAME free_tier_monthly_limit that was read', async () => {
+  it('saving does not send free_tier_monthly_limit at all (whatsapp_inbox#37)', async () => {
     mountWith();
     const el = await mount();
     await save(el);
     const payload = commands.find((c) => c.name === 'whatsapp_inbox.settings.upsert')!.payload;
     expect(
-      payload.free_tier_monthly_limit,
-      'saving the settings rewrote the free-tier meter — that is the invoice, not a preference',
-    ).toBe(30);
+      'free_tier_monthly_limit' in payload,
+      'the screen still puts the invoice in the upsert payload: the command ignores it now, but a ' +
+        'screen that sends a number it does not own is one refactor away from writing it again',
+    ).toBe(false);
   });
 
   it('no input, select or toggle is bound to the meter', async () => {
@@ -249,7 +254,7 @@ describe('what the screen DOES decide', () => {
     await save(el);
     const payload = commands.find((c) => c.name === 'whatsapp_inbox.settings.upsert')!.payload;
     expect(payload.approval_mode, 'a brand-new channel must review what the AI parsed').toBe('manual');
-    expect(payload.free_tier_monthly_limit, 'with no row there is no plan to preserve').toBe(0);
+    expect('free_tier_monthly_limit' in payload, 'the meter is never this screen\'s to send').toBe(false);
   });
 });
 

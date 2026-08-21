@@ -4447,8 +4447,9 @@ var ErpWhatsappInboxSettings = class extends i3 {
     this.saved = false;
   }
   /** `settings.upsert` writes EVERY column of the singleton row, so what the screen does not show
-   *  travels back exactly as it was read. That is not politeness: omitting the free-tier meter or
-   *  the flow's texts would blank them on the first save. */
+   *  travels back exactly as it was read. That is not politeness: omitting the flow's texts would
+   *  blank them on the first save. The free-tier meter is the exception and travels nowhere: it is
+   *  not a column this command writes any more (whatsapp_inbox#37). */
   async save(ev) {
     ev.preventDefault();
     this.saving = true;
@@ -4470,9 +4471,8 @@ var ErpWhatsappInboxSettings = class extends i3 {
         auto_close_hours: Number(this.s.auto_close_hours) || 0,
         notify_staff_new_request: flag(this.s.notify_staff_new_request, DEFAULTS.notify_staff_new_request),
         greeting_message: this.s.greeting_message ?? DEFAULTS.greeting_message,
-        out_of_hours_message: this.s.out_of_hours_message ?? DEFAULTS.out_of_hours_message,
-        // The invoice. Read here, written back unchanged, never typed by anybody.
-        free_tier_monthly_limit: Number(this.s.free_tier_monthly_limit) || 0
+        out_of_hours_message: this.s.out_of_hours_message ?? DEFAULTS.out_of_hours_message
+        // `free_tier_monthly_limit` is deliberately NOT here — see the header comment.
       });
       this.saved = true;
       await this.refresh();
