@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "whatsapp_inbox._quota.set",
+  "description": "The monthly inbound allowance billing granted this hub for the WhatsApp channel. Written ONLY by the runtime's Cloud-facing sync (whatsapp_inbox#37): the command is internal, so no screen, API key or assistant can reach it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["monthly_limit"],
+  "properties": {
+    "monthly_limit": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Inbound messages per calendar month the plan allows. 0 = no cap (unmetered plan, or a hub billing has not spoken about yet)."
+    }
+  }
+}

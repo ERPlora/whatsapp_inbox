@@ -38,10 +38,14 @@ const CATALOG: Record<string, unknown> = { es: esLocale, en: enLocale };
 // throw away messages that no longer exist anywhere. The column is carried, unread, until whoever
 // owns the channel lifecycle gives it a meaning.
 //
-// **And the meter is not a preference.** `free_tier_monthly_limit` is what the two ingest guards
-// read to stop counting inbound messages, and this module is billed per conversation. It is shown,
-// read-only, and travels back exactly as it was read — the upsert writes every column, so leaving
-// it out would blank the merchant's plan instead of protecting it.
+// **And the meter is not a preference — nor is it ours to send.** `free_tier_monthly_limit` is what
+// the two ingest guards read to stop counting inbound messages, and this module is billed per
+// message. It is shown, read-only, and it is NOT part of the upsert payload: since
+// whatsapp_inbox#37 the column has a single writer, `whatsapp_inbox._quota.set` (internal, fed by
+// the Cloud that decides the allowance), and `settings.upsert` does not touch it. Echoing the value
+// back used to be mandatory — the upsert wrote every column, so omitting it blanked the plan — and
+// that is exactly what made the hole: the only thing standing between an `admin` and their own
+// invoice was this screen choosing not to change the number.
 
 interface ErploraClientLike {
   query<T = unknown>(name: string, params?: Record<string, unknown>): Promise<T>;
@@ -172,8 +176,9 @@ export class ErpWhatsappInboxSettings extends LitElement {
   }
 
   /** `settings.upsert` writes EVERY column of the singleton row, so what the screen does not show
-   *  travels back exactly as it was read. That is not politeness: omitting the free-tier meter or
-   *  the flow's texts would blank them on the first save. */
+   *  travels back exactly as it was read. That is not politeness: omitting the flow's texts would
+   *  blank them on the first save. The free-tier meter is the exception and travels nowhere: it is
+   *  not a column this command writes any more (whatsapp_inbox#37). */
   private async save(ev: Event) {
     ev.preventDefault();
     this.saving = true;
@@ -196,8 +201,7 @@ export class ErpWhatsappInboxSettings extends LitElement {
         notify_staff_new_request: flag(this.s.notify_staff_new_request, DEFAULTS.notify_staff_new_request),
         greeting_message: this.s.greeting_message ?? DEFAULTS.greeting_message,
         out_of_hours_message: this.s.out_of_hours_message ?? DEFAULTS.out_of_hours_message,
-        // The invoice. Read here, written back unchanged, never typed by anybody.
-        free_tier_monthly_limit: Number(this.s.free_tier_monthly_limit) || 0,
+        // `free_tier_monthly_limit` is deliberately NOT here — see the header comment.
       });
       this.saved = true;
       await this.refresh();

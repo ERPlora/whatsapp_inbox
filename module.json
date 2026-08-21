@@ -549,6 +549,15 @@
       "ai": {
         "description": "Creates or updates the WhatsApp channel configuration"
       }
+    },
+    "whatsapp_inbox._quota.set": {
+      "permission": "whatsapp_inbox.manage_connections",
+      "internal": true,
+      "transaction": true,
+      "sql": [
+        "commands/quota_set.sql"
+      ],
+      "schema": "schemas/quota_set.json"
     }
   },
   "events": {

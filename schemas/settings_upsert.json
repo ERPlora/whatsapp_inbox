@@ -27,7 +27,8 @@
       "type": "integer",
       "minimum": 0,
       "default": 0,
-      "description": "Límite mensual de mensajes entrantes de la capa gratuita. 0 = sin límite. Gestionado por marketplace/billing."
+      "deprecated": true,
+      "description": "DEPRECATED and IGNORED since whatsapp_inbox#37: this is the channel's billing meter, not a preference. Its single writer is whatsapp_inbox._quota.set (internal), fed by the Cloud, where the plan's allowance is decided. Still accepted so an older screen that echoes the value back does not start failing — the command's SQL no longer reads it. Read the current value with whatsapp_inbox.usage.get."
     }
   }
 }
