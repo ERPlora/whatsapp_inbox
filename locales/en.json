@@ -26,6 +26,7 @@
     "colReference": "Reference",
     "colType": "Type",
     "colConfidence": "Confidence",
+    "colFlag": "Attention",
     "colActions": "Actions",
     "colName": "Name",
     "colLanguage": "Language",
@@ -129,7 +130,11 @@
       "request_not_pending": "That request is not waiting for review: it does not exist in this business, or it was already approved, rejected or handled.",
       "request_not_deletable": "That request cannot be deleted: it does not exist in this business, or it was fulfilled and has to stay for audit.",
       "conversation_not_found": "That conversation does not exist in this business.",
-      "template_not_found": "That template does not exist in this business."
+      "template_not_found": "That template does not exist in this business.",
+      "request_not_fulfillable": "Only a confirmed request can be marked as handled.",
+      "request_not_found": "That request does not exist in this business.",
+      "request_unreadable": "That request could not be read, so nothing was changed. Try again.",
+      "conversation_unreadable": "That conversation could not be read, so nothing was created. Try again."
     }
   }
 }

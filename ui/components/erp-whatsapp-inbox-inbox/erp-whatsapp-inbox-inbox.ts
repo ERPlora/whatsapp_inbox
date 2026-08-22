@@ -77,6 +77,19 @@ function can(permission: string): boolean {
   return typeof client.hasPermission === 'function' ? client.hasPermission(permission) : true;
 }
 
+/** A business refusal (hub#139) travels as a stable `code`: paint its translation from this
+ *  module's catalogue, keep the sentence for codes the catalog has not learned, never translate
+ *  another module's code with this catalog (the `customers` helper, one screen over). */
+function domainErrorText(e: unknown, fallbackKey: string): string {
+  const code = (e as { code?: unknown } | null)?.code;
+  const message = e instanceof Error ? e.message : '';
+  if (typeof code === 'string' && code.startsWith('whatsapp_inbox.')) {
+    const text = erplora().t(CATALOG, `errors.${code}`, { message });
+    if (text && text !== `errors.${code}`) return text;
+  }
+  return message || erplora().t(CATALOG, fallbackKey);
+}
+
 export class ErpWhatsappInboxInbox extends LitElement {
   static styles = css`
     :host { display:flex; flex-direction:column; height:100%; min-height:0; font-family: system-ui, sans-serif; color: var(--ion-text-color, #1c1b18); }
@@ -215,11 +228,17 @@ export class ErpWhatsappInboxInbox extends LitElement {
       this.assignTo = conversation.assigned_to_id ?? '';
       // Oldest first: a thread is read downwards, which is the opposite of the query's default
       // (`created_at desc`, the right default for a list of latest activity).
+      // whatsapp_inbox#39 — the conversation travels as `params`, NOT `filters`: the base SQL
+      // binds `:conversation_id` by name (`queries/messages_list.sql`), and the SDK passes
+      // `params` verbatim while `filters` flattens to `f_conversation_id` — a condition the
+      // runtime composes OUTSIDE the base SQL, whose own bind then arrives NULL (`DynNull`) and
+      // `conversation_id = NULL` matches nothing. That was the whole bug: the thread opened empty
+      // on a conversation full of messages.
       const page = await erplora().queryPage<Message>('whatsapp_inbox.messages.list', {
         limit: THREAD_PAGE,
         sort: 'created_at',
         dir: 'asc',
-        filters: { conversation_id: conversationId },
+        params: { conversation_id: conversationId },
       });
       this.messages = page?.rows ?? [];
     } catch (e) {
@@ -247,7 +266,7 @@ export class ErpWhatsappInboxInbox extends LitElement {
       await this.ctrl.load();
       await this.loadDetail(this.detail.id);
     } catch (e) {
-      this.detailError = e instanceof Error ? e.message : erplora().t(CATALOG, 'ui.errAssign');
+      this.detailError = domainErrorText(e, 'ui.errAssign');
     } finally {
       this.detailBusy = false;
     }

@@ -9,7 +9,7 @@ var __decorateClass = (decorators, target, key, kind) => {
   return result;
 };
 
-// ../module-toolkit/node_modules/@lit-labs/ssr-dom-shim/lib/element-internals.js
+// ../../../module-toolkit/node_modules/@lit-labs/ssr-dom-shim/lib/element-internals.js
 var ElementInternalsShim = class ElementInternals {
   get shadowRoot() {
     return this.__host.__shadowRoot;
@@ -88,7 +88,7 @@ var ElementInternalsShim = class ElementInternals {
   }
 };
 
-// ../module-toolkit/node_modules/@lit-labs/ssr-dom-shim/lib/events.js
+// ../../../module-toolkit/node_modules/@lit-labs/ssr-dom-shim/lib/events.js
 var __classPrivateFieldSet = function(receiver, state, value, kind, f3) {
   if (kind === "m") throw new TypeError("Private method is not writable");
   if (kind === "a" && !f3) throw new TypeError("Private accessor was defined without a setter");
@@ -246,7 +246,7 @@ Object.defineProperties(CustomEventShim.prototype, {
 var EventShimWithRealType = EventShim;
 var CustomEventShimWithRealType = CustomEventShim;
 
-// ../module-toolkit/node_modules/@lit-labs/ssr-dom-shim/lib/css.js
+// ../../../module-toolkit/node_modules/@lit-labs/ssr-dom-shim/lib/css.js
 var _a2;
 var CSSRuleShim = (_a2 = class CSSRule {
   constructor() {
@@ -277,7 +277,7 @@ var CSSRuleShim = (_a2 = class CSSRule {
   }
 }, _a2.STYLE_RULE = 1, _a2.CHARSET_RULE = 2, _a2.IMPORT_RULE = 3, _a2.MEDIA_RULE = 4, _a2.FONT_FACE_RULE = 5, _a2.PAGE_RULE = 6, _a2.NAMESPACE_RULE = 10, _a2.KEYFRAMES_RULE = 7, _a2.KEYFRAME_RULE = 8, _a2.SUPPORTS_RULE = 12, _a2.COUNTER_STYLE_RULE = 11, _a2.FONT_FEATURE_VALUES_RULE = 14, _a2.MARGIN_RULE = 9, _a2);
 
-// ../module-toolkit/node_modules/@lit-labs/ssr-dom-shim/index.js
+// ../../../module-toolkit/node_modules/@lit-labs/ssr-dom-shim/index.js
 globalThis.Event ??= EventShimWithRealType;
 globalThis.CustomEvent ??= CustomEventShimWithRealType;
 var constructionToken = Symbol();
@@ -674,7 +674,7 @@ var CustomElementRegistryShimWithRealType = CustomElementRegistry;
 var customElements2 = new CustomElementRegistryShimWithRealType();
 var windowShim = new WindowShim(constructionToken);
 
-// ../module-toolkit/node_modules/@lit/reactive-element/node/css-tag.js
+// ../../../module-toolkit/node_modules/@lit/reactive-element/node/css-tag.js
 var t = globalThis;
 var e = t.ShadowRoot && (void 0 === t.ShadyCSS || t.ShadyCSS.nativeShadow) && "adoptedStyleSheets" in Document.prototype && "replace" in CSSStyleSheet.prototype;
 var s = Symbol();
@@ -719,7 +719,7 @@ var c = e || void 0 === t.CSSStyleSheet ? (t5) => t5 : (t5) => t5 instanceof CSS
   return r(e5);
 })(t5) : t5;
 
-// ../module-toolkit/node_modules/@lit/reactive-element/node/reactive-element.js
+// ../../../module-toolkit/node_modules/@lit/reactive-element/node/reactive-element.js
 var { is: h, defineProperty: r2, getOwnPropertyDescriptor: o2, getOwnPropertyNames: n2, getOwnPropertySymbols: a, getPrototypeOf: c2 } = Object;
 var l = globalThis;
 l.customElements ??= customElements2;
@@ -942,7 +942,7 @@ var g = class extends (globalThis.HTMLElement ?? HTMLElementShimWithRealType) {
 };
 g.elementStyles = [], g.shadowRootOptions = { mode: "open" }, g[f("elementProperties")] = /* @__PURE__ */ new Map(), g[f("finalized")] = /* @__PURE__ */ new Map(), u?.({ ReactiveElement: g }), (l.reactiveElementVersions ??= []).push("2.1.2");
 
-// node_modules/.pnpm/lit-html@3.3.3/node_modules/lit-html/lit-html.js
+// ../../node_modules/.pnpm/lit-html@3.3.3/node_modules/lit-html/lit-html.js
 var t2 = globalThis;
 var i2 = (t5) => t5;
 var s2 = t2.trustedTypes;
@@ -1197,7 +1197,7 @@ var D = (t5, i7, s5) => {
   return h4._$AI(t5), h4;
 };
 
-// node_modules/.pnpm/lit-element@4.2.2/node_modules/lit-element/lit-element.js
+// ../../node_modules/.pnpm/lit-element@4.2.2/node_modules/lit-element/lit-element.js
 var s3 = globalThis;
 var i3 = class extends g {
   constructor() {
@@ -1226,7 +1226,7 @@ var o4 = s3.litElementPolyfillSupport;
 o4?.({ LitElement: i3 });
 (s3.litElementVersions ??= []).push("4.2.2");
 
-// ../module-toolkit/node_modules/@lit/reactive-element/node/decorators/property.js
+// ../../../module-toolkit/node_modules/@lit/reactive-element/node/decorators/property.js
 var o5 = { attribute: true, type: String, converter: b, reflect: false, hasChanged: m };
 var r4 = (t5 = o5, e5, r6) => {
   const { kind: n6, metadata: i7 } = r6;
@@ -1256,19 +1256,19 @@ function n4(t5) {
   })(t5, e5, o7);
 }
 
-// ../module-toolkit/node_modules/@lit/reactive-element/node/decorators/state.js
+// ../../../module-toolkit/node_modules/@lit/reactive-element/node/decorators/state.js
 function r5(r6) {
   return n4({ ...r6, state: true, attribute: false });
 }
 
-// ../outfitkit/dist/define.js
+// ../../../outfitkit/dist/define.js
 function define(tag, ctor) {
   if (typeof customElements !== "undefined" && !customElements.get(tag)) {
     customElements.define(tag, ctor);
   }
 }
 
-// node_modules/.pnpm/lit-html@3.3.3/node_modules/lit-html/directive.js
+// ../../node_modules/.pnpm/lit-html@3.3.3/node_modules/lit-html/directive.js
 var t3 = { ATTRIBUTE: 1, CHILD: 2, PROPERTY: 3, BOOLEAN_ATTRIBUTE: 4, EVENT: 5, ELEMENT: 6 };
 var e4 = (t5) => (...e5) => ({ _$litDirective$: t5, values: e5 });
 var i4 = class {
@@ -1288,7 +1288,7 @@ var i4 = class {
   }
 };
 
-// node_modules/.pnpm/lit-html@3.3.3/node_modules/lit-html/directive-helpers.js
+// ../../node_modules/.pnpm/lit-html@3.3.3/node_modules/lit-html/directive-helpers.js
 var { I: t4 } = j;
 var i5 = (o7) => o7;
 var s4 = () => document.createComment("");
@@ -1321,7 +1321,7 @@ var h3 = (o7) => {
   o7._$AR(), o7._$AA.remove();
 };
 
-// node_modules/.pnpm/lit-html@3.3.3/node_modules/lit-html/directives/repeat.js
+// ../../node_modules/.pnpm/lit-html@3.3.3/node_modules/lit-html/directives/repeat.js
 var u4 = (e5, s5, t5) => {
   const r6 = /* @__PURE__ */ new Map();
   for (let l3 = s5; l3 <= t5; l3++) r6.set(e5[l3], l3);
@@ -1374,7 +1374,7 @@ var c4 = e4(class extends i4 {
   }
 });
 
-// node_modules/.pnpm/lit-html@3.3.3/node_modules/lit-html/directives/style-map.js
+// ../../node_modules/.pnpm/lit-html@3.3.3/node_modules/lit-html/directives/style-map.js
 var n5 = "important";
 var i6 = " !" + n5;
 var o6 = e4(class extends i4 {
@@ -1403,7 +1403,7 @@ var o6 = e4(class extends i4 {
   }
 });
 
-// ../outfitkit/dist/shared/icons.js
+// ../../../outfitkit/dist/shared/icons.js
 var rawAdd = '<svg viewBox="0 0 512 512" width="1.2em" height="1.2em" ><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="32" d="M256 112v288m144-144H112"/></svg>';
 var rawAlertCircle = '<svg viewBox="0 0 512 512" width="1.2em" height="1.2em" ><path fill="currentColor" d="M256 48C141.31 48 48 141.31 48 256s93.31 208 208 208s208-93.31 208-208S370.69 48 256 48m0 319.91a20 20 0 1 1 20-20a20 20 0 0 1-20 20m21.72-201.15l-5.74 122a16 16 0 0 1-32 0l-5.74-121.94v-.05a21.74 21.74 0 1 1 43.44 0Z"/></svg>';
 var rawAlertCircleOutline = '<svg viewBox="0 0 512 512" width="1.2em" height="1.2em" ><path fill="none" stroke="currentColor" stroke-miterlimit="10" stroke-width="32" d="M448 256c0-106-86-192-192-192S64 150 64 256s86 192 192 192s192-86 192-192Z"/><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="32" d="M250.26 166.05L256 288l5.73-121.95a5.74 5.74 0 0 0-5.79-6h0a5.74 5.74 0 0 0-5.68 6"/><path fill="currentColor" d="M256 367.91a20 20 0 1 1 20-20a20 20 0 0 1-20 20"/></svg>';
@@ -1551,7 +1551,7 @@ function okIcon(value) {
   return BY_NAME[value] ?? value;
 }
 
-// ../outfitkit/dist/ok-data-table.js
+// ../../../outfitkit/dist/ok-data-table.js
 var CSV_BOM = "\uFEFF";
 var WINDOWS_1252_C1 = [
   8364,
@@ -1710,6 +1710,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     this.exportable = false;
     this.importable = false;
     this.columnSelector = false;
+    this.rowClickable = false;
     this.selectable = false;
     this.inlineFilters = false;
     this.menuActions = [];
@@ -1724,10 +1725,12 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     this.viewMode = "table";
     this.viewChosenByUser = false;
     this.isMobile = false;
+    this.xOverflow = false;
     this.hiddenKeys = /* @__PURE__ */ new Set();
     this.internalSelection = /* @__PURE__ */ new Set();
     this.menuOpen = false;
     this.onLocaleChanged = () => this.requestUpdate();
+    this.onWindowResize = () => this.measureXOverflow();
     this.onSearch = (ev) => {
       const value = ev.target.value ?? "";
       if (this.serverSide) {
@@ -1878,7 +1881,14 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     .filters-panel { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.6rem; }
 
     /* ── Vista lista en CSS GRID (no <table>): permite ancho por columna ──────────────────── */
+    /* #67 — La barra horizontal es PERMANENTE cuando hay desbordamiento: la overlay de macOS se
+       esconde a los pocos ms y deja la tabla sin ninguna pista de que sigue a la derecha. Al
+       declarar ::-webkit-scrollbar el navegador pinta la clásica, que ocupa sitio y se ve. */
     .scroll { overflow-x: auto; }
+    .scroll::-webkit-scrollbar { height: 10px; }
+    .scroll::-webkit-scrollbar-track { background: transparent; }
+    .scroll::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--color) 25%, transparent); border-radius: 6px; }
+    .scroll::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--color) 40%, transparent); }
     .grid { min-width: max-content; font-size: 14px; }
     .grow { display: grid; align-items: center; gap: 0.5rem; padding: 0 1rem; }
     .ghead { position: sticky; top: 0; z-index: 2; border-bottom: 1px solid var(--border-color);
@@ -1887,6 +1897,17 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     .gcell > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .gcell.right { justify-content: flex-end; text-align: right; }
     .gcell.center { justify-content: center; text-align: center; }
+    /* #67 — COLUMNA DE ACCIONES FIJADA. Con seis columnas o más la rejilla desborda por diseño
+       (min-width: max-content) y el botón que abre el registro se iba fuera de la pantalla: a
+       1440px quedaba a 335px del borde, sin nada que lo delatara. Se queda pegada al borde
+       derecho, como en Zendesk/Freshdesk/Shopify. Con background:inherit la hereda de la fila (que
+       por eso es opaca), así conserva hover y selección sin que se lea nada por debajo. */
+    .gcell.actions-col { position: sticky; right: 0; z-index: 1; background: inherit;
+      margin-right: -1rem; padding-right: 1rem; }
+    /* La sombra solo aparece cuando de verdad hay algo escondido a la izquierda (clase x-overflow);
+       si la tabla cabe entera no se pinta nada. */
+    .scroll.x-overflow .gcell.actions-col { box-shadow: -10px 0 10px -10px color-mix(in srgb, var(--color) 45%, transparent); }
+    .ghead .gcell.actions-col { z-index: 3; }
     .gh { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-muted); }
     .gh.sortable { cursor: pointer; user-select: none; white-space: nowrap; transition: background-color var(--ok-transition, 150ms ease), color var(--ok-transition, 150ms ease), box-shadow var(--ok-transition, 150ms ease), transform 120ms ease; }
     @media (hover: hover) {
@@ -1895,13 +1916,17 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     /* Caret de orden (3 estados, icono Ionic): neutral atenuado / activo en color primario. */
     .caret { display: inline-flex; align-items: center; margin-left: 0.25rem; flex: 0 0 auto; font-size: 13px; opacity: 0.3; }
     .caret.on { opacity: 1; color: var(--primary); }
-    .grow-data { border-bottom: 1px solid var(--border-color-soft); padding-top: 0.6rem; padding-bottom: 0.6rem; transition: background-color var(--ok-transition, 150ms ease), color var(--ok-transition, 150ms ease), box-shadow var(--ok-transition, 150ms ease), transform 120ms ease; }
+    .grow-data { background: var(--background); border-bottom: 1px solid var(--border-color-soft); padding-top: 0.6rem; padding-bottom: 0.6rem; transition: background-color var(--ok-transition, 150ms ease), color var(--ok-transition, 150ms ease), box-shadow var(--ok-transition, 150ms ease), transform 120ms ease; }
     .grow-data:last-child { border-bottom: 0; }
     @media (hover: hover) {
-      .grow-data:hover { background: var(--row-hover); }
+      .grow-data:hover { background: linear-gradient(var(--row-hover), var(--row-hover)), var(--background); }
     }
     .grow-data:active { transform: scale(0.995); }
-    .grow-data.selected { background: color-mix(in srgb, var(--primary) 10%, transparent); }
+    .grow-data.selected { background: linear-gradient(color-mix(in srgb, var(--primary) 10%, transparent), color-mix(in srgb, var(--primary) 10%, transparent)), var(--background); }
+    /* #67 — Fila clicable (opt-in row-clickable): es lo primero que intenta el usuario y lo que
+       hacen Odoo, Jira SM, Shopify o Square en sus listados. */
+    .grow-data.clickable { cursor: pointer; }
+    .grow-data.clickable:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
     .selcb { display: flex; align-items: center; justify-content: center; }
     .filters-grow { padding-top: 0.4rem; padding-bottom: 0.6rem; }
     .filters-grow input, .filters-grow select { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; padding: 0.3rem 0.4rem; border: 1px solid var(--border-color); border-radius: 6px; background: var(--background); color: var(--color); }
@@ -1977,6 +2002,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     super.connectedCallback();
     if (typeof window !== "undefined") {
       window.addEventListener("erplora:locale-changed", this.onLocaleChanged);
+      window.addEventListener("resize", this.onWindowResize);
     }
     if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
       this.mq = window.matchMedia(`(max-width: ${_OkDataTable2.MOBILE_BREAKPOINT}px)`);
@@ -1992,10 +2018,37 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
       this._mqHandler = handler;
     }
   }
+  /** #67 — Recalcula si la vista lista desborda a lo ancho (`scrollWidth > clientWidth`).
+   *
+   * Se mide después de renderizar, que es cuando el navegador ya conoce los anchos, y solo se
+   * escribe el estado si CAMBIA: asignarlo siempre reprogramaría un render en bucle. */
+  measureXOverflow() {
+    const scroll = this.renderRoot?.querySelector?.(".scroll");
+    const overflow = !!scroll && scroll.scrollWidth > scroll.clientWidth;
+    if (this.xOverflow !== overflow) this.xOverflow = overflow;
+  }
+  /** Engancha el observador al contenedor de scroll del render actual (cambia entre vistas). */
+  observeXOverflow() {
+    if (typeof ResizeObserver === "undefined") return;
+    const scroll = this.renderRoot?.querySelector?.(".scroll");
+    if (!scroll) return;
+    this.xObserver ??= new ResizeObserver(() => this.measureXOverflow());
+    this.xObserver.disconnect();
+    this.xObserver.observe(scroll);
+    const grid = scroll.querySelector(".grid");
+    if (grid) this.xObserver.observe(grid);
+  }
+  updated() {
+    this.observeXOverflow();
+    this.measureXOverflow();
+  }
   disconnectedCallback() {
     if (typeof window !== "undefined") {
       window.removeEventListener("erplora:locale-changed", this.onLocaleChanged);
+      window.removeEventListener("resize", this.onWindowResize);
     }
+    this.xObserver?.disconnect();
+    this.xObserver = void 0;
     if (this.mq) {
       const handler = this._mqHandler;
       if (handler) this.mq.removeEventListener("change", handler);
@@ -2770,6 +2823,13 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
       </div>
     `;
   }
+  /** #67 — Enter/Espacio activan la fila clicable: si se llega con el tabulador, el ratón no puede
+   *  ser el único camino. Espacio además NO debe desplazar la página. */
+  onRowKeydown(e5, row) {
+    if (e5.key !== "Enter" && e5.key !== " " && e5.key !== "Spacebar") return;
+    e5.preventDefault();
+    this.emit("rowClick", { row });
+  }
   emptyState() {
     return b2`
       <div class="empty">
@@ -2786,7 +2846,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     const allOn = this.selectable && visible.length > 0 && visible.every((r6) => this.selection.has(this.keyOf(r6)));
     const alignCls = (a3) => a3 === "right" ? "right" : a3 === "center" ? "center" : "left";
     return b2`
-      <div class="scroll">
+      <div class=${`scroll${this.xOverflow ? " x-overflow" : ""}`}>
         <div class="grid" role="table">
           <!-- Cabecera -->
           <div class="grow ghead" role="row" style=${o6(tpl)}>
@@ -2807,7 +2867,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
                 </div>
               `;
     })}
-            ${this.actions.length ? b2`<div class="gcell gh right" role="columnheader">${this.t.actions}</div>` : A}
+            ${this.actions.length ? b2`<div class="gcell gh right actions-col" role="columnheader">${this.t.actions}</div>` : A}
           </div>
 
           <!-- Filas -->
@@ -2818,12 +2878,19 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
         const key = this.keyOf(row);
         const selected = this.selectable && this.selection.has(key);
         return b2`
-                <div class=${`grow grow-data${selected ? " selected" : ""}`} role="row" style=${o6(tpl)}>
-                  ${this.selectable ? b2`<span class="selcb"><ion-checkbox .checked=${selected} aria-label=${this.t.selectRow} @ionChange=${() => this.toggleRow(key)}></ion-checkbox></span>` : A}
+                <div
+                  class=${`grow grow-data${selected ? " selected" : ""}${this.rowClickable ? " clickable" : ""}`}
+                  role="row"
+                  style=${o6(tpl)}
+                  tabindex=${this.rowClickable ? "0" : A}
+                  @click=${this.rowClickable ? () => this.emit("rowClick", { row }) : A}
+                  @keydown=${this.rowClickable ? (e5) => this.onRowKeydown(e5, row) : A}
+                >
+                  ${this.selectable ? b2`<span class="selcb" @click=${(e5) => e5.stopPropagation()}><ion-checkbox .checked=${selected} aria-label=${this.t.selectRow} @ionChange=${() => this.toggleRow(key)}></ion-checkbox></span>` : A}
                   ${cols.map(
           (c5) => b2`<div class=${`gcell ${alignCls(c5.align)}`} role="cell">${c5.render ? c5.render(row) : b2`<span>${this.cell(c5, row)}</span>`}</div>`
         )}
-                  ${this.actions.length ? b2`<div class="gcell right" role="cell">${this.actionButtons(row)}</div>` : A}
+                  ${this.actions.length ? b2`<div class="gcell right actions-col" role="cell" @click=${(e5) => e5.stopPropagation()}>${this.actionButtons(row)}</div>` : A}
                 </div>
               `;
       }
@@ -2955,6 +3022,9 @@ __decorateClass2([
   n4({ attribute: false })
 ], _OkDataTable.prototype, "pageSizes");
 __decorateClass2([
+  n4({ type: Boolean, attribute: "row-clickable" })
+], _OkDataTable.prototype, "rowClickable");
+__decorateClass2([
   n4({ type: Boolean })
 ], _OkDataTable.prototype, "selectable");
 __decorateClass2([
@@ -3010,6 +3080,9 @@ __decorateClass2([
 ], _OkDataTable.prototype, "isMobile");
 __decorateClass2([
   r5()
+], _OkDataTable.prototype, "xOverflow");
+__decorateClass2([
+  r5()
 ], _OkDataTable.prototype, "hiddenKeys");
 __decorateClass2([
   r5()
@@ -3020,7 +3093,7 @@ __decorateClass2([
 var OkDataTable = _OkDataTable;
 define("ok-data-table", OkDataTable);
 
-// ../outfitkit/dist/ok-status-pill.js
+// ../../../outfitkit/dist/ok-status-pill.js
 var __defProp3 = Object.defineProperty;
 var __decorateClass3 = (decorators, target, key, kind) => {
   var result = void 0;
@@ -3139,7 +3212,7 @@ __decorateClass3([
 ], OkStatusPill.prototype, "size");
 define("ok-status-pill", OkStatusPill);
 
-// ../hub/packages/module-sdk/src/index.ts
+// ../../../hub/packages/module-sdk/src/index.ts
 function isEmpty(v3) {
   return v3 === null || v3 === void 0 || v3 === "";
 }
@@ -3257,7 +3330,7 @@ function createListController(client, queryName, onChange = () => {
   return new ListController(client, queryName, onChange, opts);
 }
 
-// modules/whatsapp_inbox/.wt-rowclick/locales/es.json
+// locales/es.json
 var es_default = {
   name: "Bandeja de WhatsApp",
   description: "Conversaciones de WhatsApp, solicitudes entrantes, plantillas de mensaje y ajustes del canal.",
@@ -3287,6 +3360,7 @@ var es_default = {
     colReference: "Referencia",
     colType: "Tipo",
     colConfidence: "Confianza",
+    colFlag: "Aviso",
     colActions: "Acciones",
     colName: "Nombre",
     colLanguage: "Idioma",
@@ -3384,10 +3458,22 @@ var es_default = {
     labelLinkedObject: "Registro creado",
     errLoadRequest: "No se ha podido cargar la petici\xF3n",
     labelUsedThisMonth: "Consumidos este mes"
+  },
+  errors: {
+    whatsapp_inbox: {
+      request_not_pending: "Esa solicitud no est\xE1 pendiente de revisi\xF3n: no existe en este negocio, o ya se aprob\xF3, rechaz\xF3 o atendi\xF3.",
+      request_not_deletable: "Esa solicitud no se puede borrar: no existe en este negocio, o est\xE1 cumplida y debe conservarse por auditor\xEDa.",
+      conversation_not_found: "Esa conversaci\xF3n no existe en este negocio.",
+      template_not_found: "Esa plantilla no existe en este negocio.",
+      request_not_fulfillable: "Solo una solicitud confirmada se puede marcar como atendida.",
+      request_not_found: "Esa solicitud no existe en este negocio.",
+      request_unreadable: "No se ha podido leer la solicitud, as\xED que no se ha cambiado nada. Prueba otra vez.",
+      conversation_unreadable: "No se ha podido leer la conversaci\xF3n, as\xED que no se ha creado nada. Prueba otra vez."
+    }
   }
 };
 
-// modules/whatsapp_inbox/.wt-rowclick/locales/en.json
+// locales/en.json
 var en_default = {
   name: "WhatsApp Inbox",
   navigation: {
@@ -3416,6 +3502,7 @@ var en_default = {
     colReference: "Reference",
     colType: "Type",
     colConfidence: "Confidence",
+    colFlag: "Attention",
     colActions: "Actions",
     colName: "Name",
     colLanguage: "Language",
@@ -3513,10 +3600,22 @@ var en_default = {
     labelLinkedObject: "Created record",
     errLoadRequest: "Could not load the request",
     labelUsedThisMonth: "Used this month"
+  },
+  errors: {
+    whatsapp_inbox: {
+      request_not_pending: "That request is not waiting for review: it does not exist in this business, or it was already approved, rejected or handled.",
+      request_not_deletable: "That request cannot be deleted: it does not exist in this business, or it was fulfilled and has to stay for audit.",
+      conversation_not_found: "That conversation does not exist in this business.",
+      template_not_found: "That template does not exist in this business.",
+      request_not_fulfillable: "Only a confirmed request can be marked as handled.",
+      request_not_found: "That request does not exist in this business.",
+      request_unreadable: "That request could not be read, so nothing was changed. Try again.",
+      conversation_unreadable: "That conversation could not be read, so nothing was created. Try again."
+    }
   }
 };
 
-// modules/whatsapp_inbox/.wt-rowclick/ui/components/erp-whatsapp-inbox-inbox/erp-whatsapp-inbox-inbox.ts
+// ui/components/erp-whatsapp-inbox-inbox/erp-whatsapp-inbox-inbox.ts
 var CATALOG = { es: es_default, en: en_default };
 var THREAD_PAGE = 200;
 function erplora() {
@@ -3527,6 +3626,15 @@ function erplora() {
 function can(permission) {
   const client = erplora();
   return typeof client.hasPermission === "function" ? client.hasPermission(permission) : true;
+}
+function domainErrorText(e5, fallbackKey) {
+  const code = e5?.code;
+  const message = e5 instanceof Error ? e5.message : "";
+  if (typeof code === "string" && code.startsWith("whatsapp_inbox.")) {
+    const text = erplora().t(CATALOG, `errors.${code}`, { message });
+    if (text && text !== `errors.${code}`) return text;
+  }
+  return message || erplora().t(CATALOG, fallbackKey);
 }
 var ErpWhatsappInboxInbox = class extends i3 {
   constructor() {
@@ -3654,7 +3762,7 @@ var ErpWhatsappInboxInbox = class extends i3 {
         limit: THREAD_PAGE,
         sort: "created_at",
         dir: "asc",
-        filters: { conversation_id: conversationId }
+        params: { conversation_id: conversationId }
       });
       this.messages = page?.rows ?? [];
     } catch (e5) {
@@ -3680,7 +3788,7 @@ var ErpWhatsappInboxInbox = class extends i3 {
       await this.ctrl.load();
       await this.loadDetail(this.detail.id);
     } catch (e5) {
-      this.detailError = e5 instanceof Error ? e5.message : erplora().t(CATALOG, "ui.errAssign");
+      this.detailError = domainErrorText(e5, "ui.errAssign");
     } finally {
       this.detailBusy = false;
     }
@@ -3761,7 +3869,7 @@ __decorateClass([
 ], ErpWhatsappInboxInbox.prototype, "assignTo", 2);
 define("erp-whatsapp-inbox-inbox", ErpWhatsappInboxInbox);
 
-// ../outfitkit/dist/ok-inline-feedback.js
+// ../../../outfitkit/dist/ok-inline-feedback.js
 var __defProp4 = Object.defineProperty;
 var __decorateClass4 = (decorators, target, key, kind) => {
   var result = void 0;
@@ -3978,13 +4086,45 @@ __decorateClass4([
 ], OkInlineFeedback.prototype, "hasActions");
 define("ok-inline-feedback", OkInlineFeedback);
 
-// modules/whatsapp_inbox/.wt-rowclick/ui/components/erp-whatsapp-inbox-requests/erp-whatsapp-inbox-requests.ts
+// ui/components/erp-whatsapp-inbox-requests/erp-whatsapp-inbox-requests.ts
 var CATALOG2 = { es: es_default, en: en_default };
 var BOOKABLE_TYPES = /* @__PURE__ */ new Set(["appointment", "reservation"]);
 function erplora2() {
   const c5 = globalThis.erplora;
   if (!c5) throw new Error("erplora SDK no inicializado por el shell");
   return c5;
+}
+var TYPE_KEYS = {
+  order: "ui.typeOrder",
+  reservation: "ui.typeReservation",
+  appointment: "ui.typeAppointment",
+  quote: "ui.typeQuote",
+  transport: "ui.typeTransport",
+  custom: "ui.typeCustom"
+};
+var STATUS_KEYS = {
+  pending_review: "ui.requestStatusPending",
+  confirmed: "ui.requestStatusConfirmed",
+  fulfilled: "ui.requestStatusFulfilled",
+  rejected: "ui.requestStatusRejected",
+  cancelled: "ui.requestStatusCancelled"
+};
+function typeLabel(value) {
+  const key = TYPE_KEYS[value];
+  return key ? erplora2().t(CATALOG2, key) : value;
+}
+function statusLabel(value) {
+  const key = STATUS_KEYS[value];
+  return key ? erplora2().t(CATALOG2, key) : value;
+}
+function domainErrorText2(e5, fallbackKey) {
+  const code = e5?.code;
+  const message = e5 instanceof Error ? e5.message : "";
+  if (typeof code === "string" && code.startsWith("whatsapp_inbox.")) {
+    const text = erplora2().t(CATALOG2, `errors.${code}`, { message });
+    if (text && text !== `errors.${code}`) return text;
+  }
+  return message || erplora2().t(CATALOG2, fallbackKey);
 }
 var ErpWhatsappInboxRequests = class extends i3 {
   constructor() {
@@ -4075,7 +4215,10 @@ var ErpWhatsappInboxRequests = class extends i3 {
           { value: "quote", label: t5("ui.typeQuote") },
           { value: "transport", label: t5("ui.typeTransport") },
           { value: "custom", label: t5("ui.typeCustom") }
-        ]
+        ],
+        // whatsapp_inbox#41 — the cell used to paint the raw enum; the label is the same map the
+        // filter select reads, so the column and its filter can never disagree.
+        format: (r6) => typeLabel(String(r6.request_type ?? ""))
       },
       { key: "contact_name", header: t5("ui.colContact"), sortable: true, filterable: true, filterType: "text" },
       {
@@ -4090,7 +4233,8 @@ var ErpWhatsappInboxRequests = class extends i3 {
           { value: "fulfilled", label: t5("ui.requestStatusFulfilled") },
           { value: "rejected", label: t5("ui.requestStatusRejected") },
           { value: "cancelled", label: t5("ui.requestStatusCancelled") }
-        ]
+        ],
+        format: (r6) => statusLabel(String(r6.status ?? ""))
       },
       {
         key: "confidence_score",
@@ -4103,7 +4247,11 @@ var ErpWhatsappInboxRequests = class extends i3 {
       },
       {
         key: "id",
-        header: t5("ui.colActions"),
+        // whatsapp_inbox#41 — this column is the attention FLAG (⚠ a booking that did not happen,
+        // ⏳ a request waiting for review), not the actions: `ok-data-table` labels its own
+        // row-actions column «Acciones», and this header said the same, so the row read
+        // «Acciones … Acciones» and neither column was what it claimed.
+        header: t5("ui.colFlag"),
         // A booking that did not happen must not read like a request that simply arrived: the row
         // says so in the table too, not only inside the pending block.
         format: (r6) => r6.failure_reason ? "\u26A0" : r6.status === "pending_review" ? "\u23F3" : ""
@@ -4205,7 +4353,7 @@ var ErpWhatsappInboxRequests = class extends i3 {
       this.bookingFor = "";
       await this.ctrl.load();
     } catch (e5) {
-      this.formError = e5 instanceof Error ? e5.message : erplora2().t(CATALOG2, "ui.errApprove");
+      this.formError = domainErrorText2(e5, "ui.errApprove");
     } finally {
       this.busyId = "";
     }
@@ -4217,7 +4365,7 @@ var ErpWhatsappInboxRequests = class extends i3 {
       await erplora2().command("whatsapp_inbox.requests.reject", { request_id: id });
       await this.ctrl.load();
     } catch (e5) {
-      this.formError = e5 instanceof Error ? e5.message : erplora2().t(CATALOG2, "ui.errReject");
+      this.formError = domainErrorText2(e5, "ui.errReject");
     } finally {
       this.busyId = "";
     }
@@ -4233,7 +4381,7 @@ var ErpWhatsappInboxRequests = class extends i3 {
       await erplora2().command("whatsapp_inbox.requests.fulfill", { request_id: r6.id });
       await this.ctrl.load();
     } catch (e5) {
-      this.formError = e5 instanceof Error ? e5.message : erplora2().t(CATALOG2, "ui.errFulfil");
+      this.formError = domainErrorText2(e5, "ui.errFulfil");
     } finally {
       this.busyId = "";
     }
@@ -4264,7 +4412,7 @@ var ErpWhatsappInboxRequests = class extends i3 {
       this.pendingDelete = null;
       await this.ctrl.load();
     } catch (e5) {
-      this.formError = e5 instanceof Error ? e5.message : erplora2().t(CATALOG2, "ui.errDeleteRequest");
+      this.formError = domainErrorText2(e5, "ui.errDeleteRequest");
     } finally {
       this.busyId = "";
     }
@@ -4315,7 +4463,7 @@ var ErpWhatsappInboxRequests = class extends i3 {
       <div class="who">
         <span class="ref">${r6.reference_number}</span>
         <span>·</span>
-        <span>${r6.request_type}</span>
+        <span>${typeLabel(r6.request_type)}</span>
         <span>·</span>
         <span>${r6.contact_name}</span>
       </div>
@@ -4343,7 +4491,7 @@ var ErpWhatsappInboxRequests = class extends i3 {
       <div class="who">
         <span class="ref">${r6.reference_number}</span>
         <span>·</span>
-        <span>${r6.request_type}</span>
+        <span>${typeLabel(r6.request_type)}</span>
         <span>·</span>
         <span>${r6.contact_name}</span>
       </div>
@@ -4398,7 +4546,7 @@ __decorateClass([
 ], ErpWhatsappInboxRequests.prototype, "openRequest", 2);
 define("erp-whatsapp-inbox-requests", ErpWhatsappInboxRequests);
 
-// modules/whatsapp_inbox/.wt-rowclick/ui/components/erp-whatsapp-inbox-settings/erp-whatsapp-inbox-settings.ts
+// ui/components/erp-whatsapp-inbox-settings/erp-whatsapp-inbox-settings.ts
 var CATALOG3 = { es: es_default, en: en_default };
 var DEFAULTS = {
   is_enabled: 0,
@@ -4598,12 +4746,21 @@ __decorateClass([
 ], ErpWhatsappInboxSettings.prototype, "usage", 2);
 define("erp-whatsapp-inbox-settings", ErpWhatsappInboxSettings);
 
-// modules/whatsapp_inbox/.wt-rowclick/ui/components/erp-whatsapp-inbox-templates/erp-whatsapp-inbox-templates.ts
+// ui/components/erp-whatsapp-inbox-templates/erp-whatsapp-inbox-templates.ts
 var CATALOG4 = { es: es_default, en: en_default };
 function erplora4() {
   const c5 = globalThis.erplora;
   if (!c5) throw new Error("erplora SDK no inicializado por el shell");
   return c5;
+}
+function domainErrorText3(e5, fallbackKey) {
+  const code = e5?.code;
+  const message = e5 instanceof Error ? e5.message : "";
+  if (typeof code === "string" && code.startsWith("whatsapp_inbox.")) {
+    const text = erplora4().t(CATALOG4, `errors.${code}`, { message });
+    if (text && text !== `errors.${code}`) return text;
+  }
+  return message || erplora4().t(CATALOG4, fallbackKey);
 }
 var META_STATUS_KEYS = ["pending", "approved", "rejected"];
 var META_STATUS_LABEL_KEYS = {
@@ -4813,7 +4970,7 @@ var ErpWhatsappInboxTemplates = class extends i3 {
       this.dataTable()?.close();
       await this.ctrl.load();
     } catch (e5) {
-      this.formError = e5 instanceof Error ? e5.message : erplora4().t(CATALOG4, "ui.errUpdateTemplate");
+      this.formError = domainErrorText3(e5, "ui.errUpdateTemplate");
     } finally {
       this.saving = false;
     }
@@ -4831,7 +4988,7 @@ var ErpWhatsappInboxTemplates = class extends i3 {
       this.pendingDelete = null;
       await this.ctrl.load();
     } catch (e5) {
-      this.formError = e5 instanceof Error ? e5.message : erplora4().t(CATALOG4, "ui.errDeleteTemplate");
+      this.formError = domainErrorText3(e5, "ui.errDeleteTemplate");
     } finally {
       this.saving = false;
     }

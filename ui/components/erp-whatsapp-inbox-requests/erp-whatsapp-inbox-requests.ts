@@ -92,6 +92,58 @@ function erplora(): ErploraClientLike {
   return c;
 }
 
+// ── whatsapp_inbox#41 — the enum labels, ONE source for cell, filter select and detail ──────
+//
+// The table spoke in codes: Tipo and Estado had `options` with human labels for the filter
+// selects but no `format`, so the CELL painted `reservation`/`confirmed` — the database's
+// vocabulary, not the reader's. These helpers are the single place that maps enum → i18n key
+// (the `tickets` pattern: `options` and `format` off the same label function). A value the
+// catalog has not learned keeps its raw form, so a new enum never becomes an empty cell.
+
+const TYPE_KEYS: Record<string, string> = {
+  order: 'ui.typeOrder',
+  reservation: 'ui.typeReservation',
+  appointment: 'ui.typeAppointment',
+  quote: 'ui.typeQuote',
+  transport: 'ui.typeTransport',
+  custom: 'ui.typeCustom',
+};
+
+const STATUS_KEYS: Record<string, string> = {
+  pending_review: 'ui.requestStatusPending',
+  confirmed: 'ui.requestStatusConfirmed',
+  fulfilled: 'ui.requestStatusFulfilled',
+  rejected: 'ui.requestStatusRejected',
+  cancelled: 'ui.requestStatusCancelled',
+};
+
+/** The request type as the reader names it («Reserva»), or the raw value if unlearned. */
+function typeLabel(value: string): string {
+  const key = TYPE_KEYS[value];
+  return key ? erplora().t(CATALOG, key) : value;
+}
+
+/** The request status as the reader names it («Confirmada»), or the raw value if unlearned. */
+function statusLabel(value: string): string {
+  const key = STATUS_KEYS[value];
+  return key ? erplora().t(CATALOG, key) : value;
+}
+
+/** A business refusal (hub#139) travels as a stable `code` plus the handler's English fallback:
+ *  paint the code's TRANSLATION, keep the sentence for codes the catalog has not learned, and
+ *  never translate another module's code with this catalog (same helper as `customers`/
+ *  `appointments`). This is what turns the `errors` block of `locales/{en,es}.json` into the
+ *  sentence the operator actually reads when #40 refuses a move. */
+function domainErrorText(e: unknown, fallbackKey: string): string {
+  const code = (e as { code?: unknown } | null)?.code;
+  const message = e instanceof Error ? e.message : '';
+  if (typeof code === 'string' && code.startsWith('whatsapp_inbox.')) {
+    const text = erplora().t(CATALOG, `errors.${code}`, { message });
+    if (text && text !== `errors.${code}`) return text;
+  }
+  return message || erplora().t(CATALOG, fallbackKey);
+}
+
 export class ErpWhatsappInboxRequests extends LitElement {
   static styles = css`
     :host { display:block; font-family: system-ui, sans-serif; color: var(--ion-text-color, #1c1b18); }
@@ -194,6 +246,9 @@ export class ErpWhatsappInboxRequests extends LitElement {
         { value: 'transport', label: t('ui.typeTransport') },
         { value: 'custom', label: t('ui.typeCustom') },
       ],
+      // whatsapp_inbox#41 — the cell used to paint the raw enum; the label is the same map the
+      // filter select reads, so the column and its filter can never disagree.
+      format: (r) => typeLabel(String(r.request_type ?? '')),
     },
     { key: 'contact_name', header: t('ui.colContact'), sortable: true, filterable: true, filterType: 'text' },
     {
@@ -209,6 +264,7 @@ export class ErpWhatsappInboxRequests extends LitElement {
         { value: 'rejected', label: t('ui.requestStatusRejected') },
         { value: 'cancelled', label: t('ui.requestStatusCancelled') },
       ],
+      format: (r) => statusLabel(String(r.status ?? '')),
     },
     {
       key: 'confidence_score',
@@ -221,7 +277,11 @@ export class ErpWhatsappInboxRequests extends LitElement {
     },
     {
       key: 'id',
-      header: t('ui.colActions'),
+      // whatsapp_inbox#41 — this column is the attention FLAG (⚠ a booking that did not happen,
+      // ⏳ a request waiting for review), not the actions: `ok-data-table` labels its own
+      // row-actions column «Acciones», and this header said the same, so the row read
+      // «Acciones … Acciones» and neither column was what it claimed.
+      header: t('ui.colFlag'),
       // A booking that did not happen must not read like a request that simply arrived: the row
       // says so in the table too, not only inside the pending block.
       format: (r) => (r.failure_reason ? '⚠' : r.status === 'pending_review' ? '⏳' : ''),
@@ -330,7 +390,7 @@ export class ErpWhatsappInboxRequests extends LitElement {
       this.bookingFor = '';
       await this.ctrl.load();
     } catch (e) {
-      this.formError = e instanceof Error ? e.message : erplora().t(CATALOG, 'ui.errApprove');
+      this.formError = domainErrorText(e, 'ui.errApprove');
     } finally {
       this.busyId = '';
     }
@@ -343,7 +403,10 @@ export class ErpWhatsappInboxRequests extends LitElement {
       await erplora().command('whatsapp_inbox.requests.reject', { request_id: id });
       await this.ctrl.load();
     } catch (e) {
-      this.formError = e instanceof Error ? e.message : erplora().t(CATALOG, 'ui.errReject');
+      // whatsapp_inbox#40: rejecting something already decided arrives here as
+      // `whatsapp_inbox.request_not_pending` — the refusal in the reader's language, not the
+      // handler's English sentence.
+      this.formError = domainErrorText(e, 'ui.errReject');
     } finally {
       this.busyId = '';
     }
@@ -360,7 +423,7 @@ export class ErpWhatsappInboxRequests extends LitElement {
       await erplora().command('whatsapp_inbox.requests.fulfill', { request_id: r.id });
       await this.ctrl.load();
     } catch (e) {
-      this.formError = e instanceof Error ? e.message : erplora().t(CATALOG, 'ui.errFulfil');
+      this.formError = domainErrorText(e, 'ui.errFulfil');
     } finally {
       this.busyId = '';
     }
@@ -393,7 +456,7 @@ export class ErpWhatsappInboxRequests extends LitElement {
       this.pendingDelete = null;
       await this.ctrl.load();
     } catch (e) {
-      this.formError = e instanceof Error ? e.message : erplora().t(CATALOG, 'ui.errDeleteRequest');
+      this.formError = domainErrorText(e, 'ui.errDeleteRequest');
     } finally {
       this.busyId = '';
     }
@@ -444,7 +507,7 @@ export class ErpWhatsappInboxRequests extends LitElement {
       <div class="who">
         <span class="ref">${r.reference_number}</span>
         <span>·</span>
-        <span>${r.request_type}</span>
+        <span>${typeLabel(r.request_type)}</span>
         <span>·</span>
         <span>${r.contact_name}</span>
       </div>
@@ -473,7 +536,7 @@ export class ErpWhatsappInboxRequests extends LitElement {
       <div class="who">
         <span class="ref">${r.reference_number}</span>
         <span>·</span>
-        <span>${r.request_type}</span>
+        <span>${typeLabel(r.request_type)}</span>
         <span>·</span>
         <span>${r.contact_name}</span>
       </div>
