@@ -229,3 +229,42 @@ describe('clicking the row opens the request (pm#155)', () => {
     expect(wc.openRequest, 'the row was clicked and the request detail did not open').toBeTruthy();
   });
 });
+
+// ── whatsapp_inbox#40 — the screen must not invite the call the state refuses ─────────────────
+//
+// A confirmed request can no longer be approved or rejected, and since #40 the command answers
+// the domain error `whatsapp_inbox.request_not_pending` instead of `ok: true` + a phantom
+// `request.rejected`. That refusal is the runtime's; the screen's half of the contract is not to
+// OFFER the move in the first place: the approve/reject buttons live in the pending block, which
+// only a `pending_review` row enters. A confirmed row must not reach them, and the table's row
+// actions must not grow an approve/reject either (its actions are open/fulfil/delete, each gated
+// by its own state).
+describe('aprobar/rechazar solo se ofrece a lo que está PENDIENTE (whatsapp_inbox#40)', () => {
+  it('una fila confirmada no entra en el bloque de pendientes: no se le ofrece aprobar ni rechazar', async () => {
+    const el = await montar();
+    const bloque = el.shadowRoot.querySelectorAll('.pending-row');
+    expect(
+      bloque.length,
+      `hay ${bloque.length} bloques de pendiente y la fixture solo tiene UNA pending_review`,
+    ).toBe(1);
+    // The one block belongs to the pending row, and it is the only place the two buttons exist.
+    const texto = el.shadowRoot.textContent ?? '';
+    const botones = el.shadowRoot.querySelectorAll('ion-button');
+    const etiquetas = Array.from(botones).map((b) => b.textContent?.trim());
+    expect(etiquetas.filter((l) => l === 'ui.approve').length, 'falta el botón de aprobar').toBe(1);
+    expect(etiquetas.filter((l) => l === 'ui.reject').length, 'falta el botón de rechazar').toBe(1);
+    expect(
+      texto.includes(CONFIRMED.reference_number),
+      'la confirmada no debe estar en el bloque de pendientes',
+    ).toBeFalsy();
+  });
+
+  it('las acciones de fila de la tabla no incluyen aprobar ni rechazar (solo open/fulfil/delete, cada una con su guarda)', async () => {
+    const el = await montar();
+    const ids = (tabla(el)?.actions ?? []).map((a) => a.id);
+    expect(
+      ids.includes('approve') || ids.includes('reject'),
+      `la tabla ofrece ${ids}: aprobar/rechazar viven en el bloque de pendientes, no en la fila`,
+    ).toBeFalsy();
+  });
+});

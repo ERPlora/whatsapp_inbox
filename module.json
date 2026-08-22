@@ -162,9 +162,6 @@
         "default_sort": "created_at",
         "default_dir": "desc",
         "filters": {
-          "conversation_id": {
-            "op": "eq"
-          },
           "direction": {
             "op": "eq"
           },
@@ -352,6 +349,12 @@
       "emit": [
         "whatsapp_inbox.conversation.assigned"
       ],
+      "expect_rows": {
+        "op": "min",
+        "n": 1,
+        "error": "whatsapp_inbox.conversation_not_found",
+        "message": "That conversation does not exist in this business."
+      },
       "ai": {
         "description": "Assigns a WhatsApp conversation to an agent or team"
       }
@@ -366,6 +369,12 @@
       "emit": [
         "whatsapp_inbox.request.approved"
       ],
+      "expect_rows": {
+        "op": "min",
+        "n": 1,
+        "error": "whatsapp_inbox.request_not_pending",
+        "message": "That request is not waiting for review: it does not exist in this business, or it was already approved, rejected or handled."
+      },
       "ai": {
         "description": "Approves an inbound WhatsApp request"
       }
@@ -380,6 +389,12 @@
       "emit": [
         "whatsapp_inbox.request.rejected"
       ],
+      "expect_rows": {
+        "op": "min",
+        "n": 1,
+        "error": "whatsapp_inbox.request_not_pending",
+        "message": "That request is not waiting for review: it does not exist in this business, or it was already approved, rejected or handled."
+      },
       "ai": {
         "description": "Rejects an inbound WhatsApp request"
       }
@@ -394,6 +409,12 @@
       "emit": [
         "whatsapp_inbox.request.deleted"
       ],
+      "expect_rows": {
+        "op": "min",
+        "n": 1,
+        "error": "whatsapp_inbox.request_not_deletable",
+        "message": "That request cannot be deleted: it does not exist in this business, or it was fulfilled and has to stay for audit."
+      },
       "ai": {
         "description": "Soft-deletes a WhatsApp request; already-fulfilled requests cannot be deleted"
       }
@@ -488,6 +509,12 @@
       "emit": [
         "whatsapp_inbox.template.updated"
       ],
+      "expect_rows": {
+        "op": "min",
+        "n": 1,
+        "error": "whatsapp_inbox.template_not_found",
+        "message": "That template does not exist in this business."
+      },
       "ai": {
         "description": "Updates the content of an existing WhatsApp message template"
       }
@@ -502,6 +529,12 @@
       "emit": [
         "whatsapp_inbox.template.deleted"
       ],
+      "expect_rows": {
+        "op": "min",
+        "n": 1,
+        "error": "whatsapp_inbox.template_not_found",
+        "message": "That template does not exist in this business."
+      },
       "ai": {
         "description": "Soft-deletes a WhatsApp message template"
       }
