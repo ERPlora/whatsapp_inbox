@@ -85,6 +85,7 @@ async function montar() {
 const tabla = (el: HTMLElement & { shadowRoot: ShadowRoot }) =>
   el.shadowRoot.querySelector('ok-data-table') as (HTMLElement & {
     actions: { id: string }[];
+    rowClickable: boolean;
   }) | null;
 
 /** Opens the thread the way a person does: the row action of the table. */
@@ -180,5 +181,34 @@ describe('asignar la conversación desde el hilo (`conversations.assign`)', () =
     await wc.assign();
     const asignacion = comandos.find((c) => c.name === 'whatsapp_inbox.conversations.assign');
     expect(asignacion!.payload.employee_id).toBe('');
+  });
+});
+
+// ── pm#155 (outfitkit#67, second half) ────────────────────────────────────────────────────────
+//
+// At 1440 px the «Actions» column fell off the screen with nothing hinting the table went on to
+// the right, so the only door into a conversation was a button nobody could see. OutfitKit
+// 0.1.44 pins that column, but the other half of the fix is opt-in: `rowClickable` turns the
+// whole row into a door — the first thing a user tries. The list has to ask for it, and wire
+// `rowClick` to the same thread the «open» action opens.
+describe('clicking the row opens the conversation (pm#155)', () => {
+  it('the table declares `rowClickable` → the whole row is a door, not just the action button', async () => {
+    const el = await montar();
+    expect(
+      tabla(el)?.rowClickable,
+      'without `rowClickable` the row is dead: if the actions column is off-screen there is no way in',
+    ).toBe(true);
+  });
+
+  it('`rowClick` opens the thread of the clicked conversation, same as the «open» action', async () => {
+    const el = await montar();
+    tabla(el)!.dispatchEvent(new CustomEvent('rowClick', { detail: { row: { id: 'c1' } } }));
+    await new Promise((r) => setTimeout(r, 0));
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    const cabecera = consultas.find((q) => q.name === 'whatsapp_inbox.conversations.get');
+    expect(
+      cabecera?.params.conversation_id,
+      'the row was clicked and the thread did not open',
+    ).toBe('c1');
   });
 });

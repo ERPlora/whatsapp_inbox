@@ -1553,12 +1553,53 @@ function okIcon(value) {
 
 // ../outfitkit/dist/ok-data-table.js
 var CSV_BOM = "\uFEFF";
+var WINDOWS_1252_C1 = [
+  8364,
+  129,
+  8218,
+  402,
+  8222,
+  8230,
+  8224,
+  8225,
+  710,
+  8240,
+  352,
+  8249,
+  338,
+  141,
+  381,
+  143,
+  144,
+  8216,
+  8217,
+  8220,
+  8221,
+  8226,
+  8211,
+  8212,
+  732,
+  8482,
+  353,
+  8250,
+  339,
+  157,
+  382,
+  376
+];
+function decodeWindows1252(bytes) {
+  let text = "";
+  for (const byte of bytes) {
+    text += String.fromCharCode(byte >= 128 && byte <= 159 ? WINDOWS_1252_C1[byte - 128] : byte);
+  }
+  return text;
+}
 function decodeCsvBuffer(buf) {
   let text;
   try {
     text = new TextDecoder("utf-8", { fatal: true }).decode(buf);
   } catch {
-    text = new TextDecoder("windows-1252").decode(buf);
+    text = decodeWindows1252(new Uint8Array(buf));
   }
   return text.charCodeAt(0) === 65279 ? text.slice(1) : text;
 }
@@ -3216,7 +3257,7 @@ function createListController(client, queryName, onChange = () => {
   return new ListController(client, queryName, onChange, opts);
 }
 
-// modules/whatsapp_inbox/locales/es.json
+// modules/whatsapp_inbox/.wt-rowclick/locales/es.json
 var es_default = {
   name: "Bandeja de WhatsApp",
   description: "Conversaciones de WhatsApp, solicitudes entrantes, plantillas de mensaje y ajustes del canal.",
@@ -3346,7 +3387,7 @@ var es_default = {
   }
 };
 
-// modules/whatsapp_inbox/locales/en.json
+// modules/whatsapp_inbox/.wt-rowclick/locales/en.json
 var en_default = {
   name: "WhatsApp Inbox",
   navigation: {
@@ -3475,7 +3516,7 @@ var en_default = {
   }
 };
 
-// modules/whatsapp_inbox/ui/components/erp-whatsapp-inbox-inbox/erp-whatsapp-inbox-inbox.ts
+// modules/whatsapp_inbox/.wt-rowclick/ui/components/erp-whatsapp-inbox-inbox/erp-whatsapp-inbox-inbox.ts
 var CATALOG = { es: es_default, en: en_default };
 var THREAD_PAGE = 200;
 function erplora() {
@@ -3696,7 +3737,7 @@ var ErpWhatsappInboxInbox = class extends i3 {
         </header>
         ${this.ctrl?.error ? b2`<p class="err">${this.ctrl.error}</p>` : A}
         ${this.renderDetail()}
-        <ok-data-table .serverSide=${true} .views=${true} .fill=${true} .actions=${this.rowActions} .cardTitle=${(row) => String(row.contact_name ?? row.contact_phone ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "asc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchInbox")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyInbox")} @rowAction=${(e5) => this.onRowAction(e5)} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @pageSizeChange=${(e5) => this.ctrl.setPageSize(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}></ok-data-table>
+        <ok-data-table .serverSide=${true} .views=${true} .fill=${true} .actions=${this.rowActions} .rowClickable=${true} .cardTitle=${(row) => String(row.contact_name ?? row.contact_phone ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "asc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchInbox")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyInbox")} @rowAction=${(e5) => this.onRowAction(e5)} @rowClick=${(e5) => this.onRowAction({ detail: { actionId: "open", row: e5.detail.row } })} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @pageSizeChange=${(e5) => this.ctrl.setPageSize(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}></ok-data-table>
       </div>`;
   }
 };
@@ -3937,7 +3978,7 @@ __decorateClass4([
 ], OkInlineFeedback.prototype, "hasActions");
 define("ok-inline-feedback", OkInlineFeedback);
 
-// modules/whatsapp_inbox/ui/components/erp-whatsapp-inbox-requests/erp-whatsapp-inbox-requests.ts
+// modules/whatsapp_inbox/.wt-rowclick/ui/components/erp-whatsapp-inbox-requests/erp-whatsapp-inbox-requests.ts
 var CATALOG2 = { es: es_default, en: en_default };
 var BOOKABLE_TYPES = /* @__PURE__ */ new Set(["appointment", "reservation"]);
 function erplora2() {
@@ -4336,7 +4377,7 @@ var ErpWhatsappInboxRequests = class extends i3 {
           <h3>${t5("ui.pendingReview")}</h3>
           ${pending.map((r6) => this.renderPending(r6))}
         </div>` : A}
-        <ok-data-table .serverSide=${true} .views=${true} .actions=${this.rowActions} .cardTitle=${(row) => String(row.reference_number ?? row.contact_name ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "desc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchRequests")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyRequests")} @rowAction=${(e5) => this.onRowAction(e5)} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @pageSizeChange=${(e5) => this.ctrl.setPageSize(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}></ok-data-table>
+        <ok-data-table .serverSide=${true} .views=${true} .actions=${this.rowActions} .rowClickable=${true} .cardTitle=${(row) => String(row.reference_number ?? row.contact_name ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "desc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchRequests")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyRequests")} @rowAction=${(e5) => this.onRowAction(e5)} @rowClick=${(e5) => this.onRowAction({ detail: { actionId: "open", row: e5.detail.row } })} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @pageSizeChange=${(e5) => this.ctrl.setPageSize(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}></ok-data-table>
       </div>`;
   }
 };
@@ -4357,7 +4398,7 @@ __decorateClass([
 ], ErpWhatsappInboxRequests.prototype, "openRequest", 2);
 define("erp-whatsapp-inbox-requests", ErpWhatsappInboxRequests);
 
-// modules/whatsapp_inbox/ui/components/erp-whatsapp-inbox-settings/erp-whatsapp-inbox-settings.ts
+// modules/whatsapp_inbox/.wt-rowclick/ui/components/erp-whatsapp-inbox-settings/erp-whatsapp-inbox-settings.ts
 var CATALOG3 = { es: es_default, en: en_default };
 var DEFAULTS = {
   is_enabled: 0,
@@ -4557,7 +4598,7 @@ __decorateClass([
 ], ErpWhatsappInboxSettings.prototype, "usage", 2);
 define("erp-whatsapp-inbox-settings", ErpWhatsappInboxSettings);
 
-// modules/whatsapp_inbox/ui/components/erp-whatsapp-inbox-templates/erp-whatsapp-inbox-templates.ts
+// modules/whatsapp_inbox/.wt-rowclick/ui/components/erp-whatsapp-inbox-templates/erp-whatsapp-inbox-templates.ts
 var CATALOG4 = { es: es_default, en: en_default };
 function erplora4() {
   const c5 = globalThis.erplora;
@@ -4819,7 +4860,7 @@ var ErpWhatsappInboxTemplates = class extends i3 {
         ${this.formError ? b2`<p class="err">${this.formError}</p>` : A}
         ${this.ctrl?.error ? b2`<p class="err">${this.ctrl.error}</p>` : A}
         ${this.renderDeleteConfirm()}
-        <ok-data-table .serverSide=${true} .fill=${true} .addable=${true} .views=${true} .actions=${this.rowActions} .cardTitle=${(row) => String(row.name ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "desc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchTemplates")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyTemplates")} @rowAction=${(e5) => this.onRowAction(e5)} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @pageSizeChange=${(e5) => this.ctrl.setPageSize(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}>
+        <ok-data-table .serverSide=${true} .fill=${true} .addable=${true} .views=${true} .actions=${this.rowActions} .rowClickable=${true} .cardTitle=${(row) => String(row.name ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "desc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchTemplates")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyTemplates")} @rowAction=${(e5) => this.onRowAction(e5)} @rowClick=${(e5) => this.onRowAction({ detail: { actionId: "edit", row: e5.detail.row } })} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @pageSizeChange=${(e5) => this.ctrl.setPageSize(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}>
           <!-- Alta: se proyecta SIEMPRE (aunque el panel esté cerrado). Si solo se renderizara con el
                panel abierto, el «+» de la barra desplegaría un panel vacío. -->
           <form slot="create" class="form" @submit=${(e5) => this.createTemplate(e5)}>

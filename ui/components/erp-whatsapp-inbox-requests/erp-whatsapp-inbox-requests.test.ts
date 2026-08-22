@@ -61,6 +61,7 @@ async function montar() {
 const tabla = (el: HTMLElement & { shadowRoot: ShadowRoot }) =>
   el.shadowRoot.querySelector('ok-data-table') as (HTMLElement & {
     actions: { id: string; disabled?: (row: Record<string, unknown>) => boolean }[];
+    rowClickable: boolean;
   }) | null;
 
 async function accionar(el: HTMLElement & { shadowRoot: ShadowRoot }, actionId: string, row: unknown) {
@@ -198,5 +199,33 @@ describe('abrir una solicitud la LEE con `requests.get` (whatsapp_inbox#6)', () 
     (el as unknown as { openRequest: unknown }).openRequest = null;
     await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
     expect(el.shadowRoot.textContent ?? '').not.toContain('Prefiere por la mañana');
+  });
+});
+
+// ── pm#155 (outfitkit#67, second half) ────────────────────────────────────────────────────────
+//
+// At 1440 px the «Actions» column fell off the screen with nothing hinting the table went on to
+// the right, so the only door into a request was a button nobody could see. OutfitKit 0.1.44
+// pins that column, but the other half of the fix is opt-in: `rowClickable` turns the whole row
+// into a door — the first thing a user tries. The list has to ask for it, and wire `rowClick`
+// to the same request detail the «open» action opens.
+describe('clicking the row opens the request (pm#155)', () => {
+  it('the table declares `rowClickable` → the whole row is a door, not just the action button', async () => {
+    const el = await montar();
+    expect(
+      tabla(el)?.rowClickable,
+      'without `rowClickable` the row is dead: if the actions column is off-screen there is no way in',
+    ).toBe(true);
+  });
+
+  it('`rowClick` opens the detail of the clicked request, same as the «open» action', async () => {
+    const sdk = (globalThis as Record<string, unknown>).erplora as Record<string, unknown>;
+    sdk.query = async (name: string) => (name === 'whatsapp_inbox.requests.get' ? [PENDING] : []);
+    const el = await montar();
+    tabla(el)!.dispatchEvent(new CustomEvent('rowClick', { detail: { row: PENDING } }));
+    await new Promise((r) => setTimeout(r, 0));
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    const wc = el as unknown as { openRequest: unknown };
+    expect(wc.openRequest, 'the row was clicked and the request detail did not open').toBeTruthy();
   });
 });
