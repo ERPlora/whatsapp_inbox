@@ -116,11 +116,26 @@ describe('se puede ABRIR una conversación y LEER sus mensajes (whatsapp_inbox#2
 
     const hilo = consultas.find((q) => q.name === 'whatsapp_inbox.messages.list');
     expect(hilo, 'nadie llama a `whatsapp_inbox.messages.list`').toBeTruthy();
+    // whatsapp_inbox#39 — the thread arrived EMPTY, and the old assertion hid why: it accepted
+    // `filters.conversation_id` ?? `params.conversation_id`, and a test that accepts two contracts
+    // proves neither. The two forms are NOT equivalent:
+    //   * `params.conversation_id` is the bind the base SQL names (`:conversation_id`,
+    //     `queries/messages_list.sql`) — the SDK passes it verbatim (`ListParams.params`,
+    //     module-sdk `buildListParams`);
+    //   * `filters.conversation_id` flattens to `f_conversation_id`, which the runtime composes as
+    //     an OUTER condition of its pagination wrapper — it never reaches the base SQL, whose
+    //     `:conversation_id` then binds NULL (`DynNull`, hub `crates/db`) → `conversation_id =
+    //     NULL` matches nothing → «esta conversación todavía no tiene mensajes».
+    // One form, the one the SQL expects.
     expect(
-      (hilo!.params.filters as Record<string, unknown>)?.conversation_id
-        ?? (hilo!.params.params as Record<string, unknown>)?.conversation_id,
-      'el hilo se pide sin acotar por conversación: saldrían los mensajes de todo el hub',
+      (hilo!.params.params as Record<string, unknown>)?.conversation_id,
+      'el hilo no se pide con el bind `:conversation_id` (params) que exige el SQL base',
     ).toBe('c1');
+    expect(
+      (hilo!.params.filters as Record<string, unknown> | undefined)?.conversation_id,
+      'el hilo se pide por `filters` (`f_conversation_id`): esa forma no bindea el `:conversation_id` '
+        + 'del SQL base y la conversación sale vacía — la cadena tiene UNA sola forma',
+    ).toBeUndefined();
   });
 
   it('los mensajes se PINTAN, con su texto y su sentido', async () => {

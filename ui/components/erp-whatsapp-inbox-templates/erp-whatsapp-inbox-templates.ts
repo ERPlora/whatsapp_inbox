@@ -37,6 +37,19 @@ function erplora(): ErploraClientLike {
   return c;
 }
 
+/** A business refusal (hub#139) travels as a stable `code`: paint its translation from this
+ *  module's catalogue, keep the sentence for codes the catalog has not learned, never translate
+ *  another module's code with this catalog (the `customers` helper, one screen over). */
+function domainErrorText(e: unknown, fallbackKey: string): string {
+  const code = (e as { code?: unknown } | null)?.code;
+  const message = e instanceof Error ? e.message : '';
+  if (typeof code === 'string' && code.startsWith('whatsapp_inbox.')) {
+    const text = erplora().t(CATALOG, `errors.${code}`, { message });
+    if (text && text !== `errors.${code}`) return text;
+  }
+  return message || erplora().t(CATALOG, fallbackKey);
+}
+
 // Estado de revisión de Meta (enum de la migración) → clave i18n. El `value=` que viaja al runtime
 // NUNCA se traduce; solo la etiqueta que ve el usuario.
 const META_STATUS_KEYS = ['pending', 'approved', 'rejected'];
@@ -276,7 +289,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
       this.dataTable()?.close();
       await this.ctrl.load();
     } catch (e) {
-      this.formError = e instanceof Error ? e.message : erplora().t(CATALOG, 'ui.errUpdateTemplate');
+      this.formError = domainErrorText(e, 'ui.errUpdateTemplate');
     } finally {
       this.saving = false;
     }
@@ -295,7 +308,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
       this.pendingDelete = null;
       await this.ctrl.load();
     } catch (e) {
-      this.formError = e instanceof Error ? e.message : erplora().t(CATALOG, 'ui.errDeleteTemplate');
+      this.formError = domainErrorText(e, 'ui.errDeleteTemplate');
     } finally {
       this.saving = false;
     }

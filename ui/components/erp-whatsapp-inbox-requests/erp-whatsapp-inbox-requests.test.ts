@@ -268,3 +268,149 @@ describe('aprobar/rechazar solo se ofrece a lo que está PENDIENTE (whatsapp_inb
     ).toBeFalsy();
   });
 });
+
+// ── whatsapp_inbox#41 — the table spoke in codes, twice over ─────────────────────────────────
+//
+// Two raw surfaces on one screen:
+//   * the column that flags a failed booking (⚠) / a waiting request (⏳) was keyed `id` but
+//     LABELED «Acciones» — the same header `ok-data-table` puts on its own row-actions column
+//     (its own i18n, `ok-data-table.ts` `actions: 'Acciones'`), so the header row read
+//     «Acciones … Acciones» and neither said what it was;
+//   * Tipo and Estado had `options` with human labels for the FILTER selects but no `format`, so
+//     the CELL painted the enum the database stores — `reservation`, `confirmed` — a word the
+//     person at the counter never chose. Every other enum column in the fleet does both
+//     (`tickets` priority/status/category: `options` + `format` off the same label helper).
+describe('la tabla de solicitudes habla el idioma de quien la lee (whatsapp_inbox#41)', () => {
+  type Col = { key: string; header: string; format?: (row: Record<string, unknown>) => string };
+
+  const columnas = (el: HTMLElement & { shadowRoot: ShadowRoot }): Col[] => {
+    const tabla = el.shadowRoot.querySelector('ok-data-table') as unknown as { columns: Col[] };
+    return tabla?.columns ?? [];
+  };
+
+  it('ninguna columna NUESTRA se etiqueta «Acciones»: esa cabecera es de la columna de acciones de la tabla', async () => {
+    const el = await montar();
+    const repetidas = columnas(el).filter((c) => c.header === 'ui.colActions');
+    expect(
+      repetidas.length,
+      `hay ${repetidas.length} columnas etiquetadas «Acciones»: la tabla ya rotula SU columna de `
+        + 'acciones — la nuestra duplicaba la cabecera',
+    ).toBe(0);
+  });
+
+  it('la columna de la señal (⚠/⏳) tiene SU etiqueta, no la de otra columna', async () => {
+    const el = await montar();
+    const senal = columnas(el).find((c) => c.key === 'id');
+    expect(senal, 'la columna de la señal desapareció').toBeTruthy();
+    expect(senal!.header).toBe('ui.colFlag');
+  });
+
+  it('Tipo pinta la etiqueta humana del enum, no el código de la base de datos', async () => {
+    const el = await montar();
+    const tipo = columnas(el).find((c) => c.key === 'request_type');
+    expect(tipo?.format, 'la columna Tipo no tiene format: la celda pinta `reservation` en crudo')
+      .toBeTruthy();
+    // The mock `t` is the identity, so the assertion measures WHICH key the format reaches for —
+    // the real catalog supplies the sentence (both locales carry `ui.typeReservation`).
+    expect(tipo!.format!({ request_type: 'reservation' })).toBe('ui.typeReservation');
+    expect(tipo!.format!({ request_type: 'appointment' })).toBe('ui.typeAppointment');
+    // A value the catalog has not learned keeps its raw form: an enum the module adds must not
+    // turn into an empty cell on old screens.
+    expect(tipo!.format!({ request_type: 'mystery_type' })).toBe('mystery_type');
+  });
+
+  it('Estado pinta la etiqueta humana del enum, no el código de la base de datos', async () => {
+    const el = await montar();
+    const estado = columnas(el).find((c) => c.key === 'status');
+    expect(estado?.format, 'la columna Estado no tiene format: la celda pinta `confirmed` en crudo')
+      .toBeTruthy();
+    expect(estado!.format!({ status: 'confirmed' })).toBe('ui.requestStatusConfirmed');
+    expect(estado!.format!({ status: 'pending_review' })).toBe('ui.requestStatusPending');
+    expect(estado!.format!({ status: 'mystery_status' })).toBe('mystery_status');
+  });
+
+  it('la fila confirmada ya no enseña el código crudo: la celda dice la etiqueta (fixture es)', async () => {
+    // The REAL catalogue this time, not the identity mock: the cell text is what the reader sees.
+    const es = (await import('../../../locales/es.json')).default;
+    const sdk = (globalThis as Record<string, unknown>).erplora as Record<string, unknown>;
+    // A `t` that resolves `ui.*` keys against the REAL Spanish catalogue (the component asks with
+    // the `ui.` prefix; the catalogue nests one level below it).
+    sdk.t = (_catalog: unknown, key: string) => {
+      const dict = (es as { ui?: Record<string, string> }).ui ?? {};
+      return dict[key.replace(/^ui\./, '')] ?? key;
+    };
+    const el = await montar();
+    const tabla = el.shadowRoot.querySelector('ok-data-table') as unknown as {
+      columns: Col[];
+      rows: Record<string, unknown>[];
+    };
+    const estado = tabla.columns.find((c) => c.key === 'status')!;
+    const fila = tabla.rows.find((r) => r.id === 'r2')!;
+    expect(
+      estado.format!(fila),
+      'la celda de la fila confirmada sigue pintando el código en crudo',
+    ).toBe(es.ui.requestStatusConfirmed);
+  });
+});
+
+// ── whatsapp_inbox#40 — the refusal arrives as a CODE, and the screen paints it in the reader's
+// language. The command's half is the runtime's (`expect_rows` turns the zero-row UPDATE into
+// `whatsapp_inbox.request_not_pending` and an empty outbox); the screen's half is this: the
+// sentence the operator reads comes from the module catalogue, not from the handler's English
+// fallback — the `appointments#70` pattern, one screen over.
+describe('el rechazo que el estado reusa se pinta traducido (whatsapp_inbox#40)', () => {
+  /** What `.command()` throws on a domain refusal: an Error that carries the hub's `code`. */
+  class DomainRefusal extends Error {
+    code: string;
+    constructor(code: string, message: string) {
+      super(message);
+      this.code = code;
+    }
+  }
+
+  it('rechazar lo ya decidido pinta la frase del catálogo es, no la inglesa del handler', async () => {
+    const es = (await import('../../../locales/es.json')).default;
+    // A `t` that walks the REAL Spanish catalogue by dots, like the shell's.
+    const sdk = (globalThis as Record<string, unknown>).erplora as Record<string, unknown>;
+    sdk.t = (catalog: unknown, key: string) => {
+      let cur: unknown = catalog != null && typeof catalog === 'object'
+        ? ((catalog as Record<string, unknown>).es ?? catalog)
+        : undefined;
+      for (const part of key.split('.')) {
+        cur = cur && typeof cur === 'object' ? (cur as Record<string, unknown>)[part] : undefined;
+      }
+      return typeof cur === 'string' ? cur : key;
+    };
+    sdk.command = async (name: string) => {
+      if (name === 'whatsapp_inbox.requests.reject') {
+        throw new DomainRefusal(
+          'whatsapp_inbox.request_not_pending',
+          'That request is not waiting for review.',
+        );
+      }
+      return {};
+    };
+
+    const el = await montar();
+    const wc = el as unknown as { reject: (id: string) => Promise<void>; formError: string };
+    await wc.reject('r2'); // the CONFIRMED fixture — exactly the row the issue was opened for
+    expect(
+      wc.formError,
+      'the refusal must arrive in the reader language, not the handler English',
+    ).toBe((es as { errors: { whatsapp_inbox: Record<string, string> } }).errors.whatsapp_inbox.request_not_pending);
+  });
+
+  it('un código que el catálogo no conoce mantiene la frase del handler (nunca la clave cruda)', async () => {
+    const sdk = (globalThis as Record<string, unknown>).erplora as Record<string, unknown>;
+    sdk.command = async (name: string) => {
+      if (name === 'whatsapp_inbox.requests.reject') {
+        throw new DomainRefusal('whatsapp_inbox.some_future_refusal', 'A brand new no.');
+      }
+      return {};
+    };
+    const el = await montar();
+    const wc = el as unknown as { reject: (id: string) => Promise<void>; formError: string };
+    await wc.reject('r2');
+    expect(wc.formError, 'an untranslated code must never paint a raw i18n key').toBe('A brand new no.');
+  });
+});
