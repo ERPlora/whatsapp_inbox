@@ -124,5 +124,13 @@
     "labelLinkedObject": "Registro creado",
     "errLoadRequest": "No se ha podido cargar la petición",
     "labelUsedThisMonth": "Consumidos este mes"
+  },
+  "errors": {
+    "whatsapp_inbox": {
+      "request_not_pending": "Esa solicitud no está pendiente de revisión: no existe en este negocio, o ya se aprobó, rechazó o atendió.",
+      "request_not_deletable": "Esa solicitud no se puede borrar: no existe en este negocio, o está cumplida y debe conservarse por auditoría.",
+      "conversation_not_found": "Esa conversación no existe en este negocio.",
+      "template_not_found": "Esa plantilla no existe en este negocio."
+    }
   }
 }
