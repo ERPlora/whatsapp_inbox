@@ -13,13 +13,15 @@
 //!
 //! Ramas:
 //! * `create_linked_object = false` (default) — transición simple a `fulfilled`.
-//!   La guarda de estado (**solo** desde `confirmed`) vive en el WHERE de
-//!   `commands/_fulfill_transition.sql`, igual que en `approve`/`reject`: el
-//!   runtime no pre-carga lecturas para el guest, así que el estado actual no
-//!   es visible aquí y la autoridad es siempre el SQL (0 filas afectadas si la
-//!   request no está `confirmed` — equivalente al `invalid_status` legacy).
-//! * `create_linked_object = true` — dispatch cross-módulo (crear el objeto en
-//!   el módulo destino vía su command público y enlazar `linked_module`/
+//!   La guarda de estado (**solo** desde `confirmed`) es DOBLE desde whatsapp_inbox#40:
+//!   el WHERE de `commands/_fulfill_transition.sql` (red de seguridad ante una carrera) y
+//!   ESTE handler, que pre-carga la request con `reads` (ADR-0069) y rechaza con un código
+//!   de dominio si no está `confirmed` — un `WHERE` que no casa nada commitea igual y el
+//!   command devolvía `ok: true` con `whatsapp_inbox.request.fulfilled` publicado para algo
+//!   que no ocurrió (el `expect_rows` del manifest no llega a los Tier-2: cuenta las filas
+//!   del bloque `sql`, que aquí está vacío — ERPlora/tasks#26).
+//! * `create_linked_object = true` — dispatch cross-módulo (crear el objeto en el
+//!   módulo destino vía su command público y enlazar `linked_module`/
 //!   `linked_object_id`). **NO soportado todavía**: el runtime rechaza
 //!   operaciones de handlers sobre commands de otros módulos
 //!   (`validate_operation`, aislamiento ARQUITECTURA.md §5.3) y no existe la
@@ -27,7 +29,7 @@
 //!   Hasta que esa decisión de modelo de comandos se tome (issue #3/#5), esta
 //!   rama devuelve el error explícito `cross_module_dispatch_unsupported`.
 
-use erplora_guest_sdk::{Operation, Output};
+use erplora_guest_sdk::{DomainError, Operation, Output};
 use serde_json::{json, Map, Value};
 
 #[cfg(feature = "guest")]
@@ -68,6 +70,38 @@ fn as_bool(v: &Value) -> bool {
     }
 }
 
+/// Rows of a pre-loaded read (`context.reads`, ADR-0069 §1). `None` = the read did not arrive
+/// (≠ arrived empty, which means "there is no such row").
+fn read_rows<'a>(input: &'a Value, query: &str) -> Option<&'a Vec<Value>> {
+    input.get("context")?.get("reads")?.get(query)?.as_array()
+}
+
+/// The request the command claims to touch, as the SERVER sees it (`reads`, ADR-0069).
+///
+/// whatsapp_inbox#40 — the guard cannot live in the WHERE alone: a `WHERE` that matches nothing
+/// still commits, so `requests.fulfill` answered `ok: true` having changed nothing, and
+/// `whatsapp_inbox.request.fulfilled` was published for a request nobody handled. And
+/// `expect_rows` does not reach a Tier-2 command either: the runtime gate counts rows over the
+/// command's own `sql` block, which here is EMPTY (the logic goes through this handler), so the
+/// intents arrive as `extra_ops` the gate never counts (ERPlora/tasks#26). The guard goes where
+/// there is context: here, before the intent is built.
+fn resolve_request_row(input: &Value) -> Result<&Value, DomainError> {
+    match read_rows(input, "whatsapp_inbox.requests.get") {
+        // Without the read there is no way to know which state the request is in, and guessing is
+        // exactly what this guard removes (ADR-0069 §1: a guard that degrades is not a guard).
+        None => Err(DomainError::new(
+            "whatsapp_inbox.request_unreadable",
+            "That request could not be read, so nothing was changed. Try again.",
+        )),
+        Some(rows) => rows.first().ok_or_else(|| {
+            DomainError::new(
+                "whatsapp_inbox.request_not_found",
+                "That request does not exist in this business.",
+            )
+        }),
+    }
+}
+
 /// Lógica pura: `{payload, context}` → intenciones, o error de negocio.
 pub fn fulfill_request_pure(input: Value) -> Result<Output, String> {
     let payload = input.get("payload").cloned().unwrap_or(Value::Null);
@@ -93,6 +127,21 @@ pub fn fulfill_request_pure(input: Value) -> Result<Output, String> {
              modificado"
                 .to_string(),
         );
+    }
+
+    // whatsapp_inbox#40 — only a CONFIRMED request can be marked as handled, and the refusal has
+    // to travel as a domain code instead of a silent no-op. The state guard of the WHERE in
+    // `_fulfill_transition.sql` stays as the race safety net; this is the answer the caller reads.
+    let request = match resolve_request_row(&input) {
+        Ok(row) => row,
+        Err(e) => return Ok(Output::new().with_error(e)),
+    };
+    let status = as_str(request.get("status").unwrap_or(&Value::Null));
+    if status != "confirmed" {
+        return Ok(Output::new().with_error(DomainError::new(
+            "whatsapp_inbox.request_not_fulfillable",
+            "Only a confirmed request can be marked as handled.",
+        )));
     }
 
     let mut params = Map::new();
@@ -206,6 +255,29 @@ pub fn parse_inbound_message_pure(input: Value) -> Result<Output, String> {
         validate_against_schema(&parsed_data, schema)?;
     }
 
+    // whatsapp_inbox#40 — the conversation has to EXIST before an intent that would emit
+    // `whatsapp_inbox.request.created` is built. The authoritative guard until now was the
+    // INSERT..SELECT of `_insert_request` (0 filas si la conversación no existe), but a Tier-2
+    // command has no `sql` block of its own, so nothing weighed that count: a ghost
+    // `conversation_id` committed, answered `ok` and published `request.created` for a request
+    // that does not exist (the phantom-event shape of #40, one door further in). Same pattern as
+    // `fulfill_request`: the state lives in a pre-loaded read (ADR-0069), the refusal is a code.
+    match read_rows(&input, "whatsapp_inbox.conversations.get") {
+        Some(rows) if !rows.is_empty() => {}
+        Some(_) => {
+            return Ok(Output::new().with_error(DomainError::new(
+                "whatsapp_inbox.conversation_not_found",
+                "That conversation does not exist in this business.",
+            )))
+        }
+        None => {
+            return Ok(Output::new().with_error(DomainError::new(
+                "whatsapp_inbox.conversation_unreadable",
+                "That conversation could not be read, so nothing was created. Try again.",
+            )))
+        }
+    }
+
     // confidence (0.0–1.0) → confidence_score, con clamp defensivo.
     let confidence = payload
         .get("confidence")
@@ -267,4 +339,136 @@ pub fn parse_inbound_message_pure(input: Value) -> Result<Output, String> {
     Ok(Output::new()
         .with_operation(Operation::sql("whatsapp_inbox._bump_request_counter", bump))
         .with_operation(Operation::sql("whatsapp_inbox._insert_request", insert)))
+}
+
+// ───────────────────── tests (pure functions, no DB, ADR-0069 §1) ─────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn request_row(status: &str) -> Value {
+        json!({
+            "id": "r1",
+            "reference_number": "WA-20260822-0001",
+            "request_type": "reservation",
+            "status": status,
+            "contact_name": "Ana",
+        })
+    }
+
+    fn conversation_row() -> Value {
+        json!({ "id": "c1", "contact_name": "Ana", "contact_phone": "+34600111222" })
+    }
+
+    /// `reads` arrive as `{query: [rows]}` under `context.reads` — the host's half of ADR-0069.
+    fn input_with(payload: Value, reads: Value) -> Value {
+        json!({ "payload": payload, "context": { "reads": reads, "now": "2026-08-22T09:00:00+00:00", "new_ids": ["n1"] } })
+    }
+
+    // ── fulfill_request: the state guard the WHERE alone could not give (whatsapp_inbox#40) ──
+
+    #[test]
+    fn fulfill_on_a_confirmed_request_builds_the_transition_intent() {
+        let input = input_with(
+            json!({ "request_id": "r1" }),
+            json!({ "whatsapp_inbox.requests.get": [request_row("confirmed")] }),
+        );
+        let out = fulfill_request_pure(input).expect("the happy path must not fail");
+        assert!(out.error.is_none(), "no refusal expected: {out:?}");
+        assert_eq!(out.operations.len(), 1);
+        assert_eq!(out.operations[0].command, "whatsapp_inbox._fulfill_transition");
+    }
+
+    #[test]
+    fn fulfill_on_a_pending_request_refuses_with_a_domain_error_and_no_operations() {
+        let input = input_with(
+            json!({ "request_id": "r1" }),
+            json!({ "whatsapp_inbox.requests.get": [request_row("pending_review")] }),
+        );
+        let out = fulfill_request_pure(input).expect("a refusal is an output, not a trap");
+        let error = out.error.expect("a pending request must be refused");
+        assert_eq!(error.code, "whatsapp_inbox.request_not_fulfillable");
+        assert!(
+            out.operations.is_empty(),
+            "a refusal must carry no intent: the host would execute it"
+        );
+    }
+
+    #[test]
+    fn fulfill_on_an_unknown_request_says_not_found() {
+        let input = input_with(
+            json!({ "request_id": "r-ghost" }),
+            json!({ "whatsapp_inbox.requests.get": [] }),
+        );
+        let out = fulfill_request_pure(input).expect("a refusal is an output, not a trap");
+        assert_eq!(out.error.expect("an empty read must refuse").code, "whatsapp_inbox.request_not_found");
+        assert!(out.operations.is_empty());
+    }
+
+    #[test]
+    fn fulfill_without_the_read_refuses_instead_of_guessing() {
+        // ADR-0069 §1: a guard that degrades is not a guard. No read → no way to know the state
+        // → refuse loudly, never fall back to "probably fine".
+        let input = input_with(json!({ "request_id": "r1" }), json!({}));
+        let out = fulfill_request_pure(input).expect("a refusal is an output, not a trap");
+        assert_eq!(out.error.expect("a missing read must refuse").code, "whatsapp_inbox.request_unreadable");
+        assert!(out.operations.is_empty());
+    }
+
+    #[test]
+    fn fulfill_still_refuses_the_cross_module_branch_before_anything_else() {
+        let input = input_with(
+            json!({ "request_id": "r1", "create_linked_object": true }),
+            json!({ "whatsapp_inbox.requests.get": [request_row("confirmed")] }),
+        );
+        assert!(fulfill_request_pure(input).is_err());
+    }
+
+    // ── parse_inbound_message: the conversation must exist BEFORE a phantom request.created ──
+
+    #[test]
+    fn parse_with_a_live_conversation_builds_both_intents() {
+        let input = input_with(
+            json!({
+                "conversation_id": "c1",
+                "parsed_data": { "service": "tinte", "when": "mañana a las 10" },
+                "confidence": 0.8,
+            }),
+            json!({ "whatsapp_inbox.conversations.get": [conversation_row()] }),
+        );
+        let out = parse_inbound_message_pure(input).expect("the happy path must not fail");
+        assert!(out.error.is_none(), "no refusal expected: {out:?}");
+        assert_eq!(out.operations.len(), 2);
+        assert_eq!(out.operations[0].command, "whatsapp_inbox._bump_request_counter");
+        assert_eq!(out.operations[1].command, "whatsapp_inbox._insert_request");
+    }
+
+    #[test]
+    fn parse_for_a_conversation_that_does_not_exist_refuses_with_no_intents() {
+        // Without this guard the INSERT..SELECT of `_insert_request` writes 0 rows, the host
+        // commits, and `whatsapp_inbox.request.created` is published for a request that does
+        // not exist — the phantom-event shape of whatsapp_inbox#40, one door further in.
+        let input = input_with(
+            json!({
+                "conversation_id": "c-ghost",
+                "parsed_data": { "service": "tinte" },
+            }),
+            json!({ "whatsapp_inbox.conversations.get": [] }),
+        );
+        let out = parse_inbound_message_pure(input).expect("a refusal is an output, not a trap");
+        let error = out.error.expect("a ghost conversation must be refused");
+        assert_eq!(error.code, "whatsapp_inbox.conversation_not_found");
+        assert!(out.operations.is_empty());
+    }
+
+    #[test]
+    fn parse_without_the_read_still_validates_the_payload_shape_first() {
+        // Payload validation is payload validation; the read guard answers a different question.
+        let input = input_with(json!({ "conversation_id": "c1" }), json!({}));
+        assert!(
+            parse_inbound_message_pure(input).is_err(),
+            "a missing parsed_data must stay a payload error, not a read refusal"
+        );
+    }
 }

@@ -12,9 +12,10 @@
 CREATE UNIQUE INDEX IF NOT EXISTS uq_wa_conv_hub_contact
   ON whatsapp_inbox_conversation (hub_id, wa_contact_id);
 
--- Límite mensual de mensajes entrantes de la capa gratuita.
--- 0 = sin límite (plan de pago o sin enforcement). El valor concreto lo fija
--- el marketplace/billing del Cloud Portal al provisionar el módulo (decisión de
--- producto/pricing pendiente de fijar, documentar en decision-log cuando se decida).
+-- Monthly inbound-message allowance of this hub's plan. 0 = no cap (unmetered plan, or a hub
+-- billing has not spoken about yet). The number is decided in the Cloud — the SaaS resolves this
+-- module's tier and its quota and meters usage against it (ADR-0013/ADR-0032) — and reaches the
+-- hub through ONE door, `whatsapp_inbox._quota.set` (`internal: true`, whatsapp_inbox#37). No
+-- screen, API key or assistant writes this column: it is the invoice, not a preference.
 ALTER TABLE whatsapp_inbox_settings
   ADD COLUMN free_tier_monthly_limit INTEGER NOT NULL DEFAULT 0;

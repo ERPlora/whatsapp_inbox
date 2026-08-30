@@ -1,7 +1,8 @@
 {
   "id": "whatsapp_inbox",
   "name": "WhatsApp Inbox",
-  "version": "2.1.11",
+  "version": "2.1.29",
+  "description": "WhatsApp conversations, inbound requests, message templates and channel settings.",
   "agent": {
     "description": "Manages WhatsApp conversations, inbound requests, message templates, and channel settings: list and read conversations/messages, assign conversations, approve or reject requests, and configure the WhatsApp channel.",
     "keywords": [
@@ -20,7 +21,6 @@
   ],
   "permissions": [
     "whatsapp_inbox.view_conversation",
-    "whatsapp_inbox.send_message",
     "whatsapp_inbox.view_request",
     "whatsapp_inbox.change_request",
     "whatsapp_inbox.delete_request",
@@ -33,12 +33,10 @@
     ],
     "manager": [
       "whatsapp_inbox.change_request",
-      "whatsapp_inbox.send_message",
       "whatsapp_inbox.view_conversation",
       "whatsapp_inbox.view_request"
     ],
     "employee": [
-      "whatsapp_inbox.send_message",
       "whatsapp_inbox.view_conversation",
       "whatsapp_inbox.view_request"
     ]
@@ -48,26 +46,38 @@
       "id": "inbox",
       "label": "Inbox",
       "icon": "chatbubbles-outline",
-      "component": "erp-whatsapp-inbox-inbox"
+      "component": "erp-whatsapp-inbox-inbox",
+      "permission": "whatsapp_inbox.view_conversation"
     },
     {
       "id": "requests",
       "label": "Requests",
       "icon": "clipboard-outline",
-      "component": "erp-whatsapp-inbox-requests"
+      "component": "erp-whatsapp-inbox-requests",
+      "permission": "whatsapp_inbox.view_request"
     },
     {
       "id": "templates",
       "label": "Templates",
       "icon": "document-text-outline",
-      "component": "erp-whatsapp-inbox-templates"
+      "component": "erp-whatsapp-inbox-templates",
+      "permission": "whatsapp_inbox.manage_settings"
+    },
+    {
+      "id": "settings",
+      "label": "Settings",
+      "icon": "settings-outline",
+      "component": "erp-whatsapp-inbox-settings",
+      "permission": "whatsapp_inbox.manage_settings"
     }
   ],
   "migrations": {
-    "sqlite": [
-      "migrations/sqlite/001_init.sql",
-      "migrations/sqlite/002_free_tier.sql",
-      "migrations/sqlite/003_request_counter.sql"
+    "postgres": [
+      "migrations/postgres/001_init.sql",
+      "migrations/postgres/002_free_tier.sql",
+      "migrations/postgres/003_request_counter.sql",
+      "migrations/postgres/004_booking_handoff.sql",
+      "migrations/postgres/005_message_dedup.sql"
     ]
   },
   "queries": {
@@ -156,9 +166,6 @@
         "default_sort": "created_at",
         "default_dir": "desc",
         "filters": {
-          "conversation_id": {
-            "op": "eq"
-          },
           "direction": {
             "op": "eq"
           },
@@ -326,6 +333,13 @@
       "ai": {
         "description": "Retrieves the current WhatsApp channel configuration"
       }
+    },
+    "whatsapp_inbox.usage.get": {
+      "permission": "whatsapp_inbox.manage_settings",
+      "sql": "queries/usage_get.sql",
+      "ai": {
+        "description": "Inbound WhatsApp messages consumed this calendar month and the monthly allowance of the plan (0 = no cap). Read-only: the allowance is set by billing, never from the hub."
+      }
     }
   },
   "commands": {
@@ -339,6 +353,12 @@
       "emit": [
         "whatsapp_inbox.conversation.assigned"
       ],
+      "expect_rows": {
+        "op": "min",
+        "n": 1,
+        "error": "whatsapp_inbox.conversation_not_found",
+        "message": "That conversation does not exist in this business."
+      },
       "ai": {
         "description": "Assigns a WhatsApp conversation to an agent or team"
       }
@@ -353,6 +373,12 @@
       "emit": [
         "whatsapp_inbox.request.approved"
       ],
+      "expect_rows": {
+        "op": "min",
+        "n": 1,
+        "error": "whatsapp_inbox.request_not_pending",
+        "message": "That request is not waiting for review: it does not exist in this business, or it was already approved, rejected or handled."
+      },
       "ai": {
         "description": "Approves an inbound WhatsApp request"
       }
@@ -367,6 +393,12 @@
       "emit": [
         "whatsapp_inbox.request.rejected"
       ],
+      "expect_rows": {
+        "op": "min",
+        "n": 1,
+        "error": "whatsapp_inbox.request_not_pending",
+        "message": "That request is not waiting for review: it does not exist in this business, or it was already approved, rejected or handled."
+      },
       "ai": {
         "description": "Rejects an inbound WhatsApp request"
       }
@@ -381,6 +413,12 @@
       "emit": [
         "whatsapp_inbox.request.deleted"
       ],
+      "expect_rows": {
+        "op": "min",
+        "n": 1,
+        "error": "whatsapp_inbox.request_not_deletable",
+        "message": "That request cannot be deleted: it does not exist in this business, or it was fulfilled and has to stay for audit."
+      },
       "ai": {
         "description": "Soft-deletes a WhatsApp request; already-fulfilled requests cannot be deleted"
       }
@@ -393,11 +431,20 @@
         "file": "dist/handler.wasm",
         "function": "fulfill_request"
       },
+      "reads": [
+        {
+          "query": "whatsapp_inbox.requests.get",
+          "params": {
+            "request_id": "payload.request_id"
+          },
+          "required": true
+        }
+      ],
       "emit": [
         "whatsapp_inbox.request.fulfilled"
       ],
       "ai": {
-        "description": "Marks a WhatsApp request as fulfilled and executes its fulfillment logic"
+        "description": "Marks a CONFIRMED WhatsApp request as fulfilled — a note that a person handled it. It creates nothing in another module and never has: cross-module dispatch from a handler is forbidden by design (hub#659, ADR-0283 §7), so `create_linked_object: true` returns `cross_module_dispatch_unsupported` and changes nothing. To materialise a request, use a flow with an explicit grant, or the booking panel of the Requests screen for an appointment."
       }
     },
     "whatsapp_inbox._fulfill_transition": {
@@ -405,6 +452,24 @@
       "sql": [
         "commands/_fulfill_transition.sql"
       ]
+    },
+    "whatsapp_inbox._link_fulfilled": {
+      "permission": "whatsapp_inbox.change_request",
+      "internal": true,
+      "transaction": true,
+      "sql": [
+        "commands/_link_fulfilled.sql"
+      ],
+      "schema": "schemas/link_fulfilled.json"
+    },
+    "whatsapp_inbox._booking_failed": {
+      "permission": "whatsapp_inbox.change_request",
+      "internal": true,
+      "transaction": true,
+      "sql": [
+        "commands/_booking_failed.sql"
+      ],
+      "schema": "schemas/booking_failed.json"
     },
     "whatsapp_inbox.requests.ingest": {
       "permission": "whatsapp_inbox.manage_connections",
@@ -414,6 +479,15 @@
         "file": "dist/handler.wasm",
         "function": "parse_inbound_message"
       },
+      "reads": [
+        {
+          "query": "whatsapp_inbox.conversations.get",
+          "params": {
+            "conversation_id": "payload.conversation_id"
+          },
+          "required": true
+        }
+      ],
       "emit": [
         "whatsapp_inbox.request.created"
       ],
@@ -457,6 +531,12 @@
       "emit": [
         "whatsapp_inbox.template.updated"
       ],
+      "expect_rows": {
+        "op": "min",
+        "n": 1,
+        "error": "whatsapp_inbox.template_not_found",
+        "message": "That template does not exist in this business."
+      },
       "ai": {
         "description": "Updates the content of an existing WhatsApp message template"
       }
@@ -471,6 +551,12 @@
       "emit": [
         "whatsapp_inbox.template.deleted"
       ],
+      "expect_rows": {
+        "op": "min",
+        "n": 1,
+        "error": "whatsapp_inbox.template_not_found",
+        "message": "That template does not exist in this business."
+      },
       "ai": {
         "description": "Soft-deletes a WhatsApp message template"
       }
@@ -491,6 +577,20 @@
         "description": "Ingests an inbound WhatsApp message: upserts the conversation, persists the message, and emits whatsapp_inbox.message.received for other modules (e.g. communications inbox) to react. Enforces the free-tier monthly message limit when configured."
       }
     },
+    "whatsapp_inbox._ingest_inbound_message": {
+      "permission": "whatsapp_inbox.manage_connections",
+      "internal": true,
+      "transaction": true,
+      "sql": [
+        "commands/inbound_conversation_upsert.sql",
+        "commands/inbound_message_insert.sql",
+        "commands/inbound_conversation_stats.sql"
+      ],
+      "schema": "schemas/ingest_inbound_message.json",
+      "emit": [
+        "whatsapp_inbox.message.received"
+      ]
+    },
     "whatsapp_inbox.settings.upsert": {
       "permission": "whatsapp_inbox.manage_settings",
       "transaction": true,
@@ -504,11 +604,30 @@
       "ai": {
         "description": "Creates or updates the WhatsApp channel configuration"
       }
+    },
+    "whatsapp_inbox._quota.set": {
+      "permission": "whatsapp_inbox.manage_connections",
+      "internal": true,
+      "transaction": true,
+      "sql": [
+        "commands/quota_set.sql"
+      ],
+      "schema": "schemas/quota_set.json"
     }
   },
   "events": {
-    "listen": {},
-    "emit": [
+    "listen": {
+      "hub.whatsapp.message_received": {
+        "command": "whatsapp_inbox._ingest_inbound_message"
+      },
+      "appointments.booking_request.fulfilled": {
+        "command": "whatsapp_inbox._link_fulfilled"
+      },
+      "appointments.booking_request.failed": {
+        "command": "whatsapp_inbox._booking_failed"
+      }
+    },
+    "emits": [
       "whatsapp_inbox.message.received",
       "whatsapp_inbox.request.created",
       "whatsapp_inbox.conversation.assigned",

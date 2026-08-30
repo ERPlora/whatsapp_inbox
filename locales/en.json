@@ -9,6 +9,9 @@
     },
     "templates": {
       "label": "Templates"
+    },
+    "settings": {
+      "label": "Settings"
     }
   },
   "ui": {
@@ -23,6 +26,7 @@
     "colReference": "Reference",
     "colType": "Type",
     "colConfidence": "Confidence",
+    "colFlag": "Attention",
     "colActions": "Actions",
     "colName": "Name",
     "colLanguage": "Language",
@@ -69,6 +73,68 @@
     "placeholderCategory": "Category…",
     "placeholderBody": "Message body",
     "saving": "Saving…",
-    "add": "Add"
+    "add": "Add",
+    "bookingOpen": "Book",
+    "bookingClose": "Close",
+    "bookingRetry": "Book again",
+    "bookingFailedTitle": "The booking did not go through",
+    "openConversation": "Open",
+    "closeView": "Close",
+    "emptyThread": "No messages in this conversation yet.",
+    "attachment": "Attachment",
+    "assignedTo": "Assigned to",
+    "assignPlaceholder": "Employee id (empty = nobody)",
+    "assign": "Assign",
+    "unassign": "Unassign",
+    "noReplyHere": "Replies do not go out from this screen: the hub answers WhatsApp through a flow's notify step, which is where the channel credentials live.",
+    "errLoadThread": "Could not load the conversation",
+    "errAssign": "Could not assign the conversation",
+    "delete": "Delete",
+    "confirmDeleteRequest": "Delete this request? A fulfilled request cannot be deleted.",
+    "errDeleteRequest": "Could not delete the request",
+    "markFulfilled": "Mark as handled",
+    "confirmFulfil": "Mark this request as handled? Nothing is created in another module — it is a note that somebody dealt with it.",
+    "errFulfil": "Could not mark the request as handled",
+    "edit": "Edit",
+    "save": "Save",
+    "cancel": "Cancel",
+    "editTemplate": "Edit template",
+    "errUpdateTemplate": "Could not update the template",
+    "confirmDeleteTemplate": "Delete this template?",
+    "errDeleteTemplate": "Could not delete the template",
+    "settingsTitle": "Channel settings",
+    "settingsSaved": "Settings saved.",
+    "sectionChannel": "Channel",
+    "sectionRequests": "Incoming requests",
+    "labelMonthlyAllowance": "Inbound messages included each month",
+    "allowanceUnlimited": "No cap on this plan",
+    "helpAllowance": "Set by the plan you bought for this module. It is counted per calendar month and it is not edited here.",
+    "helpChannelLivesInAccount": "The phone number, the display name, the quality rating and the templates Meta approved live in your ERPlora account — the hub never stores the channel credentials.",
+    "labelApprovalMode": "A request the assistant reads",
+    "approvalAuto": "Is confirmed straight away",
+    "approvalManual": "Waits in review",
+    "helpApprovalMode": "The assistant reads a message and files what the customer asked for. «Waits in review» leaves it on the Requests screen for a person to approve; «confirmed straight away» accepts what the assistant understood.",
+    "helpConversationLivesInFlow": "The greeting, the automatic reply and the out-of-hours text are part of the flow that answers, not of this screen: edit them in Automations, where they can be changed without republishing the module.",
+    "errorLoadSettings": "Could not load the channel settings",
+    "errorSave": "Could not save the channel settings",
+    "open": "Open",
+    "requestDetail": "Request",
+    "labelParsedData": "What the assistant understood",
+    "labelNotes": "Notes",
+    "labelLinkedObject": "Created record",
+    "errLoadRequest": "Could not load the request",
+    "labelUsedThisMonth": "Used this month"
+  },
+  "errors": {
+    "whatsapp_inbox": {
+      "request_not_pending": "That request is not waiting for review: it does not exist in this business, or it was already approved, rejected or handled.",
+      "request_not_deletable": "That request cannot be deleted: it does not exist in this business, or it was fulfilled and has to stay for audit.",
+      "conversation_not_found": "That conversation does not exist in this business.",
+      "template_not_found": "That template does not exist in this business.",
+      "request_not_fulfillable": "Only a confirmed request can be marked as handled.",
+      "request_not_found": "That request does not exist in this business.",
+      "request_unreadable": "That request could not be read, so nothing was changed. Try again.",
+      "conversation_unreadable": "That conversation could not be read, so nothing was created. Try again."
+    }
   }
 }

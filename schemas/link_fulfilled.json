@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "whatsapp_inbox._link_fulfilled",
+  "description": "The payload of `appointments.booking_request.fulfilled`, verbatim. A manifest listener has no mapping layer — the relay hands the event payload straight to the command — so this schema is not free to describe a shape of its own, and `additionalProperties` stays TRUE because the runtime stamps every event payload with its system params (`hub_id`, `now`, `new_id`, the business identity…). Anything stricter dead-letters every booking answer, which is the silent failure appointments#38 exists to remove.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["request_id", "appointment_id"],
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The request that was approved. It is the correlation of the whole hand-over: it travelled out in `whatsapp_inbox.request.approved` and comes back untouched."
+    },
+    "appointment_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The object that now exists. Stored as `linked_object_id`, which is what lets the inbox open the booking it produced."
+    },
+    "module": {
+      "type": "string",
+      "description": "Who booked it (`appointments`). Stored as `linked_module` so the answer is not hard-wired to one module: a table reservation would answer the same way."
+    }
+  }
+}

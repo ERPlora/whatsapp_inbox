@@ -1,5 +1,6 @@
 {
   "name": "Bandeja de WhatsApp",
+  "description": "Conversaciones de WhatsApp, solicitudes entrantes, plantillas de mensaje y ajustes del canal.",
   "navigation": {
     "inbox": {
       "label": "Bandeja de entrada"
@@ -9,6 +10,9 @@
     },
     "templates": {
       "label": "Plantillas"
+    },
+    "settings": {
+      "label": "Ajustes"
     }
   },
   "ui": {
@@ -23,6 +27,7 @@
     "colReference": "Referencia",
     "colType": "Tipo",
     "colConfidence": "Confianza",
+    "colFlag": "Aviso",
     "colActions": "Acciones",
     "colName": "Nombre",
     "colLanguage": "Idioma",
@@ -69,6 +74,68 @@
     "placeholderCategory": "Categoría…",
     "placeholderBody": "Cuerpo del mensaje",
     "saving": "Guardando…",
-    "add": "Añadir"
+    "add": "Añadir",
+    "bookingOpen": "Reservar",
+    "bookingClose": "Cerrar",
+    "bookingRetry": "Reservar de nuevo",
+    "bookingFailedTitle": "La reserva no se pudo hacer",
+    "openConversation": "Abrir",
+    "closeView": "Cerrar",
+    "emptyThread": "Esta conversación todavía no tiene mensajes.",
+    "attachment": "Adjunto",
+    "assignedTo": "Asignada a",
+    "assignPlaceholder": "Id del empleado (vacío = nadie)",
+    "assign": "Asignar",
+    "unassign": "Desasignar",
+    "noReplyHere": "Desde esta pantalla no se responde: el hub contesta por WhatsApp con el paso «notify» de un flujo, que es donde viven las credenciales del canal.",
+    "errLoadThread": "No se pudo cargar la conversación",
+    "errAssign": "No se pudo asignar la conversación",
+    "delete": "Borrar",
+    "confirmDeleteRequest": "¿Borrar esta solicitud? Una solicitud cumplida no se puede borrar.",
+    "errDeleteRequest": "No se pudo borrar la solicitud",
+    "markFulfilled": "Marcar como atendida",
+    "confirmFulfil": "¿Marcar la solicitud como atendida? No se crea nada en otro módulo: es una nota de que alguien la resolvió.",
+    "errFulfil": "No se pudo marcar la solicitud como atendida",
+    "edit": "Editar",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "editTemplate": "Editar plantilla",
+    "errUpdateTemplate": "No se pudo actualizar la plantilla",
+    "confirmDeleteTemplate": "¿Borrar esta plantilla?",
+    "errDeleteTemplate": "No se pudo borrar la plantilla",
+    "settingsTitle": "Ajustes del canal",
+    "settingsSaved": "Ajustes guardados.",
+    "sectionChannel": "Canal",
+    "sectionRequests": "Peticiones entrantes",
+    "labelMonthlyAllowance": "Mensajes entrantes incluidos al mes",
+    "allowanceUnlimited": "Sin tope en este plan",
+    "helpAllowance": "Lo fija el plan que contrataste para este módulo. Se cuenta por mes natural y no se edita aquí.",
+    "helpChannelLivesInAccount": "El número, el nombre visible, la calificación de calidad y las plantillas aprobadas por Meta viven en tu cuenta de ERPlora — el hub no guarda las credenciales del canal.",
+    "labelApprovalMode": "Una petición que lee el asistente",
+    "approvalAuto": "Se confirma directamente",
+    "approvalManual": "Queda en revisión",
+    "helpApprovalMode": "El asistente lee el mensaje y apunta lo que pide el cliente. «Queda en revisión» la deja en la pantalla de Peticiones para que una persona la apruebe; «se confirma directamente» acepta lo que entendió el asistente.",
+    "helpConversationLivesInFlow": "El saludo, la respuesta automática y el texto de fuera de horario son parte del flujo que contesta, no de esta pantalla: se editan en Automatizaciones, donde se cambian sin republicar el módulo.",
+    "errorLoadSettings": "No se han podido cargar los ajustes del canal",
+    "errorSave": "No se han podido guardar los ajustes del canal",
+    "open": "Abrir",
+    "requestDetail": "Petición",
+    "labelParsedData": "Lo que entendió el asistente",
+    "labelNotes": "Notas",
+    "labelLinkedObject": "Registro creado",
+    "errLoadRequest": "No se ha podido cargar la petición",
+    "labelUsedThisMonth": "Consumidos este mes"
+  },
+  "errors": {
+    "whatsapp_inbox": {
+      "request_not_pending": "Esa solicitud no está pendiente de revisión: no existe en este negocio, o ya se aprobó, rechazó o atendió.",
+      "request_not_deletable": "Esa solicitud no se puede borrar: no existe en este negocio, o está cumplida y debe conservarse por auditoría.",
+      "conversation_not_found": "Esa conversación no existe en este negocio.",
+      "template_not_found": "Esa plantilla no existe en este negocio.",
+      "request_not_fulfillable": "Solo una solicitud confirmada se puede marcar como atendida.",
+      "request_not_found": "Esa solicitud no existe en este negocio.",
+      "request_unreadable": "No se ha podido leer la solicitud, así que no se ha cambiado nada. Prueba otra vez.",
+      "conversation_unreadable": "No se ha podido leer la conversación, así que no se ha creado nada. Prueba otra vez."
+    }
   }
 }
