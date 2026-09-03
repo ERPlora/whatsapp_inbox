@@ -21,7 +21,7 @@
       "channel": "whatsapp",
       "to": {
         "query": "whatsapp_inbox.conversations.list",
-        "params": { "wa_contact_id": "input.from" },
+        "params": { "f_wa_contact_id": "input.from" },
         "field": "contact_phone"
       },
       "template": "",
