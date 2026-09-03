@@ -21,10 +21,12 @@ of them surface at 3 AM in front of a customer:
    declared filter (`f_<col>_from`/`_to` when the filter is a `range`), the `:name` binds its own
    SQL references, and the properties of its `schema`. Anything else is not a filter: before
    hub#1201 the engine DROPPED it in silence and `queries::execute` answered `200 ok` with the
-   WHOLE list, so a `notify` step resolving its recipient through that query wrote to the first
-   conversation of the hub instead of the customer who had just messaged; since hub#1201 the same
-   call is refused with `unknown_filter` and the run dies. Both readings are wrong, and neither
-   shows up in the document, in the grants or in the names — every name involved exists.
+   WHOLE list, so a `notify` step resolving its recipient through that query died on
+   `recipient_ambiguous` the moment the hub held a second conversation (`recipient_of` has
+   refused several rows since hub#821 — with exactly one it only worked by luck, because the
+   sender's just-upserted conversation WAS the list); since hub#1201 the same call is refused
+   with `unknown_filter` before the read runs. Both readings kill the acknowledgement, and
+   neither shows up in the document, in the grants or in the names — every name involved exists.
 5. **The translations drift.** `*.en.flow.json` is the source and `*.es.flow.json` is what ships
    with the Spanish blueprint. If they stop being the same automation — a tool added to one, a step
    renamed in the other — then «the Spanish one» quietly became a different product. Only the human
@@ -234,11 +236,21 @@ def addressed_queries(doc):
             to = step.get("to") or {}
             if isinstance(to.get("query"), str):
                 out.append(
-                    (step.get("id"), to["query"], sorted(to.get("params") or {}), "to.params")
+                    (
+                        step.get("id"),
+                        to["query"],
+                        sorted(to.get("params") or {}),
+                        "to.params",
+                    )
                 )
         elif step.get("kind") == "query" and isinstance(step.get("query"), str):
             out.append(
-                (step.get("id"), step["query"], sorted(step.get("params") or {}), "params")
+                (
+                    step.get("id"),
+                    step["query"],
+                    sorted(step.get("params") or {}),
+                    "params",
+                )
             )
     return out
 
