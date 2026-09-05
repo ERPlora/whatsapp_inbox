@@ -203,12 +203,20 @@ def check_manifest_declares_the_gates() -> None:
                 f"sound over exactly ONE guarded statement ({[sql_file]})"
             )
 
-        # A stable code only helps if the screen can say it in the user's language (ADR-0055).
+        # A stable code only helps if the screen can say it in the user's language (ADR-0055), and
+        # only if it is filed where a reader can find it: the catalogue is FLAT since ADR-0398, the
+        # key being the COMPLETE code. The hub SDK indexes first-level keys only (hub#1570/#1573),
+        # so a sentence under the retired nested shape is a sentence no till can reach.
         for lang in ("en", "es"):
             catalog = json.loads((MODULE_DIR / "locales" / f"{lang}.json").read_text())
-            key = code.partition(".")[2]
-            if key not in catalog.get("errors", {}).get("whatsapp_inbox", {}):
+            if not isinstance((catalog.get("errors") or {}).get(code), str):
                 fail(f"locales/{lang}.json has no `errors.{code}` — the UI would show the raw code")
+
+        # The other half of ADR-0398: the manifest is the catalogue of what this module RAISES, and
+        # it is STRICT. A code the gate answers with and nobody declared is a broken contract — the
+        # install is rejected and the runtime calls it `unexpected`.
+        if code not in (MANIFEST.get("errors") or {}):
+            fail(f"module.json does not declare `{code}`, which `{command}` answers with (ADR-0398)")
 
 
 # ── 2. The Postgres half: when the SQL touches a row and when it must not ─────────────────────

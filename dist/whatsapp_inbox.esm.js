@@ -1707,6 +1707,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     this.page = 0;
     this.searchable = false;
     this.sortDir = "asc";
+    this.filterValues = {};
     this.title = "";
     this.views = false;
     this.exportable = false;
@@ -1724,6 +1725,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     this.clientSortDir = "asc";
     this.clientFilters = {};
     this.filterDraft = {};
+    this.serverFilters = {};
     this.panel = "none";
     this.viewMode = "table";
     this.viewChosenByUser = false;
@@ -2336,11 +2338,54 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
   get hasFilterRow() {
     return this.filterColumns.length > 0;
   }
-  /** Nº de filtros activos (modo cliente) → badge del botón Filtros. */
+  /** Nº de filtros activos → badge del botón Filtros. En servidor cuenta `filterValues` (#106): sin
+   *  esto el embudo no daba NINGUNA señal de que la lista venía acotada. */
   get activeFilterCount() {
+    if (this.serverSide) {
+      return Object.keys(this.serverFilters).filter((k2) => this.serverFilterState(k2) !== void 0).length;
+    }
     return Object.values(this.clientFilters).filter(
       (f3) => f3.values && f3.values.size > 0 || f3.from || f3.to
     ).length;
+  }
+  // ── Estado de filtro VISIBLE (#106) ──────────────────────────────────────────────────────────
+  /** Traduce un valor de `filterValues` (la forma que emite `filterChange`) a la forma interna que
+   *  usan los `render*Filter`. `undefined` = ese filtro no está puesto. */
+  serverFilterState(key) {
+    const raw = this.serverFilters[key];
+    if (raw === void 0 || raw === null || raw === "") return void 0;
+    if (Array.isArray(raw)) {
+      const values = raw.filter((v3) => v3 !== null && v3 !== void 0 && v3 !== "").map((v3) => String(v3));
+      return values.length ? { values: new Set(values) } : void 0;
+    }
+    if (typeof raw === "object") {
+      const range = raw;
+      const from = range.from === null || range.from === void 0 || range.from === "" ? void 0 : String(range.from);
+      const to = range.to === null || range.to === void 0 || range.to === "" ? void 0 : String(range.to);
+      return from !== void 0 || to !== void 0 ? { from, to } : void 0;
+    }
+    return { values: /* @__PURE__ */ new Set([String(raw)]) };
+  }
+  /** Estado de filtro efectivo de una columna: servidor → `filterValues`/espejo; cliente → memoria. */
+  filterStateOf(key) {
+    return this.serverSide ? this.serverFilterState(key) : this.clientFilters[key];
+  }
+  /** Fija (o borra) el valor visible de un filtro en el espejo de servidor. */
+  setServerFilter(key, value) {
+    const next = { ...this.serverFilters };
+    const empty = value === void 0 || value === null || value === "" || Array.isArray(value) && value.length === 0;
+    if (empty) delete next[key];
+    else next[key] = value;
+    this.serverFilters = next;
+  }
+  /** Fija UN extremo de un rango en el espejo. Los dos extremos viajan en eventos SEPARADOS
+   *  (`{from}` y luego `{to}`), así que aquí se MEZCLA: reemplazar borraría el otro extremo. */
+  setServerRangeEdge(key, edge, value) {
+    const prev = this.serverFilters[key];
+    const base = prev && typeof prev === "object" && !Array.isArray(prev) ? { ...prev } : {};
+    base[edge] = value;
+    const alive = (v3) => v3 !== void 0 && v3 !== null && v3 !== "";
+    this.setServerFilter(key, alive(base.from) || alive(base.to) ? base : void 0);
   }
   /** Valor crudo de una columna para ordenar/filtrar (usa format si lo hay, si no row[key]). */
   rawValue(col, row) {
@@ -2430,15 +2475,18 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
   }
   onFilterInput(col, ev) {
     const value = ev.target.value ?? "";
+    this.setServerFilter(col.key, value);
     this.emit("filterChange", { col: col.key, value });
   }
   onRangeInput(col, edge, ev) {
     const raw = ev.target.value ?? "";
     const v3 = raw === "" ? "" : Number(raw);
+    this.setServerRangeEdge(col.key, edge, v3);
     this.emit("filterChange", { col: col.key, value: { [edge]: v3 } });
   }
   onDateRangeInput(col, edge, ev) {
     const v3 = ev.target.value ?? "";
+    this.setServerRangeEdge(col.key, edge, v3);
     this.emit("filterChange", { col: col.key, value: { [edge]: v3 } });
   }
   // ── Filtros EN LÍNEA (toolbar) ────────────────────────────────────────────────────────────
@@ -2458,7 +2506,9 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
   // `filterChange`; en cliente escribe `clientFilters` (multiselect ⇒ filtra por inclusión).
   onFilterSelect(col, value, multi) {
     if (this.serverSide) {
-      this.emit("filterChange", { col: col.key, value: value ?? (multi ? [] : "") });
+      const next = value ?? (multi ? [] : "");
+      this.setServerFilter(col.key, next);
+      this.emit("filterChange", { col: col.key, value: next });
       return;
     }
     if (multi) {
@@ -2472,6 +2522,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
   onInlineRange(col, edge, ev) {
     const v3 = ev.target.value ?? "";
     if (this.serverSide) {
+      this.setServerRangeEdge(col.key, edge, v3);
       this.emit("filterChange", { col: col.key, value: { [edge]: v3 } });
       return;
     }
@@ -2502,6 +2553,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
    */
   willUpdate(changed) {
     this.applyInitialView();
+    if (changed.has("filterValues")) this.serverFilters = { ...this.filterValues ?? {} };
     if (!this.serverSide && changed.has("rows") && this.mobileShown !== 0) this.mobileShown = 0;
   }
   applyInitialView() {
@@ -2524,9 +2576,11 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
   renderFilterControl(col) {
     if (!col.filterable) return A;
     const type = col.filterType ?? "text";
+    const f3 = this.filterStateOf(col.key);
     if (type === "select" || type === "multiselect") {
       const multi = type === "multiselect";
       const opts = col.options ?? this.distinctValues(col).map((v3) => ({ value: v3, label: v3 }));
+      const current = this.selectValue(f3, multi);
       return b2`
         <ion-select
           label=${col.header}
@@ -2536,6 +2590,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
           interface="modal"
           .interfaceOptions=${{ cssClass: "ok-overlay" }}
           placeholder=${this.t.select}
+          .value=${current}
           @ionChange=${(e5) => this.onFilterSelect(col, e5.detail.value, multi)}
         >
           ${multi ? A : b2`<ion-select-option value="">${this.t.select}</ion-select-option>`}
@@ -2551,8 +2606,10 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
           <span class="flabel">${col.header}</span>
           <div class="frange">
             <ion-input type=${t5} fill="outline" mode="md" placeholder=${type === "daterange" ? this.t.from : this.t.gte}
+              .value=${f3?.from ?? ""}
               @ionInput=${(e5) => onEdge(col, "from", e5)}></ion-input>
             <ion-input type=${t5} fill="outline" mode="md" placeholder=${type === "daterange" ? this.t.to : this.t.lte}
+              .value=${f3?.to ?? ""}
               @ionInput=${(e5) => onEdge(col, "to", e5)}></ion-input>
           </div>
         </div>
@@ -2566,9 +2623,17 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
         label=${col.header}
         label-placement="stacked"
         placeholder=${this.t.filterPlaceholder}
+        .value=${this.selectValue(f3, false)}
         @ionInput=${(e5) => this.onFilterInput(col, e5)}
       ></ion-input>
     `;
+  }
+  /** Valor para un control de un solo valor (`ion-select`/`ion-input`) o multi (`ion-select
+   *  multiple`) a partir del estado de filtro interno. '' / [] = sin filtro. */
+  selectValue(f3, multi) {
+    const values = [...f3?.values ?? /* @__PURE__ */ new Set()];
+    if (multi) return values;
+    return values.length ? values[0] : "";
   }
   // Controles de filtro COMPACTOS para la toolbar (modo `inlineFilters`). Solo select y rango de
   // fechas (los del screenshot); el resto de tipos siguen disponibles vía el drawer si no se activa
@@ -2583,11 +2648,11 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
   }
   renderInlineFilter(col) {
     const type = col.filterType ?? "text";
-    const f3 = this.clientFilters[col.key];
+    const f3 = this.filterStateOf(col.key);
     if (type === "select" || type === "multiselect") {
       const multi = type === "multiselect";
       const opts = col.options ?? this.distinctValues(col).map((v3) => ({ value: v3, label: v3 }));
-      const current = multi ? [...f3?.values ?? /* @__PURE__ */ new Set()] : f3?.values && f3.values.size ? [...f3.values][0] : "";
+      const current = this.selectValue(f3, multi);
       return b2`
         <ion-select
           class="tk-filter"
@@ -2653,6 +2718,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
       (a3) => {
         const loading = a3.loading?.(row) === true;
         const disabled = loading || a3.disabled?.(row) === true;
+        const label = typeof a3.label === "function" ? a3.label(row) : a3.label;
         return b2`
             <ion-button
               size="small"
@@ -2660,11 +2726,11 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
               color=${a3.color ?? "medium"}
               ?disabled=${disabled}
               aria-disabled=${disabled ? "true" : A}
-              aria-label=${a3.label}
-              title=${a3.label}
+              aria-label=${label}
+              title=${label}
               @click=${() => this.emit("rowAction", { actionId: a3.id, row })}
             >
-              ${loading ? b2`<ion-spinner slot="icon-only" name="dots"></ion-spinner>` : a3.icon ? b2`<ion-icon slot="icon-only" .icon=${okIcon(a3.icon)}></ion-icon>` : a3.label}
+              ${loading ? b2`<ion-spinner slot="icon-only" name="dots"></ion-spinner>` : a3.icon ? b2`<ion-icon slot="icon-only" .icon=${okIcon(a3.icon)}></ion-icon>` : label}
             </ion-button>
           `;
       }
@@ -2785,7 +2851,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
                             ${this.toolButton("grid-outline", this.viewMode === "cards", () => this.setViewMode("cards"), this.t.viewCards)}
                           </span>
                         ` : A}
-                    ${this.hasFilterRow && !this.inlineFilters ? this.toolButton("funnel-outline", this.panel === "filters" || this.activeFilterCount > 0, () => this.toggle("filters"), this.t.filters, this.serverSide ? void 0 : this.activeFilterCount) : A}
+                    ${this.hasFilterRow && !this.inlineFilters ? this.toolButton("funnel-outline", this.panel === "filters" || this.activeFilterCount > 0, () => this.toggle("filters"), this.t.filters, this.activeFilterCount) : A}
                     ${this.effImport ? b2`
                           ${this.toolButton("cloud-upload-outline", false, () => this.renderRoot.querySelector(".tk-file")?.click(), this.t.importCsv)}
                           <input class="tk-file" type="file" accept=".csv,text/csv" hidden @change=${(e5) => this.onImportFile(e5)} />
@@ -3097,6 +3163,9 @@ __decorateClass2([
   n4({ attribute: "sort-dir" })
 ], _OkDataTable.prototype, "sortDir");
 __decorateClass2([
+  n4({ attribute: false })
+], _OkDataTable.prototype, "filterValues");
+__decorateClass2([
   n4()
 ], _OkDataTable.prototype, "title");
 __decorateClass2([
@@ -3168,6 +3237,9 @@ __decorateClass2([
 __decorateClass2([
   r5()
 ], _OkDataTable.prototype, "filterDraft");
+__decorateClass2([
+  r5()
+], _OkDataTable.prototype, "serverFilters");
 __decorateClass2([
   r5()
 ], _OkDataTable.prototype, "panel");
@@ -3559,16 +3631,14 @@ var es_default = {
     labelUsedThisMonth: "Consumidos este mes"
   },
   errors: {
-    whatsapp_inbox: {
-      request_not_pending: "Esa solicitud no est\xE1 pendiente de revisi\xF3n: no existe en este negocio, o ya se aprob\xF3, rechaz\xF3 o atendi\xF3.",
-      request_not_deletable: "Esa solicitud no se puede borrar: no existe en este negocio, o est\xE1 cumplida y debe conservarse por auditor\xEDa.",
-      conversation_not_found: "Esa conversaci\xF3n no existe en este negocio.",
-      template_not_found: "Esa plantilla no existe en este negocio.",
-      request_not_fulfillable: "Solo una solicitud confirmada se puede marcar como atendida.",
-      request_not_found: "Esa solicitud no existe en este negocio.",
-      request_unreadable: "No se ha podido leer la solicitud, as\xED que no se ha cambiado nada. Prueba otra vez.",
-      conversation_unreadable: "No se ha podido leer la conversaci\xF3n, as\xED que no se ha creado nada. Prueba otra vez."
-    }
+    "whatsapp_inbox.conversation_not_found": "Esa conversaci\xF3n no existe en este negocio.",
+    "whatsapp_inbox.conversation_unreadable": "No se ha podido leer la conversaci\xF3n, as\xED que no se ha creado nada. Prueba otra vez.",
+    "whatsapp_inbox.request_not_deletable": "Esa solicitud no se puede borrar: no existe en este negocio, o est\xE1 cumplida y debe conservarse por auditor\xEDa.",
+    "whatsapp_inbox.request_not_found": "Esa solicitud no existe en este negocio.",
+    "whatsapp_inbox.request_not_fulfillable": "Solo una solicitud confirmada se puede marcar como atendida.",
+    "whatsapp_inbox.request_not_pending": "Esa solicitud no est\xE1 pendiente de revisi\xF3n: no existe en este negocio, o ya se aprob\xF3, rechaz\xF3 o atendi\xF3.",
+    "whatsapp_inbox.request_unreadable": "No se ha podido leer la solicitud, as\xED que no se ha cambiado nada. Prueba otra vez.",
+    "whatsapp_inbox.template_not_found": "Esa plantilla no existe en este negocio."
   }
 };
 
@@ -3701,18 +3771,45 @@ var en_default = {
     labelUsedThisMonth: "Used this month"
   },
   errors: {
-    whatsapp_inbox: {
-      request_not_pending: "That request is not waiting for review: it does not exist in this business, or it was already approved, rejected or handled.",
-      request_not_deletable: "That request cannot be deleted: it does not exist in this business, or it was fulfilled and has to stay for audit.",
-      conversation_not_found: "That conversation does not exist in this business.",
-      template_not_found: "That template does not exist in this business.",
-      request_not_fulfillable: "Only a confirmed request can be marked as handled.",
-      request_not_found: "That request does not exist in this business.",
-      request_unreadable: "That request could not be read, so nothing was changed. Try again.",
-      conversation_unreadable: "That conversation could not be read, so nothing was created. Try again."
-    }
+    "whatsapp_inbox.conversation_not_found": "That conversation does not exist in this business.",
+    "whatsapp_inbox.conversation_unreadable": "That conversation could not be read, so nothing was created. Try again.",
+    "whatsapp_inbox.request_not_deletable": "That request cannot be deleted: it does not exist in this business, or it was fulfilled and has to stay for audit.",
+    "whatsapp_inbox.request_not_found": "That request does not exist in this business.",
+    "whatsapp_inbox.request_not_fulfillable": "Only a confirmed request can be marked as handled.",
+    "whatsapp_inbox.request_not_pending": "That request is not waiting for review: it does not exist in this business, or it was already approved, rejected or handled.",
+    "whatsapp_inbox.request_unreadable": "That request could not be read, so nothing was changed. Try again.",
+    "whatsapp_inbox.template_not_found": "That template does not exist in this business."
   }
 };
+
+// ui/lib/domain-error-text.ts
+var SOURCE_LANG = "en";
+function textFor(catalog, lang, code) {
+  const dict = catalog[lang];
+  const text = dict?.errors?.[code];
+  return typeof text === "string" && text.trim() ? text : "";
+}
+function alreadySpoken(catalog, code, message) {
+  if (!message) return false;
+  for (const lang of Object.keys(catalog)) {
+    const template = textFor(catalog, lang, code);
+    const at = template.indexOf("{message}");
+    if (at < 0) continue;
+    const head = template.slice(0, at);
+    const tail = template.slice(at + "{message}".length);
+    if (message.length >= head.length + tail.length && message.startsWith(head) && message.endsWith(tail)) return true;
+  }
+  return false;
+}
+function domainErrorText(catalog, locale, e5) {
+  const code = e5?.code;
+  if (typeof code !== "string" || !code) return "";
+  const text = textFor(catalog, locale, code) || textFor(catalog, SOURCE_LANG, code);
+  if (!text.includes("{message}")) return text;
+  const message = e5 instanceof Error ? e5.message : "";
+  if (alreadySpoken(catalog, code, message)) return message;
+  return text.replaceAll("{message}", message);
+}
 
 // ui/components/erp-whatsapp-inbox-inbox/erp-whatsapp-inbox-inbox.ts
 var CATALOG = { es: es_default, en: en_default };
@@ -3726,14 +3823,10 @@ function can(permission) {
   const client = erplora();
   return typeof client.hasPermission === "function" ? client.hasPermission(permission) : true;
 }
-function domainErrorText(e5, fallbackKey) {
-  const code = e5?.code;
-  const message = e5 instanceof Error ? e5.message : "";
-  if (typeof code === "string" && code.startsWith("whatsapp_inbox.")) {
-    const text = erplora().t(CATALOG, `errors.${code}`, { message });
-    if (text && text !== `errors.${code}`) return text;
-  }
-  return message || erplora().t(CATALOG, fallbackKey);
+function domainErrorText2(e5, fallbackKey) {
+  const declared = domainErrorText(CATALOG, erplora().locale, e5);
+  if (declared) return declared;
+  return (e5 instanceof Error ? e5.message : "") || erplora().t(CATALOG, fallbackKey);
 }
 var ErpWhatsappInboxInbox = class extends i3 {
   constructor() {
@@ -3887,7 +3980,7 @@ var ErpWhatsappInboxInbox = class extends i3 {
       await this.ctrl.load();
       await this.loadDetail(this.detail.id);
     } catch (e5) {
-      this.detailError = domainErrorText(e5, "ui.errAssign");
+      this.detailError = domainErrorText2(e5, "ui.errAssign");
     } finally {
       this.detailBusy = false;
     }
@@ -4216,14 +4309,10 @@ function statusLabel(value) {
   const key = STATUS_KEYS[value];
   return key ? erplora2().t(CATALOG2, key) : value;
 }
-function domainErrorText2(e5, fallbackKey) {
-  const code = e5?.code;
-  const message = e5 instanceof Error ? e5.message : "";
-  if (typeof code === "string" && code.startsWith("whatsapp_inbox.")) {
-    const text = erplora2().t(CATALOG2, `errors.${code}`, { message });
-    if (text && text !== `errors.${code}`) return text;
-  }
-  return message || erplora2().t(CATALOG2, fallbackKey);
+function domainErrorText3(e5, fallbackKey) {
+  const declared = domainErrorText(CATALOG2, erplora2().locale, e5);
+  if (declared) return declared;
+  return (e5 instanceof Error ? e5.message : "") || erplora2().t(CATALOG2, fallbackKey);
 }
 var ErpWhatsappInboxRequests = class extends i3 {
   constructor() {
@@ -4452,7 +4541,7 @@ var ErpWhatsappInboxRequests = class extends i3 {
       this.bookingFor = "";
       await this.ctrl.load();
     } catch (e5) {
-      this.formError = domainErrorText2(e5, "ui.errApprove");
+      this.formError = domainErrorText3(e5, "ui.errApprove");
     } finally {
       this.busyId = "";
     }
@@ -4464,7 +4553,7 @@ var ErpWhatsappInboxRequests = class extends i3 {
       await erplora2().command("whatsapp_inbox.requests.reject", { request_id: id });
       await this.ctrl.load();
     } catch (e5) {
-      this.formError = domainErrorText2(e5, "ui.errReject");
+      this.formError = domainErrorText3(e5, "ui.errReject");
     } finally {
       this.busyId = "";
     }
@@ -4480,7 +4569,7 @@ var ErpWhatsappInboxRequests = class extends i3 {
       await erplora2().command("whatsapp_inbox.requests.fulfill", { request_id: r6.id });
       await this.ctrl.load();
     } catch (e5) {
-      this.formError = domainErrorText2(e5, "ui.errFulfil");
+      this.formError = domainErrorText3(e5, "ui.errFulfil");
     } finally {
       this.busyId = "";
     }
@@ -4511,7 +4600,7 @@ var ErpWhatsappInboxRequests = class extends i3 {
       this.pendingDelete = null;
       await this.ctrl.load();
     } catch (e5) {
-      this.formError = domainErrorText2(e5, "ui.errDeleteRequest");
+      this.formError = domainErrorText3(e5, "ui.errDeleteRequest");
     } finally {
       this.busyId = "";
     }
@@ -4852,14 +4941,10 @@ function erplora4() {
   if (!c5) throw new Error("erplora SDK no inicializado por el shell");
   return c5;
 }
-function domainErrorText3(e5, fallbackKey) {
-  const code = e5?.code;
-  const message = e5 instanceof Error ? e5.message : "";
-  if (typeof code === "string" && code.startsWith("whatsapp_inbox.")) {
-    const text = erplora4().t(CATALOG4, `errors.${code}`, { message });
-    if (text && text !== `errors.${code}`) return text;
-  }
-  return message || erplora4().t(CATALOG4, fallbackKey);
+function domainErrorText4(e5, fallbackKey) {
+  const declared = domainErrorText(CATALOG4, erplora4().locale, e5);
+  if (declared) return declared;
+  return (e5 instanceof Error ? e5.message : "") || erplora4().t(CATALOG4, fallbackKey);
 }
 var META_STATUS_KEYS = ["pending", "approved", "rejected"];
 var META_STATUS_LABEL_KEYS = {
@@ -5069,7 +5154,7 @@ var ErpWhatsappInboxTemplates = class extends i3 {
       this.dataTable()?.close();
       await this.ctrl.load();
     } catch (e5) {
-      this.formError = domainErrorText3(e5, "ui.errUpdateTemplate");
+      this.formError = domainErrorText4(e5, "ui.errUpdateTemplate");
     } finally {
       this.saving = false;
     }
@@ -5087,7 +5172,7 @@ var ErpWhatsappInboxTemplates = class extends i3 {
       this.pendingDelete = null;
       await this.ctrl.load();
     } catch (e5) {
-      this.formError = domainErrorText3(e5, "ui.errDeleteTemplate");
+      this.formError = domainErrorText4(e5, "ui.errDeleteTemplate");
     } finally {
       this.saving = false;
     }

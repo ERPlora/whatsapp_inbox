@@ -8,6 +8,7 @@ import { createListController } from '@erplora/module-sdk';
 import type { ListController, ListClient, ListParams, ListPage } from '@erplora/module-sdk';
 import esLocale from '../../../locales/es.json';
 import enLocale from '../../../locales/en.json';
+import { domainErrorText as declaredErrorText } from '../../lib/domain-error-text';
 const CATALOG: Record<string, unknown> = { es: esLocale, en: enLocale };
 
 // erp-whatsapp-inbox-requests — the INBOX of what customers asked for by WhatsApp, and the place
@@ -129,19 +130,19 @@ function statusLabel(value: string): string {
   return key ? erplora().t(CATALOG, key) : value;
 }
 
-/** A business refusal (hub#139) travels as a stable `code` plus the handler's English fallback:
- *  paint the code's TRANSLATION, keep the sentence for codes the catalog has not learned, and
- *  never translate another module's code with this catalog (same helper as `customers`/
- *  `appointments`). This is what turns the `errors` block of `locales/{en,es}.json` into the
- *  sentence the operator actually reads when #40 refuses a move. */
+/** A business refusal (hub#139) travels as a stable `code`: paint the sentence this module
+ *  DECLARES for it (`locales/<lang>.json → errors.<code>`, ADR-0398), keep the arriving sentence
+ *  for codes the catalogue has not learned, and never translate another module's code with this
+ *  catalog.
+ *
+ *  Read from the catalogue, NOT through `erplora().t()`: `t()` splits its key on `.` and walks the
+ *  path, which only ever worked while these texts sat in a nested `errors.whatsapp_inbox.<name>`
+ *  bucket. Against the flat contract the walk dies on the second segment and the operator reads the
+ *  handler's English (whatsapp_inbox#49). */
 function domainErrorText(e: unknown, fallbackKey: string): string {
-  const code = (e as { code?: unknown } | null)?.code;
-  const message = e instanceof Error ? e.message : '';
-  if (typeof code === 'string' && code.startsWith('whatsapp_inbox.')) {
-    const text = erplora().t(CATALOG, `errors.${code}`, { message });
-    if (text && text !== `errors.${code}`) return text;
-  }
-  return message || erplora().t(CATALOG, fallbackKey);
+  const declared = declaredErrorText(CATALOG, erplora().locale, e);
+  if (declared) return declared;
+  return (e instanceof Error ? e.message : '') || erplora().t(CATALOG, fallbackKey);
 }
 
 export class ErpWhatsappInboxRequests extends LitElement {

@@ -127,15 +127,13 @@
     "labelUsedThisMonth": "Consumidos este mes"
   },
   "errors": {
-    "whatsapp_inbox": {
-      "request_not_pending": "Esa solicitud no está pendiente de revisión: no existe en este negocio, o ya se aprobó, rechazó o atendió.",
-      "request_not_deletable": "Esa solicitud no se puede borrar: no existe en este negocio, o está cumplida y debe conservarse por auditoría.",
-      "conversation_not_found": "Esa conversación no existe en este negocio.",
-      "template_not_found": "Esa plantilla no existe en este negocio.",
-      "request_not_fulfillable": "Solo una solicitud confirmada se puede marcar como atendida.",
-      "request_not_found": "Esa solicitud no existe en este negocio.",
-      "request_unreadable": "No se ha podido leer la solicitud, así que no se ha cambiado nada. Prueba otra vez.",
-      "conversation_unreadable": "No se ha podido leer la conversación, así que no se ha creado nada. Prueba otra vez."
-    }
+    "whatsapp_inbox.conversation_not_found": "Esa conversación no existe en este negocio.",
+    "whatsapp_inbox.conversation_unreadable": "No se ha podido leer la conversación, así que no se ha creado nada. Prueba otra vez.",
+    "whatsapp_inbox.request_not_deletable": "Esa solicitud no se puede borrar: no existe en este negocio, o está cumplida y debe conservarse por auditoría.",
+    "whatsapp_inbox.request_not_found": "Esa solicitud no existe en este negocio.",
+    "whatsapp_inbox.request_not_fulfillable": "Solo una solicitud confirmada se puede marcar como atendida.",
+    "whatsapp_inbox.request_not_pending": "Esa solicitud no está pendiente de revisión: no existe en este negocio, o ya se aprobó, rechazó o atendió.",
+    "whatsapp_inbox.request_unreadable": "No se ha podido leer la solicitud, así que no se ha cambiado nada. Prueba otra vez.",
+    "whatsapp_inbox.template_not_found": "Esa plantilla no existe en este negocio."
   }
 }
