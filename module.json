@@ -615,6 +615,16 @@
       "schema": "schemas/quota_set.json"
     }
   },
+  "errors": {
+    "whatsapp_inbox.conversation_not_found": {},
+    "whatsapp_inbox.conversation_unreadable": {},
+    "whatsapp_inbox.request_not_deletable": {},
+    "whatsapp_inbox.request_not_found": {},
+    "whatsapp_inbox.request_not_fulfillable": {},
+    "whatsapp_inbox.request_not_pending": {},
+    "whatsapp_inbox.request_unreadable": {},
+    "whatsapp_inbox.template_not_found": {}
+  },
   "events": {
     "listen": {
       "hub.whatsapp.message_received": {

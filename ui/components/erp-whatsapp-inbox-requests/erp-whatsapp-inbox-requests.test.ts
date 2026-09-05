@@ -397,7 +397,11 @@ describe('el rechazo que el estado reusa se pinta traducido (whatsapp_inbox#40)'
     expect(
       wc.formError,
       'the refusal must arrive in the reader language, not the handler English',
-    ).toBe((es as { errors: { whatsapp_inbox: Record<string, string> } }).errors.whatsapp_inbox.request_not_pending);
+      // The catalogue is FLAT since ADR-0398: the key is the COMPLETE code, not a bucket per
+      // module. Reaching through `errors.whatsapp_inbox.…` is the very shape the hub SDK cannot
+      // index (hub#1570/#1573), so a test that still read it would be green against a sentence no
+      // till can reach.
+    ).toBe((es as { errors: Record<string, string> }).errors['whatsapp_inbox.request_not_pending']);
   });
 
   it('un código que el catálogo no conoce mantiene la frase del handler (nunca la clave cruda)', async () => {
