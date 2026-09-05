@@ -3789,12 +3789,26 @@ function textFor(catalog, lang, code) {
   const text = dict?.errors?.[code];
   return typeof text === "string" && text.trim() ? text : "";
 }
+function alreadySpoken(catalog, code, message) {
+  if (!message) return false;
+  for (const lang of Object.keys(catalog)) {
+    const template = textFor(catalog, lang, code);
+    const at = template.indexOf("{message}");
+    if (at < 0) continue;
+    const head = template.slice(0, at);
+    const tail = template.slice(at + "{message}".length);
+    if (message.length >= head.length + tail.length && message.startsWith(head) && message.endsWith(tail)) return true;
+  }
+  return false;
+}
 function domainErrorText(catalog, locale, e5) {
   const code = e5?.code;
   if (typeof code !== "string" || !code) return "";
   const text = textFor(catalog, locale, code) || textFor(catalog, SOURCE_LANG, code);
   if (!text.includes("{message}")) return text;
-  return text.replaceAll("{message}", e5 instanceof Error ? e5.message : "");
+  const message = e5 instanceof Error ? e5.message : "";
+  if (alreadySpoken(catalog, code, message)) return message;
+  return text.replaceAll("{message}", message);
 }
 
 // ui/components/erp-whatsapp-inbox-inbox/erp-whatsapp-inbox-inbox.ts

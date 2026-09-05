@@ -46,6 +46,24 @@ describe('domainErrorText — the flat catalogue (ADR-0398)', () => {
     expect(domainErrorText(CATALOG, 'es', refusal('whatsapp_inbox.request_not_pending'))).toBe('Esa solicitud no está pendiente de revisión: ');
   });
 
+  // hub#1570 makes the SHELL speak the refusal too, and it hands the module an error whose
+  // `message` is ALREADY the finished sentence — template and detail spliced. Splicing a second
+  // time reads back to the operator as a stutter: «Esa solicitud no está pendiente de revisión:
+  // Esa solicitud no está pendiente de revisión: it was already approved.». Found by the reviewer
+  // of the sister module (customers#69) and guarded here before this module grows a
+  // `{message}` code of its own.
+  it('does not splice twice when the shell already spoke the sentence (hub#1570)', () => {
+    const spoken = 'Esa solicitud no está pendiente de revisión: it was already approved.';
+    expect(domainErrorText(CATALOG, 'es', refusal('whatsapp_inbox.request_not_pending', spoken))).toBe(spoken);
+  });
+
+  // …in ANY language of the catalogue: the shell speaks the user's, which need not be the one this
+  // lookup resolved first.
+  it('recognises the finished sentence in the source language too', () => {
+    const spoken = 'That request is not waiting for review: it was already approved.';
+    expect(domainErrorText(CATALOG, 'es', refusal('whatsapp_inbox.request_not_pending', spoken))).toBe(spoken);
+  });
+
   it('falls back to the source language when the active one has no text (ADR-0055)', () => {
     expect(domainErrorText(CATALOG, 'fr', refusal('whatsapp_inbox.template_not_found'))).toBe('That template does not exist in this business.');
   });

@@ -39,10 +39,35 @@ function textFor(catalog: Catalogs, lang: string, code: string): string {
  * SDK: the module owns the sentence, the handler owns which field and which value, and codes like
  * `whatsapp_inbox.request_not_pending` say nothing on their own without the second half.
  */
+/**
+ * Has the sentence the error carries ALREADY been through this template?
+ *
+ * Since hub#1570 the shell speaks the refusal too, and it hands the module an `ErploraError` whose
+ * `message` is the finished sentence — template and detail already spliced. Splicing again turns
+ * the aviso into a stutter («…no está pendiente de revisión: …no está pendiente de revisión: …»).
+ * So the message is measured against the template of EVERY language in the catalogue — the shell
+ * speaks the user's, which need not be the one this lookup resolved first — and if it fits between
+ * the halves, it is returned untouched. A raw handler detail fits none of them and is spliced.
+ */
+function alreadySpoken(catalog: Catalogs, code: string, message: string): boolean {
+  if (!message) return false;
+  for (const lang of Object.keys(catalog)) {
+    const template = textFor(catalog, lang, code);
+    const at = template.indexOf('{message}');
+    if (at < 0) continue;
+    const head = template.slice(0, at);
+    const tail = template.slice(at + '{message}'.length);
+    if (message.length >= head.length + tail.length && message.startsWith(head) && message.endsWith(tail)) return true;
+  }
+  return false;
+}
+
 export function domainErrorText(catalog: Catalogs, locale: string, e: unknown): string {
   const code = (e as { code?: unknown } | null | undefined)?.code;
   if (typeof code !== 'string' || !code) return '';
   const text = textFor(catalog, locale, code) || textFor(catalog, SOURCE_LANG, code);
   if (!text.includes('{message}')) return text;
-  return text.replaceAll('{message}', e instanceof Error ? e.message : '');
+  const message = e instanceof Error ? e.message : '';
+  if (alreadySpoken(catalog, code, message)) return message;
+  return text.replaceAll('{message}', message);
 }
