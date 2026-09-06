@@ -548,6 +548,13 @@ def undeclared_tool_problems(name, doc, known):
 
 DOCUMENT_RULES = (policy_problems, silence_problems, undeclared_tool_problems)
 
+# …and the registry itself is guarded, because it is the next place the same hole moves to. The
+# ledger only demands the rules DOCUMENT_RULES names, so deleting a name from that tuple left the
+# rule running, its cases passing and nothing requiring it to ever meet a real template again
+# (whatsapp_inbox#61, mutant P4). Every rule `self_check()` proves has to be one `main()` is
+# REQUIRED to apply, and that is asserted rather than assumed.
+SELF_CHECKED_RULES = (policy_problems, silence_problems, undeclared_tool_problems)
+
 
 def addressed_queries(doc):
     """`(step id, query id, sorted param names, where)` for every step that parameterises a query."""
@@ -839,8 +846,14 @@ TOOL_CASES = [
 
 
 def self_check():
-    """The mutants of the two rules above, run every time, before any real document is opened."""
+    """The mutants of the rules above, run every time, before any real document is opened."""
     problems = []
+    for rule in SELF_CHECKED_RULES:
+        if rule not in DOCUMENT_RULES:
+            problems.append(
+                f"`{rule.__name__}` is proved here but is not in DOCUMENT_RULES: the ledger would "
+                f"stop demanding that it ever met a real template, and its cases would keep passing"
+            )
     for label, cdef, perms, expected in CLASSIFICATION_CASES:
         got = command_only_answers(cdef, perms)
         if got is not expected:
