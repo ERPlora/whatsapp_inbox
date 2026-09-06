@@ -1,0 +1,7 @@
+{
+  "_why": "El suelo de version de los modulos cuyas operaciones piden estas plantillas. Existe porque tests/flow_templates.test.py resuelve los nombres contra los checkouts VECINOS del workspace, y un checkout viejo convierte un rojo en un verde: el 2026-09-06 `appointments/` estaba 13 releases atras (1.1.56) declarando `appointments.availability.slots` como `query`, asi que la bateria dio OK mientras el flujo perdia la tool en produccion (whatsapp_inbox#52). Solo se fija lo que estas plantillas necesitan a una version CONCRETA; el resto de vecinos se resuelve como siempre.",
+  "modules": {
+    "appointments": "1.1.69"
+  },
+  "_appointments": "1.1.69 es la release que publica `appointments.availability.day_opening` (appointments#105) y en la que `availability.slots` y `.check` ya son commands (appointments#122 / #127). Por debajo de ahi, las tres operaciones que el paso `gather_availability` necesita no existen con la forma que declara."
+}
