@@ -14,6 +14,11 @@
       "label": "Settings"
     }
   },
+  "billing": {
+    "quota": {
+      "conversations_per_month": "conversations per month"
+    }
+  },
   "ui": {
     "inboxTitle": "WhatsApp Inbox",
     "requestsTitle": "Requests",

@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+"""Every quota metric this module sells has to be readable in every language it ships (hub#1604).
+
+`billing.tiers[].quota` is a dict of `{ metric: limit }` and the metric is an identifier we write:
+`conversations_per_month`. The hub's «Plan» tab paints it, and until hub#1604 it painted it by
+swapping the underscores for spaces — so a salon owner on a Spanish hub read «Incluye 30
+conversations per month», half the sentence in her language and half not, on the screen where she
+decides how much to spend every month.
+
+The shell cannot fix that on its own: only whoever wrote the manifest knows what
+`conversations_per_month` means in Spanish. So the words live here, in `locales/<lang>.json` under
+`billing.quota.<metric>` — the same place the module already translates its navigation, its widgets
+and the fields of its settings screen (hub#1094).
+
+This gate is what keeps them from drifting apart: add a tier with a new metric, or a language, and
+the labels have to follow. English is the source language (ADR-0055), so a missing label degrades to
+English rather than breaking — which is exactly why nobody would notice, and exactly why this test
+exists.
+
+Usage: tests/billing_quota_labels.contract.test.py   (exit 0 = green). No Postgres, no Docker.
+"""
+
+import json
+import pathlib
+import sys
+
+MODULE_DIR = pathlib.Path(__file__).resolve().parent.parent
+MANIFEST = json.loads((MODULE_DIR / "module.json").read_text())
+LOCALES_DIR = MODULE_DIR / "locales"
+
+
+def quota_metrics():
+    """Every metric named by any tier of the manifest, in declaration order and without repeats."""
+    metrics = []
+    for tier in MANIFEST.get("billing", {}).get("tiers", []):
+        quota = tier.get("quota")
+        if not isinstance(quota, dict):
+            continue
+        for metric in quota:
+            if metric not in metrics:
+                metrics.append(metric)
+    return metrics
+
+
+def locale_files():
+    return sorted(LOCALES_DIR.glob("*.json"))
+
+
+def check_every_metric_is_named_in_every_language():
+    problems = []
+    metrics = quota_metrics()
+    if not metrics:
+        return problems
+    for path in locale_files():
+        labels = json.loads(path.read_text()).get("billing", {}).get("quota", {})
+        for metric in metrics:
+            label = labels.get(metric)
+            if label is None:
+                problems.append(
+                    f"{path.name}: no label for the quota metric `{metric}` — the plan screen "
+                    f"would fall back to English"
+                )
+            elif not str(label).strip():
+                problems.append(
+                    f"{path.name}: the label for `{metric}` is blank — a number with no unit "
+                    f"after it says less than the English it replaced"
+                )
+
+
+    return problems
+
+
+def check_no_label_survives_its_metric():
+    """A label for a metric no tier sells any more is a leftover: it says the plan includes
+    something it does not, the day somebody reuses the key."""
+    problems = []
+    metrics = set(quota_metrics())
+    for path in locale_files():
+        labels = json.loads(path.read_text()).get("billing", {}).get("quota", {})
+        for metric in labels:
+            if metric not in metrics:
+                problems.append(
+                    f"{path.name}: label for `{metric}`, which no tier of the manifest sells"
+                )
+    return problems
+
+
+def main():
+    if not LOCALES_DIR.is_dir():
+        print("FAIL  the module ships no locales/ directory")
+        return 1
+
+    problems = check_every_metric_is_named_in_every_language()
+    problems += check_no_label_survives_its_metric()
+
+    for problem in problems:
+        print(f"FAIL  {problem}")
+    if problems:
+        print(f"\n{len(problems)} quota label(s) missing or stale")
+        return 1
+
+    print(
+        f"OK: {len(quota_metrics())} quota metric(s) named in "
+        f"{len(locale_files())} language(s)"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
