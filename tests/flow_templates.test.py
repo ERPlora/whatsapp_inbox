@@ -290,32 +290,74 @@ def version_tuple(raw):
     return tuple(parts) if parts else None
 
 
-def command_is_read_only(cdef):
+def module_read_permissions(resolved):
+    """`command id -> the permissions the OWNING module also asks of its own queries`.
+
+    The half that makes the classification below safe, and the module states it by handing out its
+    own permissions rather than the core guessing from names (hub#1594). It is read off the SAME
+    manifest the command lives in on purpose: what another module happens to call `view_*` says
+    nothing about this one.
+    """
+    out = {}
+    for _, m in resolved.values():
+        perms = {
+            q.get("permission")
+            for q in (m.get("queries") or {}).values()
+            if isinstance(q, dict) and isinstance(q.get("permission"), str)
+        }
+        for cid in m.get("commands") or {}:
+            out[cid] = perms
+    return out
+
+
+def command_only_answers(cdef, read_permissions):
     """Does this command ANSWER a question rather than change the business?
 
-    Two independent signals from the owner's manifest, and BOTH have to hold, because getting this
-    wrong in the permissive direction is the expensive direction — it would let a write into a
-    `policy: "auto"` step, which is a model writing to the salon's database at 3 AM with nobody
-    looking (ADR-0283 D3, the reason `manual` is the default):
+    This is `assistant::command_only_answers` (hub#1595) read off the manifest instead of the
+    registry, and being a COPY is the point: the hub decides this at runtime and the flow runner
+    reads its verdict off the tool spec, so a battery that decided it by its OWN rule would go
+    green on a document the hub then treats differently. Five signals from the owner's manifest,
+    and ALL of them have to hold:
 
-    * it publishes NO domain event (`emit`) — a state change the rest of the hub must hear about
-      is a write by definition; and
-    * its `permission` is a `view_*` one — the permission a screen asks for to READ.
+    * a declared `risk` that is not `normal` wins over everything else — a manifest that
+      contradicts itself is resolved on the safe side;
+    * no `sql` and no `emit` — a state change the rest of the hub has to hear about is a write by
+      definition;
+    * no `min_affected_rows` and no `expect_rows` — both of them count ROWS CHANGED;
+    * and its `permission` is one the owning module also asks of its own QUERIES.
 
-    Neither alone is enough, and that is measured on the manifests next door rather than assumed:
-    `customers.bulk_create` declares no `emit` at all and is plainly a write, and it is the
-    `customers.add_customer` permission that says so.
+    That last signal is what replaced the `view_` prefix this battery used to read, and the
+    difference is not cosmetic: a prefix is a naming habit nobody enforces, while «the module hands
+    this permission to its own reads» is a statement the module makes. `customers.bulk_create`
+    declares no `emit` and would have walked through the old rule the day somebody named its
+    permission `view_something`; it cannot walk through this one, because no query of `customers`
+    is paid for with it.
 
-    Its limit, stated rather than hidden: a command that both published no event and asked only for
-    a `view_*` permission while writing would pass here. That is a defect in ITS manifest — an
-    unannounced write wearing a read's permission — and this battery cannot see it from the outside.
+    The absence of a signal is read as a WRITE, never as a read.
     """
-    if cdef.get("emit"):
+    ai = cdef.get("ai")
+    risk = ai.get("risk") if isinstance(ai, dict) else None
+    if risk is not None and risk != "normal":
+        return False
+    if cdef.get("sql") or cdef.get("emit"):
+        return False
+    if cdef.get("min_affected_rows") is not None or cdef.get("expect_rows") is not None:
         return False
     permission = cdef.get("permission")
     if not isinstance(permission, str):
         return False
-    return permission.rsplit(".", 1)[-1].startswith("view_")
+    return permission in (read_permissions or set())
+
+
+def quoted_steps(doc):
+    """Step ids that some OTHER step interpolates (`{{steps.<id>.…}}`) — who feeds whom."""
+    out = set()
+    for step in doc.get("steps", []):
+        for chunk in json.dumps(step, ensure_ascii=False).split("{{steps.")[1:]:
+            quoted = chunk.split("}}")[0].split(".")[0].strip()
+            if quoted and quoted != step.get("id"):
+                out.add(quoted)
+    return out
 
 
 def ai_steps(doc):
@@ -327,6 +369,60 @@ def ai_steps(doc):
         commands = ((step.get("tools") or {}).get("commands")) or []
         out.append((step.get("id"), step.get("policy") or "manual", list(commands)))
     return out
+
+
+def policy_problems(name, doc, commands_def, read_perms):
+    """`policy` weighed against what the commands a step declares actually DO.
+
+    ONE direction is a defect, and it is the dangerous one: a step that runs its commands without
+    asking (`policy: "auto"`) may only declare operations that answer. A write in there is the
+    model booking, charging or deleting at 3 AM with nobody looking, which is the entire reason
+    `manual` is the default (ADR-0283 D3).
+
+    The opposite direction used to be a defect too, and hub#1595 retired it. Before it, `kind` was
+    doing two jobs — which door of the dispatcher a call goes through AND whether a person confirms
+    it — so a read published as a *command* (which is what a WASM handler is for: answering by
+    crossing data another module owns) parked the QUESTION in `_flow_approvals` under `manual` and
+    ended the turn. The owner opened the tray in the morning and was asked to approve «check
+    availability», which is not a decision anybody can take. Today a command that only answers runs
+    in the turn under ANY policy and its result goes back to the model like a query's rows, so a
+    read in a `manual` step is not a defect: it is the shape that costs one metered AI turn instead
+    of two.
+
+    Which turns the old workaround into the defect this looks for instead: a step whose declared
+    commands ALL only answer, and whose words another step quotes, is the automation split in two
+    to dodge a problem the kernel no longer has (whatsapp_inbox#55). It bills an extra AI turn per
+    incoming message, and everything the first step learned reaches the second as prose — which is
+    where the ids, the offsets and the minutes get lost.
+    """
+    problems = []
+    quoted = quoted_steps(doc)
+    for step_id, policy, names in ai_steps(doc):
+        verdicts = []
+        for cname in names:
+            target = commands_def.get(cname)
+            if target is None:
+                continue  # already reported as a name no module declares
+            _, cdef = target
+            answers = command_only_answers(cdef, read_perms.get(cname))
+            verdicts.append(answers)
+            if policy == "auto" and not answers:
+                problems.append(
+                    f"{name} step `{step_id}` declares `{cname}` in `tools.commands` "
+                    f"under `policy: auto`, and that operation WRITES. `auto` runs it in "
+                    f"the turn, unattended: a write with nobody looking is exactly what "
+                    f"`manual` is the default for"
+                )
+        if verdicts and all(verdicts) and step_id in quoted:
+            problems.append(
+                f"{name} step `{step_id}` declares nothing but operations that ANSWER "
+                f"({', '.join(sorted(names))}) and hands its findings to another step in prose. "
+                f"That is the two-step workaround whatsapp_inbox#55 removed: since hub#1595 a "
+                f"command that only answers runs in the turn whatever the policy says, so those "
+                f"reads belong in the step that ACTS on them. Split, they cost an extra metered "
+                f"AI turn per incoming message and the ids travel as words"
+            )
+    return problems
 
 
 def addressed_queries(doc):
@@ -381,8 +477,148 @@ def structural_shape(doc):
     }
 
 
+# ── layer 0: the battery checks its OWN rules before it judges anybody's file ─────────────────
+#
+# Everything else here is a rule about somebody else's document; this is the rule about the rules,
+# and it exists because `policy_problems` is exactly the kind of check that passes by accident: it
+# only ever runs over documents that are already correct, so a mutation that blinds it — dropping
+# the `auto` branch, calling every command a read — leaves this battery green while the guard it is
+# is gone. Every row below is a MUTANT: break the rule and one of them fails BY NAME.
+_ANSWERS = {"permission": "appointments.view_schedule", "handler": "availability.wasm"}
+_MODULE_READS = {"appointments.view_schedule", "appointments.view_appointment"}
+_WRITES = {"permission": "appointments.add_appointment", "emit": ["appointments.created"]}
+
+CLASSIFICATION_CASES = [
+    (
+        "a handler that writes nothing, paid for with a permission its own queries ask for",
+        _ANSWERS,
+        _MODULE_READS,
+        True,
+    ),
+    ("`risk: normal` said out loud is still an answer", {**_ANSWERS, "ai": {"risk": "normal"}}, _MODULE_READS, True),
+    (
+        "`emit` is a write however the permission reads",
+        {**_ANSWERS, "emit": ["appointments.availability.checked"]},
+        _MODULE_READS,
+        False,
+    ),
+    ("`sql` is a write", {**_ANSWERS, "sql": ["UPDATE appointments SET x = 1"]}, _MODULE_READS, False),
+    ("`min_affected_rows` counts ROWS CHANGED", {**_ANSWERS, "min_affected_rows": 1}, _MODULE_READS, False),
+    ("`expect_rows` counts ROWS CHANGED", {**_ANSWERS, "expect_rows": 1}, _MODULE_READS, False),
+    (
+        "a declared `risk` above normal beats every other signal",
+        {**_ANSWERS, "ai": {"risk": "destructive"}},
+        _MODULE_READS,
+        False,
+    ),
+    (
+        "a `view_`-looking permission NO query of the module asks for is a write",
+        {"permission": "customers.view_customer"},
+        _MODULE_READS,
+        False,
+    ),
+    ("a write's own permission is not a read permission", _WRITES, _MODULE_READS, False),
+    ("no permission at all is a write", {}, _MODULE_READS, False),
+    ("a module whose queries were never read answers nothing", _ANSWERS, None, False),
+]
+
+_FIXTURE_COMMANDS = {
+    "appointments.availability.slots": (None, _ANSWERS),
+    "appointments.appointments.create": (None, _WRITES),
+}
+_FIXTURE_READS = {
+    "appointments.availability.slots": _MODULE_READS,
+    "appointments.appointments.create": _MODULE_READS,
+}
+
+
+def _ai_step(step_id, policy, commands, prompt=""):
+    return {
+        "id": step_id,
+        "kind": "ai",
+        "policy": policy,
+        "prompt": prompt,
+        "tools": {"commands": list(commands)},
+    }
+
+
+def _fixture_doc(*steps):
+    return {"schema_version": 1, "triggers": [], "steps": list(steps)}
+
+
+POLICY_CASES = [
+    (
+        "a read inside a `manual` step is what hub#1595 made legal",
+        _fixture_doc(_ai_step("s", "manual", ["appointments.availability.slots"])),
+        0,
+    ),
+    (
+        "a write inside an `auto` step is still the dangerous direction",
+        _fixture_doc(_ai_step("s", "auto", ["appointments.appointments.create"])),
+        1,
+    ),
+    (
+        "a write inside a `manual` step is the default, and the point of it",
+        _fixture_doc(_ai_step("s", "manual", ["appointments.appointments.create"])),
+        0,
+    ),
+    (
+        "a read inside an `auto` step is fine",
+        _fixture_doc(_ai_step("s", "auto", ["appointments.availability.slots"])),
+        0,
+    ),
+    (
+        "a step that only asks, feeding a step that acts, is the split whatsapp_inbox#55 removed",
+        _fixture_doc(
+            _ai_step("look", "auto", ["appointments.availability.slots"]),
+            _ai_step("act", "manual", ["appointments.appointments.create"], "{{steps.look.text}}"),
+        ),
+        1,
+    ),
+    (
+        "a step that only asks and that nobody quotes is not the split",
+        _fixture_doc(
+            _ai_step("look", "auto", ["appointments.availability.slots"]),
+            _ai_step("act", "manual", ["appointments.appointments.create"]),
+        ),
+        0,
+    ),
+    (
+        "asking and proposing in ONE step is the shape this repo now ships",
+        _fixture_doc(
+            _ai_step(
+                "act",
+                "manual",
+                ["appointments.availability.slots", "appointments.appointments.create"],
+            )
+        ),
+        0,
+    ),
+]
+
+
+def self_check():
+    """The mutants of the two rules above, run every time, before any real document is opened."""
+    problems = []
+    for label, cdef, perms, expected in CLASSIFICATION_CASES:
+        got = command_only_answers(cdef, perms)
+        if got is not expected:
+            problems.append(
+                f"the battery's own classification is wrong — {label}: expected {expected}, "
+                f"got {got}"
+            )
+    for label, doc, expected in POLICY_CASES:
+        got = policy_problems("(self-check)", doc, _FIXTURE_COMMANDS, _FIXTURE_READS)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own `policy` rule is wrong — {label}: expected {expected} "
+                f"problem(s), got {len(got)}: {got}"
+            )
+    return problems
+
+
 def main():
-    problems, skipped = [], []
+    problems, skipped = self_check(), []
 
     docs = flow_documents()
     if not docs:
@@ -428,6 +664,7 @@ def main():
     manifests = workspace_manifests()
     if manifests is None:
         contracts, definitions, commands_def, resolved = None, None, None, None
+        read_perms = {}
         skipped.append(
             "the module workspace is not next to this repo — query/command names and the "
             "parameter vocabularies were NOT verified"
@@ -510,6 +747,7 @@ def main():
         contracts = workspace_contracts(resolved)
         definitions = query_definitions(resolved)
         commands_def = command_definitions(resolved)
+        read_perms = module_read_permissions(resolved)
 
     for path in docs:
         doc = json.loads(path.read_text())
@@ -550,46 +788,9 @@ def main():
                             f"{path.name} addresses its message through `{q}`, which no installed module declares"
                         )
 
-        # 3a) A command a step declares is a WRITE, and `policy` is what decides its fate.
-        #
-        # `flow.schema.json` freezes both halves of this and they are the same sentence read twice:
-        # `tools.commands` is «escrituras que el modelo puede PROPONER», and `policy: "manual"` —
-        # the default, and this template's — means the proposal «se convierte en una fila de
-        # `_flow_approvals` y el turno TERMINA». So a READ-ONLY operation parked in `tools.commands`
-        # of a manual step is not a lookup at all: the model asks what hours are free, the run stops,
-        # and a person is handed an approval card for a question. That is whatsapp_inbox#52 in its
-        # next incarnation, and nothing else in this repo would notice — `appointments` turned
-        # `availability.slots`, `.check` and `.day_opening` into commands precisely because they need
-        # a WASM handler to answer with the authority the booking door uses, and their names did not
-        # change when their kind did.
-        #
-        # The other direction is the dangerous one and is checked just as hard: a step that runs its
-        # commands without asking (`policy: "auto"`) may only declare operations that answer. A write
-        # in there is the model booking, charging or deleting at 3 AM with nobody looking, which is
-        # the entire reason `manual` is the default (ADR-0283 D3).
+        # 3a) `policy` against what each declared command actually does — see `policy_problems`.
         if commands_def is not None:
-            for step_id, policy, names in ai_steps(doc):
-                for name in names:
-                    target = commands_def.get(name)
-                    if target is None:
-                        continue  # already reported above as a name no module declares
-                    _, cdef = target
-                    if policy == "manual" and command_is_read_only(cdef):
-                        problems.append(
-                            f"{path.name} step `{step_id}` declares `{name}` in `tools.commands` "
-                            f"under `policy: manual`, but that operation only READS. Under `manual` "
-                            f"the first command call becomes an `_flow_approvals` row and the turn "
-                            f"ends, so the model never gets the answer and a person is asked to "
-                            f"approve a question. A read the model has to act on belongs in a step "
-                            f"with `policy: auto`"
-                        )
-                    if policy == "auto" and not command_is_read_only(cdef):
-                        problems.append(
-                            f"{path.name} step `{step_id}` declares `{name}` in `tools.commands` "
-                            f"under `policy: auto`, and that operation WRITES. `auto` runs it in "
-                            f"the turn, unattended: a write with nobody looking is exactly what "
-                            f"`manual` is the default for"
-                        )
+            problems += policy_problems(path.name, doc, commands_def, read_perms)
 
         # 3b) Every parameter is a word the query it addresses actually knows.
         #
