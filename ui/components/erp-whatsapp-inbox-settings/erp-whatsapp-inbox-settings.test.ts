@@ -56,13 +56,35 @@ const commands: { name: string; payload: Record<string, unknown> }[] = [];
 // `null`, not `undefined`: passing `undefined` to a parameter with a default value RE-APPLIES the
 // default, so `mountWith(undefined)` would have mounted the saved row and the «no row yet» case
 // would have been tested against the opposite of itself.
-function mountWith(row: Record<string, unknown> | null = SAVED_SETTINGS) {
+/**
+ * Which OTHER modules this hub has. Absence is what the uses card is built on, and it is a
+ * different answer from «installed, nothing to show»: the SDK only ever reports it through the two
+ * codes below (`queryOptional` returns `undefined` for exactly those and re-throws everything
+ * else), so the mock speaks the same language the runtime does.
+ */
+interface Neighbours {
+  /** Module ids this hub does NOT have. */
+  absent?: string[];
+  /** Play a shell too old to offer `queryOptional`: the screen has to fall back to `query`. */
+  noQueryOptional?: boolean;
+  /** A witness that fails for a reason that is NOT absence — a denied permission, a broken handler. */
+  brokenWitness?: string;
+}
+
+function mountWith(row: Record<string, unknown> | null = SAVED_SETTINGS, hub: Neighbours = {}) {
   queries.length = 0;
   commands.length = 0;
-  (globalThis as Record<string, unknown>).erplora = {
+  const ownerOf = (name: string) => name.split('.')[0];
+  const absent = new Set(hub.absent ?? []);
+  const client: Record<string, unknown> = {
     query: async (name: string, params?: unknown) => {
       queries.push({ name, params });
       if (name === 'whatsapp_inbox.usage.get') return [{ inbound_this_month: 12, monthly_limit: row ? 30 : 0 }];
+      if (name === hub.brokenWitness) throw Object.assign(new Error('permission denied'), { code: 'permission_denied' });
+      if (absent.has(ownerOf(name))) {
+        throw Object.assign(new Error('module_not_installed'), { code: 'module_not_installed' });
+      }
+      if (ownerOf(name) !== 'whatsapp_inbox') return [];
       return row ? [row] : [];
     },
     command: async (name: string, payload: Record<string, unknown>) => {
@@ -78,6 +100,18 @@ function mountWith(row: Record<string, unknown> | null = SAVED_SETTINGS) {
       return catalog.es?.ui?.[k] ?? key;
     },
   };
+  if (!hub.noQueryOptional) {
+    client.queryOptional = async (name: string, params?: Record<string, unknown>) => {
+      try {
+        return await (client.query as (n: string, p?: unknown) => Promise<unknown>)(name, params);
+      } catch (e) {
+        const code = (e as { code?: string }).code;
+        if (code === 'module_not_installed' || code === 'module_inactive') return undefined;
+        throw e;
+      }
+    };
+  }
+  (globalThis as Record<string, unknown>).erplora = client;
 }
 
 async function mount() {
