@@ -65,8 +65,31 @@ def check_every_metric_is_named_in_every_language():
                     f"{path.name}: the label for `{metric}` is blank — a number with no unit "
                     f"after it says less than the English it replaced"
                 )
+    return problems
 
 
+def check_non_english_labels_are_translated():
+    """English is the source language (ADR-0055): a non-English file whose label is the English
+    one, character for character, is a copy-paste, not a translation. The test that only asks
+    «is there a label?» stays green on it — and the customer reads English again (hub#1604)."""
+    problems = []
+    en_path = LOCALES_DIR / "en.json"
+    if not en_path.is_file():
+        return problems
+    en_labels = json.loads(en_path.read_text()).get("billing", {}).get("quota", {})
+    for path in locale_files():
+        if path == en_path:
+            continue
+        labels = json.loads(path.read_text()).get("billing", {}).get("quota", {})
+        for metric, label in labels.items():
+            en_label = en_labels.get(metric)
+            if en_label is None or not str(label).strip():
+                continue  # already reported by the checks above
+            if str(label).strip().casefold() == str(en_label).strip().casefold():
+                problems.append(
+                    f"{path.name}: the label for `{metric}` is the English one (`{en_label}`) — "
+                    f"translate it, or the plan screen reads in English on a {path.stem} hub"
+                )
     return problems
 
 
@@ -92,6 +115,7 @@ def main():
 
     problems = check_every_metric_is_named_in_every_language()
     problems += check_no_label_survives_its_metric()
+    problems += check_non_english_labels_are_translated()
 
     for problem in problems:
         print(f"FAIL  {problem}")
