@@ -130,10 +130,9 @@ Automatizaciones no sabe nada de WhatsApp «por dentro». Trabaja con **eventos*
 flowchart TD
     E["evento<br/>hub.whatsapp.message_received"] --> T{{"Automatización<br/>«WhatsApp → cita propuesta»"}}
     T --> N1["paso notify (whatsapp)<br/>«¡Recibido! Te confirmo en un momento»"]
-    N1 --> A1["paso ai · automático<br/>¿tiene ficha de cliente? si no, la crea"]
-    A1 --> A2["paso ai · automático<br/>lee la agenda: huecos reales del día"]
-    A2 --> A3["paso ai · manual<br/>propone la cita → petición en revisión"]
-    A3 --> AP{"aprobación"}
+    N1 --> A1["paso ai · manual<br/>¿tiene ficha de cliente? si no, propone crearla"]
+    A1 --> A2["paso ai · manual<br/>lee la agenda (huecos reales del día)<br/>y propone la cita → petición en revisión"]
+    A2 --> AP{"aprobación"}
     AP -- "auto o el dueño aprueba" --> R["Citas crea la reserva"]
     R --> N2["paso notify (whatsapp)<br/>«Te he reservado el viernes a las 18:30»"]
     AP -- "rechaza" --> N3["paso notify (whatsapp)<br/>«No hay hueco el viernes, ¿te va el sábado?»"]
@@ -146,10 +145,15 @@ le haya concedido en su pantalla de permisos. Para el flujo de arriba hacen falt
 - `recipient_query` → `whatsapp_inbox.conversations.list#contact_phone` (a quién se escribe se
   **lee** de la conversación, nunca se teclea);
 - `query` → las lecturas de los pasos de IA: `customers.list`, `services.services.list`,
-  `staff.members.list`, `staff.schedules.list_for_member`, `appointments.appointments.conflicting`;
+  `staff.members.list`, `staff.schedules.list_for_member`;
 - `command` → los de **disponibilidad** de Citas, que son commands aunque solo lean
-  (`appointments.availability.day_opening`, `.slots`, `.check`), y las escrituras del paso manual:
+  (`appointments.availability.day_opening`, `.slots`, `.check`), y las escrituras:
   `customers.create` y `appointments.appointments.create`.
+
+Que los de disponibilidad sean commands **ya no obliga a partir la automatización en dos pasos**:
+desde ERPlora/hub#1595 un command que solo contesta se ejecuta en el turno con cualquier política y
+su respuesta vuelve al modelo, así que el mismo paso pregunta los huecos y propone la cita — un
+turno de IA facturado por mensaje en vez de dos. Lo único que espera aprobación es la escritura.
 
 Todos vienen listados en `flows/appointment-from-whatsapp.grants.json`, que es lo que la pantalla de
 permisos de Automatizaciones ofrece conceder de una vez.
