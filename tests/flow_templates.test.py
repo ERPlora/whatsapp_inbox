@@ -502,13 +502,51 @@ def silence_problems(name, doc):
 # templates used to leave the battery green (whatsapp_inbox#69, mutant N5): the cases still passed,
 # and nothing said the rule had never met a document. `main()` writes every application down in a
 # ledger through `applied()` and fails on any (rule, document) pair that is missing.
-DOCUMENT_RULES = (policy_problems, silence_problems)
-
-
 def applied(ledger, rule, name, doc, *args):
     """Runs `rule` on one document and records it — the call and the record are ONE line."""
     ledger.add((rule.__name__, name))
     return rule(name, doc, *args)
+
+
+def prompt_of(step):
+    """The prompt text of an `ai` step, or `""` for every other kind."""
+    return step.get("prompt") if step.get("kind") == "ai" and isinstance(step.get("prompt"), str) else ""
+
+
+def undeclared_tool_problems(name, doc, known):
+    """An operation the prompt TELLS the model to use, that the step never handed it.
+
+    The failure mode of every branch added to a prompt, and it is silent in the worst way: the
+    author writes «if they want to cancel, call `appointments.appointments.cancel`», forgets to add
+    the name to `tools.commands`, and the model is ordered to use a tool it was never given. Nothing
+    errors — there is nothing to error. It improvises: it apologises, it invents, or it reaches for
+    the closest tool it DOES have, which in this template is the one that BOOKS. The customer who
+    asked to cancel gets a second appointment, which is whatsapp_inbox#61 arriving through its own
+    fix.
+
+    Judged only against names some module in the workspace really declares (`known`), so the prose
+    of a prompt stays prose: `internal_notes`, `duration_minutes` and `start_datetime` are fields,
+    not operations, and nothing here should have to escape them.
+    """
+    problems = []
+    for step in doc.get("steps", []):
+        prompt = prompt_of(step)
+        if not prompt:
+            continue
+        tools = step.get("tools") or {}
+        handed = set((tools.get("queries") or []) + (tools.get("commands") or []))
+        for op in sorted(known - handed):
+            if f"`{op}`" in prompt:
+                problems.append(
+                    f"{name} step `{step.get('id')}` tells the model to use `{op}`, which is not in "
+                    f"its `tools`. The model is not refused — it is handed a different set than the "
+                    f"one its orders name, so it improvises with what it HAS. Declare it, or stop "
+                    f"naming it"
+                )
+    return problems
+
+
+DOCUMENT_RULES = (policy_problems, silence_problems, undeclared_tool_problems)
 
 
 def addressed_queries(doc):
@@ -743,6 +781,63 @@ SILENCE_CASES = [
 ]
 
 
+
+_KNOWN_OPS = {
+    "customers.list",
+    "customers.create",
+    "appointments.availability.slots",
+    "appointments.appointments.create",
+    "appointments.appointments.cancel",
+    "appointments.appointments.list_for_customer",
+}
+
+TOOL_CASES = [
+    (
+        "a prompt that only names what the step handed it is fine",
+        _fixture_doc(
+            _ai_step("s", "manual", ["appointments.appointments.create"], "Propose `appointments.appointments.create` with the slot."),
+        ),
+        0,
+    ),
+    (
+        "a prompt that orders a command the step never declared",
+        _fixture_doc(
+            _ai_step("s", "manual", ["appointments.appointments.create"], "If they cancel, call `appointments.appointments.cancel`."),
+        ),
+        1,
+    ),
+    (
+        "a prompt that orders a QUERY the step never declared",
+        _fixture_doc(
+            {"id": "s", "kind": "ai", "policy": "manual", "tools": {"queries": ["customers.list"]},
+             "prompt": "Look them up with `customers.list` and their visits with `appointments.appointments.list_for_customer`."},
+        ),
+        1,
+    ),
+    (
+        "a word that is not an operation of any module is prose, not a tool",
+        _fixture_doc(
+            _ai_step("s", "manual", ["appointments.appointments.create"], "Put the estimate in `internal_notes` and the ask in `notes`."),
+        ),
+        0,
+    ),
+    (
+        "a step that hands over queries AND commands is judged against both",
+        _fixture_doc(
+            {"id": "s", "kind": "ai", "policy": "manual",
+             "tools": {"queries": ["customers.list"], "commands": ["appointments.appointments.cancel"]},
+             "prompt": "Find them with `customers.list`, then `appointments.appointments.cancel`."},
+        ),
+        0,
+    ),
+    (
+        "a notify step carries no prompt and owes nothing",
+        _fixture_doc(_notify_step("tell", "your appointment is cancelled")),
+        0,
+    ),
+]
+
+
 def self_check():
     """The mutants of the two rules above, run every time, before any real document is opened."""
     problems = []
@@ -759,6 +854,13 @@ def self_check():
             problems.append(
                 f"the battery's own «say something back» rule is wrong — {label}: expected "
                 f"{expected} problem(s), got {len(got)}: {got}"
+            )
+    for label, doc, expected in TOOL_CASES:
+        got = undeclared_tool_problems("(self-check)", doc, _KNOWN_OPS)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «the prompt only orders what it was handed» rule is wrong — "
+                f"{label}: expected {expected} problem(s), got {len(got)}: {got}"
             )
     for label, doc, expected in POLICY_CASES:
         got = policy_problems("(self-check)", doc, _FIXTURE_COMMANDS, _FIXTURE_READS)
@@ -951,6 +1053,13 @@ def main():
         # shape of the document, so it runs on a bare checkout too.
         problems += applied(ledger, silence_problems, path.name, doc)
 
+        # 3a-ter) …and every tool its prompts ORDER was actually handed over (whatsapp_inbox#61).
+        # Needs the manifests: «is this a tool name or is it prose» is a question only they answer.
+        if contracts is not None:
+            problems += applied(
+                ledger, undeclared_tool_problems, path.name, doc, contracts[0] | contracts[1]
+            )
+
         # 3b) Every parameter is a word the query it addresses actually knows.
         #
         # A name that exists is not a name that filters. `whatsapp_inbox.conversations.list`
@@ -998,7 +1107,11 @@ def main():
 
     # 3c) …and every rule above actually MET every document that reached this far. Waived only for
     # the layer that was skipped out loud (no manifests next door → no `policy_problems`).
-    waived = {policy_problems.__name__} if commands_def is None else set()
+    waived = (
+        {policy_problems.__name__, undeclared_tool_problems.__name__}
+        if commands_def is None
+        else set()
+    )
     for name in inspected:
         for rule in DOCUMENT_RULES:
             if rule.__name__ in waived or (rule.__name__, name) in ledger:
