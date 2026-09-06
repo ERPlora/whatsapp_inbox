@@ -32,6 +32,30 @@ más deja de ser una traducción.
    eso en la mano **propone** la cita. `policy: manual`, que es el default del kernel: lo único que
    espera en `_flow_approvals` es la escritura, `appointments.appointments.create`, y la ejecuta
    quien la apruebe, exactamente como se guardó.
+5. **`confirm_to_customer`** — le dice a la clienta **qué ha pasado**, por el mismo WhatsApp por el
+   que escribió. Manda lo que el paso anterior escribió (`{{steps.propose_appointment.text}}`), y
+   por eso el prompt de ese paso termina diciéndole al modelo que **lo que responda se le manda a
+   ella, palabra por palabra**: día, hora y profesional por su nombre, sin ids ni notas internas.
+
+### Por qué la confirmación va DESPUÉS del paso que propone
+
+Porque el run **no termina** cuando una propuesta se aparca. `policy: manual` escribe la fila en
+`_flow_approvals` y corta el turno, pero cuando una persona decide, `decide_flow_approval` cierra el
+paso con `IoResult::Done` y **el run sigue por el paso siguiente**. Así que un `notify` escrito
+detrás cubre las dos salidas con un solo paso:
+
+- **se reservó** → la clienta recibe «te he reservado el martes a las 10:30 con Marta»;
+- **no había hueco** (el modelo no propuso nada y el paso terminó sin aparcar nada) → recibe el
+  porqué y una alternativa.
+
+Sin él, la automatización se paraba justo antes de cumplir lo que ella misma había prometido en el
+primer mensaje: el salón veía la cita en su agenda y la clienta seguía esperando (whatsapp_inbox#58).
+`tests/flow_templates.test.py` lo exige: si un paso `ai` puede proponer una escritura y no hay ningún
+`notify` **detrás**, es un FAIL. El acuse de recibo de arriba no cuenta — se manda antes de que pase
+nada, así que no puede contar lo que pasó.
+
+⚠️ **Lo que todavía NO cubre:** si el salón **rechaza** la propuesta, el run se cancela
+(`RejectPolicy::Cancel`, el defecto del kernel) y la clienta no recibe nada. Sale como issue aparte.
 
 ### Por qué preguntar y proponer caben en UN paso
 

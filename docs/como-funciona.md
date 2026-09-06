@@ -133,9 +133,10 @@ flowchart TD
     N1 --> A1["paso ai · manual<br/>¿tiene ficha de cliente? si no, propone crearla"]
     A1 --> A2["paso ai · manual<br/>lee la agenda (huecos reales del día)<br/>y propone la cita → petición en revisión"]
     A2 --> AP{"aprobación"}
+    A2 -- "no había hueco" --> N2
     AP -- "auto o el dueño aprueba" --> R["Citas crea la reserva"]
     R --> N2["paso notify (whatsapp)<br/>«Te he reservado el viernes a las 18:30»"]
-    AP -- "rechaza" --> N3["paso notify (whatsapp)<br/>«No hay hueco el viernes, ¿te va el sábado?»"]
+    AP -- "rechaza" --> X["el run se cancela<br/>(hoy la clienta no recibe nada)"]
 ```
 
 **Los permisos mandan.** Una automatización no puede escribir a nadie ni leer nada que el dueño no
