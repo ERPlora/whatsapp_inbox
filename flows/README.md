@@ -24,30 +24,42 @@ más deja de ser una traducción.
 3. **`know_the_customer`** — una cita se reserva contra un cliente REAL
    (`appointments.appointments.create` exige `customer_id`). Si el contacto no tiene ficha, la IA
    **propone crearla**; si ya la tiene, no propone nada y el run sigue.
-4. **`gather_availability`** — **solo mira**, no propone nada. Elige el servicio, **estima la
-   duración** cuando el catálogo no la declara, y pregunta la disponibilidad a las operaciones que
-   contestan con la autoridad de la propia puerta de reserva: `appointments.availability.day_opening`
+4. **`propose_appointment`** — **mira y propone en el mismo turno**. Elige el servicio, **estima
+   la duración** cuando el catálogo no la declara, pregunta la disponibilidad a las operaciones que
+   contestan con la autoridad de la propia puerta de reserva —`appointments.availability.day_opening`
    (cuándo abre el negocio ese día, con la precedencia de Horarios ya aplicada y los descansos
-   recortados), `.slots` (los huecos libres de verdad) y `.check` (confirmar el que se elija).
-   `policy: auto`, porque son **lecturas**: se ejecutan en el turno y el modelo recibe la respuesta.
-5. **`propose_appointment`** — con lo que trae el paso anterior, **propone** la cita. `policy:
-   manual`, que es el default del kernel: la propuesta espera en `_flow_approvals` y la ejecuta
+   recortados), `.slots` (los huecos libres de verdad) y `.check` (confirmar el que se elija)— y con
+   eso en la mano **propone** la cita. `policy: manual`, que es el default del kernel: lo único que
+   espera en `_flow_approvals` es la escritura, `appointments.appointments.create`, y la ejecuta
    quien la apruebe, exactamente como se guardó.
 
-### Por qué las lecturas van en un paso aparte
+### Por qué preguntar y proponer caben en UN paso
 
 Las tres operaciones de disponibilidad **son commands**, no queries: `appointments` las convirtió
 porque necesitan un handler WASM para contestar cruzando el horario que vive en el módulo
-`schedules` (appointments#105/#122/#127). Y `flow.schema.json` congela qué significa cada casilla:
-`tools.commands` son «escrituras que el modelo puede PROPONER», y bajo `policy: "manual"` la primera
-que el modelo llame «se convierte en una fila de `_flow_approvals` y **el turno TERMINA**».
+`schedules` (appointments#105/#122/#127). Y hasta hub#1595 ser un command significaba dos cosas a la
+vez: por qué puerta del dispatcher va la llamada **y** si una persona la confirma. Bajo `policy:
+"manual"` la primera que el modelo llamaba «se convertía en una fila de `_flow_approvals` y el turno
+TERMINABA», así que preguntar «¿qué huecos hay?» paraba el run y al dueño le llegaba una tarjeta de
+aprobación con una **pregunta** dentro, que no es una decisión que nadie pueda tomar. La única
+salida era partir la automatización en dos pasos, y eso costaba **un turno de IA facturado de más
+por cada mensaje** que entra, con lo averiguado viajando al segundo paso escrito en prosa — que es
+donde se pierden los ids, los offsets y los minutos.
 
-Así que una lectura metida en `tools.commands` de un paso `manual` no es una consulta: el modelo
-pregunta qué huecos hay, el run se para, y a una persona le llega una tarjeta de aprobación con una
-**pregunta** dentro. Por eso las lecturas viven en su propio paso `auto` y la única escritura
-—`appointments.appointments.create`— se queda en el paso `manual`, que es donde tiene que estar.
-`tests/flow_templates.test.py` lo exige **en las dos direcciones**: una lectura en un paso `manual`
-es un FAIL, y una escritura en un paso `auto` también.
+Desde hub#1595 esas dos preguntas están separadas: un command que **solo contesta** se ejecuta en el
+turno con cualquiera de las dos políticas y su respuesta vuelve al modelo igual que las filas de una
+query. Lo decide `assistant::command_only_answers` sobre lo que declara el manifest del módulo (sin
+`sql`, sin `emit`, sin `min_affected_rows`/`expect_rows`, `risk` normal, y con un permiso que el
+módulo también le pide a alguna de sus propias queries), y la ausencia de señal se lee **siempre**
+como escritura. Por eso `propose_appointment` pregunta y propone en el mismo turno: se paga un turno
+en vez de dos, y lo que averigua no tiene que caber en un párrafo.
+
+`tests/flow_templates.test.py` sigue exigiendo la dirección peligrosa —una **escritura** en un paso
+`auto` es un FAIL, porque `auto` la ejecuta sin nadie delante (ADR-0283 D3)— y desde
+whatsapp_inbox#55 exige también la contraria de antes: un paso cuyos commands **solo contestan** y
+al que otro paso cita (`{{steps.<id>.text}}`) es el apaño de dos pasos, y es un FAIL. La batería se
+comprueba a sí misma primero: `self_check()` corre esas dos reglas contra documentos sintéticos
+—mutantes— antes de abrir ninguna plantilla real.
 
 ### Por qué hay un suelo de versión
 
@@ -107,3 +119,12 @@ La vía declarativa para que un blueprint la reparta está propuesta en **ERPlor
 - Una imagen del hub con **hub#821** (step `notify` + grant `recipient_query`). Sin ella el
   documento se **rechaza al guardar**, nombrando su issue — que es lo correcto: un motor que
   promete y calla es peor que uno que dice que no.
+- 🔴 Una imagen del hub con **hub#1595** (un command que solo contesta se ejecuta en el turno, sea
+  cual sea la política), que es **`v1.1.15` o posterior**: `v1.1.14` es la última que NO lo lleva
+  (medido sobre `crates/server/src/agent_runner.rs` de cada tag). Y esta, al contrario que hub#821,
+  **no se rechaza al guardar: falla callando**. En un hub anterior, la primera pregunta de disponibilidad de `propose_appointment` se
+  convierte en una fila de `_flow_approvals` y el turno termina, así que al dueño le llega una
+  tarjeta pidiéndole que apruebe «consultar disponibilidad» y la cita no se propone nunca. Es el
+  motivo por el que esta plantilla estuvo partida en dos pasos (whatsapp_inbox#55): si la instalas
+  en un hub sin hub#1595, la versión de dos pasos es la que funciona ahí. **Mergeada ≠ desplegada**
+  — se comprueba contra la imagen que corre el hub, no contra `develop`.

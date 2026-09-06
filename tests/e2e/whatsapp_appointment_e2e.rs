@@ -116,9 +116,9 @@ async fn a_customer_writes(rt: &Runtime, wa_message_id: &str, text: &str) -> boo
     .unwrap()
 }
 
-/// The template with the `ai` steps removed (three since whatsapp_inbox#52/#48 split the reads out
-/// into `gather_availability`): everything a runtime with no model can execute. The filter is by
-/// `kind`, so it does not care how many there are.
+/// The template with the `ai` steps removed (two since whatsapp_inbox#55 folded the reads back
+/// into the step that acts on them): everything a runtime with no model can execute. The filter is
+/// by `kind`, so it does not care how many there are.
 fn acknowledge_only() -> Value {
     let mut def = template("appointment-from-whatsapp.es.flow.json");
     let steps: Vec<Value> = def["steps"]

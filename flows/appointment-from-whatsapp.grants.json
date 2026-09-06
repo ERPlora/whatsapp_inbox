@@ -18,10 +18,6 @@
     },
     {
       "kind": "query",
-      "value": "appointments.appointments.conflicting"
-    },
-    {
-      "kind": "query",
       "value": "staff.members.list"
     },
     {
