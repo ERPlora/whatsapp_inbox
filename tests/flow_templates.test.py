@@ -121,22 +121,61 @@ def workspace_manifests():
     return worktrees + canonical + [(MODULE_DIR, MANIFEST)]
 
 
-def workspace_contracts(manifests):
+def resolved_modules(manifests):
+    """`module id -> (module_dir, manifest)` — ONE answer per module, never a union.
+
+    🔴 The union was the hole this battery was blind through, and it is measured. On 2026-09-06 the
+    workspace held BOTH `appointments/` (the canonical checkout, 13 releases stale at 1.1.56, where
+    `appointments.availability.slots` is still a `query`) and `appointments-wt-132/` (a fleet
+    worktree at 1.1.69, where the same name is a `command`). Unioning every manifest it found made
+    the name a query AND a command at once, so layer 3 — the layer whose whole job is «does this
+    operation exist with THIS kind» — answered yes to both readings and the templates went green
+    while the flow was, in production, silently losing the tool (whatsapp_inbox#52).
+
+    A workspace answers with the precedence `workspace_manifests` already establishes: a directory
+    whose name IS the manifest's id is the module's own checkout and wins; a worktree only answers
+    for an id no canonical checkout claims; ours goes last and beats everyone.
+    """
+    out = {}
+    for module_dir, m in manifests:
+        mid = m.get("id")
+        if isinstance(mid, str) and mid:
+            out[mid] = (module_dir, m)
+    return out
+
+
+def copies_of(manifests, module_id):
+    """Every checkout in the workspace that claims `module_id`, newest first."""
+    found = [(d, m) for d, m in manifests if m.get("id") == module_id]
+    return sorted(found, key=lambda dm: version_tuple(dm[1].get("version")) or (), reverse=True)
+
+
+def workspace_contracts(resolved):
     """Every query and command name the workspace declares — our own included."""
     queries, commands = set(), set()
-    for _, m in manifests:
-        queries |= set(m.get("queries", {}))
-        commands |= set(m.get("commands", {}))
+    for _, m in resolved.values():
+        queries |= set(m.get("queries") or {})
+        commands |= set(m.get("commands") or {})
     return queries, commands
 
 
-def query_definitions(manifests):
-    """`query id -> (module_dir, definition)`, later entries winning (see `workspace_manifests`)."""
+def query_definitions(resolved):
+    """`query id -> (module_dir, definition)`, from the one manifest per module id."""
     out = {}
-    for module_dir, m in manifests:
+    for module_dir, m in resolved.values():
         for qid, qdef in (m.get("queries") or {}).items():
             if isinstance(qdef, dict):
                 out[qid] = (module_dir, qdef)
+    return out
+
+
+def command_definitions(resolved):
+    """`command id -> (module_dir, definition)`, from the one manifest per module id."""
+    out = {}
+    for module_dir, m in resolved.values():
+        for cid, cdef in (m.get("commands") or {}).items():
+            if isinstance(cdef, dict):
+                out[cid] = (module_dir, cdef)
     return out
 
 
@@ -226,6 +265,68 @@ def query_vocabulary(module_dir, qdef):
         accepted |= set(props)
 
     return accepted
+
+
+def floors_of(doc_path):
+    """The `.requires.json` that travels with a document — the version floor of what it consumes."""
+    family = doc_path.name.split(".")[0]
+    return FLOWS_DIR / f"{family}.requires.json"
+
+
+def version_tuple(raw):
+    """`"1.1.69"` -> `(1, 1, 69)`, or None when it is not a plain dotted number."""
+    if not isinstance(raw, str):
+        return None
+    parts = []
+    for chunk in raw.split("."):
+        digits = ""
+        for ch in chunk:
+            if not ch.isdigit():
+                break
+            digits += ch
+        if not digits:
+            return None
+        parts.append(int(digits))
+    return tuple(parts) if parts else None
+
+
+def command_is_read_only(cdef):
+    """Does this command ANSWER a question rather than change the business?
+
+    Two independent signals from the owner's manifest, and BOTH have to hold, because getting this
+    wrong in the permissive direction is the expensive direction — it would let a write into a
+    `policy: "auto"` step, which is a model writing to the salon's database at 3 AM with nobody
+    looking (ADR-0283 D3, the reason `manual` is the default):
+
+    * it publishes NO domain event (`emit`) — a state change the rest of the hub must hear about
+      is a write by definition; and
+    * its `permission` is a `view_*` one — the permission a screen asks for to READ.
+
+    Neither alone is enough, and that is measured on the manifests next door rather than assumed:
+    `customers.bulk_create` declares no `emit` at all and is plainly a write, and it is the
+    `customers.add_customer` permission that says so.
+
+    Its limit, stated rather than hidden: a command that both published no event and asked only for
+    a `view_*` permission while writing would pass here. That is a defect in ITS manifest — an
+    unannounced write wearing a read's permission — and this battery cannot see it from the outside.
+    """
+    if cdef.get("emit"):
+        return False
+    permission = cdef.get("permission")
+    if not isinstance(permission, str):
+        return False
+    return permission.rsplit(".", 1)[-1].startswith("view_")
+
+
+def ai_steps(doc):
+    """`(step id, policy, [command names])` for every `ai` step that may propose a write."""
+    out = []
+    for step in doc.get("steps", []):
+        if step.get("kind") != "ai":
+            continue
+        commands = ((step.get("tools") or {}).get("commands")) or []
+        out.append((step.get("id"), step.get("policy") or "manual", list(commands)))
+    return out
 
 
 def addressed_queries(doc):
@@ -326,14 +427,89 @@ def main():
 
     manifests = workspace_manifests()
     if manifests is None:
-        contracts, definitions = None, None
+        contracts, definitions, commands_def, resolved = None, None, None, None
         skipped.append(
             "the module workspace is not next to this repo — query/command names and the "
             "parameter vocabularies were NOT verified"
         )
     else:
-        contracts = workspace_contracts(manifests)
-        definitions = query_definitions(manifests)
+        resolved = resolved_modules(manifests)
+
+    # 1b) WHICH copy answered, and was it recent enough.
+    #
+    # Layer 3 below is only worth what the manifests it reads are worth, and a workspace is a pile
+    # of checkouts at whatever commit somebody left them on. This is the half that was missing when
+    # whatsapp_inbox#52 shipped: the canonical `appointments/` checkout sat 13 releases behind, so
+    # the battery resolved `appointments.availability.slots` against a manifest where it was still
+    # a `query` and said OK. A green that depends on how stale the machine is, is not a green — so
+    # the versions it resolved against are PRINTED, and a copy below the floor this repo declares
+    # is a FAIL, not a footnote.
+    if resolved is not None:
+        for path in sorted({floors_of(d) for d in docs}):
+            if not path.is_file():
+                problems.append(
+                    f"flows/ has no `{path.name}`: without a declared floor these templates are "
+                    f"checked against whatever version of its neighbours this machine happens to "
+                    f"hold, and a stale checkout turns a red into a green"
+                )
+                continue
+            floors = (json.loads(path.read_text()) or {}).get("modules") or {}
+            for module_id in sorted(floors):
+                want = version_tuple(floors[module_id])
+                if want is None:
+                    problems.append(
+                        f"{path.name}: `{module_id}` floor {floors[module_id]!r} is not a version"
+                    )
+                    continue
+                target = resolved.get(module_id)
+                if target is None:
+                    skipped.append(
+                        f"{path.name} requires `{module_id}` >= {floors[module_id]}, and no such "
+                        f"module is in the workspace — its operations were NOT verified"
+                    )
+                    continue
+                module_dir, manifest = target
+                have = version_tuple(manifest.get("version"))
+                if have is not None and have >= want:
+                    print(
+                        f"RESOLVED  {module_id}@{manifest.get('version')} "
+                        f"(needs >= {floors[module_id]}) from {module_dir.name}/"
+                    )
+                    continue
+
+                # The checkout that owns the name is too old to answer. Rather than trust it, look
+                # for a copy in the workspace that DOES meet the floor and say out loud that a
+                # fallback answered — the fleet keeps worktrees of its modules next door, and one of
+                # them being current is the ordinary case on a machine mid-batch.
+                better = next(
+                    (
+                        (d, m)
+                        for d, m in copies_of(manifests, module_id)
+                        if (version_tuple(m.get("version")) or ()) >= want
+                    ),
+                    None,
+                )
+                if better is None:
+                    problems.append(
+                        f"no copy of `{module_id}` in this workspace reaches {floors[module_id]} "
+                        f"(the newest is {manifest.get('version')} in {module_dir}). Every name "
+                        f"below would be resolved against a manifest that no longer describes what "
+                        f"the hub runs, which is how a red becomes a green — refresh it with "
+                        f"`git -C {module_dir} pull --ff-only` before believing this battery"
+                    )
+                    continue
+                resolved[module_id] = better
+                print(
+                    f"RESOLVED  {module_id}@{better[1].get('version')} "
+                    f"(needs >= {floors[module_id]}) from {better[0].name}/ — the checkout that "
+                    f"owns the name, {module_dir.name}/, is {manifest.get('version')} and too old "
+                    f"to answer"
+                )
+
+    if resolved is not None:
+        contracts = workspace_contracts(resolved)
+        definitions = query_definitions(resolved)
+        commands_def = command_definitions(resolved)
 
     for path in docs:
         doc = json.loads(path.read_text())
@@ -372,6 +548,47 @@ def main():
                     if q not in queries:
                         problems.append(
                             f"{path.name} addresses its message through `{q}`, which no installed module declares"
+                        )
+
+        # 3a) A command a step declares is a WRITE, and `policy` is what decides its fate.
+        #
+        # `flow.schema.json` freezes both halves of this and they are the same sentence read twice:
+        # `tools.commands` is «escrituras que el modelo puede PROPONER», and `policy: "manual"` —
+        # the default, and this template's — means the proposal «se convierte en una fila de
+        # `_flow_approvals` y el turno TERMINA». So a READ-ONLY operation parked in `tools.commands`
+        # of a manual step is not a lookup at all: the model asks what hours are free, the run stops,
+        # and a person is handed an approval card for a question. That is whatsapp_inbox#52 in its
+        # next incarnation, and nothing else in this repo would notice — `appointments` turned
+        # `availability.slots`, `.check` and `.day_opening` into commands precisely because they need
+        # a WASM handler to answer with the authority the booking door uses, and their names did not
+        # change when their kind did.
+        #
+        # The other direction is the dangerous one and is checked just as hard: a step that runs its
+        # commands without asking (`policy: "auto"`) may only declare operations that answer. A write
+        # in there is the model booking, charging or deleting at 3 AM with nobody looking, which is
+        # the entire reason `manual` is the default (ADR-0283 D3).
+        if commands_def is not None:
+            for step_id, policy, names in ai_steps(doc):
+                for name in names:
+                    target = commands_def.get(name)
+                    if target is None:
+                        continue  # already reported above as a name no module declares
+                    _, cdef = target
+                    if policy == "manual" and command_is_read_only(cdef):
+                        problems.append(
+                            f"{path.name} step `{step_id}` declares `{name}` in `tools.commands` "
+                            f"under `policy: manual`, but that operation only READS. Under `manual` "
+                            f"the first command call becomes an `_flow_approvals` row and the turn "
+                            f"ends, so the model never gets the answer and a person is asked to "
+                            f"approve a question. A read the model has to act on belongs in a step "
+                            f"with `policy: auto`"
+                        )
+                    if policy == "auto" and not command_is_read_only(cdef):
+                        problems.append(
+                            f"{path.name} step `{step_id}` declares `{name}` in `tools.commands` "
+                            f"under `policy: auto`, and that operation WRITES. `auto` runs it in "
+                            f"the turn, unattended: a write with nobody looking is exactly what "
+                            f"`manual` is the default for"
                         )
 
         # 3b) Every parameter is a word the query it addresses actually knows.
