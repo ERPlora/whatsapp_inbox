@@ -3614,7 +3614,8 @@ var es_default = {
     labelMonthlyAllowance: "Mensajes entrantes incluidos al mes",
     allowanceUnlimited: "Sin tope en este plan",
     helpAllowance: "Lo fija el plan que contrataste para este m\xF3dulo. Se cuenta por mes natural y no se edita aqu\xED.",
-    helpChannelLivesInAccount: "El n\xFAmero, el nombre visible, la calificaci\xF3n de calidad y las plantillas aprobadas por Meta viven en tu cuenta de ERPlora \u2014 el hub no guarda las credenciales del canal.",
+    helpChannelCredentialsStaySealed: "Las credenciales del canal se quedan selladas en el servidor de ERPlora, nunca en este hub: conectar el n\xFAmero aqu\xED se las entrega al servidor, no a esta pantalla.",
+    helpConnectNeedsNewerHub: "Este hub es demasiado antiguo para conectar el n\xFAmero desde aqu\xED. Actualiza el hub y vuelve a esta pantalla.",
     labelApprovalMode: "Una petici\xF3n que lee el asistente",
     approvalAuto: "Se confirma directamente",
     approvalManual: "Queda en revisi\xF3n",
@@ -3754,7 +3755,8 @@ var en_default = {
     labelMonthlyAllowance: "Inbound messages included each month",
     allowanceUnlimited: "No cap on this plan",
     helpAllowance: "Set by the plan you bought for this module. It is counted per calendar month and it is not edited here.",
-    helpChannelLivesInAccount: "The phone number, the display name, the quality rating and the templates Meta approved live in your ERPlora account \u2014 the hub never stores the channel credentials.",
+    helpChannelCredentialsStaySealed: "The channel credentials stay sealed on the ERPlora server, never on this hub: connecting the number here hands them to the server, not to this screen.",
+    helpConnectNeedsNewerHub: "This hub is too old to connect the number from here. Update the hub and come back to this screen.",
     labelApprovalMode: "A request the assistant reads",
     approvalAuto: "Is confirmed straight away",
     approvalManual: "Waits in review",
@@ -4873,9 +4875,21 @@ var ErpWhatsappInboxSettings = class extends i3 {
         <b>${limit > 0 ? String(limit) : t5("ui.allowanceUnlimited")}</b>
       </div>
       <p class="help">${t5("ui.helpAllowance")}</p>
-      <p class="help">${t5("ui.helpChannelLivesInAccount")}</p>
+      ${this.renderConnect(t5)}
+      <p class="help">${t5("ui.helpChannelCredentialsStaySealed")}</p>
       <p class="help">${t5("ui.noReplyHere")}</p>
     </section>`;
+  }
+  /**
+   * Where the number gets connected (whatsapp_inbox#54). The button, Meta's popup — the QR scanned
+   * with the WhatsApp Business app — and the runtime doors belong to the SHELL, as the element
+   * `<erp-whatsapp-connect>` (hub#1600, ADR-0452): a module may not load a foreign script, the
+   * shell may. This screen only embeds it. On a hub too old to define the element, the tag would
+   * be inert — an empty box the owner stares at — so that case gets a sentence instead.
+   */
+  renderConnect(t5) {
+    const provided = typeof customElements !== "undefined" && Boolean(customElements.get("erp-whatsapp-connect"));
+    return provided ? b2`<erp-whatsapp-connect></erp-whatsapp-connect>` : b2`<p class="help">${t5("ui.helpConnectNeedsNewerHub")}</p>`;
   }
   renderRequests() {
     const t5 = (k2) => erplora3().t(CATALOG3, k2);

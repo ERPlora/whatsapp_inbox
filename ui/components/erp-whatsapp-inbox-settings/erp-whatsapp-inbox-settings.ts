@@ -226,9 +226,25 @@ export class ErpWhatsappInboxSettings extends LitElement {
         <b>${limit > 0 ? String(limit) : t('ui.allowanceUnlimited')}</b>
       </div>
       <p class="help">${t('ui.helpAllowance')}</p>
-      <p class="help">${t('ui.helpChannelLivesInAccount')}</p>
+      ${this.renderConnect(t)}
+      <p class="help">${t('ui.helpChannelCredentialsStaySealed')}</p>
       <p class="help">${t('ui.noReplyHere')}</p>
     </section>`;
+  }
+
+  /**
+   * Where the number gets connected (whatsapp_inbox#54). The button, Meta's popup — the QR scanned
+   * with the WhatsApp Business app — and the runtime doors belong to the SHELL, as the element
+   * `<erp-whatsapp-connect>` (hub#1600, ADR-0452): a module may not load a foreign script, the
+   * shell may. This screen only embeds it. On a hub too old to define the element, the tag would
+   * be inert — an empty box the owner stares at — so that case gets a sentence instead.
+   */
+  private renderConnect(t: (k: string) => string) {
+    const provided =
+      typeof customElements !== 'undefined' && Boolean(customElements.get('erp-whatsapp-connect'));
+    return provided
+      ? html`<erp-whatsapp-connect></erp-whatsapp-connect>`
+      : html`<p class="help">${t('ui.helpConnectNeedsNewerHub')}</p>`;
   }
 
   private renderRequests() {

@@ -26,7 +26,7 @@
 //    said by the flow document. They are NOT deleted — they are external contract, `settings.upsert`
 //    requires them — but a screen that offered them would promise behaviour no code implements, the
 //    same mistake printing#17 had to undo.
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import esLocale from '../../../locales/es.json';
 import enLocale from '../../../locales/en.json';
@@ -263,5 +263,54 @@ describe('i18n: English is the source and Spanish is shipped (ADR-0055/0199)', (
     const es = (esLocale as { ui: Record<string, string> }).ui;
     const en = (enLocale as { ui: Record<string, string> }).ui;
     expect(Object.keys(es).sort()).toEqual(Object.keys(en).sort());
+  });
+});
+
+// whatsapp_inbox#54 — the «Channel» block is WHERE the number gets connected. The button, the
+// Meta popup (the QR scanned with the WhatsApp Business app) and the runtime doors are the shell's
+// (`<erp-whatsapp-connect>`, hub#1600, ADR-0452): a module may not load a foreign script, the
+// shell may. This screen embeds the element — and on a hub too old to define it, says so instead
+// of rendering an inert tag the owner would stare at.
+describe('the channel block is where the number gets connected (whatsapp_inbox#54)', () => {
+  const TAG = 'erp-whatsapp-connect';
+
+  afterEach(() => vi.restoreAllMocks());
+
+  // The positive of the degradation: on a hub whose shell predates hub#1601 the element is not
+  // defined, and the block must SAY so — not leave an unknown tag the browser renders as nothing.
+  // `customElements.define` cannot be undone, so the old hub is played by answering «not defined»
+  // for this one tag, whatever the other tests registered before.
+  it('says the hub is too old instead of leaving an inert tag when the shell lacks the element', async () => {
+    const real = customElements.get.bind(customElements);
+    vi.spyOn(customElements, 'get').mockImplementation((name: string) => (name === TAG ? undefined : real(name)));
+    mountWith();
+    const el = await mount();
+    expect(el.shadowRoot.querySelector(TAG), 'an old hub still got the tag it cannot define').toBeNull();
+    expect(el.shadowRoot.textContent).toContain(esLocale.ui.helpConnectNeedsNewerHub);
+  });
+
+  it('embeds the shell element when the hub provides it', async () => {
+    if (!customElements.get(TAG)) customElements.define(TAG, class extends HTMLElement {});
+    mountWith();
+    const el = await mount();
+    const channel = el.shadowRoot.querySelector(TAG);
+    expect(channel, 'the settings screen does not embed <erp-whatsapp-connect>').not.toBeNull();
+    expect(el.shadowRoot.textContent).not.toContain(esLocale.ui.helpConnectNeedsNewerHub);
+  });
+
+  it('no longer tells the owner the number lives somewhere else', async () => {
+    mountWith();
+    const el = await mount();
+    const text = el.shadowRoot.textContent ?? '';
+    expect(text).not.toContain('viven en tu cuenta de ERPlora');
+    expect(text).toContain(esLocale.ui.helpChannelCredentialsStaySealed);
+  });
+
+  it('ships the sentence for a hub that cannot connect yet, in both languages', () => {
+    for (const catalog of [esLocale, enLocale]) {
+      expect(catalog.ui.helpConnectNeedsNewerHub, 'missing helpConnectNeedsNewerHub').toBeTruthy();
+      expect(catalog.ui.helpChannelCredentialsStaySealed, 'missing helpChannelCredentialsStaySealed').toBeTruthy();
+    }
+    expect(esLocale.ui.helpConnectNeedsNewerHub).not.toBe(enLocale.ui.helpConnectNeedsNewerHub);
   });
 });
