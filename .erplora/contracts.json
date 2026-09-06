@@ -13,7 +13,7 @@
       "whatsapp_inbox.usage.get"
     ],
     "optional_queries": [
-      "appointments.appointments.list",
+      "appointments.settings.get",
       "flows.drafts.list"
     ],
     "commands": [

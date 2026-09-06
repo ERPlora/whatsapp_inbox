@@ -145,6 +145,27 @@ function fromOriginMain(moduleId: string, path: string): string | null {
 }
 
 /**
+ * The named binds a query's SQL references, `:hub_id` aside — the runtime injects that one.
+ * Comments go first: `appointments_list.sql` explains its NULL-safe filter with a literal
+ * `:p = ''` in prose, and `::text` casts are not binds.
+ */
+function bindsOf(sql: string): string[] {
+  const code = sql.replace(/--[^\n]*/g, '');
+  return [...new Set([...code.matchAll(/(?<![:\w]):([a-z_]+)/g)].map((m) => m[1]))]
+    .filter((b) => b !== 'hub_id')
+    .sort();
+}
+
+describe('the bind reader the witness guard relies on', () => {
+  it('sees a real bind, ignores :hub_id, casts and binds quoted in comments', () => {
+    expect(bindsOf("SELECT 1 WHERE a = :x AND b::text = :hub_id -- and :zzz in prose\n LIMIT :limit")).toEqual([
+      'limit',
+      'x',
+    ]);
+  });
+});
+
+/**
  * **The witness has to be a query that exists**, and this is the only place that can tell.
  *
  * A witness proves its module is INSTALLED by being asked and not coming back
@@ -173,6 +194,42 @@ describe('every witness is a query its module really publishes', () => {
       `\`${witness}\` is not a query of ${moduleId} on origin/main: the use would be offered to ` +
         'every hub, because a name that does not exist answers `not_found`, never `module_not_installed`',
     ).toContain(witness);
+  });
+});
+
+/**
+ * **A witness is asked with NO parameters, so it has to be a query that needs none.**
+ *
+ * The first witness here was `appointments.appointments.list`, which wants `:day_start`,
+ * `:day_end` and `:limit`: asked bare, the runtime answers `missing_required_param` on EVERY hub
+ * that has Appointments. The card read that as «present» — the right answer for the wrong reason,
+ * with a failed request in the console on every visit to Settings, and a witness that would keep
+ * «working» the day it became a query that really fails. A witness has to come back clean.
+ */
+describe('every witness can be asked bare', () => {
+  const witnesses = [
+    ...WHATSAPP_USES.map((u) => [u.module, u.witness] as const),
+    [AUTOMATIONS_MODULE, AUTOMATIONS_WITNESS] as const,
+  ];
+
+  it.each(witnesses)('%s: %s binds nothing but :hub_id', (moduleId, witness) => {
+    const manifest = fromOriginMain(moduleId, 'module.json');
+    if (manifest === null) {
+      console.warn(`SKIPPED: no ${moduleId} checkout next door (module-toolkit#211)`);
+      return;
+    }
+    const queries = (JSON.parse(manifest) as { queries?: Record<string, { sql?: string }> }).queries ?? {};
+    const sqlPath = queries[witness]?.sql;
+    expect(sqlPath, `\`${witness}\` names no SQL file in the manifest of ${moduleId}`).toBeTruthy();
+    const sql = fromOriginMain(moduleId, sqlPath!);
+    expect(sql, `${sqlPath} is not on origin/main of ${moduleId}`).not.toBeNull();
+    expect(sql!.length, 'read an empty SQL file: the reader, not the query, is what broke').toBeGreaterThan(0);
+    const binds = bindsOf(sql!);
+    expect(
+      binds,
+      `\`${witness}\` needs parameters (${binds.join(', ')}): asked bare it FAILS on every hub that has ` +
+        `${moduleId}, and the card counts that failure as «present» — right answer, wrong reason`,
+    ).toEqual([]);
   });
 });
 

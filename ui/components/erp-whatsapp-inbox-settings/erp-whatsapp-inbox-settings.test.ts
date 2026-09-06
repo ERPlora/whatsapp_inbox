@@ -66,8 +66,12 @@ const commands: { name: string; payload: Record<string, unknown> }[] = [];
 interface Neighbours {
   /** Module ids this hub does NOT have. */
   absent?: string[];
-  /** Play a shell too old to offer `queryOptional`: the screen has to fall back to `query`. */
+  /** Play a shell too old to offer `queryOptional`: the call lands as a TypeError, which is
+   *  «could not ask», never an absence — the screen has to keep offering the uses. */
   noQueryOptional?: boolean;
+  /** Module ids this hub has DEACTIVATED, on a shell whose `queryOptional` predates the ADR-0128
+   *  cascade and RE-THROWS `module_inactive` instead of answering `undefined` for it. */
+  legacyInactive?: string[];
   /** A witness that fails for a reason that is NOT absence — a denied permission, a broken handler. */
   brokenWitness?: string;
   /** A witness whose answer never arrives: the hub is slow, the screen is still finding out. */
@@ -79,6 +83,7 @@ function mountWith(row: Record<string, unknown> | null = SAVED_SETTINGS, hub: Ne
   commands.length = 0;
   const ownerOf = (name: string) => name.split('.')[0];
   const absent = new Set(hub.absent ?? []);
+  const legacyInactive = new Set(hub.legacyInactive ?? []);
   const client: Record<string, unknown> = {
     query: async (name: string, params?: unknown) => {
       queries.push({ name, params });
@@ -87,6 +92,9 @@ function mountWith(row: Record<string, unknown> | null = SAVED_SETTINGS, hub: Ne
       if (name === hub.brokenWitness) throw Object.assign(new Error('permission denied'), { code: 'permission_denied' });
       if (absent.has(ownerOf(name))) {
         throw Object.assign(new Error('module_not_installed'), { code: 'module_not_installed' });
+      }
+      if (legacyInactive.has(ownerOf(name))) {
+        throw Object.assign(new Error('module_inactive'), { code: 'module_inactive' });
       }
       if (ownerOf(name) !== 'whatsapp_inbox') return [];
       return row ? [row] : [];
@@ -110,7 +118,10 @@ function mountWith(row: Record<string, unknown> | null = SAVED_SETTINGS, hub: Ne
         return await (client.query as (n: string, p?: unknown) => Promise<unknown>)(name, params);
       } catch (e) {
         const code = (e as { code?: string }).code;
-        if (code === 'module_not_installed' || code === 'module_inactive') return undefined;
+        // An SDK before the ADR-0128 cascade only mapped `module_not_installed`; `module_inactive`
+        // reached the caller as an error. The screen has to read it as the absence it is.
+        if (code === 'module_not_installed') return undefined;
+        if (code === 'module_inactive' && legacyInactive.size === 0) return undefined;
         throw e;
       }
     };
@@ -455,6 +466,40 @@ describe('the settings screen says what this WhatsApp can be used for (whatsapp_
       'an old shell was read as «this hub has nothing», hiding every use on hubs that have them',
     ).not.toBeNull();
     expect(el.shadowRoot.textContent ?? '').not.toContain(esLocale.ui.usesEmpty);
+  });
+
+  // `module_inactive` is an absence (ADR-0128: a deactivated module is not available), and the
+  // screen must read it as one even on a shell whose SDK still re-throws it instead of answering
+  // `undefined`. Without this case, «every failure counts as present» passes every other test.
+  it('hides the use when an older SDK re-throws module_inactive instead of answering undefined', async () => {
+    mountWith(SAVED_SETTINGS, { legacyInactive: [APPOINTMENTS.module] });
+    const el = await mount();
+    expect(
+      el.shadowRoot.querySelector(testid(APPOINTMENTS)),
+      'a deactivated module was offered as a use: module_inactive is an absence, not a broken contract',
+    ).toBeNull();
+  });
+
+  // Counting a failed witness as «present» is the safe reading, but a witness that fails EVERY time
+  // — renamed, or behind a permission this session lacks — would keep the use offered for ever with
+  // nobody ever learning why. A failure nobody can see does not exist (CLAUDE.md: «Fallos»).
+  it('says in the console why a witness could not answer, so a broken witness is not silent', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mountWith(SAVED_SETTINGS, { brokenWitness: APPOINTMENTS.witness });
+    await mount();
+    const said = warn.mock.calls.map((c) => c.map(String).join(' '));
+    expect(
+      said.find((line) => line.includes(APPOINTMENTS.witness) && line.includes('permission_denied')),
+      `nothing in the console names the witness and its failure code; console.warn calls were: ${JSON.stringify(said)}`,
+    ).toBeTruthy();
+  });
+
+  it('stays quiet in the console when the answer is a plain absence', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mountWith(SAVED_SETTINGS, { absent: [APPOINTMENTS.module] });
+    await mount();
+    const said = warn.mock.calls.map((c) => c.map(String).join(' '));
+    expect(said.filter((line) => line.includes(APPOINTMENTS.witness))).toEqual([]);
   });
 
   it('takes the owner to that gallery card when the use is tapped', async () => {

@@ -3,6 +3,7 @@ import { state } from 'lit/decorators.js';
 import { define } from '@erplora/outfitkit/define';
 import {
   APPS_PATH,
+  AUTOMATIONS_WITNESS,
   WHATSAPP_USES,
   galleryPath,
   probeAutomations,
@@ -291,21 +292,32 @@ export class ErpWhatsappInboxSettings extends LitElement {
    * whether the module is installed. Reading them as «not here» would hide a working use behind
    * somebody else's bug, silently and for as long as the bug lasts. The other way round, the worst
    * case is a shortcut to a gallery card the owner looks at and does not use.
+   *
+   * **But not silently.** A witness that fails every time — renamed, or behind a permission this
+   * session lacks — would keep its use offered for ever with nobody ever learning why, so the
+   * reason goes to the console, named after the witness. A failure nobody can see does not exist.
    */
-  private async isHere(probe: (client: WitnessAsker) => Promise<unknown>): Promise<boolean> {
+  private async isHere(witness: string, probe: (client: WitnessAsker) => Promise<unknown>): Promise<boolean> {
     try {
       return (await probe(erplora() as unknown as WitnessAsker)) !== undefined;
     } catch (e) {
       const code = (e as { code?: string }).code;
-      return code !== 'module_not_installed' && code !== 'module_inactive';
+      // Both are absences: an SDK from before the ADR-0128 cascade re-throws `module_inactive`
+      // instead of answering `undefined` for it, and a deactivated module is not available.
+      if (code === 'module_not_installed' || code === 'module_inactive') return false;
+      const reason = code ?? (e instanceof Error ? e.message : String(e));
+      console.warn(
+        `[whatsapp_inbox] witness ${witness} could not answer (${reason}); counting its module as present`,
+      );
+      return true;
     }
   }
 
   /** Resolved in one go so the section never renders half-answered — see `availableUses`. */
   private async resolveUses() {
     const [automationsHere, ...present] = await Promise.all([
-      this.isHere(probeAutomations),
-      ...WHATSAPP_USES.map((use) => this.isHere((client) => use.probe(client))),
+      this.isHere(AUTOMATIONS_WITNESS, probeAutomations),
+      ...WHATSAPP_USES.map((use) => this.isHere(use.witness, (client) => use.probe(client))),
     ]);
     this.uses = { automationsHere, available: WHATSAPP_USES.filter((_, i) => present[i]) };
   }

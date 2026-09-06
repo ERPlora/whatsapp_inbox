@@ -4768,14 +4768,15 @@ var WHATSAPP_USES = [
     id: "whatsapp-appointment",
     family: "appointment-from-whatsapp",
     module: "appointments",
-    witness: "appointments.appointments.list",
-    probe: (client) => client.queryOptional("appointments.appointments.list"),
+    witness: "appointments.settings.get",
+    probe: (client) => client.queryOptional("appointments.settings.get"),
     icon: "calendar-outline",
     nameKey: "ui.useAppointmentsName",
     summaryKey: "ui.useAppointmentsSummary"
   }
 ];
 var AUTOMATIONS_MODULE = "flows";
+var AUTOMATIONS_WITNESS = "flows.drafts.list";
 var probeAutomations = (client) => client.queryOptional("flows.drafts.list");
 var APPS_PATH = "/apps";
 function galleryPath(templateId) {
@@ -4958,20 +4959,29 @@ var ErpWhatsappInboxSettings = class extends i3 {
    * whether the module is installed. Reading them as «not here» would hide a working use behind
    * somebody else's bug, silently and for as long as the bug lasts. The other way round, the worst
    * case is a shortcut to a gallery card the owner looks at and does not use.
+   *
+   * **But not silently.** A witness that fails every time — renamed, or behind a permission this
+   * session lacks — would keep its use offered for ever with nobody ever learning why, so the
+   * reason goes to the console, named after the witness. A failure nobody can see does not exist.
    */
-  async isHere(probe) {
+  async isHere(witness, probe) {
     try {
       return await probe(erplora3()) !== void 0;
     } catch (e5) {
       const code = e5.code;
-      return code !== "module_not_installed" && code !== "module_inactive";
+      if (code === "module_not_installed" || code === "module_inactive") return false;
+      const reason = code ?? (e5 instanceof Error ? e5.message : String(e5));
+      console.warn(
+        `[whatsapp_inbox] witness ${witness} could not answer (${reason}); counting its module as present`
+      );
+      return true;
     }
   }
   /** Resolved in one go so the section never renders half-answered — see `availableUses`. */
   async resolveUses() {
     const [automationsHere, ...present] = await Promise.all([
-      this.isHere(probeAutomations),
-      ...WHATSAPP_USES.map((use) => this.isHere((client) => use.probe(client)))
+      this.isHere(AUTOMATIONS_WITNESS, probeAutomations),
+      ...WHATSAPP_USES.map((use) => this.isHere(use.witness, (client) => use.probe(client)))
     ]);
     this.uses = { automationsHere, available: WHATSAPP_USES.filter((_2, i7) => present[i7]) };
   }

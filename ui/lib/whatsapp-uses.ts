@@ -51,6 +51,12 @@ export interface WhatsAppUse {
    * The name of the query of {@link module} that is asked to find out whether it is here.
    * Declarative twin of {@link WhatsAppUse.probe} — it is what the guards read, and
    * `whatsapp-uses.test.ts` checks the two never drift apart.
+   *
+   * **It is asked bare, so it has to be a query that needs no parameters.** The first witness was
+   * `appointments.appointments.list`, which wants a day range and a limit: asked with none, the
+   * runtime answered `missing_required_param` on every hub that HAS Appointments, and the card read
+   * that failure as «present» — the right answer for the wrong reason, with a failed request in the
+   * console on every visit. The guard in `whatsapp-uses.test.ts` reads the neighbour's SQL for it.
    */
   witness: string;
   /**
@@ -77,8 +83,8 @@ export const WHATSAPP_USES: readonly WhatsAppUse[] = [
     id: 'whatsapp-appointment',
     family: 'appointment-from-whatsapp',
     module: 'appointments',
-    witness: 'appointments.appointments.list',
-    probe: (client) => client.queryOptional('appointments.appointments.list'),
+    witness: 'appointments.settings.get',
+    probe: (client) => client.queryOptional('appointments.settings.get'),
     icon: 'calendar-outline',
     nameKey: 'ui.useAppointmentsName',
     summaryKey: 'ui.useAppointmentsSummary',
