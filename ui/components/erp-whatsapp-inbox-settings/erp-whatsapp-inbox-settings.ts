@@ -155,14 +155,17 @@ export class ErpWhatsappInboxSettings extends LitElement {
    *  number that actually stops the channel. */
   @state() usage: { inbound_this_month: number; monthly_limit: number } | null = null;
 
-  /** The uses this hub can actually carry out, or `null` while it is still being found out.
-   *  The difference matters: «none» is a sentence the owner reads, and saying it before the
-   *  answer arrives tells them their WhatsApp is useless when it is not. */
-  @state() availableUses: readonly WhatsAppUse[] | null = null;
-
-  /** Whether the automation kernel — the shortcut's destination — is installed. `null` while
-   *  resolving, same reason. */
-  @state() automationsHere: boolean | null = null;
+  /**
+   * What this hub can put its WhatsApp to, or `null` while it is still being found out.
+   *
+   * ONE piece of state, not two, and that is the point: «is Automations here?» and «which uses are
+   * available?» are answered by the same round of questions, so splitting them would leave a
+   * `null` case that can never happen — a branch no test can kill, which is how a screen ends up
+   * with a state nobody has ever seen it in. The `null` that CAN happen is worth its own case:
+   * «there is nothing to use WhatsApp for» is a sentence the owner reads and believes, and saying
+   * it before the answers arrive tells them their channel is useless when it is not.
+   */
+  @state() uses: { automationsHere: boolean; available: readonly WhatsAppUse[] } | null = null;
 
   private readonly onLocaleChange = (): void => this.requestUpdate();
 
@@ -301,12 +304,11 @@ export class ErpWhatsappInboxSettings extends LitElement {
 
   /** Resolved in one go so the section never renders half-answered — see `availableUses`. */
   private async resolveUses() {
-    const [automations, ...present] = await Promise.all([
+    const [automationsHere, ...present] = await Promise.all([
       this.isHere(AUTOMATIONS_WITNESS),
       ...WHATSAPP_USES.map((use) => this.isHere(use.witness)),
     ]);
-    this.automationsHere = automations;
-    this.availableUses = WHATSAPP_USES.filter((_, i) => present[i]);
+    this.uses = { automationsHere, available: WHATSAPP_USES.filter((_, i) => present[i]) };
   }
 
   /**
@@ -333,27 +335,27 @@ export class ErpWhatsappInboxSettings extends LitElement {
    */
   private renderUses() {
     const t = (k: string): string => erplora().t(CATALOG, k);
-    const available = this.availableUses;
+    const resolved = this.uses;
     const body = () => {
       // Still asking. Silence is the honest answer: «nothing to use it for» is a sentence the owner
       // believes, and it would be a lie for as long as the answer is outstanding.
-      if (available === null || this.automationsHere === null) return nothing;
+      if (resolved === null) return nothing;
       // No destination: the gallery is where every one of these is set up, so without the
       // automation kernel each card would be a door to a room that is not there.
-      if (!this.automationsHere) {
+      if (!resolved.automationsHere) {
         return html`<p class="help">${t('ui.usesNeedAutomations')}</p>
           <ion-button size="small" data-testid="uses-go-to-apps" @click=${() => this.goTo(APPS_PATH)}>
             <ion-icon slot="start" name="apps-outline"></ion-icon>${t('ui.usesGoToApps')}
           </ion-button>`;
       }
-      if (available.length === 0) {
+      if (resolved.available.length === 0) {
         return html`<p class="help">${t('ui.usesEmpty')}</p>
           <ion-button size="small" data-testid="uses-go-to-apps" @click=${() => this.goTo(APPS_PATH)}>
             <ion-icon slot="start" name="apps-outline"></ion-icon>${t('ui.usesGoToApps')}
           </ion-button>`;
       }
       return html`<ul class="uses">
-        ${available.map(
+        ${resolved.available.map(
           (use) => html`<li>
             <ion-icon class="use-icon" name=${use.icon} aria-hidden="true"></ion-icon>
             <div class="use-text">
