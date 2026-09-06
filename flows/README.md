@@ -24,7 +24,8 @@ más deja de ser una traducción.
 3. **`know_the_customer`** — una cita se reserva contra un cliente REAL
    (`appointments.appointments.create` exige `customer_id`). Si el contacto no tiene ficha, la IA
    **propone crearla**; si ya la tiene, no propone nada y el run sigue.
-4. **`propose_appointment`** — **mira y propone en el mismo turno**. Elige el servicio, **estima
+4. **`propose_appointment`** — primero decide **qué le están pidiendo** (reservar, anular, u otra
+   cosa) y luego **mira y propone en el mismo turno**. Elige el servicio, **estima
    la duración** cuando el catálogo no la declara, pregunta la disponibilidad a las operaciones que
    contestan con la autoridad de la propia puerta de reserva —`appointments.availability.day_opening`
    (cuándo abre el negocio ese día, con la precedencia de Horarios ya aplicada y los descansos
@@ -36,6 +37,32 @@ más deja de ser una traducción.
    que escribió. Manda lo que el paso anterior escribió (`{{steps.propose_appointment.text}}`), y
    por eso el prompt de ese paso termina diciéndole al modelo que **lo que responda se le manda a
    ella, palabra por palabra**: día, hora y profesional por su nombre, sin ids ni notas internas.
+
+### Por qué reservar y anular caben en el MISMO paso
+
+«Cancela mi cita» era la mitad de los mensajes que recibe un salón y la automatización solo sabía
+reservar: contestaba proponiendo OTRA cita (whatsapp_inbox#61). Lo arregla el mismo paso, no uno
+nuevo, y la razón es que las alternativas no salen:
+
+- **Un segundo flujo con `filter` por palabra clave no vale.** El `contains` del kernel es
+  **sensible a mayúsculas** (`s.contains(&needle)` en `def.rs`), la condición evalúa en **AND** —así
+  que no hay «o esto o lo otro»— y no existe la negación, así que el flujo de reservar tampoco podría
+  desmarcarse. «Cancela mi cita» (con mayúscula) o «anula mi cita» se escaparían, y los mensajes que
+  sí casaran dispararían **los dos** flujos: uno anulando y otro proponiendo una cita nueva.
+- **Un paso de intención aparte** cuesta un turno de IA más por cada mensaje que entra.
+
+El modelo ya está leyendo el mensaje: distinguir «quiero hora» de «no puedo ir» es exactamente lo
+que sabe hacer, y hacerlo ahí cuesta **cero** turnos extra. Las dos ramas se excluyen, así que el
+presupuesto de `max_iters` no se toca: reservar gasta hasta 9 llamadas y anular gasta 3.
+
+**Anular respeta las reglas del salón sin re-derivarlas.** La propuesta lleva `channel: "customer"`,
+y eso hace que `appointments` aplique sus propios `allow_customer_cancellation` y
+`cancellation_notice_hours` cuando la anulación se ejecuta (appointments#6, campo `channel` desde
+1.1.32). El prompt tiene prohibido calcular la antelación por su cuenta: es la misma regla que con el
+horario —quien contesta con autoridad es el módulo dueño del dato, no el modelo—.
+
+⚠️ **Mover una cita a otro día NO está** (whatsapp_inbox#74): pide ofrecer huecos y que la clienta
+elija uno de una lista numerada, y eso hoy no se puede escribir en un documento de flujo.
 
 ### Por qué la confirmación va DESPUÉS del paso que propone
 
