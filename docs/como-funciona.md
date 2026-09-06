@@ -131,7 +131,7 @@ flowchart TD
     E["evento<br/>hub.whatsapp.message_received"] --> T{{"Automatización<br/>«WhatsApp → cita propuesta»"}}
     T --> N1["paso notify (whatsapp)<br/>«¡Recibido! Te confirmo en un momento»"]
     N1 --> A1["paso ai · manual<br/>¿tiene ficha de cliente? si no, propone crearla"]
-    A1 --> A2["paso ai · manual<br/>lee la agenda (huecos reales del día)<br/>y propone la cita → petición en revisión"]
+    A1 --> A2["paso ai · manual<br/>¿reservar o anular?<br/>lee la agenda y propone → petición en revisión"]
     A2 --> AP{"aprobación"}
     A2 -- "no había hueco" --> N2
     AP -- "auto o el dueño aprueba" --> R["Citas crea la reserva"]

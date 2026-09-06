@@ -43,6 +43,14 @@
     {
       "kind": "command",
       "value": "appointments.appointments.create"
+    },
+    {
+      "kind": "query",
+      "value": "appointments.appointments.list_for_customer"
+    },
+    {
+      "kind": "command",
+      "value": "appointments.appointments.cancel"
     }
   ]
 }
