@@ -15,6 +15,11 @@
       "label": "Ajustes"
     }
   },
+  "billing": {
+    "quota": {
+      "conversations_per_month": "conversaciones al mes"
+    }
+  },
   "ui": {
     "inboxTitle": "Bandeja de WhatsApp",
     "requestsTitle": "Solicitudes",

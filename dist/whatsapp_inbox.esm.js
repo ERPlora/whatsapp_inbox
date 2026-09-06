@@ -3519,6 +3519,11 @@ var es_default = {
       label: "Ajustes"
     }
   },
+  billing: {
+    quota: {
+      conversations_per_month: "conversaciones al mes"
+    }
+  },
   ui: {
     inboxTitle: "Bandeja de WhatsApp",
     requestsTitle: "Solicitudes",
@@ -3658,6 +3663,11 @@ var en_default = {
     },
     settings: {
       label: "Settings"
+    }
+  },
+  billing: {
+    quota: {
+      conversations_per_month: "conversations per month"
     }
   },
   ui: {
