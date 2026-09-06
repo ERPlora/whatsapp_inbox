@@ -385,21 +385,29 @@ def quoted_steps(doc):
     """
     out = set()
     for step in doc.get("steps", []):
-        rest = json.dumps(step, ensure_ascii=False)
-        while True:
-            start = rest.find("{{")
-            if start < 0:
-                break
-            after = rest[start + 2 :]
-            end = after.find("}}")
-            if end < 0:
-                break
-            path = after[:end].strip()
-            if path.startswith("steps."):
-                quoted = path[len("steps.") :].split(".")[0].strip()
-                if quoted and quoted != step.get("id"):
-                    out.add(quoted)
-            rest = after[end + 2 :]
+        for path in quoted_paths(step):
+            quoted = path[len("steps.") :].split(".")[0].strip()
+            if quoted and quoted != step.get("id"):
+                out.add(quoted)
+    return out
+
+
+def quoted_paths(step):
+    """Every `{{ … }}` path ONE step interpolates, trimmed the way the hub trims it, `steps.…` only."""
+    out = set()
+    rest = json.dumps(step, ensure_ascii=False)
+    while True:
+        start = rest.find("{{")
+        if start < 0:
+            break
+        after = rest[start + 2 :]
+        end = after.find("}}")
+        if end < 0:
+            break
+        path = after[:end].strip()
+        if path.startswith("steps."):
+            out.add(path)
+        rest = after[end + 2 :]
     return out
 
 
@@ -506,20 +514,37 @@ def silence_problems(name, doc):
     completes the step with `IoResult::Done` and the run CARRIES ON to the next step. So a `notify`
     written after the `ai` step fires on the way out of the approval — and, when the model proposed
     nothing at all, on the way out of the step itself. One step covers both endings.
+
+    And it has to say what HAPPENED, which only the booking step knows: `result` is `{ok, new_ids}`
+    and `proposed.arguments` is an opaque string, so the day, the hour and the professional exist
+    in exactly one place — the `text` that step wrote for the customer. A `notify` after the
+    booking whose words are its own («Done.») is a message that cannot carry them, and it passed
+    this rule until a reviewer sent it (whatsapp_inbox#58, mutant N7). Some `notify` after the
+    last booking step has to quote `{{steps.<that step>.text}}`.
     """
     steps = doc.get("steps", [])
     writing = writing_ai_steps(doc)
     if not writing:
         return []
     last = writing[-1]
-    if any(s.get("kind") == "notify" for s in steps[last + 1 :]):
+    writer = steps[last].get("id")
+    after = [s for s in steps[last + 1 :] if s.get("kind") == "notify"]
+    if not after:
+        return [
+            f"{name} step `{writer}` can book something and NO `notify` comes after it: "
+            f"the customer is told «we will confirm shortly» and then never hears again, whoever "
+            f"approves. The run resumes after an approval (`decide_flow_approval` completes the step "
+            f"with `Done`), so a `notify` written after this step covers both endings — booked, and "
+            f"nothing found"
+        ]
+    if any(f"steps.{writer}.text" in quoted_paths(s) for s in after):
         return []
     return [
-        f"{name} step `{steps[last].get('id')}` can book something and NO `notify` comes after it: "
-        f"the customer is told «we will confirm shortly» and then never hears again, whoever "
-        f"approves. The run resumes after an approval (`decide_flow_approval` completes the step "
-        f"with `Done`), so a `notify` written after this step covers both endings — booked, and "
-        f"nothing found"
+        f"{name} step `{writer}` can book something and the `notify` after it never quotes "
+        f"`{{{{steps.{writer}.text}}}}`: the day, the hour and the professional live only in the "
+        f"text that step wrote for the customer (`result` is `{{ok, new_ids}}` and "
+        f"`proposed.arguments` is an opaque string), so a notify with words of its own tells them "
+        f"nothing about what happened"
     ]
 
 
@@ -740,6 +765,66 @@ def unattended_problems(name, doc):
     return problems
 
 
+# The sentence that makes the unattended family habitable, in each language it ships in. It is
+# prose, and this battery otherwise keeps out of prose on purpose (`undeclared_tool_problems`) —
+# but this rule has no structural home: the kernel cannot tell «the start the customer asked for»
+# from «a start the model picked», the document has no field for it, and a person is precisely
+# what this family does without. The prompt is the only place the rule lives, so the prompt is
+# what is pinned. Changing the wording means changing it here too, in the same commit: that is the
+# point, not a nuisance — the wording IS the contract (whatsapp_inbox#58, reviewer mutant N2).
+HOUR_RULE = {
+    "en": "You never choose the hour. They do.",
+    "es": "La hora no la eliges tú. La elige ella.",
+}
+BOOKING_COMMAND = "appointments.appointments.create"
+
+
+def hour_choice_problems(name, doc):
+    """In the unattended family, the step that can BOOK says, in its own language, that it never
+    picks the hour.
+
+    whatsapp_inbox#58, reviewer mutant N2. With `policy: auto` and nobody at the salon, the one
+    thing standing between the customer and an appointment at an hour they never asked for is a
+    paragraph of the prompt — «you never choose the hour, they do». Reword it away and nothing
+    changes shape: the document validates, the grants match, every other rule here is green, and
+    the model starts «helpfully» sliding people to the nearest free slot. The forums the issue
+    cites are unanimous about how that ends (double bookings, no-shows, the chair AND the customer
+    lost), which is why the attended sibling can leave it to a person and this family cannot.
+
+    Judged per language, because the model reads the prompt in the language it is written in: a
+    Spanish document carrying only the English sentence has the rule for nobody who reads it.
+    Silent on every other family, and on the steps that cannot book.
+    """
+    if not is_unattended(name):
+        return []
+    parts = name.split(".")
+    lang = parts[1] if len(parts) >= 3 else ""
+    sentence = HOUR_RULE.get(lang)
+    problems = []
+    for step in doc.get("steps", []):
+        if step.get("kind") != "ai":
+            continue
+        commands = (step.get("tools") or {}).get("commands") or []
+        if BOOKING_COMMAND not in commands:
+            continue
+        if sentence is None:
+            problems.append(
+                f"{name} step `{step.get('id')}` can book unattended and this battery has no "
+                f"wording of the hour rule for language `{lang}`: add the translation to "
+                f"HOUR_RULE in the same commit, or the rule is a promise this document does not "
+                f"make to the people who read it"
+            )
+        elif sentence not in prompt_of(step):
+            problems.append(
+                f"{name} step `{step.get('id')}` can book unattended and its prompt no longer says "
+                f"«{sentence}»: with `policy: auto` and nobody at the salon, that sentence is the "
+                f"only thing keeping the model from booking people into hours they never asked "
+                f"for. If the wording changed, change HOUR_RULE with it — it is the contract of "
+                f"the `-unattended` family, not a nicety"
+            )
+    return problems
+
+
 DOCUMENT_RULES = (
     policy_problems,
     silence_problems,
@@ -748,6 +833,7 @@ DOCUMENT_RULES = (
     budget_problems,
     enum_value_problems,
     unattended_problems,
+    hour_choice_problems,
 )
 
 # …and the registry itself is guarded, because it is the next place the same hole moves to. The
@@ -763,6 +849,7 @@ SELF_CHECKED_RULES = (
     budget_problems,
     enum_value_problems,
     unattended_problems,
+    hour_choice_problems,
 )
 
 
@@ -1071,14 +1158,97 @@ UNATTENDED_CASES = [
 ]
 
 
+UNATTENDED_ES = "appointment-from-whatsapp-unattended.es.flow.json"
+
+HOUR_CASES = [
+    (
+        "the shape the unattended family ships: the step that can book carries the rule, in its "
+        "own language",
+        UNATTENDED,
+        _fixture_doc(_ai_step("book", "auto", [BOOKING_COMMAND], f"Book it. {HOUR_RULE['en']} Go.")),
+        0,
+    ),
+    (
+        "the regression this rule exists for (reviewer mutant N2 on whatsapp_inbox#58): the rule "
+        "reworded away, and a bot with nobody behind it books people into hours they never asked "
+        "for — the document saves, the trigger arms, and nothing anywhere says so",
+        UNATTENDED,
+        _fixture_doc(_ai_step("book", "auto", [BOOKING_COMMAND], "Book whatever fits best.")),
+        1,
+    ),
+    (
+        "the Spanish document carries the Spanish wording",
+        UNATTENDED_ES,
+        _fixture_doc(_ai_step("book", "auto", [BOOKING_COMMAND], f"Resérvala. {HOUR_RULE['es']}")),
+        0,
+    ),
+    (
+        "a translation that kept the English sentence dropped the rule for the reader it has: the "
+        "model reads the prompt in the language it is written in, and so does the salon",
+        UNATTENDED_ES,
+        _fixture_doc(_ai_step("book", "auto", [BOOKING_COMMAND], f"Resérvala. {HOUR_RULE['en']}")),
+        1,
+    ),
+    (
+        "a step that cannot book owes no such promise: the customer-record step writes, but not "
+        "into the diary",
+        UNATTENDED,
+        _fixture_doc(_ai_step("know", "auto", ["customers.create"], "Find or create them.")),
+        0,
+    ),
+    (
+        "silent on the attended family: there a person reads the proposal before it books",
+        ATTENDED,
+        _fixture_doc(_ai_step("book", "manual", [BOOKING_COMMAND], "Book whatever fits best.")),
+        0,
+    ),
+    (
+        "a language this battery has no wording for is a document it cannot vouch for — a third "
+        "translation adds its sentence to HOUR_RULE in the same commit, or it does not ship",
+        "appointment-from-whatsapp-unattended.fr.flow.json",
+        _fixture_doc(_ai_step("book", "auto", [BOOKING_COMMAND], f"Réserve. {HOUR_RULE['en']}")),
+        1,
+    ),
+]
+
+
 SILENCE_CASES = [
     (
-        "an automation that books and then says so is the whole point",
+        "an automation that books and then says so — in the words the booking step wrote for the "
+        "customer — is the whole point",
         _fixture_doc(
             _ai_step("book", "manual", ["appointments.appointments.create"]),
-            _notify_step(),
+            _notify_step("tell", "{{steps.book.text}}"),
         ),
         0,
+    ),
+    (
+        "…and the hub trims the path, so the spaced spelling is the same quotation",
+        _fixture_doc(
+            _ai_step("book", "manual", ["appointments.appointments.create"]),
+            _notify_step("tell", "{{ steps.book.text }}"),
+        ),
+        0,
+    ),
+    (
+        "a notify AFTER the booking that says something of its own («Done.») is not the "
+        "confirmation: the day, the hour and the professional only exist in the booking step's "
+        "own text, and a fixed sentence cannot carry them (reviewer mutant N7 on "
+        "whatsapp_inbox#58)",
+        _fixture_doc(
+            _ai_step("book", "manual", ["appointments.appointments.create"]),
+            _notify_step("tell", "Done."),
+        ),
+        1,
+    ),
+    (
+        "quoting SOME other step is not quoting the one that booked",
+        _fixture_doc(
+            _ai_step("who", "manual", ["customers.create"]),
+            _ai_step("book", "manual", ["appointments.appointments.create"]),
+            _notify_step("tell", "{{steps.who.text}}"),
+        ),
+        1,
     ),
     (
         "an automation that books and says NOTHING leaves the customer waiting",
@@ -1300,6 +1470,13 @@ def self_check():
         if len(got) != expected:
             problems.append(
                 f"the battery's own «unattended means unattended» rule is wrong — {label}: "
+                f"expected {expected} problem(s), got {len(got)}: {got}"
+            )
+    for label, name, doc, expected in HOUR_CASES:
+        got = hour_choice_problems(name, doc)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «the model never picks the hour» rule is wrong — {label}: "
                 f"expected {expected} problem(s), got {len(got)}: {got}"
             )
     for label, doc, expected in SILENCE_CASES:
@@ -1533,6 +1710,10 @@ def main():
         # 3a-bis-ii) …and a family that CALLS itself unattended really is (whatsapp_inbox#58): the
         # other half of the exception `policy_problems` grants it. Needs no manifest either.
         problems += applied(ledger, unattended_problems, path.name, doc)
+
+        # 3a-bis-iii) …and, in that family, the step that can book still says in so many words that
+        # it never picks the hour (whatsapp_inbox#58, reviewer mutant N2). Prose, pinned on purpose.
+        problems += applied(ledger, hour_choice_problems, path.name, doc)
 
         # 3a-ter) …and every tool its prompts ORDER was actually handed over (whatsapp_inbox#61).
         # Needs the manifests: «is this a tool name or is it prose» is a question only they answer.
