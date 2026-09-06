@@ -26,7 +26,7 @@
 //    said by the flow document. They are NOT deleted — they are external contract, `settings.upsert`
 //    requires them — but a screen that offered them would promise behaviour no code implements, the
 //    same mistake printing#17 had to undo.
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import esLocale from '../../../locales/es.json';
 import enLocale from '../../../locales/en.json';
@@ -273,6 +273,21 @@ describe('i18n: English is the source and Spanish is shipped (ADR-0055/0199)', (
 // of rendering an inert tag the owner would stare at.
 describe('the channel block is where the number gets connected (whatsapp_inbox#54)', () => {
   const TAG = 'erp-whatsapp-connect';
+
+  afterEach(() => vi.restoreAllMocks());
+
+  // The positive of the degradation: on a hub whose shell predates hub#1601 the element is not
+  // defined, and the block must SAY so — not leave an unknown tag the browser renders as nothing.
+  // `customElements.define` cannot be undone, so the old hub is played by answering «not defined»
+  // for this one tag, whatever the other tests registered before.
+  it('says the hub is too old instead of leaving an inert tag when the shell lacks the element', async () => {
+    const real = customElements.get.bind(customElements);
+    vi.spyOn(customElements, 'get').mockImplementation((name: string) => (name === TAG ? undefined : real(name)));
+    mountWith();
+    const el = await mount();
+    expect(el.shadowRoot.querySelector(TAG), 'an old hub still got the tag it cannot define').toBeNull();
+    expect(el.shadowRoot.textContent).toContain(esLocale.ui.helpConnectNeedsNewerHub);
+  });
 
   it('embeds the shell element when the hub provides it', async () => {
     if (!customElements.get(TAG)) customElements.define(TAG, class extends HTMLElement {});
