@@ -35,6 +35,10 @@ of them surface at 3 AM in front of a customer:
    (`auto`), or the automation is split in two steps to dodge a problem hub#1595 already solved and
    every incoming message pays an extra metered AI turn (whatsapp_inbox#55). Both are judged with
    the hub's own classification, copied into `command_only_answers`.
+7. **A tool is handed over that the prompt never orders, a value is ordered that the command's
+   schema refuses, or `max_iters` is past what the hub accepts** (whatsapp_inbox#61) — each a
+   template that reads right and fails somewhere else: a grant nobody spends, a proposal the hub
+   refuses AFTER the salon approved it, a document no hub saves.
 
 And because these rules only ever run over documents that are already correct, the battery mutates
 its OWN rules first (`self_check`) — a blinded rule would otherwise stay green forever.
@@ -44,7 +48,9 @@ Usage: tests/flow_templates.test.py   (exit 0 = green)
 
 import json
 import pathlib
+import re
 import sys
+import tempfile
 
 MODULE_DIR = pathlib.Path(__file__).resolve().parent.parent
 FLOWS_DIR = MODULE_DIR / "flows"
@@ -546,14 +552,150 @@ def undeclared_tool_problems(name, doc, known):
     return problems
 
 
-DOCUMENT_RULES = (policy_problems, silence_problems, undeclared_tool_problems)
+def unordered_tool_problems(name, doc):
+    """A tool the step HANDS the model that its prompt never tells it to use.
+
+    The mirror image of `undeclared_tool_problems`, and the same hole seen from the other side:
+    there the orders name a tool that was never handed over; here a tool is handed over that no
+    order names. Measured on whatsapp_inbox#61 — delete the whole CANCELLING branch from the
+    prompt, keep `appointments.appointments.cancel` in `tools.commands`, and the battery stayed
+    green: the grants still matched the tools, the tools still existed, and the customer who wrote
+    «cancel it» was back to getting a second appointment while the salon had granted the automation
+    the power to cancel for nothing. A permission nobody is told to spend is a door left open — and
+    a branch of the prompt that vanishes is only visible through the tool it leaves orphaned.
+
+    Every handed tool has to be named in backticks somewhere in the prompt. Nothing more: this does
+    not judge WHAT the prompt says about it, only that it says something.
+    """
+    problems = []
+    for step in doc.get("steps", []):
+        if step.get("kind") != "ai":
+            continue
+        prompt = prompt_of(step)
+        tools = step.get("tools") or {}
+        for op in (tools.get("queries") or []) + (tools.get("commands") or []):
+            if f"`{op}`" not in prompt:
+                problems.append(
+                    f"{name} step `{step.get('id')}` hands the model `{op}` and its prompt never "
+                    f"tells it to use it: a grant the owner was asked for that no order spends, "
+                    f"or a branch of the prompt that went missing. Name it, or stop handing it over"
+                )
+    return problems
+
+
+# `crates/runtime/src/flows/def.rs::MAX_ITERS_CAP` — the hub REFUSES a document whose `ai` step asks
+# for more, so a template past it is one no hub can save. `flow.schema.json` says the same, but that
+# layer only runs with the hub checkout next door (a CI runner has none): this one needs nothing, so
+# the cap holds on a bare checkout too.
+MAX_ITERS_CAP = 10
+
+
+def budget_problems(name, doc):
+    """`max_iters` of every `ai` step within what the hub accepts (1..=MAX_ITERS_CAP).
+
+    `propose_appointment` sits AT the cap on purpose (whatsapp_inbox#55): booking chains up to nine
+    tool calls in one turn, so a branch added to that prompt has to be one that EXCLUDES the others
+    (cancelling is: three calls, never alongside booking — whatsapp_inbox#61), never one that
+    lengthens the chain. The only relief an author reaches for when the chain grows is this number,
+    and the hub takes the whole document away when it goes past ten.
+    """
+    problems = []
+    for step in doc.get("steps", []):
+        if step.get("kind") != "ai" or "max_iters" not in step:
+            continue
+        n = step.get("max_iters")
+        if isinstance(n, bool) or not isinstance(n, int) or not 1 <= n <= MAX_ITERS_CAP:
+            problems.append(
+                f"{name} step `{step.get('id')}` asks for `max_iters` {n!r}: the hub accepts 1 to "
+                f"{MAX_ITERS_CAP} (`def.rs::MAX_ITERS_CAP`) and refuses the whole document past "
+                f"that — split the step, do not raise the number"
+            )
+    return problems
+
+
+# «`channel` set to `customer`», «`channel` puesto a `customer`», «`channel` = `customer`» — the three
+# ways a prompt of this module ORDERS a value for a payload field. An order phrased any other way is
+# prose this rule cannot read: it stays blind to it, never wrong about it.
+ORDERED_VALUE = re.compile(r"`([A-Za-z_][A-Za-z0-9_]*)`\s+(?:set to|puesto a|=)\s+`([^`]+)`")
+
+
+def payload_enums(commands_def):
+    """`command id -> {property: [allowed values]}` for every enum property a command's payload
+    schema declares. A command without a `schema`, or whose file is not there, declares none."""
+    out = {}
+    for cid, (module_dir, cdef) in commands_def.items():
+        rel = cdef.get("schema")
+        if not isinstance(rel, str) or module_dir is None:
+            continue
+        path = pathlib.Path(module_dir) / rel
+        if not path.is_file():
+            continue
+        props = json.loads(path.read_text()).get("properties") or {}
+        enums = {
+            prop: list(spec["enum"])
+            for prop, spec in props.items()
+            if isinstance(spec, dict) and isinstance(spec.get("enum"), list)
+        }
+        if enums:
+            out[cid] = enums
+    return out
+
+
+def enum_value_problems(name, doc, enums):
+    """A value the prompt ORDERS for a payload field that the command's own schema refuses.
+
+    whatsapp_inbox#61 as written said `channel: "whatsapp"`; `appointments.appointments.cancel` is
+    `additionalProperties: false` with `channel` in `["staff", "customer"]`, and it is `customer`
+    that makes `allow_customer_cancellation` and `cancellation_notice_hours` apply at all. The wrong
+    word is not a wrong history line: the hub validates the payload again at approval
+    (`decide_flow_approval` → `commands::validate_payload`), so the salon approves and the proposal
+    stays PENDING with `invalid_payload` — the cancellation never runs and the customer is told
+    nothing, which is whatsapp_inbox#70 reached through a typo.
+
+    Judged only for fields whose schema declares an `enum`, and only against the commands the step
+    hands over: `phone` = `+{{input.from}}` addresses a query and is nobody's enum.
+    """
+    problems = []
+    for step in doc.get("steps", []):
+        prompt = prompt_of(step)
+        if not prompt:
+            continue
+        handed = ((step.get("tools") or {}).get("commands")) or []
+        for prop, value in ORDERED_VALUE.findall(prompt):
+            for cname in handed:
+                allowed = (enums.get(cname) or {}).get(prop)
+                if allowed is not None and value not in allowed:
+                    problems.append(
+                        f"{name} step `{step.get('id')}` tells the model to send `{prop}` = "
+                        f"`{value}`, and `{cname}` only accepts {allowed}: the salon would approve "
+                        f"a proposal the hub then refuses as `invalid_payload`, and the customer "
+                        f"hears nothing"
+                    )
+    return problems
+
+
+DOCUMENT_RULES = (
+    policy_problems,
+    silence_problems,
+    undeclared_tool_problems,
+    unordered_tool_problems,
+    budget_problems,
+    enum_value_problems,
+)
 
 # …and the registry itself is guarded, because it is the next place the same hole moves to. The
 # ledger only demands the rules DOCUMENT_RULES names, so deleting a name from that tuple left the
 # rule running, its cases passing and nothing requiring it to ever meet a real template again
 # (whatsapp_inbox#61, mutant P4). Every rule `self_check()` proves has to be one `main()` is
 # REQUIRED to apply, and that is asserted rather than assumed.
-SELF_CHECKED_RULES = (policy_problems, silence_problems, undeclared_tool_problems)
+SELF_CHECKED_RULES = (
+    policy_problems,
+    silence_problems,
+    undeclared_tool_problems,
+    unordered_tool_problems,
+    budget_problems,
+    enum_value_problems,
+)
 
 
 def addressed_queries(doc):
@@ -845,6 +987,118 @@ TOOL_CASES = [
 ]
 
 
+ORDER_CASES = [
+    (
+        "a tool the prompt names is a tool the prompt spends",
+        _fixture_doc(
+            _ai_step("s", "manual", ["appointments.appointments.create"], "Propose `appointments.appointments.create`."),
+        ),
+        0,
+    ),
+    (
+        "a command handed over that the prompt never names is a door left open",
+        _fixture_doc(
+            _ai_step(
+                "s",
+                "manual",
+                ["appointments.appointments.create", "appointments.appointments.cancel"],
+                "Propose `appointments.appointments.create`.",
+            ),
+        ),
+        1,
+    ),
+    (
+        "a QUERY handed over that the prompt never names, the same",
+        _fixture_doc(
+            {"id": "s", "kind": "ai", "policy": "manual",
+             "tools": {"queries": ["customers.list", "appointments.appointments.list_for_customer"]},
+             "prompt": "Find them with `customers.list`."},
+        ),
+        1,
+    ),
+    (
+        "a step that hands nothing over owes nothing",
+        _fixture_doc({"id": "s", "kind": "ai", "policy": "manual", "prompt": "Answer in one line.", "tools": {}}),
+        0,
+    ),
+    ("a notify step hands no tools", _fixture_doc(_notify_step()), 0),
+]
+
+
+def _budget_step(max_iters):
+    return {**_ai_step("s", "manual", ["appointments.appointments.create"]), "max_iters": max_iters}
+
+
+BUDGET_CASES = [
+    ("at the cap is what the module ships", _fixture_doc(_budget_step(MAX_ITERS_CAP)), 0),
+    ("one past the cap is a document no hub saves", _fixture_doc(_budget_step(MAX_ITERS_CAP + 1)), 1),
+    ("zero turns is not a step", _fixture_doc(_budget_step(0)), 1),
+    ("a step that leaves it unset takes the hub's default", _fixture_doc(_ai_step("s", "manual", [])), 0),
+]
+
+_FIXTURE_ENUMS = {"appointments.appointments.cancel": {"channel": ["staff", "customer"]}}
+
+
+def _enum_step(prompt, commands=("appointments.appointments.cancel",)):
+    return _fixture_doc(_ai_step("s", "manual", list(commands), prompt))
+
+
+ENUM_CASES = [
+    (
+        "`customer` is one of the two words the cancel gate accepts",
+        _enum_step("Propose `appointments.appointments.cancel` with `channel` set to `customer`."),
+        0,
+    ),
+    (
+        "`whatsapp` — what the issue said — is a proposal the hub refuses after approval",
+        _enum_step("Propose `appointments.appointments.cancel` with `channel` set to `whatsapp`."),
+        1,
+    ),
+    (
+        "the Spanish order reads the same",
+        _enum_step("Propón `appointments.appointments.cancel` con `channel` puesto a `whatsapp`."),
+        1,
+    ),
+    ("and so does an equals sign", _enum_step("`appointments.appointments.cancel`, `channel` = `whatsapp`"), 1),
+    (
+        "a value for a field no handed command constrains is prose",
+        _enum_step("`appointments.appointments.cancel`; filter by `phone` = `+{{input.from}}`."),
+        0,
+    ),
+    (
+        "a command the step never handed over constrains nothing here",
+        _enum_step("`appointments.appointments.create`, `channel` set to `whatsapp`", ("appointments.appointments.create",)),
+        0,
+    ),
+]
+
+
+def _enum_reading_problems():
+    """`payload_enums` reads the real schema file, so `enum_value_problems` is only worth what this
+    proves: a schema on disk with one enum field, one whose file is missing, one with no schema."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        (root / "schemas").mkdir()
+        (root / "schemas" / "cancel.json").write_text(
+            json.dumps({
+                "type": "object",
+                "properties": {
+                    "appointment_id": {"type": "string"},
+                    "channel": {"type": "string", "enum": ["staff", "customer"]},
+                },
+            })
+        )
+        got = payload_enums({
+            "appointments.appointments.cancel": (root, {"schema": "schemas/cancel.json"}),
+            "appointments.appointments.create": (root, {"schema": "schemas/missing.json"}),
+            "customers.list": (root, {}),
+        })
+    want = {"appointments.appointments.cancel": {"channel": ["staff", "customer"]}}
+    if got != want:
+        return [f"the battery's own reading of payload enums is wrong: expected {want}, got {got}"]
+    return []
+
+
 def self_check():
     """The mutants of the rules above, run every time, before any real document is opened."""
     problems = []
@@ -875,6 +1129,28 @@ def self_check():
                 f"the battery's own «the prompt only orders what it was handed» rule is wrong — "
                 f"{label}: expected {expected} problem(s), got {len(got)}: {got}"
             )
+    for label, doc, expected in ORDER_CASES:
+        got = unordered_tool_problems("(self-check)", doc)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «every tool handed over is ordered» rule is wrong — {label}: "
+                f"expected {expected} problem(s), got {len(got)}: {got}"
+            )
+    for label, doc, expected in BUDGET_CASES:
+        got = budget_problems("(self-check)", doc)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own `max_iters` rule is wrong — {label}: expected {expected} "
+                f"problem(s), got {len(got)}: {got}"
+            )
+    for label, doc, expected in ENUM_CASES:
+        got = enum_value_problems("(self-check)", doc, _FIXTURE_ENUMS)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «the value ordered is one the schema accepts» rule is wrong — "
+                f"{label}: expected {expected} problem(s), got {len(got)}: {got}"
+            )
+    problems += _enum_reading_problems()
     for label, doc, expected in POLICY_CASES:
         got = policy_problems("(self-check)", doc, _FIXTURE_COMMANDS, _FIXTURE_READS)
         if len(got) != expected:
@@ -1017,6 +1293,7 @@ def main():
         definitions = query_definitions(resolved)
         commands_def = command_definitions(resolved)
         read_perms = module_read_permissions(resolved)
+        enums = payload_enums(commands_def)
 
     for path in docs:
         doc = json.loads(path.read_text())
@@ -1073,6 +1350,18 @@ def main():
                 ledger, undeclared_tool_problems, path.name, doc, contracts[0] | contracts[1]
             )
 
+        # 3a-iv) …and the reverse: every tool handed over is one the prompt ORDERS
+        # (whatsapp_inbox#61). Needs nothing: a bare checkout judges it too.
+        problems += applied(ledger, unordered_tool_problems, path.name, doc)
+
+        # 3a-v) `max_iters` within the hub's cap, hub checkout or not.
+        problems += applied(ledger, budget_problems, path.name, doc)
+
+        # 3a-vi) …and every value the prompt orders for an enum field is one the command's own
+        # schema accepts (whatsapp_inbox#61). Needs the manifests: the schema lives next to them.
+        if commands_def is not None:
+            problems += applied(ledger, enum_value_problems, path.name, doc, enums)
+
         # 3b) Every parameter is a word the query it addresses actually knows.
         #
         # A name that exists is not a name that filters. `whatsapp_inbox.conversations.list`
@@ -1121,7 +1410,11 @@ def main():
     # 3c) …and every rule above actually MET every document that reached this far. Waived only for
     # the layer that was skipped out loud (no manifests next door → no `policy_problems`).
     waived = (
-        {policy_problems.__name__, undeclared_tool_problems.__name__}
+        {
+            policy_problems.__name__,
+            undeclared_tool_problems.__name__,
+            enum_value_problems.__name__,
+        }
         if commands_def is None
         else set()
     )
