@@ -497,6 +497,20 @@ def silence_problems(name, doc):
     ]
 
 
+# The rules `main()` has to apply to EVERY real document. `self_check()` proves each of them against
+# synthetic documents — which is exactly why deleting the one line that applied a rule to the REAL
+# templates used to leave the battery green (whatsapp_inbox#69, mutant N5): the cases still passed,
+# and nothing said the rule had never met a document. `main()` writes every application down in a
+# ledger through `applied()` and fails on any (rule, document) pair that is missing.
+DOCUMENT_RULES = (policy_problems, silence_problems)
+
+
+def applied(ledger, rule, name, doc, *args):
+    """Runs `rule` on one document and records it — the call and the record are ONE line."""
+    ledger.add((rule.__name__, name))
+    return rule(name, doc, *args)
+
+
 def addressed_queries(doc):
     """`(step id, query id, sorted param names, where)` for every step that parameterises a query."""
     out = []
@@ -758,6 +772,7 @@ def self_check():
 
 def main():
     problems, skipped = self_check(), []
+    ledger, inspected = set(), []
 
     docs = flow_documents()
     if not docs:
@@ -898,6 +913,7 @@ def main():
                 f"{path.name} has no `{gpath.name}`: a document without its grants is a flow that saves and then dies with `flow.grant_denied`"
             )
             continue
+        inspected.append(path.name)
         needed, declared = needed_grants(doc), declared_grants(gpath)
         for kind, value in sorted(needed - declared):
             problems.append(
@@ -929,11 +945,11 @@ def main():
 
         # 3a) `policy` against what each declared command actually does — see `policy_problems`.
         if commands_def is not None:
-            problems += policy_problems(path.name, doc, commands_def, read_perms)
+            problems += applied(ledger, policy_problems, path.name, doc, commands_def, read_perms)
 
         # 3a-bis) …and it SAYS so afterwards (whatsapp_inbox#58). Needs no manifest: it is about the
         # shape of the document, so it runs on a bare checkout too.
-        problems += silence_problems(path.name, doc)
+        problems += applied(ledger, silence_problems, path.name, doc)
 
         # 3b) Every parameter is a word the query it addresses actually knows.
         #
@@ -978,6 +994,19 @@ def main():
         if "hub.whatsapp.message_received" not in events:
             problems.append(
                 f"{path.name} does not trigger on `hub.whatsapp.message_received`: {sorted(events)}"
+            )
+
+    # 3c) …and every rule above actually MET every document that reached this far. Waived only for
+    # the layer that was skipped out loud (no manifests next door → no `policy_problems`).
+    waived = {policy_problems.__name__} if commands_def is None else set()
+    for name in inspected:
+        for rule in DOCUMENT_RULES:
+            if rule.__name__ in waived or (rule.__name__, name) in ledger:
+                continue
+            problems.append(
+                f"{name} never went through `{rule.__name__}`: self_check() only proves that rule "
+                f"on synthetic documents, so a template it never met is green for no reason — "
+                f"apply it in main() through `applied()`"
             )
 
     # 4) The translations are the same automation.
