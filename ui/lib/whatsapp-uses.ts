@@ -21,6 +21,19 @@
  * use, says what it does, and opens the door. The owner still walks through it.
  */
 
+/**
+ * The read door of the SDK this file needs, and nothing else.
+ *
+ * `queryOptional` is the only one: it answers `undefined` for `module_not_installed` /
+ * `module_inactive` and RE-THROWS everything else, which is the whole reason a witness can prove an
+ * absence at all. It is also the door that does NOT create a hard dependency — a literal in
+ * `query()` would land in `contracts.json` as a required consumption and make an inbox module
+ * refuse to install without Appointments (ADR-0127).
+ */
+export interface WitnessAsker {
+  queryOptional<T = unknown>(name: string, params?: Record<string, unknown>): Promise<T | undefined>;
+}
+
 /** One thing a business can use its WhatsApp for. */
 export interface WhatsAppUse {
   /**
@@ -35,12 +48,24 @@ export interface WhatsAppUse {
   /** The module that has to be installed for this use to mean anything. */
   module: string;
   /**
-   * A query of {@link module}, asked through `queryOptional` to find out whether it is here.
-   * `undefined` comes back **only** for `module_not_installed` / `module_inactive`, so this proves
-   * absence without guessing — anything else (a denied permission, a broken handler) is a broken
-   * contract, never an absence.
+   * The name of the query of {@link module} that is asked to find out whether it is here.
+   * Declarative twin of {@link WhatsAppUse.probe} — it is what the guards read, and
+   * `whatsapp-uses.test.ts` checks the two never drift apart.
    */
   witness: string;
+  /**
+   * Asks {@link WhatsAppUse.witness}. `undefined` comes back **only** for `module_not_installed` /
+   * `module_inactive`, so this proves absence without guessing — anything else (a denied
+   * permission, a broken handler) is a broken contract, never an absence.
+   *
+   * **It is a thunk, and the name inside it is a literal, on purpose.** ADR-0127 builds this
+   * module's contract by reading the string literals of SDK calls out of the AST
+   * (`module-toolkit/src/contracts.mjs`): a witness passed as a variable is a name the extractor
+   * cannot see, so it would vanish from `contracts.json` and no one would ever notice the day the
+   * neighbour renamed it. `erplora validate` refuses to build it, which is how this shape was
+   * arrived at.
+   */
+  probe(client: WitnessAsker): Promise<unknown>;
   /** `ion-icon` name, registered by the module build. Never a loose SVG. */
   icon: string;
   nameKey: string;
@@ -53,6 +78,7 @@ export const WHATSAPP_USES: readonly WhatsAppUse[] = [
     family: 'appointment-from-whatsapp',
     module: 'appointments',
     witness: 'appointments.appointments.list',
+    probe: (client) => client.queryOptional('appointments.appointments.list'),
     icon: 'calendar-outline',
     nameKey: 'ui.useAppointmentsName',
     summaryKey: 'ui.useAppointmentsSummary',
@@ -64,6 +90,11 @@ export const AUTOMATIONS_MODULE = 'flows';
 
 /** Proof that {@link AUTOMATIONS_MODULE} is installed here, same rules as `WhatsAppUse.witness`. */
 export const AUTOMATIONS_WITNESS = 'flows.drafts.list';
+
+/** Asks {@link AUTOMATIONS_WITNESS}. A thunk with the literal inside, same reason as
+ *  {@link WhatsAppUse.probe}. */
+export const probeAutomations = (client: WitnessAsker): Promise<unknown> =>
+  client.queryOptional('flows.drafts.list');
 
 /** Where the hub lists what can be installed — where a missing Automations is fixed. */
 export const APPS_PATH = '/apps';

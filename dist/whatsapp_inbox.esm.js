@@ -3634,7 +3634,15 @@ var es_default = {
     labelNotes: "Notas",
     labelLinkedObject: "Registro creado",
     errLoadRequest: "No se ha podido cargar la petici\xF3n",
-    labelUsedThisMonth: "Consumidos este mes"
+    labelUsedThisMonth: "Consumidos este mes",
+    sectionUses: "\xBFPara qu\xE9 usas WhatsApp?",
+    helpUses: "Elige qu\xE9 quieres que haga este n\xFAmero. Te llevamos a la automatizaci\xF3n que lo hace, ya preparada; t\xFA la lees y la enciendes.",
+    useAppointmentsName: "Reservar citas",
+    useAppointmentsSummary: "Una clienta pide cita por WhatsApp, el asistente le ofrece las horas que de verdad tienes libres y le reserva la que elija; luego le dice que ya est\xE1.",
+    usesOpen: "Configurar",
+    usesEmpty: "Todav\xEDa no hay nada que este WhatsApp pueda hacer solo: lo que puedes hacer con \xE9l sale de las aplicaciones que tengas instaladas.",
+    usesNeedAutomations: "Contestar solo lo hacen las Automatizaciones, y este hub a\xFAn no las tiene.",
+    usesGoToApps: "Ver aplicaciones"
   },
   errors: {
     "whatsapp_inbox.conversation_not_found": "Esa conversaci\xF3n no existe en este negocio.",
@@ -3780,7 +3788,15 @@ var en_default = {
     labelNotes: "Notes",
     labelLinkedObject: "Created record",
     errLoadRequest: "Could not load the request",
-    labelUsedThisMonth: "Used this month"
+    labelUsedThisMonth: "Used this month",
+    sectionUses: "What do you use WhatsApp for?",
+    helpUses: "Pick what this number should do for you. We take you to the automation that does it, already set up; you read it and switch it on yourself.",
+    useAppointmentsName: "Book appointments",
+    useAppointmentsSummary: "A customer asks for an appointment on WhatsApp, the assistant offers the hours you actually have free, and books the one they pick \u2014 then tells them it is done.",
+    usesOpen: "Set it up",
+    usesEmpty: "There is nothing for this WhatsApp to do on its own yet: what it can be used for comes from the apps you have installed.",
+    usesNeedAutomations: "Answering on its own is done by Automations, and this hub does not have it yet.",
+    usesGoToApps: "See apps"
   },
   errors: {
     "whatsapp_inbox.conversation_not_found": "That conversation does not exist in this business.",
@@ -4746,6 +4762,26 @@ __decorateClass([
 ], ErpWhatsappInboxRequests.prototype, "openRequest", 2);
 define("erp-whatsapp-inbox-requests", ErpWhatsappInboxRequests);
 
+// ui/lib/whatsapp-uses.ts
+var WHATSAPP_USES = [
+  {
+    id: "whatsapp-appointment",
+    family: "appointment-from-whatsapp",
+    module: "appointments",
+    witness: "appointments.appointments.list",
+    probe: (client) => client.queryOptional("appointments.appointments.list"),
+    icon: "calendar-outline",
+    nameKey: "ui.useAppointmentsName",
+    summaryKey: "ui.useAppointmentsSummary"
+  }
+];
+var AUTOMATIONS_MODULE = "flows";
+var probeAutomations = (client) => client.queryOptional("flows.drafts.list");
+var APPS_PATH = "/apps";
+function galleryPath(templateId) {
+  return `/m/${AUTOMATIONS_MODULE}/automations?template=${encodeURIComponent(templateId)}`;
+}
+
 // ui/components/erp-whatsapp-inbox-settings/erp-whatsapp-inbox-settings.ts
 var CATALOG3 = { es: es_default, en: en_default };
 var DEFAULTS = {
@@ -4782,6 +4818,7 @@ var ErpWhatsappInboxSettings = class extends i3 {
     this.error = "";
     this.saved = false;
     this.usage = null;
+    this.uses = null;
     this.onLocaleChange = () => this.requestUpdate();
   }
   static {
@@ -4801,6 +4838,12 @@ var ErpWhatsappInboxSettings = class extends i3 {
     .err { color:#d9480f; font-weight:600; }
     .ok { color:#2b8a3e; font-weight:600; }
     .actions { display:flex; gap:.5rem; }
+    .uses { list-style:none; margin:.5rem 0 0; padding:0; display:flex; flex-direction:column; gap:.5rem; }
+    .uses li { display:flex; gap:.6rem; align-items:center; flex-wrap:wrap; }
+    .use-text { flex:1 1 12rem; min-width:0; }
+    .use-text b { display:block; font-size:.95rem; }
+    .use-text .help { margin:.1rem 0 0; }
+    .use-icon { font-size:1.35rem; color: var(--ion-color-medium,#6b6557); flex:0 0 auto; }
     /* 44px minimum touch target: this screen is used one-handed, at a counter. */
     ion-button { --min-height: 44px; }
   `;
@@ -4825,6 +4868,7 @@ var ErpWhatsappInboxSettings = class extends i3 {
         "whatsapp_inbox.usage.get"
       );
       this.usage = Array.isArray(usage) ? usage[0] ?? null : usage;
+      await this.resolveUses();
     } catch (e5) {
       this.error = e5 instanceof Error ? e5.message : erplora3().t(CATALOG3, "ui.errorLoadSettings");
     } finally {
@@ -4901,6 +4945,97 @@ var ErpWhatsappInboxSettings = class extends i3 {
     const provided = typeof customElements !== "undefined" && Boolean(customElements.get("erp-whatsapp-connect"));
     return provided ? b2`<erp-whatsapp-connect></erp-whatsapp-connect>` : b2`<p class="help">${t5("ui.helpConnectNeedsNewerHub")}</p>`;
   }
+  /**
+   * **Is this module here?** — the one question the uses card is built on.
+   *
+   * `queryOptional` answers `undefined` for `module_not_installed` / `module_inactive` and RE-THROWS
+   * everything else (`packages/module-sdk/src/index.ts`), which is exactly the distinction needed:
+   * only those two codes prove an absence.
+   *
+   * **Everything that is not a proven absence counts as PRESENT**, and that asymmetry is the
+   * decision. A denied permission, a renamed query, a handler that blew up — or a shell so old its
+   * SDK has no `queryOptional` at all, which lands here as a `TypeError` — say nothing about
+   * whether the module is installed. Reading them as «not here» would hide a working use behind
+   * somebody else's bug, silently and for as long as the bug lasts. The other way round, the worst
+   * case is a shortcut to a gallery card the owner looks at and does not use.
+   */
+  async isHere(probe) {
+    try {
+      return await probe(erplora3()) !== void 0;
+    } catch (e5) {
+      const code = e5.code;
+      return code !== "module_not_installed" && code !== "module_inactive";
+    }
+  }
+  /** Resolved in one go so the section never renders half-answered — see `availableUses`. */
+  async resolveUses() {
+    const [automationsHere, ...present] = await Promise.all([
+      this.isHere(probeAutomations),
+      ...WHATSAPP_USES.map((use) => this.isHere((client) => use.probe(client)))
+    ]);
+    this.uses = { automationsHere, available: WHATSAPP_USES.filter((_2, i7) => present[i7]) };
+  }
+  /**
+   * The channel module→shell (whatsapp_inbox#59). A Web Component gets no router, so the way to
+   * move the hub is to push the URL and tell the shell with `popstate` — the same pattern
+   * `sales` uses to send a doubtful checkout to Sales and `appointments` to send an appointment to
+   * the POS (`sales/ui/components/erp-pos-touch/erp-pos-touch.ts`).
+   */
+  goTo(path) {
+    window.history.pushState({}, "", path);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }
+  /**
+   * **What this WhatsApp can be used for, and where each one is set up** (whatsapp_inbox#59).
+   *
+   * A shortcut, deliberately: it does NOT create or switch on the automation. `/api/hub/flows*` is
+   * gated behind `manage_flows` — «la capability con más alcance de todas»
+   * (`crates/runtime/src/manifest.rs`), granting power over every automation of the business and
+   * over the event catalogue, which carries customers' data — and an inbox module has no business
+   * holding it. The kernel also creates every gallery template PAUSED on purpose
+   * (`flows/ui/lib/templates.ts`, rule 3): «one tap and it is running» is the thing the grants
+   * system exists to prevent. So this names the use, says what it does, and opens the door.
+   */
+  renderUses() {
+    const t5 = (k2) => erplora3().t(CATALOG3, k2);
+    const resolved = this.uses;
+    const body = () => {
+      if (resolved === null) return A;
+      if (!resolved.automationsHere) {
+        return b2`<p class="help">${t5("ui.usesNeedAutomations")}</p>
+          <ion-button size="small" data-testid="uses-go-to-apps" @click=${() => this.goTo(APPS_PATH)}>
+            <ion-icon slot="start" name="apps-outline"></ion-icon>${t5("ui.usesGoToApps")}
+          </ion-button>`;
+      }
+      if (resolved.available.length === 0) {
+        return b2`<p class="help">${t5("ui.usesEmpty")}</p>
+          <ion-button size="small" data-testid="uses-go-to-apps" @click=${() => this.goTo(APPS_PATH)}>
+            <ion-icon slot="start" name="apps-outline"></ion-icon>${t5("ui.usesGoToApps")}
+          </ion-button>`;
+      }
+      return b2`<ul class="uses">
+        ${resolved.available.map(
+        (use) => b2`<li>
+            <ion-icon class="use-icon" name=${use.icon} aria-hidden="true"></ion-icon>
+            <div class="use-text">
+              <b>${t5(use.nameKey)}</b>
+              <p class="help">${t5(use.summaryKey)}</p>
+            </div>
+            <ion-button
+              size="small"
+              data-testid="use-${use.id}"
+              @click=${() => this.goTo(galleryPath(use.id))}
+            >${t5("ui.usesOpen")}</ion-button>
+          </li>`
+      )}
+      </ul>`;
+    };
+    return b2`<section>
+      <h3>${t5("ui.sectionUses")}</h3>
+      <p class="help">${t5("ui.helpUses")}</p>
+      ${body()}
+    </section>`;
+  }
   renderRequests() {
     const t5 = (k2) => erplora3().t(CATALOG3, k2);
     return b2`<section>
@@ -4929,6 +5064,7 @@ var ErpWhatsappInboxSettings = class extends i3 {
         ${this.error ? b2`<p class="err">${this.error}</p>` : A}
         ${this.saved ? b2`<p class="ok">${t5("ui.settingsSaved")}</p>` : A}
         ${this.renderChannel()}
+        ${this.renderUses()}
         ${this.renderRequests()}
         <div class="actions">
           <ion-button type="submit" ?disabled=${this.saving || this.loading}>
@@ -4956,6 +5092,9 @@ __decorateClass([
 __decorateClass([
   r5()
 ], ErpWhatsappInboxSettings.prototype, "usage", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxSettings.prototype, "uses", 2);
 define("erp-whatsapp-inbox-settings", ErpWhatsappInboxSettings);
 
 // ui/components/erp-whatsapp-inbox-templates/erp-whatsapp-inbox-templates.ts

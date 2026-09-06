@@ -3,10 +3,11 @@ import { state } from 'lit/decorators.js';
 import { define } from '@erplora/outfitkit/define';
 import {
   APPS_PATH,
-  AUTOMATIONS_WITNESS,
   WHATSAPP_USES,
   galleryPath,
+  probeAutomations,
   type WhatsAppUse,
+  type WitnessAsker,
 } from '../../lib/whatsapp-uses';
 // Catálogo i18n del módulo (ADR-0055): esbuild inlinea estos JSON en el `dist` del WC.
 import esLocale from '../../../locales/es.json';
@@ -56,8 +57,9 @@ const CATALOG: Record<string, unknown> = { es: esLocale, en: enLocale };
 
 interface ErploraClientLike {
   query<T = unknown>(name: string, params?: Record<string, unknown>): Promise<T>;
-  /** Absence-tolerant `query` (ADR-0127). Missing on a shell older than the SDK that added it, so
-   *  every caller here has to survive without it — see {@link ErpWhatsappInboxSettings.isHere}. */
+  /** Absence-tolerant `query` (ADR-0127): `undefined` for a module that is not installed, and the
+   *  original error for anything else. What the uses card is built on — see
+   *  {@link ErpWhatsappInboxSettings.isHere}. */
   queryOptional?<T = unknown>(name: string, params?: Record<string, unknown>): Promise<T | undefined>;
   command<T = unknown>(name: string, payload?: Record<string, unknown>): Promise<T>;
   locale: string;
@@ -281,21 +283,18 @@ export class ErpWhatsappInboxSettings extends LitElement {
    *
    * `queryOptional` answers `undefined` for `module_not_installed` / `module_inactive` and RE-THROWS
    * everything else (`packages/module-sdk/src/index.ts`), which is exactly the distinction needed:
-   * only those two codes prove an absence. A denied permission, a renamed query or a handler that
-   * blew up are broken contracts — they say nothing about whether the module is installed, and
-   * reading them as «not here» would hide a use that works behind somebody else's bug. So anything
-   * that is not a proven absence counts as PRESENT: the worst case is a shortcut to a gallery card
-   * the owner then decides not to use, which is a far cheaper mistake than a feature that silently
-   * disappears.
+   * only those two codes prove an absence.
    *
-   * On a shell whose SDK predates `queryOptional` the same rule is applied by hand over `query`.
+   * **Everything that is not a proven absence counts as PRESENT**, and that asymmetry is the
+   * decision. A denied permission, a renamed query, a handler that blew up — or a shell so old its
+   * SDK has no `queryOptional` at all, which lands here as a `TypeError` — say nothing about
+   * whether the module is installed. Reading them as «not here» would hide a working use behind
+   * somebody else's bug, silently and for as long as the bug lasts. The other way round, the worst
+   * case is a shortcut to a gallery card the owner looks at and does not use.
    */
-  private async isHere(witness: string): Promise<boolean> {
-    const client = erplora();
+  private async isHere(probe: (client: WitnessAsker) => Promise<unknown>): Promise<boolean> {
     try {
-      if (client.queryOptional) return (await client.queryOptional(witness)) !== undefined;
-      await client.query(witness);
-      return true;
+      return (await probe(erplora() as unknown as WitnessAsker)) !== undefined;
     } catch (e) {
       const code = (e as { code?: string }).code;
       return code !== 'module_not_installed' && code !== 'module_inactive';
@@ -305,8 +304,8 @@ export class ErpWhatsappInboxSettings extends LitElement {
   /** Resolved in one go so the section never renders half-answered — see `availableUses`. */
   private async resolveUses() {
     const [automationsHere, ...present] = await Promise.all([
-      this.isHere(AUTOMATIONS_WITNESS),
-      ...WHATSAPP_USES.map((use) => this.isHere(use.witness)),
+      this.isHere(probeAutomations),
+      ...WHATSAPP_USES.map((use) => this.isHere((client) => use.probe(client))),
     ]);
     this.uses = { automationsHere, available: WHATSAPP_USES.filter((_, i) => present[i]) };
   }

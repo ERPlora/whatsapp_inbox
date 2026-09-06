@@ -443,17 +443,18 @@ describe('the settings screen says what this WhatsApp can be used for (whatsapp_
     ).not.toBeNull();
   });
 
-  it('works the same on a shell too old to offer queryOptional', async () => {
+  // A shell whose SDK predates `queryOptional` cannot answer the question at all — the call lands
+  // as a TypeError, not as an absence. That is the same class of «I could not find out» as a denied
+  // permission, and it degrades the same way: offer the use. The screen is not allowed to turn «I
+  // could not ask» into «you cannot do this», which on an old hub would empty the card for everyone.
+  it('offers the uses anyway on a shell too old to answer the question', async () => {
     mountWith(SAVED_SETTINGS, { noQueryOptional: true });
     const el = await mount();
-    expect(el.shadowRoot.querySelector(testid(APPOINTMENTS))).not.toBeNull();
-
-    mountWith(SAVED_SETTINGS, { noQueryOptional: true, absent: [APPOINTMENTS.module] });
-    const absent = await mount();
     expect(
-      absent.shadowRoot.querySelector(testid(APPOINTMENTS)),
-      'without queryOptional the absence has to be caught by hand, and it was not',
-    ).toBeNull();
+      el.shadowRoot.querySelector(testid(APPOINTMENTS)),
+      'an old shell was read as «this hub has nothing», hiding every use on hubs that have them',
+    ).not.toBeNull();
+    expect(el.shadowRoot.textContent ?? '').not.toContain(esLocale.ui.usesEmpty);
   });
 
   it('takes the owner to that gallery card when the use is tapped', async () => {

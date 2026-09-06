@@ -3,7 +3,14 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-import { AUTOMATIONS_MODULE, AUTOMATIONS_WITNESS, APPS_PATH, WHATSAPP_USES, galleryPath } from './whatsapp-uses';
+import {
+  AUTOMATIONS_MODULE,
+  AUTOMATIONS_WITNESS,
+  APPS_PATH,
+  WHATSAPP_USES,
+  galleryPath,
+  probeAutomations,
+} from './whatsapp-uses';
 
 /**
  * **The uses this channel can be put to, and the two ways that list can lie.**
@@ -60,6 +67,36 @@ describe('every offered use is backed by a recipe this module actually ships', (
       expect(use.witness.split('.')[0], `witness of ${use.id}`).toBe(use.module);
     }
     expect(AUTOMATIONS_WITNESS.split('.')[0]).toBe('flows');
+  });
+
+  // `witness` is what every guard here reads; `probe` is what actually travels to the runtime, and
+  // it has to carry the name as a LITERAL so ADR-0127's extractor can see the dependency at all.
+  // Two spellings of one fact drift the moment somebody renames only one of them — and the drift is
+  // silent, because a name that does not exist answers `not_found`, never an absence.
+  it('each probe asks for exactly the witness it declares, through the optional door', async () => {
+    const asked: { door: string; name: string }[] = [];
+    const client = {
+      queryOptional: async (name: string) => {
+        asked.push({ door: 'queryOptional', name });
+        return [];
+      },
+      query: async (name: string) => {
+        asked.push({ door: 'query', name });
+        return [];
+      },
+    };
+
+    for (const use of WHATSAPP_USES) {
+      asked.length = 0;
+      await use.probe(client);
+      expect(asked, `probe of ${use.id} asked something else than its declared witness`).toEqual([
+        { door: 'queryOptional', name: use.witness },
+      ]);
+    }
+
+    asked.length = 0;
+    await probeAutomations(client);
+    expect(asked).toEqual([{ door: 'queryOptional', name: AUTOMATIONS_WITNESS }]);
   });
 
   it('ids are unique: two cards pointing at the same gallery template is one of them wrong', () => {
