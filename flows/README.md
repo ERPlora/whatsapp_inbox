@@ -119,3 +119,11 @@ La vía declarativa para que un blueprint la reparta está propuesta en **ERPlor
 - Una imagen del hub con **hub#821** (step `notify` + grant `recipient_query`). Sin ella el
   documento se **rechaza al guardar**, nombrando su issue — que es lo correcto: un motor que
   promete y calla es peor que uno que dice que no.
+- 🔴 Una imagen del hub con **hub#1595** (un command que solo contesta se ejecuta en el turno, sea
+  cual sea la política). Y esta, al contrario que hub#821, **no se rechaza al guardar: falla
+  callando**. En un hub anterior, la primera pregunta de disponibilidad de `propose_appointment` se
+  convierte en una fila de `_flow_approvals` y el turno termina, así que al dueño le llega una
+  tarjeta pidiéndole que apruebe «consultar disponibilidad» y la cita no se propone nunca. Es el
+  motivo por el que esta plantilla estuvo partida en dos pasos (whatsapp_inbox#55): si la instalas
+  en un hub sin hub#1595, la versión de dos pasos es la que funciona ahí. **Mergeada ≠ desplegada**
+  — se comprueba contra la imagen que corre el hub, no contra `develop`.

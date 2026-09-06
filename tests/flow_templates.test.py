@@ -31,6 +31,13 @@ of them surface at 3 AM in front of a customer:
    with the Spanish blueprint. If they stop being the same automation — a tool added to one, a step
    renamed in the other — then «the Spanish one» quietly became a different product. Only the human
    text may differ.
+6. **A step's `policy` does not match what its commands DO** → either a write runs unattended
+   (`auto`), or the automation is split in two steps to dodge a problem hub#1595 already solved and
+   every incoming message pays an extra metered AI turn (whatsapp_inbox#55). Both are judged with
+   the hub's own classification, copied into `command_only_answers`.
+
+And because these rules only ever run over documents that are already correct, the battery mutates
+its OWN rules first (`self_check`) — a blinded rule would otherwise stay green forever.
 
 Usage: tests/flow_templates.test.py   (exit 0 = green)
 """
