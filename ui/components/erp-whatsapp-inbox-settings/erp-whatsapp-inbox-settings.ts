@@ -1,6 +1,13 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { state } from 'lit/decorators.js';
 import { define } from '@erplora/outfitkit/define';
+import {
+  APPS_PATH,
+  AUTOMATIONS_WITNESS,
+  WHATSAPP_USES,
+  galleryPath,
+  type WhatsAppUse,
+} from '../../lib/whatsapp-uses';
 // Catálogo i18n del módulo (ADR-0055): esbuild inlinea estos JSON en el `dist` del WC.
 import esLocale from '../../../locales/es.json';
 import enLocale from '../../../locales/en.json';
@@ -49,6 +56,9 @@ const CATALOG: Record<string, unknown> = { es: esLocale, en: enLocale };
 
 interface ErploraClientLike {
   query<T = unknown>(name: string, params?: Record<string, unknown>): Promise<T>;
+  /** Absence-tolerant `query` (ADR-0127). Missing on a shell older than the SDK that added it, so
+   *  every caller here has to survive without it — see {@link ErpWhatsappInboxSettings.isHere}. */
+  queryOptional?<T = unknown>(name: string, params?: Record<string, unknown>): Promise<T | undefined>;
   command<T = unknown>(name: string, payload?: Record<string, unknown>): Promise<T>;
   locale: string;
   t(catalog: Record<string, unknown>, key: string, params?: Record<string, unknown>): string;
@@ -120,6 +130,12 @@ export class ErpWhatsappInboxSettings extends LitElement {
     .err { color:#d9480f; font-weight:600; }
     .ok { color:#2b8a3e; font-weight:600; }
     .actions { display:flex; gap:.5rem; }
+    .uses { list-style:none; margin:.5rem 0 0; padding:0; display:flex; flex-direction:column; gap:.5rem; }
+    .uses li { display:flex; gap:.6rem; align-items:center; flex-wrap:wrap; }
+    .use-text { flex:1 1 12rem; min-width:0; }
+    .use-text b { display:block; font-size:.95rem; }
+    .use-text .help { margin:.1rem 0 0; }
+    .use-icon { font-size:1.35rem; color: var(--ion-color-medium,#6b6557); flex:0 0 auto; }
     /* 44px minimum touch target: this screen is used one-handed, at a counter. */
     ion-button { --min-height: 44px; }
   `;
@@ -138,6 +154,15 @@ export class ErpWhatsappInboxSettings extends LitElement {
    *  the ingest guards make: a screen that computed «this month» its own way would contradict the
    *  number that actually stops the channel. */
   @state() usage: { inbound_this_month: number; monthly_limit: number } | null = null;
+
+  /** The uses this hub can actually carry out, or `null` while it is still being found out.
+   *  The difference matters: «none» is a sentence the owner reads, and saying it before the
+   *  answer arrives tells them their WhatsApp is useless when it is not. */
+  @state() availableUses: readonly WhatsAppUse[] | null = null;
+
+  /** Whether the automation kernel — the shortcut's destination — is installed. `null` while
+   *  resolving, same reason. */
+  @state() automationsHere: boolean | null = null;
 
   private readonly onLocaleChange = (): void => this.requestUpdate();
 
@@ -163,6 +188,7 @@ export class ErpWhatsappInboxSettings extends LitElement {
         'whatsapp_inbox.usage.get',
       );
       this.usage = Array.isArray(usage) ? usage[0] ?? null : (usage as never);
+      await this.resolveUses();
     } catch (e) {
       this.error = e instanceof Error ? e.message : erplora().t(CATALOG, 'ui.errorLoadSettings');
     } finally {
@@ -247,6 +273,109 @@ export class ErpWhatsappInboxSettings extends LitElement {
       : html`<p class="help">${t('ui.helpConnectNeedsNewerHub')}</p>`;
   }
 
+  /**
+   * **Is this module here?** — the one question the uses card is built on.
+   *
+   * `queryOptional` answers `undefined` for `module_not_installed` / `module_inactive` and RE-THROWS
+   * everything else (`packages/module-sdk/src/index.ts`), which is exactly the distinction needed:
+   * only those two codes prove an absence. A denied permission, a renamed query or a handler that
+   * blew up are broken contracts — they say nothing about whether the module is installed, and
+   * reading them as «not here» would hide a use that works behind somebody else's bug. So anything
+   * that is not a proven absence counts as PRESENT: the worst case is a shortcut to a gallery card
+   * the owner then decides not to use, which is a far cheaper mistake than a feature that silently
+   * disappears.
+   *
+   * On a shell whose SDK predates `queryOptional` the same rule is applied by hand over `query`.
+   */
+  private async isHere(witness: string): Promise<boolean> {
+    const client = erplora();
+    try {
+      if (client.queryOptional) return (await client.queryOptional(witness)) !== undefined;
+      await client.query(witness);
+      return true;
+    } catch (e) {
+      const code = (e as { code?: string }).code;
+      return code !== 'module_not_installed' && code !== 'module_inactive';
+    }
+  }
+
+  /** Resolved in one go so the section never renders half-answered — see `availableUses`. */
+  private async resolveUses() {
+    const [automations, ...present] = await Promise.all([
+      this.isHere(AUTOMATIONS_WITNESS),
+      ...WHATSAPP_USES.map((use) => this.isHere(use.witness)),
+    ]);
+    this.automationsHere = automations;
+    this.availableUses = WHATSAPP_USES.filter((_, i) => present[i]);
+  }
+
+  /**
+   * The channel module→shell (whatsapp_inbox#59). A Web Component gets no router, so the way to
+   * move the hub is to push the URL and tell the shell with `popstate` — the same pattern
+   * `sales` uses to send a doubtful checkout to Sales and `appointments` to send an appointment to
+   * the POS (`sales/ui/components/erp-pos-touch/erp-pos-touch.ts`).
+   */
+  private goTo(path: string) {
+    window.history.pushState({}, '', path);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }
+
+  /**
+   * **What this WhatsApp can be used for, and where each one is set up** (whatsapp_inbox#59).
+   *
+   * A shortcut, deliberately: it does NOT create or switch on the automation. `/api/hub/flows*` is
+   * gated behind `manage_flows` — «la capability con más alcance de todas»
+   * (`crates/runtime/src/manifest.rs`), granting power over every automation of the business and
+   * over the event catalogue, which carries customers' data — and an inbox module has no business
+   * holding it. The kernel also creates every gallery template PAUSED on purpose
+   * (`flows/ui/lib/templates.ts`, rule 3): «one tap and it is running» is the thing the grants
+   * system exists to prevent. So this names the use, says what it does, and opens the door.
+   */
+  private renderUses() {
+    const t = (k: string): string => erplora().t(CATALOG, k);
+    const available = this.availableUses;
+    const body = () => {
+      // Still asking. Silence is the honest answer: «nothing to use it for» is a sentence the owner
+      // believes, and it would be a lie for as long as the answer is outstanding.
+      if (available === null || this.automationsHere === null) return nothing;
+      // No destination: the gallery is where every one of these is set up, so without the
+      // automation kernel each card would be a door to a room that is not there.
+      if (!this.automationsHere) {
+        return html`<p class="help">${t('ui.usesNeedAutomations')}</p>
+          <ion-button size="small" data-testid="uses-go-to-apps" @click=${() => this.goTo(APPS_PATH)}>
+            <ion-icon slot="start" name="apps-outline"></ion-icon>${t('ui.usesGoToApps')}
+          </ion-button>`;
+      }
+      if (available.length === 0) {
+        return html`<p class="help">${t('ui.usesEmpty')}</p>
+          <ion-button size="small" data-testid="uses-go-to-apps" @click=${() => this.goTo(APPS_PATH)}>
+            <ion-icon slot="start" name="apps-outline"></ion-icon>${t('ui.usesGoToApps')}
+          </ion-button>`;
+      }
+      return html`<ul class="uses">
+        ${available.map(
+          (use) => html`<li>
+            <ion-icon class="use-icon" name=${use.icon} aria-hidden="true"></ion-icon>
+            <div class="use-text">
+              <b>${t(use.nameKey)}</b>
+              <p class="help">${t(use.summaryKey)}</p>
+            </div>
+            <ion-button
+              size="small"
+              data-testid="use-${use.id}"
+              @click=${() => this.goTo(galleryPath(use.id))}
+            >${t('ui.usesOpen')}</ion-button>
+          </li>`,
+        )}
+      </ul>`;
+    };
+    return html`<section>
+      <h3>${t('ui.sectionUses')}</h3>
+      <p class="help">${t('ui.helpUses')}</p>
+      ${body()}
+    </section>`;
+  }
+
   private renderRequests() {
     const t = (k: string): string => erplora().t(CATALOG, k);
     return html`<section>
@@ -276,6 +405,7 @@ export class ErpWhatsappInboxSettings extends LitElement {
         ${this.error ? html`<p class="err">${this.error}</p>` : nothing}
         ${this.saved ? html`<p class="ok">${t('ui.settingsSaved')}</p>` : nothing}
         ${this.renderChannel()}
+        ${this.renderUses()}
         ${this.renderRequests()}
         <div class="actions">
           <ion-button type="submit" ?disabled=${this.saving || this.loading}>

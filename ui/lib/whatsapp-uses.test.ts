@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-import { AUTOMATIONS_WITNESS, APPS_PATH, WHATSAPP_USES, galleryPath } from './whatsapp-uses';
+import { AUTOMATIONS_MODULE, AUTOMATIONS_WITNESS, APPS_PATH, WHATSAPP_USES, galleryPath } from './whatsapp-uses';
 
 /**
  * **The uses this channel can be put to, and the two ways that list can lie.**
@@ -17,13 +17,16 @@ import { AUTOMATIONS_WITNESS, APPS_PATH, WHATSAPP_USES, galleryPath } from './wh
  * (`flows/ui/lib/templates.ts`, rule 3), so «one tap and it is running» is the very thing grants
  * exist to prevent.
  *
- * A shortcut has exactly two failure modes, and both are silent:
+ * A shortcut has three failure modes, and every one of them is silent:
  *
  * 1. **It offers a use this module does not ship a recipe for.** Then the owner arrives at a
  *    gallery with nothing that does what the card promised. Guarded by reading `flows/` itself.
  * 2. **It links to a gallery card that does not exist.** A typo in `id` is a link that lands
  *    nowhere in particular, and nothing turns red — the gallery just shows everything. Guarded
  *    against the neighbouring `flows` checkout when there is one.
+ * 3. **Its witness is a query that does not exist.** Then the module can never be proven absent —
+ *    `not_found` is a broken contract, not an absence — and the use is offered to every hub,
+ *    including the ones that cannot run it. Guarded against the neighbour's published manifest.
  */
 
 const MODULE_ROOT = join(__dirname, '..', '..');
@@ -79,7 +82,7 @@ describe('where a use sends the owner', () => {
 });
 
 /**
- * **The neighbour check, read off `origin/main` and never off the working tree.**
+ * **The neighbour checks are read off `origin/main` and never off the working tree.**
  *
  * Same shape as `flows/ui/lib/templates.test.ts`, with one lesson applied: the sibling checkout of
  * `flows` in this workspace was five releases behind `origin/main` the day this was written, so
@@ -87,29 +90,60 @@ describe('where a use sends the owner', () => {
  * `main` since flows#53. A guard that goes red because somebody else did not `git pull` is a guard
  * people learn to ignore.
  *
- * In CI there is no `flows` checkout at all, so this skips OUT LOUD — the debt is
+ * In CI there is no neighbouring checkout at all, so these skip OUT LOUD — the debt is
  * module-toolkit#211, which brings the source repo to the runner. In the workspace, where the fleet
- * works, it runs.
+ * works, they run.
  */
-describe('the gallery really offers what we link to', () => {
-  const neighbour = join(MODULE_ROOT, '..', 'flows');
-
-  function galleryFromOriginMain(): string | null {
-    if (!existsSync(join(neighbour, '.git'))) return null;
-    try {
-      return execFileSync('git', ['-C', neighbour, 'show', 'origin/main:ui/lib/templates.ts'], {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-      });
-    } catch {
-      return null;
-    }
+function fromOriginMain(moduleId: string, path: string): string | null {
+  const neighbour = join(MODULE_ROOT, '..', moduleId);
+  if (!existsSync(join(neighbour, '.git'))) return null;
+  try {
+    return execFileSync('git', ['-C', neighbour, 'show', `origin/main:${path}`], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+  } catch {
+    return null;
   }
+}
 
+/**
+ * **The witness has to be a query that exists**, and this is the only place that can tell.
+ *
+ * A witness proves its module is INSTALLED by being asked and not coming back
+ * `module_not_installed`. That makes a renamed or misspelt witness fail SAFE in the worst possible
+ * way: `not_found` is not an absence, so the screen keeps offering the use — for every hub, forever,
+ * including the ones that really do not have the module. Nothing goes red, the shortcut just starts
+ * lying. Checking the name against the neighbour's published manifest is what closes it.
+ */
+describe('every witness is a query its module really publishes', () => {
+  const witnesses = [
+    ...WHATSAPP_USES.map((u) => [u.module, u.witness] as const),
+    [AUTOMATIONS_MODULE, AUTOMATIONS_WITNESS] as const,
+  ];
+
+  it.each(witnesses)('%s publishes %s', (moduleId, witness) => {
+    const manifest = fromOriginMain(moduleId, 'module.json');
+    if (manifest === null) {
+      console.warn(`SKIPPED: no ${moduleId} checkout next door (module-toolkit#211)`);
+      return;
+    }
+    const queries = (JSON.parse(manifest) as { queries?: Record<string, unknown> }).queries ?? {};
+    expect(Object.keys(queries).length, 'read no queries at all: the parser, not the manifest, is what broke')
+      .toBeGreaterThan(0);
+    expect(
+      Object.keys(queries),
+      `\`${witness}\` is not a query of ${moduleId} on origin/main: the use would be offered to ` +
+        'every hub, because a name that does not exist answers `not_found`, never `module_not_installed`',
+    ).toContain(witness);
+  });
+});
+
+describe('the gallery really offers what we link to', () => {
   it('every use id is a template id of the flows gallery on origin/main', () => {
-    const src = galleryFromOriginMain();
+    const src = fromOriginMain(AUTOMATIONS_MODULE, 'ui/lib/templates.ts');
     if (src === null) {
-      console.warn(`SKIPPED: no flows checkout next door at ${neighbour} (module-toolkit#211)`);
+      console.warn(`SKIPPED: no ${AUTOMATIONS_MODULE} checkout next door (module-toolkit#211)`);
       return;
     }
     const ids = new Set([...src.matchAll(/^\s{4}id: '([^']+)'/gm)].map((m) => m[1]));

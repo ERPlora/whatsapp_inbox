@@ -30,6 +30,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import esLocale from '../../../locales/es.json';
 import enLocale from '../../../locales/en.json';
+import { WHATSAPP_USES } from '../../lib/whatsapp-uses';
 
 /** A hub on the free tier: 30 inbound messages a month, and a channel already configured. */
 const SAVED_SETTINGS = {
@@ -69,6 +70,8 @@ interface Neighbours {
   noQueryOptional?: boolean;
   /** A witness that fails for a reason that is NOT absence — a denied permission, a broken handler. */
   brokenWitness?: string;
+  /** A witness whose answer never arrives: the hub is slow, the screen is still finding out. */
+  pendingWitness?: string;
 }
 
 function mountWith(row: Record<string, unknown> | null = SAVED_SETTINGS, hub: Neighbours = {}) {
@@ -80,6 +83,7 @@ function mountWith(row: Record<string, unknown> | null = SAVED_SETTINGS, hub: Ne
     query: async (name: string, params?: unknown) => {
       queries.push({ name, params });
       if (name === 'whatsapp_inbox.usage.get') return [{ inbound_this_month: 12, monthly_limit: row ? 30 : 0 }];
+      if (name === hub.pendingWitness) return new Promise(() => {});
       if (name === hub.brokenWitness) throw Object.assign(new Error('permission denied'), { code: 'permission_denied' });
       if (absent.has(ownerOf(name))) {
         throw Object.assign(new Error('module_not_installed'), { code: 'module_not_installed' });
@@ -346,5 +350,151 @@ describe('the channel block is where the number gets connected (whatsapp_inbox#5
       expect(catalog.ui.helpChannelCredentialsStaySealed, 'missing helpChannelCredentialsStaySealed').toBeTruthy();
     }
     expect(esLocale.ui.helpConnectNeedsNewerHub).not.toBe(enLocale.ui.helpConnectNeedsNewerHub);
+  });
+});
+
+// whatsapp_inbox#59 — «What do you use WhatsApp for?».
+//
+// The complaint: the owner scans the QR, the inbox starts filling up, and that is where the product
+// stops. Turning a WhatsApp into a booked appointment means leaving Settings, finding Automations,
+// recognising which of a dozen gallery cards is theirs, granting permissions and switching it on.
+// Nobody who has just connected a number knows that screen exists. Wati, respond.io and Zoko all
+// ask «what do you want it for?» right after the connection; this is our version of that question.
+//
+// **It is a shortcut, and that is a decision, not a shortcoming** (the reasoning lives in
+// `ui/lib/whatsapp-uses.ts`): the module does not create the flow, because `/api/hub/flows*` is
+// gated behind `manage_flows` — the widest capability the runtime has — and because the kernel
+// creates every template PAUSED on purpose. So the card names the use, says what it does, and opens
+// the door. The owner still walks through it.
+//
+// What these tests pin is everything that can silently lie on that card:
+// · offering a use whose module is not installed — a door to a room that is not there;
+// · claiming there is nothing to offer while still finding out;
+// · treating a broken witness (denied permission, renamed query) as an absence: that hides a
+//   working use behind somebody else's bug, and the module cannot tell the two apart by guessing;
+// · pointing at Automations when Automations is what is missing.
+describe('the settings screen says what this WhatsApp can be used for (whatsapp_inbox#59)', () => {
+  const APPOINTMENTS = WHATSAPP_USES.find((u) => u.module === 'appointments')!;
+  const testid = (use: { id: string }) => `[data-testid="use-${use.id}"]`;
+  const uses = (el: HTMLElement & { shadowRoot: ShadowRoot }) =>
+    [...el.shadowRoot.querySelectorAll('[data-testid^="use-"]')];
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('offers the use when its module and Automations are both installed', async () => {
+    mountWith();
+    const el = await mount();
+    const card = el.shadowRoot.querySelector(testid(APPOINTMENTS));
+    expect(card, 'the hub has Appointments and Automations and the screen offers nothing').not.toBeNull();
+    const text = el.shadowRoot.textContent ?? '';
+    expect(text, 'the card does not name the use').toContain(esLocale.ui[APPOINTMENTS.nameKey.split('.')[1]]);
+    expect(text, 'the card does not say what the use does').toContain(
+      esLocale.ui[APPOINTMENTS.summaryKey.split('.')[1]],
+    );
+  });
+
+  it('puts the question straight after the channel block, where the number was just connected', async () => {
+    mountWith();
+    const el = await mount();
+    const headings = [...el.shadowRoot.querySelectorAll('section h3')].map((h) => h.textContent?.trim());
+    expect(headings).toEqual([esLocale.ui.sectionChannel, esLocale.ui.sectionUses, esLocale.ui.sectionRequests]);
+  });
+
+  it('asks the module it would send the owner to whether it is installed', async () => {
+    mountWith();
+    await mount();
+    expect(queries.map((q) => q.name)).toContain(APPOINTMENTS.witness);
+  });
+
+  it('hides a use whose module this hub does not have', async () => {
+    mountWith(SAVED_SETTINGS, { absent: [APPOINTMENTS.module] });
+    const el = await mount();
+    expect(
+      el.shadowRoot.querySelector(testid(APPOINTMENTS)),
+      'the screen offers a use that leads to a gallery card this hub cannot run',
+    ).toBeNull();
+  });
+
+  it('says so in a sentence when no use is available, instead of an empty box', async () => {
+    mountWith(SAVED_SETTINGS, { absent: WHATSAPP_USES.map((u) => u.module) });
+    const el = await mount();
+    expect(uses(el)).toEqual([]);
+    expect(el.shadowRoot.textContent ?? '').toContain(esLocale.ui.usesEmpty);
+  });
+
+  it('offers nothing while it is still finding out — silence, not «nothing to offer»', async () => {
+    mountWith(SAVED_SETTINGS, { pendingWitness: APPOINTMENTS.witness });
+    const el = await mount();
+    const text = el.shadowRoot.textContent ?? '';
+    expect(uses(el), 'a use was offered before its module answered').toEqual([]);
+    expect(text, 'told the owner there is nothing to use WhatsApp for while still asking').not.toContain(
+      esLocale.ui.usesEmpty,
+    );
+    expect(text).not.toContain(esLocale.ui.usesNeedAutomations);
+  });
+
+  it('still offers the use when the witness fails for something that is NOT absence', async () => {
+    mountWith(SAVED_SETTINGS, { brokenWitness: APPOINTMENTS.witness });
+    const el = await mount();
+    expect(
+      el.shadowRoot.querySelector(testid(APPOINTMENTS)),
+      'a denied permission or a renamed query was read as «the module is not here», hiding a use ' +
+        'that works: only module_not_installed / module_inactive prove an absence',
+    ).not.toBeNull();
+  });
+
+  it('works the same on a shell too old to offer queryOptional', async () => {
+    mountWith(SAVED_SETTINGS, { noQueryOptional: true });
+    const el = await mount();
+    expect(el.shadowRoot.querySelector(testid(APPOINTMENTS))).not.toBeNull();
+
+    mountWith(SAVED_SETTINGS, { noQueryOptional: true, absent: [APPOINTMENTS.module] });
+    const absent = await mount();
+    expect(
+      absent.shadowRoot.querySelector(testid(APPOINTMENTS)),
+      'without queryOptional the absence has to be caught by hand, and it was not',
+    ).toBeNull();
+  });
+
+  it('takes the owner to that gallery card when the use is tapped', async () => {
+    mountWith();
+    const el = await mount();
+    const push = vi.spyOn(window.history, 'pushState');
+    const dispatch = vi.spyOn(window, 'dispatchEvent');
+
+    el.shadowRoot.querySelector<HTMLElement>(testid(APPOINTMENTS))!.click();
+
+    expect(push).toHaveBeenCalledWith({}, '', `/m/flows/automations?template=${APPOINTMENTS.id}`);
+    const popped = dispatch.mock.calls.map(([e]) => e).filter((e) => e.type === 'popstate');
+    expect(popped, 'the URL changed and the shell was never told: the screen would not move').not.toEqual([]);
+  });
+
+  // Without the automation kernel the shortcut has no destination at all, so pointing at it would
+  // be a door to a room that does not exist. The app list is where that gets fixed.
+  it('sends the owner to install Automations instead of offering doors that lead nowhere', async () => {
+    mountWith(SAVED_SETTINGS, { absent: ['flows'] });
+    const el = await mount();
+    expect(uses(el), 'offered a use whose destination is not installed').toEqual([]);
+    expect(el.shadowRoot.textContent ?? '').toContain(esLocale.ui.usesNeedAutomations);
+
+    const push = vi.spyOn(window.history, 'pushState');
+    const apps = el.shadowRoot.querySelector<HTMLElement>('[data-testid="uses-go-to-apps"]');
+    expect(apps, 'said Automations is missing and offered no way to get it').not.toBeNull();
+    apps!.click();
+    expect(push).toHaveBeenCalledWith({}, '', '/apps');
+  });
+
+  it('ships every sentence of the card in both languages, translated (ADR-0055/0199)', () => {
+    const keys = [
+      'sectionUses', 'helpUses', 'usesOpen', 'usesEmpty', 'usesNeedAutomations', 'usesGoToApps',
+      ...WHATSAPP_USES.flatMap((u) => [u.nameKey.split('.')[1], u.summaryKey.split('.')[1]]),
+    ];
+    for (const key of keys) {
+      expect(enLocale.ui[key], `missing \`ui.${key}\` in en.json`).toBeTruthy();
+      expect(esLocale.ui[key], `missing \`ui.${key}\` in es.json`).toBeTruthy();
+      expect(esLocale.ui[key], `\`ui.${key}\` was shipped in English to a Spanish salon`).not.toBe(
+        enLocale.ui[key],
+      );
+    }
   });
 });

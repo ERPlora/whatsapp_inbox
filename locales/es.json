@@ -130,7 +130,15 @@
     "labelNotes": "Notas",
     "labelLinkedObject": "Registro creado",
     "errLoadRequest": "No se ha podido cargar la petición",
-    "labelUsedThisMonth": "Consumidos este mes"
+    "labelUsedThisMonth": "Consumidos este mes",
+    "sectionUses": "¿Para qué usas WhatsApp?",
+    "helpUses": "Elige qué quieres que haga este número. Te llevamos a la automatización que lo hace, ya preparada; tú la lees y la enciendes.",
+    "useAppointmentsName": "Reservar citas",
+    "useAppointmentsSummary": "Una clienta pide cita por WhatsApp, el asistente le ofrece las horas que de verdad tienes libres y le reserva la que elija; luego le dice que ya está.",
+    "usesOpen": "Configurar",
+    "usesEmpty": "Todavía no hay nada que este WhatsApp pueda hacer solo: lo que puedes hacer con él sale de las aplicaciones que tengas instaladas.",
+    "usesNeedAutomations": "Contestar solo lo hacen las Automatizaciones, y este hub aún no las tiene.",
+    "usesGoToApps": "Ver aplicaciones"
   },
   "errors": {
     "whatsapp_inbox.conversation_not_found": "Esa conversación no existe en este negocio.",

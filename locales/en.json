@@ -129,7 +129,15 @@
     "labelNotes": "Notes",
     "labelLinkedObject": "Created record",
     "errLoadRequest": "Could not load the request",
-    "labelUsedThisMonth": "Used this month"
+    "labelUsedThisMonth": "Used this month",
+    "sectionUses": "What do you use WhatsApp for?",
+    "helpUses": "Pick what this number should do for you. We take you to the automation that does it, already set up; you read it and switch it on yourself.",
+    "useAppointmentsName": "Book appointments",
+    "useAppointmentsSummary": "A customer asks for an appointment on WhatsApp, the assistant offers the hours you actually have free, and books the one they pick — then tells them it is done.",
+    "usesOpen": "Set it up",
+    "usesEmpty": "There is nothing for this WhatsApp to do on its own yet: what it can be used for comes from the apps you have installed.",
+    "usesNeedAutomations": "Answering on its own is done by Automations, and this hub does not have it yet.",
+    "usesGoToApps": "See apps"
   },
   "errors": {
     "whatsapp_inbox.conversation_not_found": "That conversation does not exist in this business.",
