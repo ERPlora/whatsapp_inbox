@@ -121,14 +121,14 @@ Automatizaciones no sabe nada de WhatsApp «por dentro». Trabaja con **eventos*
 
 | Lo que Automatizaciones necesita | Lo que le da WhatsApp Inbox |
 |---|---|
-| Un **disparador** | El evento `whatsapp_inbox.message.received` (y los demás de la tabla de abajo) |
+| Un **disparador** | El evento del núcleo `hub.whatsapp.message_received` (trae `from` y `text`) o el del módulo `whatsapp_inbox.message.received` (y los demás de la tabla de abajo) |
 | Un **destinatario** para contestar | La query `whatsapp_inbox.conversations.list`, campo `contact_phone` (se concede como `recipient_query`) |
 | Un **canal** para el paso `notify` | `whatsapp`, que sale por el proxy del SaaS (se concede como `notify`) |
 | **Lecturas** para que la IA entienda el contexto | `whatsapp_inbox.conversations.get`, `whatsapp_inbox.messages.list`, y las queries de Citas para los huecos |
 
 ```mermaid
 flowchart TD
-    E["evento<br/>whatsapp_inbox.message.received"] --> T{{"Automatización<br/>«WhatsApp → cita propuesta»"}}
+    E["evento<br/>hub.whatsapp.message_received"] --> T{{"Automatización<br/>«WhatsApp → cita propuesta»"}}
     T --> N1["paso notify (whatsapp)<br/>«¡Recibido! Te confirmo en un momento»"]
     N1 --> A1["paso ai · automático<br/>¿tiene ficha de cliente? si no, la crea"]
     A1 --> A2["paso ai · automático<br/>lee la agenda: huecos reales del día"]
