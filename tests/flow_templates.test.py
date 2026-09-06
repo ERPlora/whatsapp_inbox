@@ -357,13 +357,30 @@ def command_only_answers(cdef, read_permissions):
 
 
 def quoted_steps(doc):
-    """Step ids that some OTHER step interpolates (`{{steps.<id>.…}}`) — who feeds whom."""
+    """Step ids that some OTHER step interpolates (`{{steps.<id>.…}}`) — who feeds whom.
+
+    Read the way the hub reads it (`flows::def::render_template`): every `{{ … }}` pair, the path
+    TRIMMED before it is resolved. So `{{ steps.look.text }}` names `look` exactly as
+    `{{steps.look.text}}` does — a guard that only knew the unspaced spelling let the two-step
+    workaround back in with one space.
+    """
     out = set()
     for step in doc.get("steps", []):
-        for chunk in json.dumps(step, ensure_ascii=False).split("{{steps.")[1:]:
-            quoted = chunk.split("}}")[0].split(".")[0].strip()
-            if quoted and quoted != step.get("id"):
-                out.add(quoted)
+        rest = json.dumps(step, ensure_ascii=False)
+        while True:
+            start = rest.find("{{")
+            if start < 0:
+                break
+            after = rest[start + 2 :]
+            end = after.find("}}")
+            if end < 0:
+                break
+            path = after[:end].strip()
+            if path.startswith("steps."):
+                quoted = path[len("steps.") :].split(".")[0].strip()
+                if quoted and quoted != step.get("id"):
+                    out.add(quoted)
+            rest = after[end + 2 :]
     return out
 
 
@@ -579,6 +596,16 @@ POLICY_CASES = [
         _fixture_doc(
             _ai_step("look", "auto", ["appointments.availability.slots"]),
             _ai_step("act", "manual", ["appointments.appointments.create"], "{{steps.look.text}}"),
+        ),
+        1,
+    ),
+    (
+        "the same split quoted with spaces inside the braces — `{{ steps.look.text }}` — is still "
+        "the split: the hub trims the path before resolving it (`render_template`), so the "
+        "guard has to read it the way the hub does",
+        _fixture_doc(
+            _ai_step("look", "auto", ["appointments.availability.slots"]),
+            _ai_step("act", "manual", ["appointments.appointments.create"], "{{ steps.look.text }}"),
         ),
         1,
     ),
