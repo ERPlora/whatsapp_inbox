@@ -259,8 +259,13 @@ La vía declarativa para que un blueprint la reparta está propuesta en **ERPlor
   promete y calla es peor que uno que dice que no.
 - 🔴 Una imagen del hub con **hub#1595** (un command que solo contesta se ejecuta en el turno, sea
   cual sea la política), que es **`v1.1.15` o posterior**: `v1.1.14` es la última que NO lo lleva
-  (medido sobre `crates/server/src/agent_runner.rs` de cada tag). Y esta, al contrario que hub#821,
-  **no se rechaza al guardar: falla callando**. En un hub anterior, la primera pregunta de disponibilidad de `propose_appointment` se
+  (medido sobre `crates/server/src/agent_runner.rs` de cada tag). Desde whatsapp_inbox#62 **esto ya
+  no es solo esta línea**: el manifest lo declara (`compatibility.min_erplora_version: "1.1.15"`) y
+  el hub lo aplica al instalar (hub#521), así que un core anterior **rechaza la instalación** con
+  `core_version_too_old` («este módulo necesita una versión más nueva de tu terminal») en vez de
+  aceptarla. `tests/core_floor.contract.test.py` vuelve a medir el número contra los tags del hub
+  para que no se quede viejo. Antes de eso —y esto es lo que la declaración vino a cerrar—,
+  **no se rechazaba al guardar: fallaba callando**. En un hub anterior, la primera pregunta de disponibilidad de `propose_appointment` se
   convierte en una fila de `_flow_approvals` y el turno termina, así que al dueño le llega una
   tarjeta pidiéndole que apruebe «consultar disponibilidad» y la cita no se propone nunca. Es el
   motivo por el que esta plantilla estuvo partida en dos pasos (whatsapp_inbox#55): si la instalas
