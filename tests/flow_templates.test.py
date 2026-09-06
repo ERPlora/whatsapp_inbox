@@ -449,6 +449,54 @@ def policy_problems(name, doc, commands_def, read_perms):
     return problems
 
 
+def writing_ai_steps(doc):
+    """Indexes of the `ai` steps that can PROPOSE a write — the ones a customer waits on."""
+    out = []
+    for i, step in enumerate(doc.get("steps", [])):
+        if step.get("kind") != "ai":
+            continue
+        if ((step.get("tools") or {}).get("commands")) or []:
+            out.append(i)
+    return out
+
+
+def silence_problems(name, doc):
+    """Does the automation SAY something back to the person who wrote in, after it books?
+
+    whatsapp_inbox#58, and it is the half of that issue that has nothing to do with who approves:
+    a customer writes at 3 AM, gets «we will confirm when we open», and then — whether the salon
+    approves the proposal at 9 AM or the hub books it unattended — **nobody tells them anything**.
+    The appointment exists, the customer does not know. That is not a missing nicety: it is the
+    automation stopping one step short of the thing it promised in its own first message.
+
+    Mechanically: if a document has an `ai` step that can PROPOSE a write, some `notify` has to come
+    AFTER it. The acknowledgement at the top does not count and that is the whole point — it is sent
+    before anything happened, so it cannot say what happened. It is the LAST such step that must be
+    answered: a document that tells the customer «found your record» and then books in silence has
+    the same hole.
+
+    Why this is checkable at all: the run does not end when a proposal parks. `manual` writes an
+    `_flow_approvals` row and stops the turn, and when a person decides, `decide_flow_approval`
+    completes the step with `IoResult::Done` and the run CARRIES ON to the next step. So a `notify`
+    written after the `ai` step fires on the way out of the approval — and, when the model proposed
+    nothing at all, on the way out of the step itself. One step covers both endings.
+    """
+    steps = doc.get("steps", [])
+    writing = writing_ai_steps(doc)
+    if not writing:
+        return []
+    last = writing[-1]
+    if any(s.get("kind") == "notify" for s in steps[last + 1 :]):
+        return []
+    return [
+        f"{name} step `{steps[last].get('id')}` can book something and NO `notify` comes after it: "
+        f"the customer is told «we will confirm shortly» and then never hears again, whoever "
+        f"approves. The run resumes after an approval (`decide_flow_approval` completes the step "
+        f"with `Done`), so a `notify` written after this step covers both endings — booked, and "
+        f"nothing found"
+    ]
+
+
 def addressed_queries(doc):
     """`(step id, query id, sorted param names, where)` for every step that parameterises a query."""
     out = []
@@ -631,6 +679,56 @@ POLICY_CASES = [
 ]
 
 
+def _notify_step(step_id="tell", text="done"):
+    return {
+        "id": step_id,
+        "kind": "notify",
+        "channel": "whatsapp",
+        "to": {"query": "whatsapp_inbox.conversations.list", "params": {"f_wa_contact_id": "input.from"}, "field": "contact_phone"},
+        "template": "",
+        "vars": {"text": text},
+    }
+
+
+SILENCE_CASES = [
+    (
+        "an automation that books and then says so is the whole point",
+        _fixture_doc(
+            _ai_step("book", "manual", ["appointments.appointments.create"]),
+            _notify_step(),
+        ),
+        0,
+    ),
+    (
+        "an automation that books and says NOTHING leaves the customer waiting",
+        _fixture_doc(_ai_step("book", "manual", ["appointments.appointments.create"])),
+        1,
+    ),
+    (
+        "the acknowledgement sent BEFORE booking is not a confirmation",
+        _fixture_doc(
+            _notify_step("acknowledge", "we got your message"),
+            _ai_step("book", "manual", ["appointments.appointments.create"]),
+        ),
+        1,
+    ),
+    (
+        "a step that proposes nothing owes the customer nothing",
+        _fixture_doc({"id": "look", "kind": "ai", "policy": "auto", "prompt": "", "tools": {"queries": ["customers.list"]}}),
+        0,
+    ),
+    (
+        "the LAST step that can book is the one that has to be answered",
+        _fixture_doc(
+            _ai_step("who", "manual", ["customers.create"]),
+            _notify_step("half", "found you"),
+            _ai_step("book", "manual", ["appointments.appointments.create"]),
+        ),
+        1,
+    ),
+]
+
+
 def self_check():
     """The mutants of the two rules above, run every time, before any real document is opened."""
     problems = []
@@ -640,6 +738,13 @@ def self_check():
             problems.append(
                 f"the battery's own classification is wrong — {label}: expected {expected}, "
                 f"got {got}"
+            )
+    for label, doc, expected in SILENCE_CASES:
+        got = silence_problems("(self-check)", doc)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «say something back» rule is wrong — {label}: expected "
+                f"{expected} problem(s), got {len(got)}: {got}"
             )
     for label, doc, expected in POLICY_CASES:
         got = policy_problems("(self-check)", doc, _FIXTURE_COMMANDS, _FIXTURE_READS)
@@ -825,6 +930,10 @@ def main():
         # 3a) `policy` against what each declared command actually does — see `policy_problems`.
         if commands_def is not None:
             problems += policy_problems(path.name, doc, commands_def, read_perms)
+
+        # 3a-bis) …and it SAYS so afterwards (whatsapp_inbox#58). Needs no manifest: it is about the
+        # shape of the document, so it runs on a bare checkout too.
+        problems += silence_problems(path.name, doc)
 
         # 3b) Every parameter is a word the query it addresses actually knows.
         #
