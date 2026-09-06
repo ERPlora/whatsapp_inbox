@@ -35,6 +35,10 @@ canal.
 
 ## Documentación de usuario — [`docs/`](docs/)
 
+> 🗺️ **Empieza por [`docs/como-funciona.md`](docs/como-funciona.md)**: el módulo de punta a punta con
+> dibujos — conectar el número (QR), cómo llega un mensaje, cómo lo usa **Automatizaciones** para
+> contestar y reservar, las peticiones, las pantallas, el dinero y la lista de la prueba real.
+
 Viaja **dentro** del módulo y se versiona con él: el asistente del hub (ADR-0282) la indexa por
 versión instalada y cita la de TU versión, no la de la última publicada. En inglés (idioma fuente).
 
