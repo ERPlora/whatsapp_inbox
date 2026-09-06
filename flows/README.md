@@ -1,20 +1,29 @@
-# Plantillas de flujo — «un cliente escribe por WhatsApp y acaba con una cita propuesta»
+# Plantillas de flujo — «un cliente escribe por WhatsApp y acaba con una cita»
 
 El caso estrella de [ADR-0283](https://github.com/ERPlora/architecture) escrito como un documento de
 flujo real, validado contra `hub/schemas/flow.schema.json` por `tests/flow_templates.test.py`.
 
+Hay **dos familias**, y el negocio elige UNA al instalar:
+
+| Familia | Quién decide que la cita entre |
+| --- | --- |
+| `appointment-from-whatsapp` | **El salón.** La escritura espera en la bandeja de aprobación del hub hasta que una persona la revisa |
+| `appointment-from-whatsapp-unattended` | **Nadie.** La cita entra en la agenda en el mismo turno, sin bandeja y sin que nadie del salón toque nada (whatsapp_inbox#58) |
+
+Cada familia son cuatro ficheros con el mismo nombre delante:
+
 | Fichero | Qué es |
 | --- | --- |
-| `appointment-from-whatsapp.en.flow.json` | **La fuente.** Inglés, como todo lo que se escribe aquí |
-| `appointment-from-whatsapp.es.flow.json` | La traducción que acompaña al blueprint de peluquería **es** |
-| `appointment-from-whatsapp.grants.json` | Los grants que el documento necesita. Van aparte porque el kernel los guarda aparte (`PUT …/grants` es una pantalla distinta a propósito: es donde una persona decide qué puede hacer el hub sin nadie delante) |
-| `appointment-from-whatsapp.requires.json` | El **suelo de versión** de los módulos cuyas operaciones piden estas plantillas. NO viaja al hub: lo lee `tests/flow_templates.test.py` para no resolver los nombres contra un checkout vecino viejo (ver «Por qué hay un suelo de versión») |
+| `<familia>.en.flow.json` | **La fuente.** Inglés, como todo lo que se escribe aquí |
+| `<familia>.es.flow.json` | La traducción que acompaña al blueprint de peluquería **es** |
+| `<familia>.grants.json` | Los grants que el documento necesita. Van aparte porque el kernel los guarda aparte (`PUT …/grants` es una pantalla distinta a propósito: es donde una persona decide qué puede hacer el hub sin nadie delante) |
+| `<familia>.requires.json` | El **suelo de versión** de los módulos cuyas operaciones piden estas plantillas. NO viaja al hub: lo lee `tests/flow_templates.test.py` para no resolver los nombres contra un checkout vecino viejo (ver «Por qué hay un suelo de versión») |
 
 Los dos idiomas son **la misma automatización**: mismos steps, mismas tools, mismos grants. Solo
 cambia el texto que lee una persona. El test lo comprueba — una traducción que se lleva una tool de
 más deja de ser una traducción.
 
-## Qué hace, paso a paso
+## `appointment-from-whatsapp` — qué hace, paso a paso
 
 1. **Dispara** con el evento **core** `hub.whatsapp.message_received` (hub#664), filtrando los
    mensajes con texto: una foto no da para razonar una cita y cada turno de IA se factura.
@@ -37,6 +46,79 @@ más deja de ser una traducción.
    que escribió. Manda lo que el paso anterior escribió (`{{steps.propose_appointment.text}}`), y
    por eso el prompt de ese paso termina diciéndole al modelo que **lo que responda se le manda a
    ella, palabra por palabra**: día, hora y profesional por su nombre, sin ids ni notas internas.
+
+## `appointment-from-whatsapp-unattended` — la misma automatización, sin nadie delante
+
+Mismos cuatro steps, mismas tools, mismos grants. Cambian **dos cosas**: los dos steps `ai` llevan
+`policy: "auto"`, así que lo que el modelo llama **ocurre en el turno** (ADR-0283 D3, por la puerta
+de `Origin::Automation`); y los prompts están escritos para eso — no dicen «lo revisa una persona»,
+porque no la hay.
+
+Es lo que pidió Ioan el 06/09/2026: «un proceso automático con WhatsApp sin necesidad de un humano».
+Un salón de una persona no tiene a nadie mirando el hub a las 3 AM, y con la familia atendida la
+clienta que escribe de madrugada no tiene cita hasta que alguien abre la bandeja.
+
+### 🔴 La hora NO la elige el modelo
+
+La regla que hace habitable lo de arriba, y está escrita en el prompt tres veces: **solo se reserva
+un inicio que la clienta haya pedido.** Si su mensaje no fija el día **y** la hora, el turno no
+reserva nada — contesta con los huecos libres de verdad y le pide que responda con el servicio, el
+día y la hora, con un ejemplo (`«corte, mañana a las 10:30»`). El ejemplo lleva el servicio a
+propósito: el mensaje siguiente **es un turno nuevo que empieza de cero**, así que un «10:30» a
+secas llega sin saber para qué es.
+
+Es lo que hacen los que llevan años con esto (Square Assistant, Toast, los bots de reserva por SMS):
+proponer huecos reales y que el cliente conteste. Los foros coinciden en el porqué — el bot que
+adivina la hora acaba metiendo a la gente en horas a las que no pueden ir, y ahí ya no hay nadie que
+lo cace antes de que la clienta se plante en el salón.
+
+Lo que el modelo **sí** elige es **quién** atiende, porque eso lo resuelve contra
+`staff.members.list` + `staff.schedules.list_for_member` y lo confirma con
+`appointments.availability.check`. Elegir QUIÉN es suyo; elegir CUÁNDO no.
+
+### Por qué son dos plantillas y no un ajuste
+
+Parece que debería gobernarlo el ajuste **«Aprobación» (`approval_mode`)** que el módulo ya guarda.
+No puede, por dos motivos distintos, y los dos verificados contra `origin`:
+
+- **`policy` es un literal del documento.** `flow.schema.json` lo declara
+  `enum: ["auto","manual"]`; no es una expresión del lenguaje de mapeo, así que ningún documento
+  puede leer un ajuste del módulo y cambiar de modo en caliente. Un documento = un modo.
+- **`approval_mode` gobierna OTRA cosa, y hoy no gobierna nada.** Decide el estado inicial de una
+  `request` (`commands/_insert_request.sql`: `auto` → `confirmed`, `manual` → `pending_review`), y
+  ese pipeline está desconectado: lo único que emite `whatsapp_inbox.request.approved` —el evento
+  que `appointments` escucha para reservar— es `requests.approve`, cuyo SQL exige
+  `status = 'pending_review'` y devuelve `whatsapp_inbox.request_not_pending` en cualquier otro
+  caso. O sea que una request nacida `confirmed` **no se puede aprobar y nadie la reserva**; y
+  `whatsapp_inbox.request.created` no lo escucha ningún módulo. Además hoy **nadie llama a
+  `requests.ingest`**, así que ese camino no se ha ejecutado nunca.
+
+Así que el modo se elige **al instalar**, que es como lo eligen Square («auto-confirm» / «request to
+book») y Toast: dos plantillas en la galería, una frase de diferencia, y el dueño marca una.
+
+### `-unattended` en el nombre del fichero es la DECLARACIÓN
+
+No es un adorno del nombre: es lo que le compra a esta familia la excepción de
+`tests/flow_templates.test.py`, que para todas las demás sigue dando **FAIL** si una escritura
+aparece en un paso `auto`. Está en el nombre del fichero y no dentro del documento porque el
+documento no tiene dónde ponerlo — `flow.schema.json` es `additionalProperties: false` en la raíz,
+así que un `"unattended": true` inventado lo **rechazaría** `PUT /api/hub/flows`. Y el nombre de
+familia sobrevive a la traducción, que es más de lo que hace el campo `name`.
+
+La excepción se cobra: `unattended_problems` sujeta a esa familia a la promesa que hace su nombre.
+Un paso que puede escribir y vuelve a `policy: "manual"`, o un paso `approval` (la pausa explícita
+del kernel, hub#950), son **FAIL**. La razón es que esa regresión es invisible desde fuera: el
+documento sigue siendo válido, se guarda, arma su trigger y contesta a la clienta — y la escritura
+se queda esperando en `_flow_approvals` a una persona que en este negocio no existe. El único
+síntoma es una cita que nunca aparece.
+
+⚠️ **Lo que esta familia NO hace todavía:** que la clienta elija de una **lista numerada** («responde
+2») antes de que se reserve nada. Eso necesita que la oferta se **guarde** entre un mensaje y el
+siguiente, y hoy no hay dónde: solo se persisten los mensajes **entrantes**
+(`events.listen` → `_ingest_inbound_message`), un paso `query` deja en el run los campos de la
+**primera** fila (`result: "first"`; `rows` no existe en v1) y el pipeline de `requests` está
+desconectado. Por eso el prompt pide la hora en palabras. Sale como issue aparte, y es la misma
+capacidad que le falta a whatsapp_inbox#74 para mover una cita.
 
 ### Por qué reservar y anular caben en el MISMO paso
 
@@ -106,7 +188,8 @@ como escritura. Por eso `propose_appointment` pregunta y propone en el mismo tur
 en vez de dos, y lo que averigua no tiene que caber en un párrafo.
 
 `tests/flow_templates.test.py` sigue exigiendo la dirección peligrosa —una **escritura** en un paso
-`auto` es un FAIL, porque `auto` la ejecuta sin nadie delante (ADR-0283 D3)— y desde
+`auto` es un FAIL, porque `auto` la ejecuta sin nadie delante (ADR-0283 D3), **salvo en la familia
+`-unattended`, que es exactamente lo que compra**— y desde
 whatsapp_inbox#55 exige también la contraria de antes: un paso cuyos commands **solo contestan** y
 al que otro paso cita (`{{steps.<id>.text}}`) es el apaño de dos pasos, y es un FAIL. La batería se
 comprueba a sí misma primero: `self_check()` corre esas dos reglas contra documentos sintéticos
@@ -142,16 +225,20 @@ kernel son `_flow*`. Es una guarda deliberada: `_flow_grants` es la tabla de cap
 Así que hoy la plantilla se instala **por la misma puerta que usa una persona**, con sesión de
 owner/admin:
 
+Sustituye `<familia>` por la que quieras instalar — `appointment-from-whatsapp` (con revisión)
+o `appointment-from-whatsapp-unattended` (sin revisión). **Una sola**: las dos a la vez disparan con
+el MISMO evento, así que el mensaje de la clienta arrancaría los dos flujos y acabaría con dos citas.
+
 ```bash
 # 1) crear el flujo
 curl -X POST "$HUB/api/hub/flows" -H "Authorization: Bearer $SESSION" \
      -H 'content-type: application/json' \
-     -d "$(jq -n --slurpfile d appointment-from-whatsapp.es.flow.json \
+     -d "$(jq -n --slurpfile d <familia>.es.flow.json \
            '{name: $d[0].name, enabled: true, definition: $d[0]}')"
 
 # 2) concederle lo que necesita (reemplazo COMPLETO)
 curl -X PUT "$HUB/api/hub/flows/$FLOW_ID/grants" -H "Authorization: Bearer $SESSION" \
-     -H 'content-type: application/json' -d @appointment-from-whatsapp.grants.json
+     -H 'content-type: application/json' -d @<familia>.grants.json
 ```
 
 La vía declarativa para que un blueprint la reparta está propuesta en **ERPlora/pm#126** (clave
