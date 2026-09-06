@@ -51,7 +51,6 @@
           "appointments.availability.slots",
           "appointments.availability.check",
           "appointments.appointments.conflicting",
-          "appointments.schedules.list",
           "staff.members.list",
           "staff.schedules.list_for_member",
           "schedules.business_hours.list"
