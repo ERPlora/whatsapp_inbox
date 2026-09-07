@@ -95,21 +95,53 @@ def trigger_paths(text: str) -> list[str] | None:
     return found
 
 
-def packed_in_toolkit() -> list[str] | None:
-    """`INCLUDE` as the toolkit's trunk has it today, or `None` when it cannot be read."""
+def git(*args: str) -> subprocess.CompletedProcess | None:
+    """`git -C <toolkit> …`, or `None` when git itself cannot be run."""
     try:
-        blob = subprocess.run(
-            ["git", "-C", str(TOOLKIT_CHECKOUT), "show", f"origin/main:{TOOLKIT_PACK}"],
+        return subprocess.run(
+            ["git", "-C", str(TOOLKIT_CHECKOUT), *args],
             capture_output=True,
             text=True,
             check=False,
         )
     except OSError:
         return None
+
+
+def packed_in_toolkit() -> tuple[list[str] | None, str | None]:
+    """`INCLUDE` at the toolkit's trunk, as `(paths, reason_it_could_not_be_read)`.
+
+    The two ways of not reading it are NOT the same and must not both go quiet. No checkout (or no
+    fetched `origin/main`) is the gate unpacking this module on its own: nothing the author can act
+    on, so it skips out loud. But a checkout that DOES resolve `origin/main` and still has no
+    `src/pack.mjs` means the file moved — and a re-read pointed at a file that is not there is a
+    check that passes for the rest of time without looking at anything. That one is a failure.
+    """
+    blob = git("show", f"origin/main:{TOOLKIT_PACK}")
+    if blob is None:
+        return None, "git could not be run"
     if blob.returncode != 0:
-        return None
+        if not TOOLKIT_CHECKOUT.is_dir():
+            return None, f"there is no checkout at {TOOLKIT_CHECKOUT}"
+        head = git("rev-parse", "--verify", "--quiet", "origin/main")
+        if head is None or head.returncode != 0:
+            return None, f"{TOOLKIT_CHECKOUT} has no fetched `origin/main`"
+        failures.append(
+            f"`{TOOLKIT_PACK}` is not at origin/main of {TOOLKIT_CHECKOUT} "
+            f"({(head.stdout or '').strip()[:7]}), but the checkout is right there: the file that "
+            "decides what goes in the zip moved, so the re-read below has been judging nothing. "
+            "Point `TOOLKIT_PACK` at where `INCLUDE` lives now"
+        )
+        return None, None
     block = re.search(r"export const INCLUDE = \[(.*?)\]", blob.stdout, re.S)
-    return re.findall(r"['\"]([^'\"]+)['\"]", block[1]) if block else None
+    if block is None:
+        failures.append(
+            f"no `export const INCLUDE = [...]` in `{TOOLKIT_PACK}` at origin/main of "
+            f"{TOOLKIT_CHECKOUT}: the packed list is declared some other way now and this re-read "
+            "cannot see it any more"
+        )
+        return None, None
+    return re.findall(r"['\"]([^'\"]+)['\"]", block[1]), None
 
 
 def covers(entry: str, listed: set[str]) -> bool:
@@ -157,13 +189,14 @@ def main() -> int:
         )
 
     # 3 · re-read the packed list from the toolkit that builds the zip.
-    upstream = packed_in_toolkit()
-    if upstream is None:
+    upstream, skipped = packed_in_toolkit()
+    if skipped:
         print(
-            f"  ⚠ SKIPPED the re-read: cannot read `{TOOLKIT_PACK}` at origin/main from "
-            f"{TOOLKIT_CHECKOUT} (no toolkit checkout, or its refs are not fetched). The checks "
-            "above still ran against the copy in this file."
+            f"  ⚠ SKIPPED the re-read of `{TOOLKIT_PACK}`: {skipped}. The checks above still ran "
+            "against the copy in this file."
         )
+    elif upstream is None:
+        pass  # already reported: the file moved, or `INCLUDE` is gone
     elif set(upstream) != set(PACKED):
         gained, lost = (
             sorted(set(upstream) - set(PACKED)),
