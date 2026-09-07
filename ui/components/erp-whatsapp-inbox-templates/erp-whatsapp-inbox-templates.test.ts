@@ -40,13 +40,35 @@ async function montar() {
   return el as HTMLElement & { shadowRoot: ShadowRoot };
 }
 
+type Tabla = HTMLElement & {
+  addable: boolean;
+  primaryAction?: { label: string; icon?: string };
+  fill: boolean;
+  open: (p?: string) => void;
+  close: () => void;
+  rowClickable: boolean;
+};
 const tabla = (el: HTMLElement & { shadowRoot: ShadowRoot }) =>
-  el.shadowRoot.querySelector('ok-data-table') as (HTMLElement & { addable: boolean; fill: boolean; close: () => void; rowClickable: boolean }) | null;
+  el.shadowRoot.querySelector('ok-data-table') as Tabla | null;
 
 describe('el alta vive DENTRO de la tabla (paridad con /employees e inventory)', () => {
-  it('la tabla declara `addable` → pinta el «+» en su barra', async () => {
+  // Lo exigido sigue siendo lo mismo —hay un «+» en la barra de la tabla y abre el panel de
+  // ALTA—; lo que cambia es quién lo despacha. Con `addable` la tabla abría el panel por su
+  // cuenta y el módulo no se enteraba, así que el «+» heredaba la plantilla que estuviera
+  // abierta antes (appointments#42, y con whatsapp_inbox#65 también su veredicto de Meta).
+  it('la barra de la tabla pinta el «+» y abre el panel de ALTA', async () => {
     const el = await montar();
-    expect(tabla(el)?.addable, 'sin `addable` no hay «+» en la barra de la tabla').toBe(true);
+    const t = tabla(el)!;
+    expect(t.primaryAction, 'sin acción primaria no hay «+» en la barra de la tabla').toBeTruthy();
+    expect(t.primaryAction!.icon).toBe('add');
+    expect(t.primaryAction!.label, 'el rótulo del «+» sale del catálogo del módulo, no del shell').toBe('ui.add');
+
+    let opened = '';
+    t.open = (p?: string) => { opened = p ?? ''; };
+    t.dispatchEvent(new CustomEvent('primaryAction', { detail: {}, bubbles: true, composed: true }));
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(opened, 'el «+» no despliega el panel de alta').toBe('create');
   });
 
   it('la tabla llena el alto (`fill`)', async () => {
@@ -209,6 +231,43 @@ describe("Meta's verdict says what to DO about it (whatsapp_inbox#65)", () => {
   it('the block is gone while the panel is an ADD: there is no verdict on a template that does not exist', async () => {
     const el = await montarCon('approved');
     expect(el.shadowRoot.querySelector('form[slot="create"] .meta')).toBeNull();
+  });
+
+  // The panel is ONE: it is the add and it is the edit. So «+» has to be the module's door, or the
+  // tab opens an «add» still carrying the template that was open before it — the verdict of another
+  // template on one that does not exist yet, and an `editingId` that turns the save into an
+  // overwrite. Same root cause and same fix as appointments#42.
+  it('the «+» after opening a template is a CLEAN add: no leftover verdict, no leftover template', async () => {
+    const el = await montarCon('rejected');
+    const t = tabla(el)!;
+    let opened = '';
+    t.open = (p?: string) => { opened = p ?? ''; };
+    t.close = () => {};
+
+    (el as unknown as { startEdit: (row: Record<string, unknown>) => void }).startEdit(fila('rejected'));
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    expect(el.shadowRoot.querySelector('form[slot="create"] .meta'), 'the edit panel lost its verdict').toBeTruthy();
+
+    // The owner closes the panel (scrim, Escape, the X) and presses «+» to write a NEW template.
+    t.close();
+    t.dispatchEvent(new CustomEvent('primaryAction', { detail: {}, bubbles: true, composed: true }));
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    await new Promise((r) => setTimeout(r, 0));
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+
+    expect(
+      el.shadowRoot.querySelector('form[slot="create"] .meta'),
+      "the ADD panel is showing the previous template's verdict from Meta",
+    ).toBeNull();
+    expect(
+      (el as unknown as { editingId: string }).editingId,
+      'the «+» is still editing the previous template: saving would overwrite it instead of adding',
+    ).toBe('');
+    expect(
+      (el as unknown as { newName: string }).newName,
+      'the «+» keeps the previous template name in the form',
+    ).toBe('');
+    expect(opened, 'the «+» does not open the add panel').toBe('create');
   });
 });
 

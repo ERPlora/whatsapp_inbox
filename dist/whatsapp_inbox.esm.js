@@ -5245,8 +5245,8 @@ var ErpWhatsappInboxTemplates = class extends i3 {
         ]
       },
       {
-        // El estado de Meta es dominio cerrado de la migración (pending|approved|rejected) y el
-        // servidor lo filtra por igualdad exacta: tecleándolo, un "aprobado" no casaría nunca.
+        // Meta's verdict is a closed vocabulary and the server filters it by exact equality on the
+        // value `queries/templates_list.sql` projects: typed by hand, «aprobado» would match no row.
         key: "meta_status",
         header: t5("ui.colMetaStatus"),
         sortable: true,
@@ -5347,6 +5347,20 @@ var ErpWhatsappInboxTemplates = class extends i3 {
     this.formError = "";
     this.dataTable()?.open("create");
   }
+  /** Opens the panel as an ADD, on an empty form.
+   *
+   *  The «+» is dispatched by the MODULE (`primaryAction`) instead of being left to `addable`,
+   *  for the reason appointments#42 found first: the panel is ONE — it is the add and it is the
+   *  edit — and with `addable` the table opened it on its own, so the module never learnt about
+   *  it. Closing a template with the scrim and pressing «+» next handed back the previous
+   *  template: its name and body in the fields, its `editingId` (so «Add» saved an EDIT on top of
+   *  it) and, since whatsapp_inbox#65, Meta's verdict ON ANOTHER TEMPLATE next to them. */
+  async openCreate() {
+    this.resetForm();
+    this.formError = "";
+    await this.updateComplete;
+    this.dataTable()?.open("create");
+  }
   resetForm() {
     this.editingId = "";
     this.newName = "";
@@ -5445,7 +5459,7 @@ var ErpWhatsappInboxTemplates = class extends i3 {
         ${this.formError ? b2`<p class="err">${this.formError}</p>` : A}
         ${this.ctrl?.error ? b2`<p class="err">${this.ctrl.error}</p>` : A}
         ${this.renderDeleteConfirm()}
-        <ok-data-table .serverSide=${true} .fill=${true} .addable=${true} .views=${true} .actions=${this.rowActions} .rowClickable=${true} .cardTitle=${(row) => String(row.name ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "desc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchTemplates")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyTemplates")} @rowAction=${(e5) => this.onRowAction(e5)} @rowClick=${(e5) => this.onRowAction({ detail: { actionId: "edit", row: e5.detail.row } })} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @pageSizeChange=${(e5) => this.ctrl.setPageSize(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}>
+        <ok-data-table .serverSide=${true} .fill=${true} .primaryAction=${{ label: t5("ui.add"), icon: "add" }} @primaryAction=${() => this.openCreate()} .views=${true} .actions=${this.rowActions} .rowClickable=${true} .cardTitle=${(row) => String(row.name ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "desc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchTemplates")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyTemplates")} @rowAction=${(e5) => this.onRowAction(e5)} @rowClick=${(e5) => this.onRowAction({ detail: { actionId: "edit", row: e5.detail.row } })} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @pageSizeChange=${(e5) => this.ctrl.setPageSize(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}>
           <!-- Alta: se proyecta SIEMPRE (aunque el panel esté cerrado). Si solo se renderizara con el
                panel abierto, el «+» de la barra desplegaría un panel vacío. -->
           <form slot="create" class="form" @submit=${(e5) => this.createTemplate(e5)}>
