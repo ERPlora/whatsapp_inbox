@@ -149,6 +149,10 @@
     "usesOpen": "Configurar",
     "usesEmpty": "Todavía no hay nada que este WhatsApp pueda hacer solo: lo que puedes hacer con él sale de las aplicaciones que tengas instaladas.",
     "usesNeedAutomations": "Contestar solo lo hacen las Automatizaciones, y este hub aún no las tiene.",
+    "usesActive": "Activa",
+    "usesPaused": "En pausa",
+    "usesUnfinished": "Sin terminar",
+    "usesView": "Verla",
     "usesGoToApps": "Ver aplicaciones"
   },
   "errors": {

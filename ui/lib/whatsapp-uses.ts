@@ -73,6 +73,26 @@ export interface WhatsAppUse {
    */
   probe(client: WitnessAsker): Promise<unknown>;
   /** `ion-icon` name, registered by the module build. Never a loose SVG. */
+  /**
+   * The event every recipe of {@link WhatsAppUse.family} is triggered by — half of what identifies
+   * «the automation of this use» in a hub (whatsapp_inbox#79).
+   *
+   * It is NOT the gallery template: a created flow keeps no record of the template it came from,
+   * and the document cannot carry one either — the root of `hub/schemas/flow.schema.json` is
+   * `additionalProperties: false`. What a flow does keep is what it LISTENS to and what it is
+   * allowed to DO, and the kernel maintains both, so neither goes stale behind our back.
+   */
+  triggerEvent: string;
+  /**
+   * A command grant EVERY variant of {@link WhatsAppUse.family} carries — the other half.
+   *
+   * «Every variant» is the requirement, not «the main recipe»: this module ships an attended and an
+   * unattended appointment recipe, and a command only one of them holds would leave the other
+   * unrecognised and the card inviting the owner to build a second automation. Together with
+   * {@link WhatsAppUse.triggerEvent} it also keeps the uses apart — the table-booking recipe
+   * (whatsapp_inbox#60) listens to the SAME event with a `reservations.*` command.
+   */
+  setupCommand: string;
   icon: string;
   nameKey: string;
   summaryKey: string;
@@ -85,6 +105,8 @@ export const WHATSAPP_USES: readonly WhatsAppUse[] = [
     module: 'appointments',
     witness: 'appointments.settings.get',
     probe: (client) => client.queryOptional('appointments.settings.get'),
+    triggerEvent: 'hub.whatsapp.message_received',
+    setupCommand: 'appointments.appointments.create',
     icon: 'calendar-outline',
     nameKey: 'ui.useAppointmentsName',
     summaryKey: 'ui.useAppointmentsSummary',
@@ -102,16 +124,95 @@ export const AUTOMATIONS_WITNESS = 'flows.drafts.list';
 export const probeAutomations = (client: WitnessAsker): Promise<unknown> =>
   client.queryOptional('flows.drafts.list');
 
+/**
+ * **How far along the automation of a use is in THIS hub.**
+ *
+ * `unknown` is not a tidy default: it is «I could not find out», and it is the only value that
+ * degrades to what this card did before whatsapp_inbox#79 — no badge, «Set it up». An older
+ * `flows` without the status query, a denied permission, an answer nobody could parse: all of them
+ * land there, because the alternative is telling a salon its automation is running on the strength
+ * of an answer we did not understand.
+ */
+export type AutomationState = 'unknown' | 'absent' | 'unfinished' | 'paused' | 'active';
+
+/**
+ * The query of {@link AUTOMATIONS_MODULE} that answers «is this one already set up here?».
+ *
+ * Read-only and behind `flows.view_flow`, NOT behind `manage_flows` — the capability the runtime
+ * itself calls «la capability con más alcance de todas» (`crates/runtime/src/manifest.rs`), which
+ * hands its holder every automation of the business plus the event catalogue, carrying customers'
+ * names. It answers three integers about the ONE event and ONE command the caller names, and
+ * nothing about any other automation of the business.
+ */
+export const AUTOMATION_STATUS_WITNESS = 'flows.automations.status';
+
+/**
+ * Asks {@link AUTOMATION_STATUS_WITNESS} about one use. A thunk with the literal inside, same
+ * reason as {@link WhatsAppUse.probe}.
+ *
+ * Through `queryOptional`, so a hub without Automations answers «I could not find out» instead of
+ * throwing a failure into a screen that is only trying to decide whether to paint a badge.
+ */
+export const probeAutomationStatus = (client: WitnessAsker, use: WhatsAppUse): Promise<unknown> =>
+  client.queryOptional('flows.automations.status', {
+    event: use.triggerEvent,
+    command: use.setupCommand,
+  });
+
+/** One counter of the status answer, or `null` if it is not a number we can trust. `SUM()` is a
+ *  bigint, which reaches a browser as a number on some drivers and as a string on others. */
+function counter(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+/**
+ * Reads the answer of {@link AUTOMATION_STATUS_WITNESS} into one word.
+ *
+ * `total` counts the automations that listen to the use's event AND may run its command;
+ * `unfinished` counts the ones that listen and hold no command grant at all — the state the gallery
+ * leaves behind, since it creates every template paused and ungranted (`flows/ui/lib/templates.ts`,
+ * rule 3). Anything that is not three readable counters is {@link AutomationState} `unknown`.
+ */
+export function automationState(answer: unknown): AutomationState {
+  const row: unknown = Array.isArray(answer) ? answer[0] : answer;
+  if (row === null || typeof row !== 'object') return 'unknown';
+  const counts = row as Record<string, unknown>;
+  const total = counter(counts.total);
+  const enabled = counter(counts.enabled);
+  const unfinished = counter(counts.unfinished);
+  if (total === null || enabled === null || unfinished === null) return 'unknown';
+  if (total > 0) return enabled > 0 ? 'active' : 'paused';
+  return unfinished > 0 ? 'unfinished' : 'absent';
+}
+
 /** Where the hub lists what can be installed — where a missing Automations is fixed. */
 export const APPS_PATH = '/apps';
 
 /**
- * The gallery, with the card the owner asked for named in the query string.
+ * The Automations screen itself: the owner's flows listed at the top, the gallery underneath.
+ *
+ * Where «View it» goes once the automation of a use is already here (whatsapp_inbox#79). The
+ * status answer carries no id on purpose — three counters, nothing about any one flow — so the
+ * closest the card can bring the owner is the list their flow is in. What it must NOT do is name the
+ * template card: the gallery scrolls that card into view (flows#56/#57) and its one button is «Use»,
+ * which builds the second automation this badge exists to prevent. The `navId` is spelled in full
+ * because the shell drops the query string when it has to correct it (`ModuleView.vue`).
+ */
+export const AUTOMATIONS_PATH = `/m/${AUTOMATIONS_MODULE}/automations`;
+
+/**
+ * The gallery, with the card the owner asked for named in the query string — where «Set it up» goes
+ * while there is nothing set up yet.
  *
  * `?template=` is the contract for opening that card already selected. A gallery that does not read
  * it yet still lands the owner in Automations, which is where the card is — the shortcut degrades
  * to «took me to the right screen» instead of breaking.
  */
 export function galleryPath(templateId: string): string {
-  return `/m/${AUTOMATIONS_MODULE}/automations?template=${encodeURIComponent(templateId)}`;
+  return `${AUTOMATIONS_PATH}?template=${encodeURIComponent(templateId)}`;
 }

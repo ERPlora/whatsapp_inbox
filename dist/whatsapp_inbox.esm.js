@@ -3653,6 +3653,10 @@ var es_default = {
     usesOpen: "Configurar",
     usesEmpty: "Todav\xEDa no hay nada que este WhatsApp pueda hacer solo: lo que puedes hacer con \xE9l sale de las aplicaciones que tengas instaladas.",
     usesNeedAutomations: "Contestar solo lo hacen las Automatizaciones, y este hub a\xFAn no las tiene.",
+    usesActive: "Activa",
+    usesPaused: "En pausa",
+    usesUnfinished: "Sin terminar",
+    usesView: "Verla",
     usesGoToApps: "Ver aplicaciones"
   },
   errors: {
@@ -3818,6 +3822,10 @@ var en_default = {
     usesOpen: "Set it up",
     usesEmpty: "There is nothing for this WhatsApp to do on its own yet: what it can be used for comes from the apps you have installed.",
     usesNeedAutomations: "Answering on its own is done by Automations, and this hub does not have it yet.",
+    usesActive: "Active",
+    usesPaused: "Paused",
+    usesUnfinished: "Unfinished",
+    usesView: "View it",
     usesGoToApps: "See apps"
   },
   errors: {
@@ -4797,6 +4805,8 @@ var WHATSAPP_USES = [
     module: "appointments",
     witness: "appointments.settings.get",
     probe: (client) => client.queryOptional("appointments.settings.get"),
+    triggerEvent: "hub.whatsapp.message_received",
+    setupCommand: "appointments.appointments.create",
     icon: "calendar-outline",
     nameKey: "ui.useAppointmentsName",
     summaryKey: "ui.useAppointmentsSummary"
@@ -4805,13 +4815,49 @@ var WHATSAPP_USES = [
 var AUTOMATIONS_MODULE = "flows";
 var AUTOMATIONS_WITNESS = "flows.drafts.list";
 var probeAutomations = (client) => client.queryOptional("flows.drafts.list");
+var AUTOMATION_STATUS_WITNESS = "flows.automations.status";
+var probeAutomationStatus = (client, use) => client.queryOptional("flows.automations.status", {
+  event: use.triggerEvent,
+  command: use.setupCommand
+});
+function counter(value) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string" && value.trim() !== "") {
+    const n6 = Number(value);
+    return Number.isFinite(n6) ? n6 : null;
+  }
+  return null;
+}
+function automationState(answer) {
+  const row = Array.isArray(answer) ? answer[0] : answer;
+  if (row === null || typeof row !== "object") return "unknown";
+  const counts = row;
+  const total = counter(counts.total);
+  const enabled = counter(counts.enabled);
+  const unfinished = counter(counts.unfinished);
+  if (total === null || enabled === null || unfinished === null) return "unknown";
+  if (total > 0) return enabled > 0 ? "active" : "paused";
+  return unfinished > 0 ? "unfinished" : "absent";
+}
 var APPS_PATH = "/apps";
+var AUTOMATIONS_PATH = `/m/${AUTOMATIONS_MODULE}/automations`;
 function galleryPath(templateId) {
-  return `/m/${AUTOMATIONS_MODULE}/automations?template=${encodeURIComponent(templateId)}`;
+  return `${AUTOMATIONS_PATH}?template=${encodeURIComponent(templateId)}`;
 }
 
 // ui/components/erp-whatsapp-inbox-settings/erp-whatsapp-inbox-settings.ts
 var CATALOG3 = { es: es_default, en: en_default };
+var STATE_BADGE = {
+  unknown: null,
+  absent: null,
+  unfinished: "ui.usesUnfinished",
+  paused: "ui.usesPaused",
+  active: "ui.usesActive"
+};
+var STATE_CLASS = {
+  active: "is-active",
+  unfinished: "is-unfinished"
+};
 var DEFAULTS = {
   is_enabled: 0,
   account_mode: "shared",
@@ -4872,6 +4918,19 @@ var ErpWhatsappInboxSettings = class extends i3 {
     .use-text b { display:block; font-size:.95rem; }
     .use-text .help { margin:.1rem 0 0; }
     .use-icon { font-size:1.35rem; color: var(--ion-color-medium,#6b6557); flex:0 0 auto; }
+    /* The badge sits with the name, not with the button: what the owner reads first is «is mine
+       already there?», and the answer belongs next to the thing it is about. */
+    .use-state {
+      display:inline-block; margin-top:.15rem; padding:.1rem .45rem; border-radius:.7rem;
+      font-size:.72rem; font-weight:600; text-transform:uppercase; letter-spacing:.02em;
+      background: var(--ion-color-light,#f1efe9); color: var(--ion-color-medium-shade,#5b5648);
+    }
+    .use-state.is-active {
+      background: var(--ion-color-success-tint,#dff3e4); color: var(--ion-color-success-shade,#1c7a3e);
+    }
+    .use-state.is-unfinished {
+      background: var(--ion-color-warning-tint,#fbeecd); color: var(--ion-color-warning-shade,#8a6300);
+    }
     /* 44px minimum touch target: this screen is used one-handed, at a counter. */
     ion-button { --min-height: 44px; }
   `;
@@ -5004,13 +5063,54 @@ var ErpWhatsappInboxSettings = class extends i3 {
       return true;
     }
   }
-  /** Resolved in one go so the section never renders half-answered — see `availableUses`. */
+  /**
+   * **How far along the automation of one use is here** (whatsapp_inbox#79), or `unknown` when the
+   * question could not be answered at all.
+   *
+   * Every failure ends in `unknown`, and `unknown` renders exactly as this card rendered before
+   * #79 — no badge, «Set it up». Being wrong in that direction costs the owner a trip to a gallery
+   * card they already have; being wrong the other way tells a salon its automation is running when
+   * nothing is. Only the failures that are NOT a plain absence say so in the console: an
+   * `flows.automations.status` that has been renamed would otherwise put the #79 bug back
+   * permanently, with nothing anywhere to say why.
+   */
+  async automationStateOf(use) {
+    try {
+      return automationState(await probeAutomationStatus(erplora3(), use));
+    } catch (e5) {
+      const code = e5.code;
+      if (code === "module_not_installed" || code === "module_inactive") return "unknown";
+      const reason = code ?? (e5 instanceof Error ? e5.message : String(e5));
+      console.warn(
+        `[whatsapp_inbox] ${AUTOMATION_STATUS_WITNESS} could not answer for ${use.id} (${reason}); the card cannot say whether this use is already set up`
+      );
+      return "unknown";
+    }
+  }
+  /**
+   * Resolved in one go so the section never renders half-answered — see `availableUses`.
+   *
+   * The status question travels in the SAME round as the presence one, and asked for every use
+   * rather than only the available ones: one round is the contract this section already had, and a
+   * second phase would add a rendered state nobody has ever seen. It costs one extra read-only
+   * query per use on a screen the owner opens rarely, and it is asked through `queryOptional`, so
+   * a hub without Automations answers «could not find out» instead of failing.
+   */
   async resolveUses() {
-    const [automationsHere, ...present] = await Promise.all([
+    const [automationsHere, ...answers] = await Promise.all([
       this.isHere(AUTOMATIONS_WITNESS, probeAutomations),
-      ...WHATSAPP_USES.map((use) => this.isHere(use.witness, (client) => use.probe(client)))
+      ...WHATSAPP_USES.map(async (use) => {
+        const [present, state] = await Promise.all([
+          this.isHere(use.witness, (client) => use.probe(client)),
+          this.automationStateOf(use)
+        ]);
+        return { use, present, state };
+      })
     ]);
-    this.uses = { automationsHere, available: WHATSAPP_USES.filter((_2, i7) => present[i7]) };
+    this.uses = {
+      automationsHere,
+      available: answers.filter((a3) => a3.present).map(({ use, state }) => ({ use, state }))
+    };
   }
   /**
    * The channel module→shell (whatsapp_inbox#59). A Web Component gets no router, so the way to
@@ -5052,17 +5152,22 @@ var ErpWhatsappInboxSettings = class extends i3 {
       }
       return b2`<ul class="uses">
         ${resolved.available.map(
-        (use) => b2`<li>
+        ({ use, state }) => b2`<li>
             <ion-icon class="use-icon" name=${use.icon} aria-hidden="true"></ion-icon>
             <div class="use-text">
               <b>${t5(use.nameKey)}</b>
               <p class="help">${t5(use.summaryKey)}</p>
+              ${STATE_BADGE[state] ? b2`<span
+                    class="use-state ${STATE_CLASS[state] ?? ""}"
+                    data-testid="automation-state-${use.id}"
+                    >${t5(STATE_BADGE[state])}</span
+                  >` : A}
             </div>
             <ion-button
               size="small"
               data-testid="use-${use.id}"
-              @click=${() => this.goTo(galleryPath(use.id))}
-            >${t5("ui.usesOpen")}</ion-button>
+              @click=${() => this.goTo(STATE_BADGE[state] ? AUTOMATIONS_PATH : galleryPath(use.id))}
+            >${t5(STATE_BADGE[state] ? "ui.usesView" : "ui.usesOpen")}</ion-button>
           </li>`
       )}
       </ul>`;
