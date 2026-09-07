@@ -2615,6 +2615,14 @@ OWN_CUSTOMER_CASES = [
         2,
     ),
     (
+        "the resolver is deterministic and keyed on a NAME: the model is out of the loop and the "
+        "wrong customer is picked anyway, because the only identity in this run WhatsApp vouched "
+        "for is the number the message came from",
+        UNATTENDED,
+        _own_customer_doc(_BOOK_FOR_HER, _DIARY, params={"f_name": "Mar\u00eda"}),
+        1,
+    ),
+    (
         "a resolver with no params at all is the whole address book, and its first row is "
         "somebody — just not the somebody who wrote in",
         UNATTENDED,
