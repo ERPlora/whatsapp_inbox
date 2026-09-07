@@ -4927,6 +4927,39 @@ def _floor_reading_problems():
                 f"skip: got {got} ({why})"
             )
 
+        # …and the collector on top of it, because the SKIP is the half that can go quiet. A floor
+        # whose past could not be read has to be NAMED: dropping the command from `props` alone
+        # makes `floor_field_problems` say nothing about it, and «I could not look» would then
+        # read exactly like «the floor is high enough» (measured: that mutant survived).
+        commands_def = {MOVE_COMMAND: (root, {"schema": rel})}
+        resolved = {"appointments": (root, {"id": "appointments"})}
+        for label, floors, want_props, want_skips in [
+            (
+                "the floor that takes everything these templates send",
+                {"appointments": "1.1.73"},
+                {MOVE_COMMAND: {"appointment_id", "start_datetime", "channel", "customer_id"}},
+                0,
+            ),
+            (
+                "a floor no release ever carried — a typo in `requires.json`",
+                {"appointments": "9.9.9"},
+                {},
+                1,
+            ),
+            (
+                "the family pins no floor for that module, so there is nothing to read it against",
+                {},
+                {},
+                0,
+            ),
+        ]:
+            got_props, got_skips = floor_payload_properties(floors, commands_def, resolved)
+            if got_props != want_props or len(got_skips) != want_skips:
+                problems.append(
+                    f"the battery's own collection of floor payloads is wrong — {label}: expected "
+                    f"{want_props} and {want_skips} skip(s), got {got_props} and {got_skips}"
+                )
+
     with tempfile.TemporaryDirectory() as bare:
         got, why = schema_at_version(pathlib.Path(bare), "1.1.73", rel)
         if got is not None or not why:
