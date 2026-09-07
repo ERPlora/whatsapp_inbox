@@ -1513,7 +1513,12 @@ def own_customer_only_problems(name, doc):
                 )
 
         prompt = prompt_of(step)
-        if not any(f"steps.{s.get('id')}.id" in prompt for _, s in earlier):
+        # The DOUBLE brace is the check, not `steps.<id>.id` as a substring: `{steps.x.id}` with
+        # one brace contains it and resolves to nothing, so a substring match reads a broken
+        # reference as a working one. Mark 5 does not cover this either when the same resolver is
+        # read correctly elsewhere (`.found`, `.count`) and only `.id` — the one that carries the
+        # identity — lost its braces. Measured: that mutant SURVIVED both marks.
+        if not any("{{steps." + str(s.get("id")) + ".id}}" in prompt for _, s in earlier):
             named = ", ".join(f"`{s.get('id')}`" for _, s in earlier)
             problems.append(
                 f"{name} step `{sid}` reads diaries with `{OWNED_APPOINTMENTS_QUERY}` and its "
@@ -2667,7 +2672,7 @@ OWN_CUSTOMER_CASES = [
         "writing this commit",
         UNATTENDED,
         _own_customer_doc("Book for {steps.resolve.id} and for nobody else.", _DIARY),
-        1,
+        2,  # mark 4 (no resolvable `.id`) and mark 5 (nothing reads the answer)
     ),
     (
         "silent where nothing is owed: a step that reads no diary and holds no address book",
