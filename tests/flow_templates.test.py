@@ -891,8 +891,15 @@ def payload_properties(commands_def):
     return out
 
 
-def identity_field_problems(props):
-    """Every field `IDENTITY_BOUND_PAYLOAD` names is one the command's own schema really declares."""
+def identity_field_problems(name, doc, props):
+    """Every field `IDENTITY_BOUND_PAYLOAD` names is one the command's own schema really declares.
+
+    A document rule that never reads the document, and on purpose: what it needs is the ledger. As
+    a one-off call in `main()` it was the only check here that nothing required — deleting its
+    single line let `appointments` rename or drop `customer_id` with this battery green over
+    templates that would then fail on every cancellation (measured: the mutant survived). Registered
+    like every other rule, that deletion is refused by name.
+    """
     problems = []
     for cname, pairs in sorted(IDENTITY_BOUND_PAYLOAD.items()):
         declared = props.get(cname)
@@ -902,10 +909,10 @@ def identity_field_problems(props):
             for prop in (field, companion):
                 if prop not in declared:
                     problems.append(
-                        f"IDENTITY_BOUND_PAYLOAD names `{prop}` for `{cname}`, whose schema "
-                        f"declares {sorted(declared)}: the table is about a contract that lives in "
-                        f"another repository and that contract moved, so this rule is now asking "
-                        f"the templates for a word nothing accepts"
+                        f"{name}: IDENTITY_BOUND_PAYLOAD names `{prop}` for `{cname}`, whose "
+                        f"schema declares {sorted(declared)}: the table is about a contract that "
+                        f"lives in another repository and that contract moved, so this rule is now "
+                        f"asking the templates for a word nothing accepts"
                     )
     return problems
 
@@ -1223,6 +1230,7 @@ def only_the_customer_problems(name, doc):
 DOCUMENT_RULES = (
     policy_problems,
     identified_cancellation_problems,
+    identity_field_problems,
     silence_problems,
     mute_refusal_problems,
     undeclared_tool_problems,
@@ -1242,6 +1250,7 @@ DOCUMENT_RULES = (
 SELF_CHECKED_RULES = (
     policy_problems,
     identified_cancellation_problems,
+    identity_field_problems,
     silence_problems,
     mute_refusal_problems,
     undeclared_tool_problems,
@@ -2235,18 +2244,23 @@ def _identity_reading_problems():
             problems.append(
                 f"the battery's own reading of payload properties is wrong: expected {want}, got {got}"
             )
-        # …and the anchor itself: the real table against a schema that HAS the pair, and against one
-        # that lost it — the shape `appointments` dropping `customer_id` would take.
-        if identity_field_problems(got):
+    # …and the anchor itself: the real table against a schema that HAS the pair, against one that
+    # lost it (the shape `appointments` dropping `customer_id` would take), and against a workspace
+    # whose schema could not be read — which stays quiet, because layer 1b already said so.
+    for label, props, expected in [
+        ("the schema declares both fields", want, 0),
+        (
+            "`customer_id` is gone from the schema",
+            {"appointments.appointments.cancel": {"appointment_id", "channel"}},
+            1,
+        ),
+        ("the command's schema could not be read", {}, 0),
+    ]:
+        got_anchor = identity_field_problems("(self-check)", {}, props)
+        if len(got_anchor) != expected:
             problems.append(
-                "the battery's own identity anchor is wrong: a schema that declares both fields "
-                f"should raise nothing, it raised {identity_field_problems(got)}"
-            )
-        without = {"appointments.appointments.cancel": {"appointment_id", "channel"}}
-        if len(identity_field_problems(without)) != 1:
-            problems.append(
-                "the battery's own identity anchor is blind: a schema that no longer declares "
-                f"`customer_id` should raise once, it raised {identity_field_problems(without)}"
+                f"the battery's own identity anchor is wrong — {label}: expected {expected} "
+                f"problem(s), got {len(got_anchor)}: {got_anchor}"
             )
     return problems
 
@@ -2508,7 +2522,7 @@ def main():
         commands_def = command_definitions(resolved)
         read_perms = module_read_permissions(resolved)
         enums = payload_enums(commands_def)
-        problems += identity_field_problems(payload_properties(commands_def))
+        identity_props = payload_properties(commands_def)
 
     for path in docs:
         doc = json.loads(path.read_text())
@@ -2594,6 +2608,11 @@ def main():
         # and `identity_field_problems` below is what keeps that table honest.
         problems += applied(ledger, identified_cancellation_problems, path.name, doc)
 
+        # 3a-vi-ter) …and the table that rule reads still describes the command's REAL schema
+        # (whatsapp_inbox#82). Needs the manifests: the schema lives next to them.
+        if commands_def is not None:
+            problems += applied(ledger, identity_field_problems, path.name, doc, identity_props)
+
         # 3b) Every parameter is a word the query it addresses actually knows.
         #
         # A name that exists is not a name that filters. `whatsapp_inbox.conversations.list`
@@ -2651,6 +2670,7 @@ def main():
             policy_problems.__name__,
             undeclared_tool_problems.__name__,
             enum_value_problems.__name__,
+            identity_field_problems.__name__,
         }
         if commands_def is None
         else set()
