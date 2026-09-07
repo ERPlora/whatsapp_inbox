@@ -86,16 +86,37 @@ def is_unattended(name):
 
 
 def needed_grants(doc):
-    """Exactly the grants this document needs, as `(kind, value)` pairs."""
+    """Exactly the grants this document needs, as `(kind, value)` pairs.
+
+    A model is not the only thing that spends a grant, and this used to read as if it were. The
+    DETERMINISTIC steps go through the very same gates — `crates/runtime/src/flows/grants.rs`
+    puts `kind: query` (hub#954) through `check_query_grant` and `kind: command` through
+    `check_command_grant`, the same two doors the `ai` step's tools use — so a document whose
+    only reader is a `query` step needed a grant this function said nobody needed. Both
+    directions of the comparison lied because of it: the missing grant was never demanded, and
+    the grant that IS spent was reported as «an authorisation nobody spends» and invited to be
+    deleted, which would have taken the step down with `flow.grant_denied` on the first run
+    (whatsapp_inbox#103).
+
+    `kind: http` is deliberately absent: its grant is a URL PATTERN and the step carries a
+    templated URL, so what it needs cannot be derived from the document — `allows_http` decides
+    that against the URL as really built. A template that adds an `http` step has to bring its
+    own rule.
+    """
     needed = set()
     for step in doc.get("steps", []):
-        if step.get("kind") == "ai":
+        kind = step.get("kind")
+        if kind == "ai":
             tools = step.get("tools", {})
             for q in tools.get("queries", []):
                 needed.add(("query", q))
             for c in tools.get("commands", []):
                 needed.add(("command", c))
-        elif step.get("kind") == "notify":
+        elif kind == "query":
+            needed.add(("query", step["query"]))
+        elif kind == "command":
+            needed.add(("command", step["command"]))
+        elif kind == "notify":
             needed.add(("notify", step["channel"]))
             to = step["to"]
             needed.add(("recipient_query", f"{to['query']}#{to['field']}"))
@@ -1175,6 +1196,14 @@ def hour_choice_problems(name, doc):
 # step's hands for the other branches, so it is always one sentence away.
 MOVE_COMMAND = "appointments.appointments.reschedule"
 OWNED_APPOINTMENTS_QUERY = "appointments.appointments.list_for_customer"
+# The ADDRESS BOOK, searchable by name (`customers.list` declares `search: [name, …]` and a
+# `name` filter with `op: like`, so on the wire `f_name`/`search` reach whoever holds it).
+# Harmless in a hub screen; not in the hands of a model that is reading a stranger's WhatsApp.
+DIRECTORY_QUERY = "customers.list"
+# What the trigger carries and no model can touch: the phone the message came FROM. It is mapped
+# in `triggers[].input`, so it reaches a step as `{{input.from}}` — the one identity in this run
+# that WhatsApp itself vouched for.
+TRUSTED_PHONE = "input.from"
 MOVE_RULE = {
     "en": "Moving is one call, never two.",
     "es": "Mover es una sola llamada, nunca dos.",
@@ -1331,6 +1360,139 @@ def moving_problems(name, doc):
                 f"that moving is «{stale}»: the model obeys the sentence, not the tool list, so "
                 f"the branch is dead, the owner was asked for a permission nothing spends, and "
                 f"every other rule here stays green over it"
+            )
+    return problems
+
+
+def _query_steps(doc, query):
+    """`(index, step)` of every deterministic `query` step (hub#954) reading `query`."""
+    return [
+        (i, s)
+        for i, s in enumerate(doc.get("steps", []))
+        if s.get("kind") == "query" and s.get("query") == query
+    ]
+
+
+def own_customer_only_problems(name, doc):
+    """A model reading a stranger's message never holds the ADDRESS BOOK — whatsapp_inbox#103.
+
+    The chain this closes needs no bug and no jailbreak, only the two reads these templates were
+    already granted: `customers.list` is searchable by NAME, so «what has María got booked?»
+    resolves a stranger to her `id`; `list_for_customer` takes ANY `customer_id`, so that id
+    returns her diary — day, hour, professional, `notes` and `internal_notes`; and what the step
+    reads is what the step writes back, to whoever wrote in. Nothing downstream can refuse it: a
+    read is not a write, so no approval tray sees it, and `appointments` is answering a question
+    it was asked correctly. The only thing in the way was a paragraph of prompt telling the model
+    to search by phone — which is the same «control» whatsapp_inbox#100 and hub#1623 exist to say
+    is not one.
+
+    🔴 **And it cannot be closed the way the write side is.** A grant pins payload values
+    (hub#1623), but only on a `command`: `crates/runtime/src/flows/grants.rs` refuses a `payload`
+    on any other kind with `flow.invalid_grant_payload`, because `check_command_grant` is the one
+    gate handed a payload and a restriction nothing applies is worse than none. Both links here
+    are `query` grants. So there is nothing to pin, and taking the reads away instead would take
+    cancelling with them.
+
+    What closes it is moving the LOOKUP out of the model's hands. The kernel already has the
+    shape: a `query` step (hub#954) is a deterministic read whose params are mapped by the
+    DOCUMENT, not chosen by a model — and `{{input.from}}` is the phone WhatsApp itself vouched
+    for. Resolve the customer there, and the only `customer_id` that exists in the run is the one
+    the number belongs to. Four marks, each of them one edit away from being lost:
+
+    * **the model is never handed the address book** — `DIRECTORY_QUERY` out of every `ai` step's
+      `tools.queries`. This is the red the issue is: leave it in and every other mark here is
+      decoration, because the model can resolve anybody by name whatever the prompt says;
+    * **whoever can read a diary has a deterministic resolver BEFORE it** — a `kind: query` step
+      over `DIRECTORY_QUERY` earlier in the document. «Earlier» is not pedantry: `steps.x` of a
+      step that has not run resolves to `null` (`resolve_path`), so a resolver placed after the
+      reader hands it nothing and the model improvises again;
+    * **that resolver is keyed on the phone and on nothing a model wrote** — every param
+      templated from `input.`, and none of them reading `steps.` . A resolver fed
+      `{{steps.know_the_customer.text}}` is the same hole with an extra step in it, and it would
+      pass the two marks above;
+    * **and the reader actually USES it** — `{{steps.<resolver>.id}}` named in the prompt.
+      Without this the fix is only a restriction: the step has no customer, so it invents one or
+      answers nothing, and «closed the hole» would mean «broke cancelling».
+
+    Silent on documents that read no diary and hold no address book: a template that books
+    nothing for a named person owes nothing here.
+    """
+    problems = []
+    steps = doc.get("steps", [])
+    resolvers = _query_steps(doc, DIRECTORY_QUERY)
+
+    for index, step in enumerate(steps):
+        if step.get("kind") != "ai":
+            continue
+        sid = step.get("id")
+        tools = step.get("tools") or {}
+        queries = tools.get("queries") or []
+
+        if DIRECTORY_QUERY in queries:
+            problems.append(
+                f"{name} step `{sid}` hands the model `{DIRECTORY_QUERY}`, which searches the "
+                f"address book by NAME (`f_name`/`search`). Steered by a stranger's message that "
+                f"is «find María» → her `id` → `{OWNED_APPOINTMENTS_QUERY}` → her diary, notes "
+                f"and internal notes, written straight back to whoever asked. A `query` grant "
+                f"cannot pin its params (`flow.invalid_grant_payload`), so the lookup has to "
+                f"leave the model: resolve the customer in a `kind: query` step keyed on "
+                f"`{{{{{TRUSTED_PHONE}}}}}` and hand the step the id, not the search"
+            )
+
+        if OWNED_APPOINTMENTS_QUERY not in queries:
+            continue
+
+        earlier = [(i, s) for i, s in resolvers if i < index]
+        if not earlier:
+            problems.append(
+                f"{name} step `{sid}` can read one customer's whole diary with "
+                f"`{OWNED_APPOINTMENTS_QUERY}` and no `kind: query` step resolved that customer "
+                f"before it: the `customer_id` can only come from the model, so it is whoever the "
+                f"message named. Add a deterministic read of `{DIRECTORY_QUERY}` keyed on "
+                f"`{{{{{TRUSTED_PHONE}}}}}` ahead of this step"
+            )
+            continue
+
+        for _, resolver in earlier:
+            rid = resolver.get("id")
+            params = resolver.get("params") or {}
+            if not params:
+                problems.append(
+                    f"{name} step `{rid}` resolves the customer with `{DIRECTORY_QUERY}` and "
+                    f"passes NO params: that is the whole address book, and its first row is "
+                    f"somebody. Key it on `{{{{{TRUSTED_PHONE}}}}}`"
+                )
+                continue
+            for key, expr in sorted(params.items()):
+                text = expr if isinstance(expr, str) else json.dumps(expr, sort_keys=True)
+                if "{{steps." in text or text.startswith("steps."):
+                    problems.append(
+                        f"{name} step `{rid}` resolves the customer with `{DIRECTORY_QUERY}` and "
+                        f"takes `{key}` from another step's output (`{text}`). If that step is an "
+                        f"`ai` one, the model is choosing who this run is about again — the "
+                        f"lookup moved, the hole did not. Key it on `{{{{{TRUSTED_PHONE}}}}}`"
+                    )
+            if not any(
+                TRUSTED_PHONE in (expr if isinstance(expr, str) else "")
+                for expr in params.values()
+            ):
+                problems.append(
+                    f"{name} step `{rid}` resolves the customer with `{DIRECTORY_QUERY}` and "
+                    f"never reads `{TRUSTED_PHONE}`: it is keyed on "
+                    f"{json.dumps(params, sort_keys=True)}, so it answers about somebody the "
+                    f"phone number never picked out. The trigger's own `from` is the only "
+                    f"identity in this run WhatsApp vouched for"
+                )
+
+        prompt = prompt_of(step)
+        if not any(f"steps.{s.get('id')}.id" in prompt for _, s in earlier):
+            named = ", ".join(f"`{s.get('id')}`" for _, s in earlier)
+            problems.append(
+                f"{name} step `{sid}` reads diaries with `{OWNED_APPOINTMENTS_QUERY}` and its "
+                f"prompt never names the resolved customer ({{{{steps.<{named}>.id}}}}): the id "
+                f"it passes has to come from somewhere, and with the resolver unmentioned that "
+                f"somewhere is the model. Closing the lookup without handing over its answer does "
+                f"not secure this step, it breaks it"
             )
     return problems
 
@@ -1554,6 +1716,7 @@ DOCUMENT_RULES = (
     shipped_recipe_problems,
     unowned_table_problems,
     moving_problems,
+    own_customer_only_problems,
     only_the_customer_problems,
 )
 
@@ -1577,6 +1740,7 @@ SELF_CHECKED_RULES = (
     shipped_recipe_problems,
     unowned_table_problems,
     moving_problems,
+    own_customer_only_problems,
     only_the_customer_problems,
 )
 
@@ -3330,6 +3494,11 @@ def main():
         # up whose it is before it does, and says that moving never becomes cancel-plus-book
         # (whatsapp_inbox#74).
         problems += applied(ledger, moving_problems, path.name, doc)
+
+        # 3a-bis-v) …and no step of either family holds the address book, so the customer this
+        # run is about is the one the PHONE picked out and never the one the message named
+        # (whatsapp_inbox#103). Needs no manifest: it is the document's own shape.
+        problems += applied(ledger, own_customer_only_problems, path.name, doc)
 
         # 3a-ter) …and every tool its prompts ORDER was actually handed over (whatsapp_inbox#61).
         # Needs the manifests: «is this a tool name or is it prose» is a question only they answer.
