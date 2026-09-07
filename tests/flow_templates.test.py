@@ -902,6 +902,11 @@ def enum_value_problems(name, doc, enums):
 # closed on purpose so that an external channel wired without the customer fails LOUDLY).
 IDENTITY_BOUND_PAYLOAD = {
     "appointments.appointments.cancel": {("channel", "customer"): "customer_id"},
+    # Since appointments#144 (v1.1.73) moving carries the same pair as cancelling and shares the
+    # same guard (`customer_identity_refusal`), so it earns the same row: an instruction that
+    # orders the customer channel and forgets who the customer is fails as `invalid_payload`
+    # AFTER the salon approved it, and the customer hears nothing (whatsapp_inbox#105).
+    "appointments.appointments.reschedule": {("channel", "customer"): "customer_id"},
 }
 
 
@@ -1300,6 +1305,12 @@ TRUSTED_PHONE = "input.from"
 # permission is a permission; prose is not one, however emphatic (whatsapp_inbox#100).
 PINNED_COMMAND_PAYLOAD = {
     CANCEL_COMMAND: {"channel": "customer"},
+    # And MOVING, for the same reason and with the same default (whatsapp_inbox#105): since
+    # appointments#144 `reschedule` takes `channel` + `customer_id` and runs the same
+    # `customer_identity_refusal`, and its `channel` also defaults to `staff`. So «say nothing» is
+    # the WIDE move — no minimum notice, no maximum advance, and no check that the appointment
+    # belongs to whoever wrote in.
+    MOVE_COMMAND: {"channel": "customer"},
 }
 
 
