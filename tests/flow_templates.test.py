@@ -1449,6 +1449,26 @@ def own_customer_only_problems(name, doc):
                 f"either way"
             )
 
+        # The same reference, HALF-WRITTEN. `{{steps.x.id}}` is the whole mechanism; `{steps.x.id}`
+        # is plain text the runtime never resolves (`resolve_path` is only reached from `{{…}}`),
+        # so the model is handed the words and goes straight back to choosing the customer itself.
+        # Neither mark above catches it on its own: mark 5 is satisfied whenever the resolver is
+        # ALSO read correctly somewhere else (`.found`, `.count`), and mark 4 below only runs for
+        # steps that read a diary — which the TABLE families (whatsapp_inbox#104) never do. So in
+        # exactly those four documents the one reference carrying the identity could sit in the
+        # prompt as plain text with the battery green. Not hypothetical: `str.format` produced this
+        # shape while these very templates were being written.
+        for broken in sorted(
+            set(re.findall(r"(?<!\{)\{steps\." + re.escape(str(sid)) + r"\.[A-Za-z0-9_]+\}", later))
+        ):
+            problems.append(
+                f"{name} names `{broken}` with ONE brace: the runtime resolves `{{{{…}}}}` and "
+                f"nothing else, so `{sid}` is read and the step is handed that text verbatim "
+                f"instead of the value. It LOOKS wired and resolves to nothing, which is how the "
+                f"reference that carries the customer's identity goes missing with every other "
+                f"mark still green"
+            )
+
     for index, step in enumerate(steps):
         if step.get("kind") != "ai":
             continue
@@ -2672,7 +2692,26 @@ OWN_CUSTOMER_CASES = [
         "writing this commit",
         UNATTENDED,
         _own_customer_doc("Book for {steps.resolve.id} and for nobody else.", _DIARY),
-        2,  # mark 4 (no resolvable `.id`) and mark 5 (nothing reads the answer)
+        3,  # mark 4 (no resolvable `.id`), mark 5 (nothing reads the answer) and the lost brace
+        # itself, which is the only one of the three that NAMES what went wrong
+    ),
+    (
+        "\U0001f534 the SAME lost brace, in the family that reads no diary (the table recipes "
+        "whatsapp_inbox#104 brought): `.found` still resolves, so mark 5 is satisfied, and mark 4 "
+        "never runs because nothing here reads a diary — so the one reference that carries the "
+        "IDENTITY can sit in the prompt as plain text with the battery green. This is the shape "
+        "`str.format` really produced while these templates were being written",
+        UNATTENDED,
+        _fixture_doc(
+            _query_step("resolve", params=_OWN_PHONE),
+            _ai_step(
+                "book",
+                "auto",
+                [BOOKING_COMMAND],
+                "On file: {{steps.resolve.found}}. Book for {steps.resolve.id}.",
+            ),
+        ),
+        1,
     ),
     (
         "silent where nothing is owed: a step that reads no diary and holds no address book",
