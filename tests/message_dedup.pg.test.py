@@ -61,6 +61,8 @@ LISTENER_DOOR = "whatsapp_inbox._ingest_inbound_message"
 
 HUB = "h1"
 CONTACT_WA_ID = "34600111222"
+# The shop's own number: the `from` of an echo, never the thread it belongs to.
+STORE_WA_ID = "34999000111"
 DUPLICATE = "wamid.DUP"
 
 
@@ -132,14 +134,23 @@ def public_binds(wa_message_id, new_id, now, body="Hola"):
     }
 
 
-def listener_binds(wa_message_id, new_id, now, text="Hola"):
-    """The core event payload verbatim (`crates/server/src/inbound_poll.rs::event_payload`)."""
+def listener_binds(wa_message_id, new_id, now, text="Hola", direction="inbound", source="live"):
+    """The core event payload verbatim (`crates/server/src/inbound_poll.rs::event_payload`).
+
+    `direction`, `contact` and `source` since hub#1612: the poll asks the SaaS for `?direction=all`,
+    so the event also carries the echo of what the owner answered from their phone. This door is the
+    one that has to tell the two apart (whatsapp_inbox#66) — the dedup contract below is about a
+    message arriving TWICE, which is the same question for either direction.
+    """
     return {
         "hub_id": HUB,
         "current_user_id": "",  # a core event has no user: nobody in this hub caused it
         "now": now,
         "new_id": new_id,
-        "from": CONTACT_WA_ID,
+        "from": STORE_WA_ID if direction == "outbound" else CONTACT_WA_ID,
+        "contact": CONTACT_WA_ID,
+        "direction": direction,
+        "source": source,
         "wa_message_id": wa_message_id,
         "text": text,
         "received_at": now,

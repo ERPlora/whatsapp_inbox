@@ -14,7 +14,19 @@
     "from": {
       "type": "string",
       "minLength": 1,
-      "description": "The sender's WhatsApp id as Meta reports it — digits, NO leading `+` (`34600111222`). It is stored as `wa_contact_id` and normalised to E.164 for `contact_phone`, which is the column a `recipient_query` grant addresses."
+      "description": "Who SPOKE, as Meta reports it — digits, NO leading `+` (`34600111222`). Since hub#1612 this is not always the customer: in the echo of what the owner answered from the WhatsApp Business app it is the shop's own number, which is why the thread is keyed by `contact` and not by this (whatsapp_inbox#66)."
+    },
+    "direction": {
+      "type": "string",
+      "description": "`inbound` (the customer wrote) or `outbound` (the echo of what the business answered from the phone). ABSENT on a hub older than hub#1612, and then it means `inbound` — that is all such a hub could serve. Deliberately NOT an enum: the runtime forwards a value it does not recognise verbatim rather than normalising it, and refusing it here would dead-letter the message instead of showing it. The column stores whatever arrives; nothing repaints it as `inbound`."
+    },
+    "contact": {
+      "type": "string",
+      "description": "The number at the OTHER end — the customer in BOTH directions. It is the thread: `wa_contact_id` and the E.164 `contact_phone` a `recipient_query` grant addresses. Absent on a hub older than hub#1612, where it falls back to `from`."
+    },
+    "source": {
+      "type": "string",
+      "description": "`live` (traffic arriving now) or `history` (the 180-day coexistence backlog the SaaS backfilled when the number was connected). Absent means `live`. It never reaches a column: it is what tells the free-tier meter and the unread badge that a backlog message is not new traffic. Not an enum, for the same reason `direction` is not."
     },
     "text": {
       "type": "string",

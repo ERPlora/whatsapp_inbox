@@ -61,6 +61,10 @@ CORE_EVENT = "hub.whatsapp.message_received"
 CONTACT_WA_ID = "34600111222"
 CONTACT_E164 = "+34600111222"
 
+# The business's OWN WhatsApp number. It is the `from` of every echo — what the owner typed on the
+# phone, in the WhatsApp Business app, which since saas#1883 the SaaS stores and hub#1612 forwards.
+STORE_WA_ID = "34999000111"
+
 
 def core_event_payload(wa_message_id, text, received_at):
     return {
@@ -165,28 +169,48 @@ def check_payload_contract(command):
     return problems
 
 
-def run_listener(db, command, payload):
+def optional_binds(command):
+    """The payload keys the command's schema declares but does NOT require.
+
+    Read off the schema instead of hardcoded on purpose: this is exactly what the runtime does with
+    a field the event does not carry — `db::bind_params` binds `DynNull` (a NULL with OID 0, typed
+    by context) for every name the payload has no value for. A hub older than hub#1612 sends no
+    `direction`, no `contact` and no `source`, so the statements have to survive all three being
+    NULL, and a test that always supplies them would never find out.
+    """
+    spec = MANIFEST["commands"][command]
+    rel = spec.get("schema")
+    if not rel:
+        return set()
+    schema = json.loads((MODULE_DIR / rel).read_text())
+    return set(schema.get("properties", {})) - set(schema.get("required", []))
+
+
+def run_listener(db, command, payload, hub_id="h1", now=None, new_id=None):
     """Runs the listener's statements IN ORDER, in one transaction, like the runtime does."""
     spec = MANIFEST["commands"][command]
     files = spec["sql"] if isinstance(spec["sql"], list) else [spec["sql"]]
     system = {
-        "hub_id": "h1",
+        "hub_id": hub_id,
         "current_user_id": "",  # a core event has no user: nobody in this hub caused it
-        "now": payload["received_at"],
-        "new_id": "msg-" + payload["wa_message_id"],
+        "now": now or payload["received_at"],
+        "new_id": new_id or ("msg-" + payload["wa_message_id"]),
     }
+    optional = optional_binds(command)
     statements = ["BEGIN;"]
     for i, rel in enumerate(files):
         sql, names = translate((MODULE_DIR / rel).read_text())
         binds = dict(system)
         for key, value in payload.items():
             binds[key] = value if isinstance(value, str) else json.dumps(value)
-        missing = [n for n in names if n not in binds]
+        missing = [n for n in names if n not in binds and n not in optional]
         if missing:
             return [
                 f"`{command}` [{rel}] binds {missing}, which the core event does not carry"
             ]
-        values = ", ".join(sql_literal(binds[n]) for n in names)
+        values = ", ".join(
+            sql_literal(binds[n]) if n in binds else "NULL" for n in names
+        )
         statements.append(
             f"PREPARE s{i} AS {sql}\nEXECUTE s{i}({values});\nDEALLOCATE s{i};"
         )
@@ -274,6 +298,253 @@ def check_ingestion(db, command):
     return problems
 
 
+def served_payload(
+    wa_message_id,
+    text,
+    received_at,
+    *,
+    direction="inbound",
+    source="live",
+    sender=None,
+    contact=CONTACT_WA_ID,
+):
+    """One message as a hub WITH hub#1612 serves it: `direction`, `contact` and `source` included.
+
+    `from` is whoever spoke and `contact` is the number at the OTHER end — the same in a message the
+    customer sent, the customer in an echo of what the owner answered. Threading by `from` is what
+    opens a conversation between the shop and itself.
+    """
+    who = sender if sender is not None else (STORE_WA_ID if direction == "outbound" else CONTACT_WA_ID)
+    return {
+        "wa_message_id": wa_message_id,
+        "from": who,
+        "contact": contact,
+        "direction": direction,
+        "source": source,
+        "text": text,
+        "received_at": received_at,
+        "message": {
+            "id": wa_message_id,
+            "from": who,
+            "timestamp": "1786000000",
+            "type": "text",
+            "text": {"body": text},
+        },
+    }
+
+
+def seed_quota(db, limit, hub_id="h1"):
+    """The free-tier meter of a hub. `> 0` is what arms both ingest guards."""
+    return psql(
+        db,
+        "INSERT INTO whatsapp_inbox_settings (id, hub_id, free_tier_monthly_limit, created_at)"
+        f" VALUES ('s-{hub_id}', {sql_literal(hub_id)}, {limit}, '2026-08-11T00:00:00+00:00');\n",
+    )
+
+
+def threads_of(db, hub_id="h1"):
+    """`wa_contact_id|unread_count` of every conversation of a hub, ordered."""
+    return scalar(
+        db,
+        "SELECT COALESCE(string_agg(wa_contact_id || '|' || unread_count::text, ' / '"
+        " ORDER BY wa_contact_id), '')"
+        f" FROM whatsapp_inbox_conversation WHERE hub_id = {sql_literal(hub_id)} AND is_deleted = 0;",
+    )
+
+
+def messages_of(db, hub_id="h1"):
+    """`direction:body` of every message of a hub, in the order the thread shows them."""
+    return scalar(
+        db,
+        "SELECT COALESCE(string_agg(m.direction || ':' || m.body, ' / ' ORDER BY m.created_at,"
+        " m.wa_message_id), '')"
+        " FROM whatsapp_inbox_message m"
+        f" WHERE m.hub_id = {sql_literal(hub_id)} AND m.is_deleted = 0;",
+    )
+
+
+def check_echo_lands_in_the_customers_thread(db, command):
+    """whatsapp_inbox#66 — what the owner answered from their phone belongs to the CUSTOMER's chat.
+
+    Since hub#1612 the poll asks the SaaS for `?direction=all` and the event carries `direction`,
+    `contact` and `source`. Written as it was, this listener stamped `'inbound'` on every row and
+    resolved the conversation `WHERE wa_contact_id = :from` — and in an echo `from` is the shop, so
+    the owner's own replies opened a thread between the business and itself and were filed as if the
+    customer had sent them.
+    """
+    problems = []
+    hub = "h-echo"
+    problems += run_listener(
+        db,
+        command,
+        served_payload("wamid.C1", "Hola, quiero cita", "2026-08-11T09:00:00+00:00"),
+        hub_id=hub,
+    )
+    problems += run_listener(
+        db,
+        command,
+        served_payload(
+            "wamid.S1", "Te va bien el jueves?", "2026-08-11T09:05:00+00:00",
+            direction="outbound",
+        ),
+        hub_id=hub,
+    )
+    if problems:
+        return problems
+
+    threads = threads_of(db, hub)
+    if threads != f"{CONTACT_WA_ID}|1":
+        problems.append(
+            f"after a customer message and the owner's reply the hub has threads [{threads}], "
+            f"expected exactly [{CONTACT_WA_ID}|1] — the reply has to join the customer's chat "
+            "(threaded by `contact`, not by `from`) and must not raise the unread badge of a "
+            "message the business itself wrote"
+        )
+    landed = messages_of(db, hub)
+    want = "inbound:Hola, quiero cita / outbound:Te va bien el jueves?"
+    if landed != want:
+        problems.append(
+            f"the thread reads [{landed}], expected [{want}] — the owner's reply is stored as the "
+            "customer's, so the inbox shows the business talking to itself"
+        )
+
+    # The badge is only half of what the third statement does: the other half is `last_message_at`,
+    # which is how `queries/conversations_list.sql` sorts the inbox. If the reply does not move it,
+    # a thread the owner has just answered sinks under threads nothing happened in — and no
+    # assertion about `unread_count` can see it, because 0 + 0 and «no row matched» look the same.
+    last = scalar(
+        db,
+        "SELECT COALESCE(max(last_message_at), '')"
+        f" FROM whatsapp_inbox_conversation WHERE hub_id = {sql_literal(hub)}"
+        f" AND wa_contact_id = {sql_literal(CONTACT_WA_ID)} AND is_deleted = 0;",
+    )
+    if last != "2026-08-11T09:05:00+00:00":
+        problems.append(
+            f"after the owner's reply the thread's `last_message_at` is [{last}], expected the time "
+            "of that reply — the conversation has to rise to the top of the inbox when the business "
+            "answers, and it only does if the third statement finds it by `contact` too"
+        )
+    return problems
+
+
+def check_an_unknown_direction_is_never_repainted(db, command):
+    """A value this module does not know is stored AS IT CAME — never turned into `inbound`.
+
+    hub#1612 forwards an unrecognised `direction` verbatim instead of normalising it, precisely so
+    the module does not have to guess. Guessing `inbound` is the harm itself: it paints somebody
+    else's words as the customer's.
+    """
+    hub = "h-unknown"
+    problems = run_listener(
+        db,
+        command,
+        served_payload(
+            "wamid.U1", "??", "2026-08-11T10:00:00+00:00", direction="broadcast",
+            sender=STORE_WA_ID,
+        ),
+        hub_id=hub,
+    )
+    if problems:
+        return problems
+    landed = messages_of(db, hub)
+    if landed != "broadcast:??":
+        problems.append(
+            f"a message with `direction = broadcast` landed as [{landed}]: an unknown value must be "
+            "kept verbatim so the screen can show it as what it is, never repainted as `inbound`"
+        )
+    return problems
+
+
+def check_the_meter_only_stops_what_it_counts(db, command):
+    """The free-tier cap counts inbound customer traffic — so it may only ever BLOCK that.
+
+    Three ways the guard used to be wrong at once, with the limit already reached:
+      * the owner's own reply was refused — the business ran out of quota by answering;
+      * a message of the 180-day coexistence backlog (`source = history`) was refused, so the
+        thread the merchant connected WhatsApp to read stayed half empty;
+      * and a value nobody recognises was metered as if it were a customer.
+    A live inbound message IS refused, which is what proves the guard is still armed.
+    """
+    hub = "h-meter"
+    r = seed_quota(db, 1, hub)
+    if r.returncode != 0:
+        return [f"could not seed the quota: {r.stderr}"]
+
+    problems = run_listener(
+        db, command,
+        served_payload("wamid.M1", "primera", "2026-09-02T09:00:00+00:00"),
+        hub_id=hub,
+    )
+    if problems:
+        return problems
+
+    allowed = {
+        "the owner's own reply": served_payload(
+            "wamid.M2", "voy", "2026-09-02T09:01:00+00:00", direction="outbound"
+        ),
+        "a message of the history backlog": served_payload(
+            "wamid.M3", "vieja", "2026-09-02T09:02:00+00:00", source="history"
+        ),
+        "a direction nobody recognises": served_payload(
+            "wamid.M4", "raro", "2026-09-02T09:03:00+00:00", direction="broadcast",
+            sender=STORE_WA_ID,
+        ),
+    }
+    for label, payload in allowed.items():
+        problems += run_listener(db, command, payload, hub_id=hub)
+    if problems:
+        return problems
+
+    # The positive control: the meter still cuts off live customer traffic over the limit.
+    problems += run_listener(
+        db, command,
+        served_payload("wamid.M5", "segunda", "2026-09-02T09:04:00+00:00"),
+        hub_id=hub,
+    )
+    if problems:
+        return problems
+
+    landed = scalar(
+        db,
+        "SELECT COALESCE(string_agg(wa_message_id, ',' ORDER BY wa_message_id), '')"
+        f" FROM whatsapp_inbox_message WHERE hub_id = {sql_literal(hub)} AND is_deleted = 0;",
+    )
+    want = "wamid.M1,wamid.M2,wamid.M3,wamid.M4"
+    if landed != want:
+        problems.append(
+            f"with the free tier at its limit the messages that landed are [{landed}], expected "
+            f"[{want}]: the cap counts inbound customer traffic, so it may only stop that — and it "
+            "must still stop it (`wamid.M5` is the positive control)"
+        )
+    return problems
+
+
+def check_a_hub_before_1612_still_ingests(db, command):
+    """A hub that sends no `direction`/`contact`/`source` keeps working exactly as before.
+
+    Not decoration: the module installs on hubs older than the runtime that grew these fields, and
+    for those every message the SaaS could serve WAS an inbound live one.
+    """
+    hub = "h-legacy"
+    problems = run_listener(
+        db,
+        command,
+        core_event_payload("wamid.L1", "sin direction", "2026-08-11T11:00:00+00:00"),
+        hub_id=hub,
+    )
+    if problems:
+        return problems
+    threads = threads_of(db, hub)
+    landed = messages_of(db, hub)
+    if threads != f"{CONTACT_WA_ID}|1" or landed != "inbound:sin direction":
+        problems.append(
+            f"an event without `direction`/`contact` produced threads [{threads}] and messages "
+            f"[{landed}], expected [{CONTACT_WA_ID}|1] and [inbound:sin direction] — an absent "
+            "field binds as NULL and has to fall back to the only thing it could have meant"
+        )
+    return problems
+
+
 def check_recipient_query_is_declared():
     """The grant `whatsapp_inbox.conversations.list#contact_phone` has to be expressible."""
     problems = []
@@ -325,6 +596,10 @@ def main():
                 print(f"FAIL: migration {rel} does not apply\n{r.stderr}")
                 return 1
         problems = check_ingestion(db, command)
+        problems += check_echo_lands_in_the_customers_thread(db, command)
+        problems += check_an_unknown_direction_is_never_repainted(db, command)
+        problems += check_the_meter_only_stops_what_it_counts(db, command)
+        problems += check_a_hub_before_1612_still_ingests(db, command)
         for p in problems:
             print(f"FAIL  {p}")
         if problems:

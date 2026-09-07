@@ -3601,6 +3601,7 @@ var es_default = {
     openConversation: "Abrir",
     closeView: "Cerrar",
     emptyThread: "Esta conversaci\xF3n todav\xEDa no tiene mensajes.",
+    unknownDirection: "Mensaje no reconocido",
     attachment: "Adjunto",
     assignedTo: "Asignada a",
     assignPlaceholder: "Id del empleado (vac\xEDo = nadie)",
@@ -3765,6 +3766,7 @@ var en_default = {
     openConversation: "Open",
     closeView: "Close",
     emptyThread: "No messages in this conversation yet.",
+    unknownDirection: "Unrecognised message",
     attachment: "Attachment",
     assignedTo: "Assigned to",
     assignPlaceholder: "Employee id (empty = nobody)",
@@ -3909,6 +3911,10 @@ var ErpWhatsappInboxInbox = class extends i3 {
       background:var(--ok-surface-2, var(--ion-color-step-50, rgba(0,0,0,.04))); }
     .msg.inbound { align-self:flex-start; }
     .msg.outbound { align-self:flex-end; background:var(--ion-color-primary-tint, #d0ebff); }
+    /* Neither side: centred and outlined so it reads as «we do not know who said this», never as
+       one more customer message (whatsapp_inbox#66). */
+    .msg.unknown { align-self:center; text-align:center;
+      border:1px dashed var(--ion-color-warning-shade, #b8860b); background:transparent; }
     .msg .body { white-space:pre-wrap; margin:0; }
     .msg .when { display:block; font-size:.75rem; color:var(--ion-color-medium,#6f6a5e); margin-top:.15rem; }
     .msg .kind { font-size:.75rem; font-weight:600; color:var(--ion-color-medium,#6f6a5e); }
@@ -4039,9 +4045,10 @@ var ErpWhatsappInboxInbox = class extends i3 {
   // ── Render ────────────────────────────────────────────────────────────────
   renderMessage(m4) {
     const t5 = (k2) => erplora().t(CATALOG, k2);
-    const outbound = m4.direction === "outbound";
+    const side = m4.direction === "outbound" || m4.direction === "inbound" ? m4.direction : "unknown";
     const bodyless = !m4.body && m4.message_type && m4.message_type !== "text";
-    return b2`<div class=${`msg ${outbound ? "outbound" : "inbound"}`}>
+    return b2`<div class=${`msg ${side}`}>
+      ${side === "unknown" ? b2`<span class="kind">${t5("ui.unknownDirection")} · ${m4.direction}</span>` : A}
       ${bodyless ? b2`<span class="kind">${m4.message_type}</span>` : A}
       ${m4.body ? b2`<p class="body">${m4.body}</p>` : A}
       ${m4.media_url ? b2`<span class="kind">${t5("ui.attachment")}</span>` : A}

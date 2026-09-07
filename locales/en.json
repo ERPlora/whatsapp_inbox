@@ -96,6 +96,7 @@
     "openConversation": "Open",
     "closeView": "Close",
     "emptyThread": "No messages in this conversation yet.",
+    "unknownDirection": "Unrecognised message",
     "attachment": "Attachment",
     "assignedTo": "Assigned to",
     "assignPlaceholder": "Employee id (empty = nobody)",

@@ -97,6 +97,7 @@
     "openConversation": "Abrir",
     "closeView": "Cerrar",
     "emptyThread": "Esta conversación todavía no tiene mensajes.",
+    "unknownDirection": "Mensaje no reconocido",
     "attachment": "Adjunto",
     "assignedTo": "Asignada a",
     "assignPlaceholder": "Id del empleado (vacío = nadie)",
