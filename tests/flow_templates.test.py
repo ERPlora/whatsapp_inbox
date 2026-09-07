@@ -1427,6 +1427,28 @@ def own_customer_only_problems(name, doc):
     steps = doc.get("steps", [])
     resolvers = _query_steps(doc, DIRECTORY_QUERY)
 
+    # Mark 5, and the one that caught a real bug in this very commit: a resolver ANSWERS in
+    # `{{steps.<id>.…}}`, and the braces are the whole mechanism. Written with one brace the
+    # runtime never resolves it (`resolve_path` is only reached from `{{…}}`), so the model is
+    # handed the literal text `{steps.find_customer.id}`, finds no id in it, and goes back to
+    # deciding who this run is about — with every other mark here still green, because the step
+    # LOOKS wired. The reservation templates have no diary read, so mark 4 does not cover them:
+    # this one is owed by every resolver in every family.
+    for index, step in enumerate(steps):
+        if step.get("kind") != "query" or step.get("query") != DIRECTORY_QUERY:
+            continue
+        sid = step.get("id")
+        later = json.dumps(steps[index + 1:], ensure_ascii=False, sort_keys=True)
+        if "{{steps." + str(sid) + "." not in later:
+            problems.append(
+                f"{name} resolves the customer in `{sid}` and no later step ever reads "
+                f"`{{{{steps.{sid}.…}}}}`: the answer is fetched and dropped. Either a step is "
+                f"meant to use it — and then the hole is still open, because whoever books is "
+                f"choosing the customer some other way — or the reference lost a brace, which "
+                f"reads as plain text to the model and resolves to nothing. A grant is spent "
+                f"either way"
+            )
+
     for index, step in enumerate(steps):
         if step.get("kind") != "ai":
             continue
@@ -2604,7 +2626,7 @@ OWN_CUSTOMER_CASES = [
         "run resolves to `null`, so the model improvises the id again",
         UNATTENDED,
         _own_customer_doc(_BOOK_FOR_HER, _DIARY, resolver_first=False),
-        1,
+        2,  # …and nothing after it reads its answer either (mark 5)
     ),
     (
         "the lookup moved into a `query` step and the hole moved with it: the resolver is keyed "
@@ -2635,6 +2657,16 @@ OWN_CUSTOMER_CASES = [
         "of securing it",
         UNATTENDED,
         _own_customer_doc("Book whatever she asked for.", _DIARY),
+        2,  # the same defect from both sides: the prompt does not name it (4), nobody reads it (5)
+    ),
+    (
+        "🔴 the resolver is named with ONE brace: `{steps.resolve.id}` is plain text to the "
+        "runtime, so the model is handed the words instead of the id and picks the customer "
+        "itself — and the step LOOKS wired, which is why mark 4 (a substring match on "
+        "`steps.<id>.id`) sails straight past it. This is a bug that really happened while "
+        "writing this commit",
+        UNATTENDED,
+        _own_customer_doc("Book for {steps.resolve.id} and for nobody else.", _DIARY),
         1,
     ),
     (
