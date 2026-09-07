@@ -1,0 +1,45 @@
+-- Where a message CAME FROM, so the free tier can charge for traffic and not for history
+-- (whatsapp_inbox#91).
+--
+-- `live` = a message arriving now. `history` = one of the up-to-180-day coexistence backlog that
+-- WhatsApp hands over when the owner connects their number by scanning the QR (ADR-0452). The core
+-- event has carried the distinction since hub#1612, but it died at the door: nothing in this table
+-- could hold it, so the moment the row was written the two were indistinguishable.
+--
+-- That is not a missing nicety, it is the meter being wrong. `free_tier_monthly_limit` (002) is
+-- metered by COUNTING inbound rows of the calendar month, and the backfill writes its rows with the
+-- runtime clock of the connection — today, this month. A salon whose six months of history is 300
+-- messages therefore spent its entire monthly allowance in the minute it connected the number,
+-- before a single customer had written, and every message that DID arrive was dropped until the
+-- month rolled over. whatsapp_inbox#66 already stopped the cap from BLOCKING the backlog, which was
+-- the urgent half. This column is what stops it from COUNTING it.
+--
+-- ── Why a column and not a lookup ────────────────────────────────────────────────────────────
+-- The alternative was to re-derive it at read time from Meta's object in `extra_metadata` (its
+-- `timestamp` says WHEN the message was said). It is the wrong answer twice: an old message can
+-- perfectly well arrive live minutes after it was written, and the guard runs on every inbound
+-- webhook, so a JSON extraction plus a date comparison would replace a sargable predicate on every
+-- ingest. What the SaaS told us is a FACT about the delivery, not something to reconstruct.
+--
+-- `DEFAULT 'live'`, which is also what the rows already out there get. Not a guess: those rows were
+-- written before anything could tell the two apart, and the meter has ALREADY charged the merchant
+-- for them. Backdating them to `history` would hand back allowance that was already spent and make
+-- the settings screen disagree with the invoice the merchant has been reading all month. Which of
+-- them truly came from a backfill is not knowable from here, and inventing it is worse than
+-- preserving the number they have been shown.
+--
+-- Additive only (`expand`, ADR-0269): one ADD COLUMN with a default, no DROP and no DELETE. Every
+-- statement that does not name it keeps working untouched — `commands/message_ingest_msg.sql`, the
+-- public webhook door, writes live traffic and the default is exactly what it means. Rolling back
+-- is rolling back the code: the column simply stops being consulted, and it takes no data with it.
+--
+-- No index: the two readers (`commands/inbound_message_insert.sql`, `queries/usage_get.sql`) narrow
+-- by `hub_id` first through `idx_whatsapp_inbox_message_hub`, and `source` only ever ANDs onto a
+-- set already cut down to one hub and one month. An index whose selectivity is «all but the
+-- backfill» would be written on every ingest and read by nothing.
+--
+-- WARNING No semicolons in this header. The migration guard that runs on the fleet splits
+-- statements by `;` without understanding comments, and a `;` inside a `--` line turns the rest of
+-- the sentence into SQL (printing#23 — the module stopped installing everywhere for two days).
+ALTER TABLE whatsapp_inbox_message
+  ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'live';

@@ -519,6 +519,133 @@ def check_the_meter_only_stops_what_it_counts(db, command):
     return problems
 
 
+
+def usage_reported(db, hub_id):
+    """`inbound_this_month/monthly_limit` as `queries/usage_get.sql` answers it — run, not rewritten.
+
+    The screen and the guard have to say the SAME number: a merchant whose channel stopped at the
+    limit while the settings screen reads 0 has no way of knowing what happened. So this runs the
+    SHIPPED query, lowered exactly as the runtime lowers it, instead of a hand-written COUNT that
+    could agree with the guard by accident.
+    """
+    rel = MANIFEST["queries"]["whatsapp_inbox.usage.get"]["sql"]
+    sql, names = translate((MODULE_DIR / rel).read_text())
+    binds = {"hub_id": hub_id, "now": "2026-09-02T12:00:00+00:00"}
+    values = ", ".join(sql_literal(binds[n]) for n in names)
+    r = psql(
+        db,
+        "\\pset tuples_only on\n\\pset format unaligned\n"
+        f"PREPARE u AS {sql}\nEXECUTE u({values});\nDEALLOCATE u;\n",
+    )
+    if r.returncode != 0:
+        error = " ".join(x for x in r.stderr.splitlines() if x.startswith("ERROR"))
+        return f"<`{rel}` could not run: {error}>"
+    row = r.stdout.strip().splitlines()[-1].strip() if r.stdout.strip() else ""
+    return row.replace("|", "/")
+
+
+def check_the_history_does_not_eat_the_month(db, command):
+    """whatsapp_inbox#91 — the 180-day backlog is SHOWN, never billed.
+
+    whatsapp_inbox#66 stopped the cap from BLOCKING a backlog message, which was the urgent half.
+    The other half is that the backlog must not be COUNTED either: those rows land as
+    `direction = 'inbound'` like any customer message, so a salon whose six months of history is 300
+    messages had its whole monthly allowance spent in the minute it connected the number — before a
+    single customer had written. From then on the messages that DID arrive were dropped until the
+    month rolled over.
+
+    The guard of `commands/inbound_message_insert.sql` and the number `queries/usage_get.sql` puts
+    on the settings screen are asserted TOGETHER on purpose: two definitions of «this month» is a
+    merchant reading one figure while a different one cuts their channel off.
+    """
+    hub = "h-backfill"
+    limit = 3
+    r = seed_quota(db, limit, hub)
+    if r.returncode != 0:
+        return [f"could not seed the quota: {r.stderr}"]
+
+    # What WhatsApp hands over the moment the number is connected: more backlog than the whole
+    # allowance. Every one of them has to land — that half is whatsapp_inbox#66.
+    problems = []
+    for n in range(1, limit + 2):
+        failed = run_listener(
+            db, command,
+            served_payload(
+                f"wamid.H{n}", f"vieja {n}", f"2026-09-02T08:0{n}:00+00:00", source="history"
+            ),
+            hub_id=hub,
+        )
+        if failed:
+            return failed
+
+    reported = usage_reported(db, hub)
+    if reported != f"0/{limit}":
+        problems.append(
+            f"after {limit + 1} backlog messages the settings screen reads [{reported}], expected "
+            f"[0/{limit}]: the history is what already happened, so it is shown but does not spend "
+            "the allowance"
+        )
+
+    # The whole allowance still has to be there for the customers who write NOW.
+    for n in range(1, limit + 1):
+        failed = run_listener(
+            db, command,
+            served_payload(f"wamid.N{n}", f"nueva {n}", f"2026-09-02T09:0{n}:00+00:00"),
+            hub_id=hub,
+        )
+        if failed:
+            return failed
+
+    # The positive control: the meter is still armed and cuts off the one over the limit.
+    failed = run_listener(
+        db, command,
+        served_payload("wamid.N9", "una de mas", "2026-09-02T09:09:00+00:00"),
+        hub_id=hub,
+    )
+    if failed:
+        return failed
+
+    landed = scalar(
+        db,
+        "SELECT COALESCE(string_agg(wa_message_id, ',' ORDER BY wa_message_id), '')"
+        f" FROM whatsapp_inbox_message WHERE hub_id = {sql_literal(hub)} AND is_deleted = 0;",
+    )
+    want = "wamid.H1,wamid.H2,wamid.H3,wamid.H4,wamid.N1,wamid.N2,wamid.N3"
+    if landed != want:
+        problems.append(
+            f"with a free tier of {limit} and {limit + 1} backlog messages the rows that landed are "
+            f"[{landed}], expected [{want}]: the backlog does not spend the allowance, the "
+            f"{limit} live messages do, and `wamid.N9` is the positive control that the cap still "
+            "cuts off live traffic over the limit"
+        )
+
+    reported = usage_reported(db, hub)
+    if reported != f"{limit}/{limit}":
+        problems.append(
+            f"after the {limit} live messages the settings screen reads [{reported}], expected "
+            f"[{limit}/{limit}] — the guard and the screen have to show the same number, or the "
+            "merchant sees a consumption that disagrees with the one that cut their channel off"
+        )
+
+    # And the distinction has to survive in the ROW: a meter that can only tell the two apart while
+    # the event is in front of it stops working the moment the transaction commits.
+    stored = scalar(
+        db,
+        "SELECT COALESCE(string_agg(source || ':' || wa_message_id, ',' ORDER BY wa_message_id), '')"
+        f" FROM whatsapp_inbox_message WHERE hub_id = {sql_literal(hub)} AND is_deleted = 0;",
+    )
+    want_stored = (
+        "history:wamid.H1,history:wamid.H2,history:wamid.H3,history:wamid.H4,"
+        "live:wamid.N1,live:wamid.N2,live:wamid.N3"
+    )
+    if stored != want_stored:
+        problems.append(
+            f"the rows store [{stored}], expected [{want_stored}]: `source` has to be written WITH "
+            "the row, or once the event is gone the backlog and live traffic are indistinguishable"
+        )
+    return problems
+
+
 def check_a_hub_before_1612_still_ingests(db, command):
     """A hub that sends no `direction`/`contact`/`source` keeps working exactly as before.
 
@@ -599,6 +726,7 @@ def main():
         problems += check_echo_lands_in_the_customers_thread(db, command)
         problems += check_an_unknown_direction_is_never_repainted(db, command)
         problems += check_the_meter_only_stops_what_it_counts(db, command)
+        problems += check_the_history_does_not_eat_the_month(db, command)
         problems += check_a_hub_before_1612_still_ingests(db, command)
         for p in problems:
             print(f"FAIL  {p}")

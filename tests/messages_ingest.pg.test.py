@@ -291,7 +291,11 @@ def free_tier_window(db):
     and meter a different number per connection. This asserts the window is the UTC month, always.
 
     Seed: limit 2, two inbound messages in JULY (one of them at 23:59:59.999999999 of the last
-    day, the lexicographic worst case) and one OUTBOUND in August — none of the three may count.
+    day, the lexicographic worst case), one OUTBOUND in August, and one August inbound message of
+    the coexistence BACKLOG (`source = history`, whatsapp_inbox#91) — none of the four may count.
+    The backlog one is not decoration: it is written by the OTHER door (the core-event listener), it
+    lands in this same table as `direction = inbound`, and a salon whose six months of history is
+    300 messages would find this guard shut before a single customer had written.
     """
     ingest, names = translate((MODULE_DIR / SQL_FILE).read_text())
     fixed = {
@@ -322,6 +326,9 @@ def free_tier_window(db):
         " ('m1','h1','c1','inbound','w1','2026-07-31T23:59:59.999999999+00:00'),"
         " ('m2','h1','c1','inbound','w2','2026-07-15T10:00:00+00:00'),"
         " ('m3','h1','c1','outbound','w3','2026-08-02T10:00:00+00:00');\n"
+        "INSERT INTO whatsapp_inbox_message"
+        " (id, hub_id, conversation_id, direction, wa_message_id, created_at, source) VALUES"
+        " ('m4','h1','c1','inbound','w4','2026-08-01T09:00:00+00:00','history');\n"
         f"PREPARE ingest AS {ingest}\n"
         # Two August messages fit under the limit of 2, the third must be refused, and the
         # September one must pass again: the window resets on the UTC month boundary.
@@ -345,9 +352,11 @@ def free_tier_window(db):
     want = "i1,i2,i4"  # i3 is the one over the limit
     if got != want:
         return [
-            "the free-tier guard counts the wrong month window: the messages that got through "
-            f"are [{got}], expected [{want}] (i1/i2 = August under the limit, i3 = August over "
-            "it, i4 = September, a fresh window)"
+            "the free-tier guard counts the wrong traffic: the messages that got through are "
+            f"[{got}], expected [{want}] (i1/i2 = August under the limit, i3 = August over it, "
+            "i4 = September, a fresh window). It counts the UTC month of `:now`, and only what the "
+            "merchant is being metered for — never the July rows, never an outbound one, and never "
+            "`m4`, a message of the coexistence backlog (whatsapp_inbox#91)"
         ]
     return []
 
