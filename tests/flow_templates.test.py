@@ -1695,6 +1695,28 @@ TAP_KIND = (
     "whether this family should wake up for a tap is `tappable_option_problems`' question",
 )
 
+# And the SIXTH shape, the one that makes the tap trigger hard to write: a photo, a sticker or a
+# voice note, sent with no caption. It arrives with `text` EMPTY — like a tap — and the only thing
+# telling the two apart is `reply_id`, which the core serves **empty and never absent** (hub#1633,
+# `inbound_poll.rs`: "a flow comparing `reply_id` against something should simply not match a
+# photo"). So `exists` is TRUE for every message that ever arrives, and only `neq ""` says «she
+# tapped». A tap trigger written with `exists` reads exactly right and wakes the booking recipe up
+# for every picture a customer sends: a metered turn spent on an empty message, and an answer she
+# never asked for. Like TAP_KIND this belongs to the family that offers rows, so it is asserted in
+# `tappable_option_problems` where that is known.
+MEDIA_KIND = (
+    "a photo sent with no caption",
+    {
+        "text": "",
+        "reply_id": "",
+        "reply_title": "",
+        "from": CUSTOMER_NUMBER,
+        "contact": CUSTOMER_NUMBER,
+        "direction": "inbound",
+        "source": "live",
+    },
+)
+
 WHATSAPP_EVENT = "hub.whatsapp.message_received"
 
 
@@ -2010,6 +2032,18 @@ def tappable_option_problems(name, doc):
                     f"{name} wakes up for a tap and its `input` never maps `reply_id`: the run "
                     f"knows somebody tapped and not WHICH row, which is the ambiguity this whole "
                     f"change exists to remove"
+                )
+            # …and it has to tell a tap from a PHOTO, which arrives with `text` empty just the
+            # same. The core serves `reply_id` empty and never ABSENT, so `exists` — the way of
+            # writing this that reads right — is true for every message there is.
+            if _filter_matches(trigger.get("filter") or {}, {"event": MEDIA_KIND[1]}):
+                problems.append(
+                    f"{name} wakes up for {MEDIA_KIND[0]} as well as for a tap: its filter "
+                    f"{json.dumps(trigger.get('filter') or {}, sort_keys=True)} cannot tell them "
+                    f"apart, because the core serves `reply_id` EMPTY and never absent "
+                    f"(hub#1633), so anything but `neq \"\"` on it is true for a picture too. She "
+                    f"sends one and this booking recipe runs over a message with no words in it — "
+                    f"a metered turn, and an answer she never asked for"
                 )
     return problems
 
@@ -3697,6 +3731,7 @@ def _tap_doc(
     guard=True,
     rows="steps.pick.slots",
     triggers=("words", "tap"),
+    tap_filter=None,
     tap_input=("from", "text", "reply_id"),
     prompt=_TAP_PROMPT,
     extra_copy=None,
@@ -3741,7 +3776,7 @@ def _tap_doc(
             {
                 "kind": "event",
                 "event": WHATSAPP_EVENT,
-                "filter": TAP_TRIGGER,
+                "filter": tap_filter or TAP_TRIGGER,
                 "input": {
                     key: f"event.{ {'text': 'reply_title'}.get(key, key) }"
                     for key in tap_input
@@ -3753,6 +3788,28 @@ def _tap_doc(
 
 # `(label, file name, document, problems expected)`
 TAPPABLE_CASES = [
+    (
+        "\U0001f534 the tap trigger written with `exists`, which reads right and is not: the core "
+        "serves `reply_id` EMPTY and never absent, so it is true for a photo with no caption too "
+        "and the booking recipe runs over an empty message",
+        ATTENDED,
+        _tap_doc(
+            tap_filter={
+                "event.text": {"eq": ""},
+                "event.reply_id": {"exists": True},
+                "event.direction": {"neq": "outbound"},
+                "event.source": {"neq": "history"},
+            }
+        ),
+        1,
+    ),
+    (
+        "the trigger as it ships tells the two apart: `neq \"\"` wakes up for the tap and leaves "
+        "the photo alone",
+        ATTENDED,
+        _tap_doc(),
+        0,
+    ),
     (
         "the shape this issue ships: the slots the turn found become the rows she taps, guarded "
         "against the empty list, with a trigger that wakes up for the tap",
