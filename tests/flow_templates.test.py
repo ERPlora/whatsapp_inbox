@@ -515,10 +515,24 @@ def policy_problems(name, doc, commands_def, read_perms):
 
 
 def writing_ai_steps(doc):
-    """Indexes of the `ai` steps that can PROPOSE a write — the ones a customer waits on."""
+    """Indexes of the `ai` steps that can PROPOSE a write — the ones a customer waits on.
+
+    A step that declares `output` under anything but `auto` is NOT one of them, and that is the
+    kernel's own arithmetic rather than a convention of this file: a proposal ends the turn, so a
+    step that owes data could never fill it, and `agent_runner.rs` refuses the proposal by name
+    before the approval row exists (hub#1639). Nothing parks, so nobody can say «no» to it, so the
+    rules built on this list — survive a rejection, be followed by a `notify` that carries the
+    words, run `auto` where nobody is watching — have nothing to ask of it.
+
+    Which is what lets the attended family offer slots at all (whatsapp_inbox#109): the step that
+    writes the message holds the reads and hands the rows over, `manual` and unrejectable, while
+    the step that PROPOSES the appointment stays the one this list is about.
+    """
     out = []
     for i, step in enumerate(doc.get("steps", [])):
         if step.get("kind") != "ai":
+            continue
+        if step.get("output") and (step.get("policy") or "manual") != "auto":
             continue
         if ((step.get("tools") or {}).get("commands")) or []:
             out.append(i)
@@ -3415,6 +3429,27 @@ SILENCE_CASES = [
 
 # `(label, document, problems expected)` — the mutants of «a «no» reaches the customer too».
 REFUSAL_CASES = [
+    (
+        "a step that declares `output` under `manual` can never BE rejected: the kernel refuses "
+        "its proposals by name (a proposal ends the turn and the fields would never arrive), so "
+        "it owes no `on_reject` and it is not the writer this rule is about. It is the shape the "
+        "attended family uses to hand over the slots she taps (whatsapp_inbox#109)",
+        _fixture_doc(
+            _ai_step(
+                "book", "manual", ["appointments.appointments.create"], on_reject="continue"
+            ),
+            {
+                "id": "reply",
+                "kind": "ai",
+                "policy": "manual",
+                "prompt": "{{steps.book.text}} {{steps.book.status}}",
+                "tools": {"commands": ["appointments.availability.slots"]},
+                "output": {"slots": {"type": "options", "describe": "what she may tap"}},
+            },
+            _notify_step("tell", "{{steps.reply.text}}"),
+        ),
+        0,
+    ),
     (
         "the shape whatsapp_inbox#67 ships: the booking step survives a «no» and the step that "
         "writes the reply knows how the turn ended",
