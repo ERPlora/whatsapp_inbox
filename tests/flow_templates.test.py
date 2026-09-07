@@ -919,6 +919,210 @@ def hour_choice_problems(name, doc):
     return problems
 
 
+# ── «a customer, and only now» ────────────────────────────────────────────────────────────────
+#
+# The event these templates wait on is the CORE's (`crates/server/src/inbound_poll.rs`), and the
+# poller asks the SaaS for `?direction=all&source=all`: everything the number ever saw comes
+# through it. Since hub#1621 the payload says which is which — `direction` (who spoke), `source`
+# (live traffic or the backlog WhatsApp hands over the day the number is connected) and `contact`
+# (whose conversation it is). A trigger that does not ask answers all three, and two of them are
+# not customers writing now:
+#
+# * the OWNER'S OWN REPLY, sent from the WhatsApp Business app on her phone, arrives here as an
+#   `outbound` message. The automation reads it as a new customer message and answers the salon's
+#   own number with «we will confirm your appointment as soon as we open»;
+# * the 180-day BACKLOG arrives in one burst at connection time, so people who wrote in March get
+#   a confirmation today for something that is over.
+#
+# 🔴 And the shape of the ANSWER matters as much as the shape of the question: a core below this
+# module's declared floor (`compatibility.min_erplora_version`, whatsapp_inbox#62) predates
+# hub#1621 and serves NONE of the three fields. In the kernel a missing path resolves to `Null`
+# (`resolve_path` → `matches` in `crates/runtime/src/flows/def.rs`), and `json_eq(Null, x)` is
+# `false` — so `{"event.direction": {"eq": "inbound"}}` turns the whole automation OFF on every
+# hub at the floor, without an error, a log line or a run. The rule below therefore judges the
+# filter by what it DOES to four real messages rather than by the operator it is written with,
+# and one of the four is the message a floor-level core serves.
+class _UnjudgeableFilter(Exception):
+    """An operator this battery has no faithful copy of — refused out loud, never guessed."""
+
+
+def _resolve(path, scope):
+    """`resolve_path` in `crates/runtime/src/flows/def.rs`: any missing segment is `null`."""
+    cursor = scope
+    for segment in path.split("."):
+        if not isinstance(cursor, dict) or segment not in cursor:
+            return None
+        cursor = cursor[segment]
+    return cursor
+
+
+def _json_eq(actual, expected):
+    """`json_eq`: `null` equals nothing except `null` — the whole reason `eq` is a trap here."""
+    if actual is None or expected is None:
+        return actual is None and expected is None
+    return actual == expected
+
+
+def _clause_matches(op, actual, expected):
+    """One operator of `eval()`. Anything this battery cannot copy faithfully is REFUSED."""
+    if op == "eq":
+        return _json_eq(actual, expected)
+    if op == "neq":
+        return not _json_eq(actual, expected)
+    if op == "in":
+        return isinstance(expected, list) and any(_json_eq(actual, i) for i in expected)
+    if op == "exists":
+        return (actual is not None) == (expected if isinstance(expected, bool) else True)
+    raise _UnjudgeableFilter(op)
+
+
+def _filter_matches(condition, scope):
+    """`Condition::matches`: every clause of every path, in AND."""
+    return all(
+        _clause_matches(op, _resolve(path, scope), expected)
+        for path, ops in (condition or {}).items()
+        for op, expected in (ops or {}).items()
+    )
+
+
+CUSTOMER_NUMBER = "34600111222"
+SALON_NUMBER = "34999888777"
+
+# The four kinds of message one connected number hands this trigger, and whether the automation is
+# supposed to wake up for it. `(label, event payload, should the filter let it through, why)`.
+MESSAGE_KINDS = (
+    (
+        "a customer writing now",
+        {
+            "text": "hola, quiero cita mañana",
+            "from": CUSTOMER_NUMBER,
+            "contact": CUSTOMER_NUMBER,
+            "direction": "inbound",
+            "source": "live",
+        },
+        True,
+        "it is the only thing this automation exists for",
+    ),
+    (
+        "the owner's own reply, echoed back from her phone",
+        {
+            "text": "te confirmo a las 10:30",
+            "from": SALON_NUMBER,
+            "contact": CUSTOMER_NUMBER,
+            "direction": "outbound",
+            "source": "live",
+        },
+        False,
+        "the salon is answered by its own automation, on its own number (whatsapp_inbox#66 is "
+        "what puts the echo in the inbox; letting it TRIGGER is this one)",
+    ),
+    (
+        "a message from the 180-day backlog",
+        {
+            "text": "hola, quiero cita mañana",
+            "from": CUSTOMER_NUMBER,
+            "contact": CUSTOMER_NUMBER,
+            "direction": "inbound",
+            "source": "history",
+        },
+        False,
+        "everyone who wrote in the last six months is answered at once, today, about something "
+        "that is over",
+    ),
+    (
+        "the same customer, on a core at this module's declared floor",
+        {"text": "hola, quiero cita mañana", "from": CUSTOMER_NUMBER},
+        True,
+        "a core below hub#1621 serves neither `direction` nor `source`, and in the kernel an "
+        "absent path is `null`: a filter written with `eq`/`in`/`exists` matches NOTHING there, "
+        "so the salon gets no automation at all and no error either",
+    ),
+)
+
+WHATSAPP_EVENT = "hub.whatsapp.message_received"
+
+
+def whatsapp_triggers(doc):
+    """Every event trigger of this document that waits on the core's WhatsApp event."""
+    return [
+        t
+        for t in doc.get("triggers", [])
+        if t.get("kind") == "event" and t.get("event") == WHATSAPP_EVENT
+    ]
+
+
+def only_the_customer_problems(name, doc):
+    """The automation wakes up for a customer writing NOW — and can address her back on every
+    core this module says it runs on.
+
+    whatsapp_inbox#90. Two halves of one harm, and they are one rule because they are one bug:
+    answering the wrong person.
+
+    **The question.** The filter is run against the four messages in `MESSAGE_KINDS`, with this
+    battery's copy of the kernel's `eval`, and every disagreement is named. Judging behaviour
+    rather than syntax is deliberate: `{"event.direction": {"eq": "inbound"}}` and
+    `{"event.direction": {"neq": "outbound"}}` both read as «only what the customer sent», and
+    only the second one is still true on a core at the floor.
+
+    **The answer.** A `notify` step resolves its recipient through
+    `whatsapp_inbox.conversations.list`, and the value it filters by comes from the trigger's own
+    `input` map. Every key it spends therefore has to be one a floor-level core can fill: mapping
+    the recipient to `event.contact` — the field that is RIGHT in an echo — hands the query a
+    `null` on that core, and `recipient_of` then refuses with `recipient_ambiguous` (or picks the
+    hub's only conversation by luck). With the echo filtered out at the trigger, `event.from` IS
+    the customer, on every core; `event.contact` becomes the better address the day the floor
+    rises above hub#1621, and this rule goes red until it does.
+    """
+    problems = []
+    for trigger in whatsapp_triggers(doc):
+        condition = trigger.get("filter") or {}
+        for label, payload, wanted, why in MESSAGE_KINDS:
+            try:
+                got = _filter_matches(condition, {"event": payload})
+            except _UnjudgeableFilter as e:
+                problems.append(
+                    f"{name} filters on `{e}`, an operator this battery has no faithful copy of, "
+                    f"so it cannot say who this trigger wakes up for. Add it to "
+                    f"`_clause_matches` from `eval()` in `crates/runtime/src/flows/def.rs` in the "
+                    f"same commit"
+                )
+                break
+            if got == wanted:
+                continue
+            problems.append(
+                f"{name} {'ignores' if wanted else 'answers'} {label}: {why}. Its trigger filter "
+                f"is {json.dumps(condition, sort_keys=True)}"
+            )
+
+        mapping = trigger.get("input") or {}
+        floor_event = next(p for lab, p, _, _ in MESSAGE_KINDS if lab.endswith("declared floor"))
+        for step in doc.get("steps", []):
+            if step.get("kind") != "notify":
+                continue
+            for param, expr in ((step.get("to") or {}).get("params") or {}).items():
+                if not isinstance(expr, str) or not expr.startswith("input."):
+                    continue
+                key = expr.split(".", 1)[1]
+                if key not in mapping:
+                    problems.append(
+                        f"{name} step `{step.get('id')}` addresses its reply by `{expr}`, and the "
+                        f"trigger's `input` never maps `{key}`: the query is handed a `null`, so "
+                        f"the recipient is whatever single conversation the hub happens to hold — "
+                        f"or `recipient_ambiguous` the moment there are two"
+                    )
+                elif _resolve(mapping[key], {"event": floor_event}) is None:
+                    problems.append(
+                        f"{name} step `{step.get('id')}` addresses its reply by `{expr}` → "
+                        f"`{mapping[key]}`, which a core at this module's declared floor does not "
+                        f"serve (hub#1621). There it resolves to `null` and the message goes to "
+                        f"whoever the query happens to answer with. With the echo filtered out at "
+                        f"the trigger, `event.from` is the customer on every core; move to "
+                        f"`event.contact` when the floor rises past hub#1621 (whatsapp_inbox#86)"
+                    )
+    return problems
+
+
+
 DOCUMENT_RULES = (
     policy_problems,
     silence_problems,
@@ -929,6 +1133,7 @@ DOCUMENT_RULES = (
     enum_value_problems,
     unattended_problems,
     hour_choice_problems,
+    only_the_customer_problems,
 )
 
 # …and the registry itself is guarded, because it is the next place the same hole moves to. The
@@ -946,6 +1151,7 @@ SELF_CHECKED_RULES = (
     enum_value_problems,
     unattended_problems,
     hour_choice_problems,
+    only_the_customer_problems,
 )
 
 
@@ -1327,6 +1533,184 @@ HOUR_CASES = [
         "appointment-from-whatsapp-unattended.fr.flow.json",
         _fixture_doc(_ai_step("book", "auto", [BOOKING_COMMAND], f"Réserve. {HOUR_RULE['en']}")),
         1,
+    ),
+]
+
+
+def _wa_doc(condition=None, mapping=None, steps=None):
+    """A document carrying the trigger these templates really ship: the core's WhatsApp event."""
+    return {
+        "schema_version": 1,
+        "triggers": [
+            {
+                "kind": "event",
+                "event": WHATSAPP_EVENT,
+                "filter": TEXT_ONLY if condition is None else condition,
+                "input": {"from": "event.from", "text": "event.text"}
+                if mapping is None
+                else mapping,
+            }
+        ],
+        "steps": [_notify_step()] if steps is None else list(steps),
+    }
+
+
+# The filter as it stood before whatsapp_inbox#90 — «anything with words in it».
+TEXT_ONLY = {"event.text": {"neq": ""}}
+# …and as it ships now. `neq` and not `eq` on purpose: see `only_the_customer_problems`.
+LIVE_INBOUND = {
+    "event.text": {"neq": ""},
+    "event.direction": {"neq": "outbound"},
+    "event.source": {"neq": "history"},
+}
+
+
+def _contact_notify(step_id="tell"):
+    """The tempting mistake: address the reply by the field that is right in an echo."""
+    step = _notify_step(step_id)
+    step["to"]["params"] = {"f_wa_contact_id": "input.contact"}
+    return step
+
+
+# `(label, file name, document, problems expected)` — the mutants of «a customer, and only now».
+ONLY_CUSTOMER_CASES = [
+    (
+        "the shape whatsapp_inbox#90 ships: the owner's echo and the backlog are both refused, "
+        "and a core at the floor still wakes up",
+        ATTENDED,
+        _wa_doc(LIVE_INBOUND),
+        0,
+    ),
+    (
+        "the filter as it was: «anything with words in it» answers the owner's own reply AND "
+        "every message of the 180-day backlog",
+        ATTENDED,
+        _wa_doc(TEXT_ONLY),
+        2,
+    ),
+    (
+        "who spoke, without when: the backlog still arrives",
+        ATTENDED,
+        _wa_doc({**TEXT_ONLY, "event.direction": {"neq": "outbound"}}),
+        1,
+    ),
+    (
+        "when, without who: the owner is still answered by her own automation",
+        ATTENDED,
+        _wa_doc({**TEXT_ONLY, "event.source": {"neq": "history"}}),
+        1,
+    ),
+    (
+        "🔴 `eq` reads right and is the regression: on a core at this module's declared floor the "
+        "path is absent, `json_eq(Null, \"inbound\")` is false, and the automation is off with "
+        "nothing said",
+        ATTENDED,
+        _wa_doc(
+            {
+                **TEXT_ONLY,
+                "event.direction": {"eq": "inbound"},
+                "event.source": {"neq": "history"},
+            }
+        ),
+        1,
+    ),
+    (
+        "…and `in` is the same trap with a list around it",
+        ATTENDED,
+        _wa_doc(
+            {
+                **TEXT_ONLY,
+                "event.direction": {"in": ["inbound"]},
+                "event.source": {"neq": "history"},
+            }
+        ),
+        1,
+    ),
+    (
+        "…and asking whether the field is THERE is worse than either: it blocks the floor-level "
+        "core and lets the echo through, because `outbound` exists just as much as `inbound` does",
+        ATTENDED,
+        _wa_doc(
+            {
+                **TEXT_ONLY,
+                "event.direction": {"exists": True},
+                "event.source": {"neq": "history"},
+            }
+        ),
+        2,
+    ),
+    (
+        "…and `eq` on `source` fails the same way, one field over",
+        ATTENDED,
+        _wa_doc(
+            {
+                **TEXT_ONLY,
+                "event.direction": {"neq": "outbound"},
+                "event.source": {"eq": "live"},
+            }
+        ),
+        1,
+    ),
+    (
+        "the filter written inside out answers the salon and ignores the customer — two harms, "
+        "and the floor-level core is the one thing it still gets right",
+        ATTENDED,
+        _wa_doc(
+            {
+                **TEXT_ONLY,
+                "event.direction": {"neq": "inbound"},
+                "event.source": {"neq": "history"},
+            }
+        ),
+        2,
+    ),
+    (
+        "an operator this battery cannot copy is refused, not waved through: a filter it judges "
+        "with a guess is worse than one it does not judge",
+        ATTENDED,
+        _wa_doc({**LIVE_INBOUND, "event.direction": {"contains": "in"}}),
+        1,
+    ),
+    (
+        "🔴 the reply addressed by `event.contact` — the field that is RIGHT in an echo, and "
+        "absent on a core at the floor, where it hands the query a `null`",
+        ATTENDED,
+        _wa_doc(
+            LIVE_INBOUND,
+            mapping={"from": "event.from", "text": "event.text", "contact": "event.contact"},
+            steps=[_contact_notify()],
+        ),
+        1,
+    ),
+    (
+        "…and addressing the reply by an input key the trigger never maps is the same `null` "
+        "arriving by a shorter road",
+        ATTENDED,
+        _wa_doc(LIVE_INBOUND, steps=[_contact_notify()]),
+        1,
+    ),
+    (
+        "every notify step is judged, not the first: two replies wrongly addressed are two "
+        "customers who get somebody else's message",
+        ATTENDED,
+        _wa_doc(LIVE_INBOUND, steps=[_contact_notify("acknowledge"), _contact_notify("confirm")]),
+        2,
+    ),
+    (
+        "the unattended family is held to exactly the same promise: nobody is watching there",
+        UNATTENDED,
+        _wa_doc(TEXT_ONLY),
+        2,
+    ),
+    (
+        "a template that waits on some other event is not this rule's business",
+        ATTENDED,
+        {
+            "schema_version": 1,
+            "triggers": [{"kind": "event", "event": "sale.completed", "filter": {}}],
+            "steps": [_notify_step()],
+        },
+        0,
     ),
 ]
 
@@ -1718,6 +2102,13 @@ def self_check():
                 f"the battery's own «unattended means unattended» rule is wrong — {label}: "
                 f"expected {expected} problem(s), got {len(got)}: {got}"
             )
+    for label, name, doc, expected in ONLY_CUSTOMER_CASES:
+        got = only_the_customer_problems(name, doc)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «a customer, and only now» rule is wrong — {label}: expected "
+                f"{expected} problem(s), got {len(got)}: {got}"
+            )
     for label, name, doc, expected in HOUR_CASES:
         got = hour_choice_problems(name, doc)
         if len(got) != expected:
@@ -2025,6 +2416,11 @@ def main():
                         f"which does not accept it{hint}. Accepted: "
                         f"{', '.join(sorted(accepted))}"
                     )
+
+        # 3a-vii) …and the trigger only wakes up for a customer writing NOW, on every core this
+        # module claims to run on (whatsapp_inbox#90). Needs no manifest: filter and input map are
+        # the document's own shape.
+        problems += applied(ledger, only_the_customer_problems, path.name, doc)
 
         # The trigger this whole issue is about: a template that listens to something else is a
         # different product wearing the same file name.

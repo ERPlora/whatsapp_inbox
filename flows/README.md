@@ -25,8 +25,11 @@ más deja de ser una traducción.
 
 ## `appointment-from-whatsapp` — qué hace, paso a paso
 
-1. **Dispara** con el evento **core** `hub.whatsapp.message_received` (hub#664), filtrando los
-   mensajes con texto: una foto no da para razonar una cita y cada turno de IA se factura.
+1. **Dispara** con el evento **core** `hub.whatsapp.message_received` (hub#664), filtrando **tres**
+   cosas: que el mensaje tenga texto —una foto no da para razonar una cita y cada turno de IA se
+   factura—, que no lo haya escrito **el propio negocio** (`event.direction`) y que no venga del
+   **histórico** que WhatsApp entrega al conectar el número (`event.source`). Ver «Por qué el filtro
+   dice `neq` y no `eq`» más abajo.
 2. **`acknowledge`** — contesta **al instante** por WhatsApp: «te confirmamos en cuanto abramos».
    Es la mitad que hace habitable la decisión de que la IA no agende sola: el cliente que escribe a
    las 3 AM no se queda sin respuesta hasta las 9.
@@ -194,6 +197,40 @@ whatsapp_inbox#55 exige también la contraria de antes: un paso cuyos commands *
 al que otro paso cita (`{{steps.<id>.text}}`) es el apaño de dos pasos, y es un FAIL. La batería se
 comprueba a sí misma primero: `self_check()` corre esas dos reglas contra documentos sintéticos
 —mutantes— antes de abrir ninguna plantilla real.
+
+### Por qué el filtro dice `neq` y no `eq`
+
+El poller pide `?direction=all&source=all`, así que por este evento entra **todo** lo que ha visto
+el número: lo que escribe la clienta, **el eco de lo que contesta la dueña** desde la app de
+WhatsApp Business en su móvil, y **el histórico de 180 días** que WhatsApp entrega de golpe el día
+que se conecta el número. Sin filtrar, la automatización contestaba a las tres cosas: le respondía
+al salón en su propio número, y el día de la conexión mandaba «te confirmamos la cita» a todo el que
+hubiera escrito en medio año (whatsapp_inbox#90).
+
+Los tres campos que lo distinguen —`direction`, `source` y `contact`— los añade **hub#1621**, y ahí
+está el detalle que decide la forma del filtro:
+
+- En el kernel, **un path ausente resuelve a `Null`** (`resolve_path` → `matches`, en
+  `crates/runtime/src/flows/def.rs`) y `json_eq(Null, x)` es `false`.
+- **Ningún tag publicado del hub lleva hub#1621** todavía: `v1.1.15` es el más nuevo y no lo tiene
+  — y `v1.1.15` es justo el suelo que declara este módulo (`compatibility.min_erplora_version`).
+
+O sea que `{"event.direction": {"eq": "inbound"}}` **apagaría la automatización entera** en un hub
+al suelo, sin error, sin log y sin run. Con `neq` pasa lo contrario: `Null` **pasa**, que es
+exactamente lo que un core viejo podía servir (solo entrante y solo vivo), y en un core nuevo el eco
+y el histórico se quedan fuera. Lo mismo vale para `in` y para `exists`.
+
+Por el mismo motivo el destinatario de los `notify` sigue saliendo de **`input.from`** y no de
+`input.contact`: `contact` es el campo correcto **en un eco** —ahí `from` es la tienda—, pero en un
+core al suelo no existe, y la query recibiría un `null`. Con el eco fuera desde el trigger,
+**`from` ES la clienta** en todos los cores. El cambio a `contact` es de cuando el suelo suba por
+encima de hub#1621 (whatsapp_inbox#86); `tests/flow_templates.test.py` lo tiene puesto en rojo hasta
+entonces, con esa misma frase en el mensaje.
+
+`only_the_customer_problems` no juzga el operador: le pasa al filtro **cuatro mensajes reales** —la
+clienta ahora, el eco de la dueña, uno del histórico y el que sirve un core al suelo— con una copia
+del `eval()` del kernel, y falla nombrando cuál de los cuatro se coló o se quedó fuera. Un filtro que
+lee bien y hace otra cosa es exactamente el fallo que esto existe para cazar.
 
 ### Por qué hay un suelo de versión
 

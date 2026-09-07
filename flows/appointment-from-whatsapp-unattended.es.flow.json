@@ -8,6 +8,12 @@
       "filter": {
         "event.text": {
           "neq": ""
+        },
+        "event.direction": {
+          "neq": "outbound"
+        },
+        "event.source": {
+          "neq": "history"
         }
       },
       "input": {
