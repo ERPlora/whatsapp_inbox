@@ -3,6 +3,7 @@ import { state } from 'lit/decorators.js';
 import { define } from '@erplora/outfitkit/define';
 import {
   APPS_PATH,
+  AUTOMATIONS_PATH,
   AUTOMATIONS_WITNESS,
   AUTOMATION_STATUS_WITNESS,
   WHATSAPP_USES,
@@ -27,7 +28,10 @@ const CATALOG: Record<string, unknown> = { es: esLocale, en: enLocale };
  * identical to the owner, because the only honest thing to show when the answer did not arrive is
  * the card as it was before whatsapp_inbox#79. Having the badge decide the button too is what keeps
  * the two from ever disagreeing — a badge saying «Active» over a button saying «Set it up» is the
- * screen contradicting itself.
+ * screen contradicting itself. The same entry decides WHERE the button goes: with a badge, to the
+ * list the owner's flow is in ({@link AUTOMATIONS_PATH}); without one, to the template card
+ * ({@link galleryPath}) — «View it» landing on the card whose only button is «Use» would be the
+ * invitation of whatsapp_inbox#79 wearing a different label.
  */
 const STATE_BADGE: Record<AutomationState, string | null> = {
   unknown: null,
@@ -470,7 +474,7 @@ export class ErpWhatsappInboxSettings extends LitElement {
             <ion-button
               size="small"
               data-testid="use-${use.id}"
-              @click=${() => this.goTo(galleryPath(use.id))}
+              @click=${() => this.goTo(STATE_BADGE[state] ? AUTOMATIONS_PATH : galleryPath(use.id))}
             >${t(STATE_BADGE[state] ? 'ui.usesView' : 'ui.usesOpen')}</ion-button>
           </li>`,
         )}

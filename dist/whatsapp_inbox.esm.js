@@ -4840,8 +4840,9 @@ function automationState(answer) {
   return unfinished > 0 ? "unfinished" : "absent";
 }
 var APPS_PATH = "/apps";
+var AUTOMATIONS_PATH = `/m/${AUTOMATIONS_MODULE}/automations`;
 function galleryPath(templateId) {
-  return `/m/${AUTOMATIONS_MODULE}/automations?template=${encodeURIComponent(templateId)}`;
+  return `${AUTOMATIONS_PATH}?template=${encodeURIComponent(templateId)}`;
 }
 
 // ui/components/erp-whatsapp-inbox-settings/erp-whatsapp-inbox-settings.ts
@@ -5165,7 +5166,7 @@ var ErpWhatsappInboxSettings = class extends i3 {
             <ion-button
               size="small"
               data-testid="use-${use.id}"
-              @click=${() => this.goTo(galleryPath(use.id))}
+              @click=${() => this.goTo(STATE_BADGE[state] ? AUTOMATIONS_PATH : galleryPath(use.id))}
             >${t5(STATE_BADGE[state] ? "ui.usesView" : "ui.usesOpen")}</ion-button>
           </li>`
       )}

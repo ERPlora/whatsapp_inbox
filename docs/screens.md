@@ -132,7 +132,8 @@ and the hub never sees it.
 
 A shortcut into Automations, and deliberately nothing more: it does not create the flow or switch it
 on. Each card names a use this hub can actually run — the module of the recipe has to be installed —
-says what it does, and opens the gallery with that template named. Without the `flows` module there
+says what it does, and opens the gallery with that template named — or, once the automation is
+already set up, the list of automations, where the owner's flow is. Without the `flows` module there
 is no destination at all, so the block points at the app list instead.
 
 Each card also says whether that automation is **already set up here**
@@ -143,10 +144,14 @@ event and the one command that identify the use, never `manage_flows`:
 
 | What the card shows | When |
 |---|---|
-| **Active** + «View it» | at least one automation listens to the use's event, may run its command and is switched on |
-| **Paused** + «View it» | it is set up, and switched off |
-| **Unfinished** + «View it» | something listens to the event but was never granted any command — where the gallery leaves a half-finished setup, since it creates every template paused and ungranted |
-| no badge + «Set it up» | there is none — **or** the question could not be answered (an older `flows`, a denied permission). The card never says more than it knows |
+| **Active** + «View it» → the automations list | at least one automation listens to the use's event, may run its command and is switched on |
+| **Paused** + «View it» → the automations list | it is set up, and switched off |
+| **Unfinished** + «View it» → the automations list | something listens to the event but was never granted any command — where the gallery leaves a half-finished setup, since it creates every template paused and ungranted |
+| no badge + «Set it up» → the template card | there is none — **or** the question could not be answered (an older `flows`, a denied permission). The card never says more than it knows |
+
+«View it» never names the template card: the gallery scrolls that card into view and its one button
+is «Use», which would build the second automation the badge exists to prevent. The status answer
+carries no id on purpose, so the list is the closest the card can bring the owner to their flow.
 
 ### The requests
 

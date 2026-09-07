@@ -194,12 +194,25 @@ export function automationState(answer: unknown): AutomationState {
 export const APPS_PATH = '/apps';
 
 /**
- * The gallery, with the card the owner asked for named in the query string.
+ * The Automations screen itself: the owner's flows listed at the top, the gallery underneath.
+ *
+ * Where «View it» goes once the automation of a use is already here (whatsapp_inbox#79). The
+ * status answer carries no id on purpose — three counters, nothing about any one flow — so the
+ * closest the card can bring the owner is the list their flow is in. What it must NOT do is name the
+ * template card: the gallery scrolls that card into view (flows#56/#57) and its one button is «Use»,
+ * which builds the second automation this badge exists to prevent. The `navId` is spelled in full
+ * because the shell drops the query string when it has to correct it (`ModuleView.vue`).
+ */
+export const AUTOMATIONS_PATH = `/m/${AUTOMATIONS_MODULE}/automations`;
+
+/**
+ * The gallery, with the card the owner asked for named in the query string — where «Set it up» goes
+ * while there is nothing set up yet.
  *
  * `?template=` is the contract for opening that card already selected. A gallery that does not read
  * it yet still lands the owner in Automations, which is where the card is — the shortcut degrades
  * to «took me to the right screen» instead of breaking.
  */
 export function galleryPath(templateId: string): string {
-  return `/m/${AUTOMATIONS_MODULE}/automations?template=${encodeURIComponent(templateId)}`;
+  return `${AUTOMATIONS_PATH}?template=${encodeURIComponent(templateId)}`;
 }

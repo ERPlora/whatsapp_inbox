@@ -641,12 +641,25 @@ describe('the settings screen says what this WhatsApp can be used for (whatsapp_
       expect(said.filter((line) => line.includes('flows.automations.status'))).toEqual([]);
     });
 
-    it('still takes the owner to the same gallery card when the automation is already there', async () => {
-      mountWith(SAVED_SETTINGS, { automations: { total: 1, enabled: 1, unfinished: 0 } });
+    // «View it» has to land where THEIR automation is — the list at the top of Automations — and
+    // never on the gallery card `?template=` names: the gallery scrolls that card into view
+    // (flows#56/#57) and its one button is «Use», which creates a second flow. A button that reads
+    // «View it» and lands on «Use» is the invitation of #79 wearing a different label. The list is
+    // the closest this card can get: the status answer carries no id on purpose (three counters).
+    it.each([
+      ['running', { total: 1, enabled: 1, unfinished: 0 }],
+      ['paused', { total: 1, enabled: 0, unfinished: 0 }],
+      ['unfinished', { total: 0, enabled: 0, unfinished: 1 }],
+    ])('takes the owner to their automations, not to the card that builds a second one, when it is %s', async (_state, automations) => {
+      mountWith(SAVED_SETTINGS, { automations });
       const el = await mount();
       const push = vi.spyOn(window.history, 'pushState');
       button(el)!.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
-      expect(push).toHaveBeenCalledWith({}, '', `/m/flows/automations?template=${APPOINTMENTS.id}`);
+      expect(push).toHaveBeenCalledWith({}, '', '/m/flows/automations');
+      expect(
+        push,
+        'sent the owner to the template card: the one button there is «Use», which builds a second automation',
+      ).not.toHaveBeenCalledWith({}, '', expect.stringContaining('?template='));
     });
   });
 

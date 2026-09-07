@@ -8,6 +8,7 @@ import {
   AUTOMATIONS_WITNESS,
   AUTOMATION_STATUS_WITNESS,
   APPS_PATH,
+  AUTOMATIONS_PATH,
   WHATSAPP_USES,
   automationState,
   galleryPath,
@@ -118,6 +119,14 @@ describe('where a use sends the owner', () => {
 
   it('sends to the app list when Automations is what is missing', () => {
     expect(APPS_PATH).toBe('/apps');
+  });
+
+  // Once the owner already has the automation, «View it» goes to the list — their flow is there —
+  // and not to the template card, whose one button builds a second one (whatsapp_inbox#79). Both
+  // shortcuts are the same screen: a gallery that ignores `?template=` and a list are one page.
+  it('is the automations list itself once the owner already has one, the same screen without a card named', () => {
+    expect(AUTOMATIONS_PATH).toBe('/m/flows/automations');
+    expect(galleryPath('whatsapp-appointment').startsWith(`${AUTOMATIONS_PATH}?template=`)).toBe(true);
   });
 });
 
