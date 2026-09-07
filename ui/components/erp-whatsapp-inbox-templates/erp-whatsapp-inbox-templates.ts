@@ -8,6 +8,11 @@ import type { ListController, ListClient, ListParams, ListPage } from '@erplora/
 import esLocale from '../../../locales/es.json';
 import enLocale from '../../../locales/en.json';
 import { domainErrorText as declaredErrorText } from '../../lib/domain-error-text';
+import {
+  META_TEMPLATE_STATES,
+  metaTemplateView,
+} from '../../lib/meta-template-status';
+import type { MetaTemplateView } from '../../lib/meta-template-status';
 const CATALOG: Record<string, unknown> = { es: esLocale, en: enLocale };
 
 interface ErploraClientLike extends ListClient {
@@ -53,18 +58,13 @@ function domainErrorText(e: unknown, fallbackKey: string): string {
   return (e instanceof Error ? e.message : '') || erplora().t(CATALOG, fallbackKey);
 }
 
-// Estado de revisión de Meta (enum de la migración) → clave i18n. El `value=` que viaja al runtime
-// NUNCA se traduce; solo la etiqueta que ve el usuario.
-const META_STATUS_KEYS = ['pending', 'approved', 'rejected'];
-const META_STATUS_LABEL_KEYS: Record<string, string> = {
-  pending: 'ui.metaPending',
-  approved: 'ui.metaApproved',
-  rejected: 'ui.metaRejected',
-};
-
+/** Meta's verdict, in the words of this module (whatsapp_inbox#65). The `value=` that travels to
+ *  the runtime is never translated; only the label the owner reads. A code the module has not
+ *  learned keeps Meta's own word, so it can be looked up instead of being dressed up as a state
+ *  that means something else. */
 function metaStatusLabel(status: string): string {
-  const key = META_STATUS_LABEL_KEYS[status];
-  return key ? erplora().t(CATALOG, key) : status;
+  const { labelKey } = metaTemplateView(status);
+  return labelKey ? erplora().t(CATALOG, labelKey) : status;
 }
 
 export class ErpWhatsappInboxTemplates extends LitElement {
@@ -82,6 +82,15 @@ export class ErpWhatsappInboxTemplates extends LitElement {
       background:var(--ok-surface-2, var(--ion-color-step-50, rgba(0,0,0,.04))); }
     /* 44px minimum touch target: this screen is used one-handed, at a counter. */
     ion-button { --min-height: 44px; }
+    /* Meta's verdict: the colour is a second channel, never the only one — the sentence says it. */
+    .meta { border-left: 4px solid var(--ok-color-medium, #8a8578); padding: .5rem .75rem;
+      border-radius: var(--ok-radius-sm, 10px);
+      background: var(--ok-surface-2, var(--ion-color-step-50, rgba(0,0,0,.04))); }
+    .meta p { margin: .25rem 0 0; font-size: .9rem; }
+    .meta[data-state="approved"] { border-left-color: var(--ion-color-success, #2dd36f); }
+    .meta[data-state="rejected"],
+    .meta[data-state="paused"],
+    .meta[data-state="disabled"] { border-left-color: var(--ion-color-danger, #c5000f); }
   `;
 
   @state() newName = '';
@@ -105,6 +114,14 @@ export class ErpWhatsappInboxTemplates extends LitElement {
 
   /** The template whose delete is awaiting confirmation, in the page. */
   @state() pendingDelete: Template | null = null;
+
+  /** Meta's verdict on the template being edited, and the move it asks for. `null` while the panel
+   *  is an ADD: there is no verdict on a template that does not exist yet. */
+  @state() editingMeta: MetaTemplateView | null = null;
+
+  /** Meta's raw word for the row being edited: what the panel shows when the code is one this
+   *  module has not learned, so it can be looked up in WhatsApp Manager. */
+  @state() editingMetaCode = '';
 
   /** Carried through an edit so `templates.update` — whose schema requires every field — can send
    *  back untouched what this panel does not show. */
@@ -152,7 +169,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
       sortable: true,
       filterable: true,
       filterType: 'select',
-      options: META_STATUS_KEYS.map((value) => ({ value, label: metaStatusLabel(value) })),
+      options: META_TEMPLATE_STATES.map((value) => ({ value, label: metaStatusLabel(value) })),
       format: (r) => metaStatusLabel(String(r.meta_status ?? '')),
     },
     {
@@ -252,6 +269,8 @@ export class ErpWhatsappInboxTemplates extends LitElement {
       variables: row.variables ?? '[]',
       is_active: Number(row.is_active ?? 1),
     };
+    this.editingMeta = metaTemplateView(row.meta_status);
+    this.editingMetaCode = String(row.meta_status ?? '');
     this.formError = '';
     this.dataTable()?.open('create');
   }
@@ -263,6 +282,8 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     this.newLanguage = 'es';
     this.newCategory = 'UTILITY';
     this.editingRest = { header: '', footer: '', variables: '[]', is_active: 1 };
+    this.editingMeta = null;
+    this.editingMetaCode = '';
   }
 
   private cancelEdit() {
@@ -326,6 +347,22 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     }
   }
 
+  /** What Meta says about this template and what the owner has to do about it.
+   *
+   *  It lives in the panel, next to the fields that fix it, which is where every WhatsApp tool the
+   *  market has (Meta's own WhatsApp Manager, Twilio, 360dialog, Brevo) puts it: the list carries
+   *  the short state, the detail carries the move. A whole sentence per row would drown the table
+   *  it is supposed to explain. */
+  private renderMetaVerdict() {
+    if (!this.editingMeta) return nothing;
+    const t = (k: string): string => erplora().t(CATALOG, k);
+    const { state, labelKey, actionKey } = this.editingMeta;
+    return html`<div class="meta" data-state=${state}>
+      <strong>${t('ui.colMetaStatus')}: ${labelKey ? t(labelKey) : this.editingMetaCode}</strong>
+      <p>${t(actionKey)}</p>
+    </div>`;
+  }
+
   private renderDeleteConfirm() {
     if (!this.pendingDelete) return nothing;
     const t = (k: string): string => erplora().t(CATALOG, k);
@@ -347,6 +384,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
           <!-- Alta: se proyecta SIEMPRE (aunque el panel esté cerrado). Si solo se renderizara con el
                panel abierto, el «+» de la barra desplegaría un panel vacío. -->
           <form slot="create" class="form" @submit=${(e: Event) => this.createTemplate(e)}>
+            ${this.renderMetaVerdict()}
             <ion-input mode="md" fill="outline" label-placement="floating" label=${t('ui.colName')} .value=${this.newName} @ionInput=${(e: any) => (this.newName = e.target.value)}></ion-input>
             <ion-input mode="md" fill="outline" label-placement="floating" label=${t('ui.colLanguage')} placeholder=${t('ui.placeholderLanguage')} .value=${this.newLanguage} @ionInput=${(e: any) => (this.newLanguage = e.target.value)}></ion-input>
             <ion-select mode="md" fill="outline" label-placement="floating" label=${t('ui.colCategory')} .value=${this.newCategory} @ionChange=${(e: any) => (this.newCategory = e.target.value)}>
