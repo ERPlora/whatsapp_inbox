@@ -49,6 +49,7 @@ Usage: tests/flow_templates.test.py   (exit 0 = green)
 import json
 import pathlib
 import re
+import subprocess
 import sys
 import tempfile
 
@@ -1020,6 +1021,153 @@ def identity_field_problems(name, doc, props, enums=None):
                     f"{name}: PINNED_COMMAND_PAYLOAD fixes `{field}` = `{value}` for `{cname}`, "
                     f"which only accepts {allowed}: the grant pins a value the command refuses, so "
                     f"the pin stops being «narrower» and becomes «never»"
+                )
+    return problems
+
+
+def sent_payload_fields():
+    """`command id -> {field names}` this repo puts in a payload, from BOTH tables that name one.
+
+    `IDENTITY_BOUND_PAYLOAD` names what the prompts must SEND and `PINNED_COMMAND_PAYLOAD` what the
+    grant FIXES; against a neighbour one release too old they fail the same way, so the floor reads
+    them as one list.
+    """
+    out = {}
+    for cname, pairs in IDENTITY_BOUND_PAYLOAD.items():
+        for (field, _value), companion in pairs.items():
+            out.setdefault(cname, set()).update((field, companion))
+    for cname, fixed in PINNED_COMMAND_PAYLOAD.items():
+        out.setdefault(cname, set()).update(fixed)
+    return out
+
+
+def schema_at_version(module_dir, version, rel):
+    """The `properties` a command's payload schema declared AT a released version of its module.
+
+    Read out of the neighbour's own git history, because that is the only copy of the past there
+    is: the module repos carry no tags at all (`git tag` is empty in every one of them), so a
+    release is found as the commit whose `module.json` declares exactly that version.
+
+    ⚠️ `-S` answers with the commits where the count of the string CHANGED, which is the one that
+    added the version and the one that bumped it away — and the newest is usually the second. So
+    every candidate is opened and only the one whose manifest really reads that version answers.
+    Taking the first sha reads the schema of the release ABOVE the floor, which is precisely the
+    reading this rule exists to distrust (measured by hand: `-S '"version": "1.1.72"' -n1` on
+    `appointments/` answers `7c1c7f9`, which IS 1.1.73).
+
+    Returns `(properties, None)` or `(None, reason)` — never a quiet empty set, because «the field
+    was not there» and «I could not look» are opposite answers and only one of them is a bug.
+    """
+
+    def git(*args):
+        try:
+            done = subprocess.run(
+                ("git", "-C", str(module_dir)) + args,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+        except (OSError, subprocess.SubprocessError) as e:
+            return None, f"`git` could not be run ({e})"
+        if done.returncode != 0:
+            return None, (done.stderr.strip().splitlines() or ["git failed"])[0]
+        return done.stdout, None
+
+    out, why = git("rev-parse", "--git-dir")
+    if out is None:
+        return None, f"{module_dir.name}/ is not a git checkout ({why})"
+    out, why = git(
+        "log", "--format=%H", "-S", f'"version": "{version}"', "--", "module.json"
+    )
+    if out is None:
+        return None, f"the history of {module_dir.name}/module.json could not be read ({why})"
+    for sha in out.split():
+        blob, _ = git("show", f"{sha}:module.json")
+        if blob is None:
+            continue
+        try:
+            if (json.loads(blob) or {}).get("version") != version:
+                continue
+        except ValueError:
+            continue
+        blob, why = git("show", f"{sha}:{rel}")
+        if blob is None:
+            return None, f"{module_dir.name}/{rel} is not in the tree of {version} ({why})"
+        try:
+            return set((json.loads(blob).get("properties") or {}).keys()), None
+        except ValueError as e:
+            return None, f"{module_dir.name}/{rel} at {version} is not readable JSON ({e})"
+    return None, f"no commit of {module_dir.name}/ declares version {version}"
+
+
+def floor_payload_properties(floors, commands_def, resolved):
+    """`command id -> {declared property names}` AS OF the floor this family declares.
+
+    The twin of `payload_properties`, one or more releases behind on purpose. That one reads the
+    neighbour's WORKING TREE — whatever checkout this machine happens to hold, which on a developer
+    box is the newest thing there is; this one reads the OLDEST version these templates promise to
+    work on. They answer different questions, and only both together say «what this recipe sends is
+    taken everywhere this recipe is offered».
+
+    Returns `(props, skipped)`: a command whose past could not be read is named out loud, never
+    dropped, because an unreadable floor and a floor that is high enough look identical from here.
+    """
+    props, skipped = {}, []
+    owners = {module_dir: mid for mid, (module_dir, _) in resolved.items()}
+    for cname in sorted(sent_payload_fields()):
+        target = commands_def.get(cname)
+        if target is None:
+            continue  # a name no module declares — layer 3 already says so
+        module_dir, cdef = target
+        floor = floors.get(owners.get(module_dir))
+        if floor is None:
+            continue  # this family pins no floor for that module: nothing to read against
+        rel = cdef.get("schema")
+        if not isinstance(rel, str):
+            continue  # a command with no payload schema declares no field to be missing
+        declared, why = schema_at_version(module_dir, floor, rel)
+        if declared is None:
+            skipped.append(
+                f"the payload of `{cname}` as of the declared floor {floor} could not be read "
+                f"({why}) — whether that floor is high enough for what these templates SEND was "
+                f"NOT verified"
+            )
+            continue
+        props[cname] = declared
+    return props, skipped
+
+
+def floor_field_problems(name, doc, floor_props):
+    """Every field these templates SEND is one the command ALREADY TOOK at the declared floor.
+
+    The floor stopped being a footnote of this battery with hub#1611: `requires.json` TRAVELS to
+    the hub, and `flow_template_floor_is_met` (`crates/runtime/src/registry.rs`) is what decides
+    whether a recipe is OFFERED at all. So the floor is the oldest neighbour this template promises
+    to work on, and a floor one release too low is a promise the command refuses to keep.
+
+    🔴 Measured, and it is the whole reason this rule exists (whatsapp_inbox#105, mutant M9).
+    `channel` + `customer_id` enter `appointments.appointments.reschedule` in 1.1.73. Leaving the
+    floor at 1.1.72 left every other rule here green: layer 1b only compares the floor against the
+    checkout on THIS machine, which is newer, so it printed `RESOLVED appointments@1.1.73 (needs
+    >= 1.1.72)` and said nothing, and `identity_field_problems` reads that same new working tree.
+    A hub sitting at exactly 1.1.72 would then be offered the recipe against a schema that is
+    `additionalProperties: false` without those fields: every customer who asks to move her
+    appointment is told it is being moved and the call comes back `invalid_payload`.
+    """
+    problems, sent = [], sent_payload_fields()
+    for step in doc.get("steps", []):
+        for cname in ((step.get("tools") or {}).get("commands")) or []:
+            declared = floor_props.get(cname)
+            if declared is None:
+                continue  # unfloored or unreadable: `main()` said so out loud
+            for field in sorted((sent.get(cname) or set()) - declared):
+                problems.append(
+                    f"{name} step `{step.get('id')}` hands over `{cname}`, whose payload this repo "
+                    f"fills with `{field}`, and at the floor this family declares that command "
+                    f"took {sorted(declared)}: the floor is below the release that started taking "
+                    f"the field, so the hub OFFERS this recipe to a copy that answers "
+                    f"`invalid_payload` to every one of these calls — raise `modules` in "
+                    f"`{name.split('.')[0]}.requires.json` to the version that introduced it"
                 )
     return problems
 
@@ -2470,6 +2618,7 @@ DOCUMENT_RULES = (
     policy_problems,
     identified_cancellation_problems,
     identity_field_problems,
+    floor_field_problems,
     silence_problems,
     mute_refusal_problems,
     undeclared_tool_problems,
@@ -2498,6 +2647,7 @@ SELF_CHECKED_RULES = (
     policy_problems,
     identified_cancellation_problems,
     identity_field_problems,
+    floor_field_problems,
     silence_problems,
     mute_refusal_problems,
     undeclared_tool_problems,
@@ -4624,6 +4774,170 @@ INSTRUCTION_CASES = [
 ]
 
 
+# The floor rule's own mutants. A document that hands MOVE over, one that does not, and the two
+# readings of the neighbour's past: the release that already took the fields and the one below it.
+_FLOOR_MOVER = {
+    "steps": [{"id": "book_appointment", "kind": "ai", "tools": {"commands": [MOVE_COMMAND]}}]
+}
+_FLOOR_BOOKER = {
+    "steps": [
+        {
+            "id": "book_appointment",
+            "kind": "ai",
+            "tools": {"commands": ["appointments.appointments.create"]},
+        }
+    ]
+}
+_FLOOR_TAKES_BOTH = {
+    MOVE_COMMAND: {"appointment_id", "start_datetime", "channel", "customer_id"}
+}
+_FLOOR_TAKES_NEITHER = {MOVE_COMMAND: {"appointment_id", "start_datetime"}}
+
+FLOOR_CASES = [
+    (
+        "the floor already takes every field these templates send",
+        _FLOOR_MOVER,
+        _FLOOR_TAKES_BOTH,
+        0,
+    ),
+    (
+        "whatsapp_inbox#105 as the mutant M9 left it: the floor is the release BELOW the one that "
+        "started taking `channel` + `customer_id`",
+        _FLOOR_MOVER,
+        _FLOOR_TAKES_NEITHER,
+        2,
+    ),
+    (
+        "no step hands the command over, so this family promises nothing about it",
+        _FLOOR_BOOKER,
+        _FLOOR_TAKES_NEITHER,
+        0,
+    ),
+    (
+        "the schema at the floor could not be read — `main()` skipped it out loud, and guessing "
+        "here would be this rule inventing a floor it never saw",
+        _FLOOR_MOVER,
+        {},
+        0,
+    ),
+    (
+        "a command handed over whose payload no table here fills: nothing is promised, so nothing "
+        "is demanded of the floor",
+        _FLOOR_BOOKER,
+        {"appointments.appointments.create": set()},
+        0,
+    ),
+]
+
+
+def _floor_reading_problems():
+    """`schema_at_version` reads a real git history, so `floor_field_problems` is only worth what
+    this proves: the release that HAS the fields, the one below it, a version nobody released and a
+    directory that is not a checkout at all.
+
+    The trap it pins is the one that costs an hour by hand — `-S` also answers with the commit that
+    bumped the version AWAY, and that commit is the NEWEST. A reader that took the first sha would
+    read the schema of the release ABOVE every floor and call every floor good, which is the exact
+    shape of the bug this whole rule is here to catch.
+    """
+    problems = []
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        (root / "schemas").mkdir()
+
+        def commit(version, props, message):
+            (root / "module.json").write_text(
+                json.dumps({"id": "appointments", "version": version}, indent=2)
+            )
+            (root / "schemas" / "reschedule.json").write_text(
+                json.dumps(
+                    {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {p: {"type": "string"} for p in props},
+                    }
+                )
+            )
+            for args in (
+                ["add", "-A"],
+                ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false",
+                 "commit", "-q", "-m", message],
+            ):
+                done = subprocess.run(
+                    ["git", "-C", str(root)] + args, capture_output=True, text=True
+                )
+                if done.returncode != 0:
+                    problems.append(
+                        f"the battery could not build its own git fixture (`git {args[0]}`): "
+                        f"{done.stderr.strip()} — `schema_at_version` was NOT proved"
+                    )
+                    return False
+            return True
+
+        done = subprocess.run(
+            ["git", "-C", str(root), "init", "-q"], capture_output=True, text=True
+        )
+        if done.returncode != 0:
+            return [
+                f"the battery could not build its own git fixture (`git init`): "
+                f"{done.stderr.strip()} — `schema_at_version` was NOT proved"
+            ]
+        # Two releases, the shape `appointments` really has: the fields land in the SECOND one.
+        if not commit("1.1.72", ["appointment_id", "start_datetime"], "chore(release): v1.1.72"):
+            return problems
+        if not commit(
+            "1.1.73",
+            ["appointment_id", "start_datetime", "channel", "customer_id"],
+            "chore(release): v1.1.73",
+        ):
+            return problems
+
+        rel = "schemas/reschedule.json"
+        for label, version, want in [
+            (
+                "the floor that predates the fields — and the newest commit `-S` answers with is "
+                "the one that bumped this version AWAY, so a reader taking the first sha reads "
+                "1.1.73 here and never sees the hole",
+                "1.1.72",
+                {"appointment_id", "start_datetime"},
+            ),
+            (
+                "the release that introduced them",
+                "1.1.73",
+                {"appointment_id", "start_datetime", "channel", "customer_id"},
+            ),
+        ]:
+            got, why = schema_at_version(root, version, rel)
+            if got != want:
+                problems.append(
+                    f"the battery's own reading of a released schema is wrong — {label}: expected "
+                    f"{sorted(want)}, got {got if got is None else sorted(got)} ({why})"
+                )
+
+        got, why = schema_at_version(root, "9.9.9", rel)
+        if got is not None or not why:
+            problems.append(
+                f"the battery reads a version nobody released as an answer instead of a skip: "
+                f"got {got} ({why}) — a floor typo would then be a silent green"
+            )
+        got, why = schema_at_version(root, "1.1.73", "schemas/nowhere.json")
+        if got is not None or not why:
+            problems.append(
+                f"the battery reads a schema absent from the release as an answer instead of a "
+                f"skip: got {got} ({why})"
+            )
+
+    with tempfile.TemporaryDirectory() as bare:
+        got, why = schema_at_version(pathlib.Path(bare), "1.1.73", rel)
+        if got is not None or not why:
+            problems.append(
+                f"the battery reads a directory that is not a git checkout as an answer instead "
+                f"of a skip: got {got} ({why}) — on a CI runner with no neighbours that is a "
+                f"green over nothing"
+            )
+    return problems
+
+
 def _identity_reading_problems():
     """`payload_properties` reads the real schema files, so `identity_field_problems` is only worth
     what this proves: a schema on disk, one whose file is missing, one with no `schema` at all."""
@@ -5154,6 +5468,14 @@ def self_check():
                 f"{label}: expected {expected} problem(s), got {len(got)}: {got}"
             )
     problems += _identity_reading_problems()
+    for label, doc, floor_props, expected in FLOOR_CASES:
+        got = floor_field_problems("(self-check)", doc, floor_props)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «the floor already takes what we send» rule is wrong — "
+                f"{label}: expected {expected} problem(s), got {len(got)}: {got}"
+            )
+    problems += _floor_reading_problems()
     for label, name, doc, expected in POLICY_CASES:
         got = policy_problems(name, doc, _FIXTURE_COMMANDS, _FIXTURE_READS)
         if len(got) != expected:
@@ -5307,6 +5629,10 @@ def main():
     # and a row pointing at a name nothing carries is a guard over nothing.
     shipped_families = {path.name.split(".")[0] for path in docs}
 
+    # …and what each family's declared FLOOR really takes, read once per `requires.json` because it
+    # walks the neighbour's git history and both languages of a family share the same floor.
+    floor_props_by_family = {}
+
     for path in docs:
         doc = json.loads(path.read_text())
 
@@ -5430,6 +5756,22 @@ def main():
                 ledger, identity_field_problems, path.name, doc, identity_props, enums
             )
 
+        # 3a-vi-quater) …and the command TOOK those fields already at the floor this family
+        # declares, not just in the checkout this machine happens to hold (whatsapp_inbox#105).
+        # The floor travels to the hub since hub#1611 and decides whether the recipe is OFFERED,
+        # so a floor one release too low hands the recipe to a hub that refuses every call.
+        if commands_def is not None:
+            fpath = floors_of(path)
+            if fpath not in floor_props_by_family:
+                declared = (json.loads(fpath.read_text()) or {}).get("modules") or {} if fpath.is_file() else {}
+                floor_props_by_family[fpath], floor_skips = floor_payload_properties(
+                    declared, commands_def, resolved
+                )
+                skipped += [f"{fpath.name}: {why}" for why in floor_skips]
+            problems += applied(
+                ledger, floor_field_problems, path.name, doc, floor_props_by_family[fpath]
+            )
+
         # 3b) Every parameter is a word the query it addresses actually knows.
         #
         # A name that exists is not a name that filters. `whatsapp_inbox.conversations.list`
@@ -5498,6 +5840,7 @@ def main():
             undeclared_tool_problems.__name__,
             enum_value_problems.__name__,
             identity_field_problems.__name__,
+            floor_field_problems.__name__,
             parking_producer_problems.__name__,
         }
         if commands_def is None
