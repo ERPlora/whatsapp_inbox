@@ -1481,10 +1481,17 @@ def missing_instruction_problems(name, doc, families):
     sentence is exactly what a legitimate rewrite moves around, and a rule that also pins the step
     turns every honest edit into a red — which is how a guard stops being read.
 
-    The table is anchored against what really ships (`families`), the hole
-    `shipped_recipe_problems` closes for `BOOKING_RULES`: rename a recipe and the row keeps guarding
+    The table is anchored against what really ships (`families`) IN BOTH DIRECTIONS, the hole
+    `shipped_recipe_problems` closes for `BOOKING_RULES`. Rename a recipe and the row keeps guarding
     a document that no longer exists, with this battery green, because every rule here only judges
-    the documents that are there.
+    the documents that are there. And the mirror, which is the one that matters: delete the row and
+    the recipe it guarded keeps shipping, unguarded, also green — a guard that can be switched off
+    by deleting a line is not a guard, it is a comment. Measured in review, not feared: dropping
+    `reservation-from-whatsapp-unattended` and then losing the advance-window sentence from its
+    Spanish document — whatsapp_inbox#108 again, in the half nobody is watching — left this battery
+    at `EXIT=0`. So every recipe in `flows/` owes a row. A recipe that carries no safety sentence
+    owes an EMPTY one (`"family": ()`): the decision that there is nothing to keep is written down
+    where the next person can read it, instead of looking exactly like a row somebody deleted.
     """
     problems = []
     for family in sorted(PINNED_INSTRUCTIONS):
@@ -1494,6 +1501,15 @@ def missing_instruction_problems(name, doc, families):
                 f"in `flows/` belongs to that family: the row guards nothing and reads as if it "
                 f"did. Point it at the family that shipped, or take it out"
             )
+    for family in sorted(set(families) - set(PINNED_INSTRUCTIONS)):
+        problems.append(
+            f"{name}: `{family}` ships in `flows/` and has no row in `PINNED_INSTRUCTIONS`, so "
+            f"nothing here holds its two translations to saying the same thing — which is the "
+            f"whole of whatsapp_inbox#112, and it stays green. Deleting a row has to be as loud "
+            f"as deleting the sentence, or the guard is one edit away from being a comment. Give "
+            f"it the sentences it may not lose, or, if it carries none, write that down with an "
+            f"empty row (`\"{family}\": ()`)"
+        )
     parts = name.split(".")
     lang = parts[1] if len(parts) >= 3 else ""
     for label, wording in PINNED_INSTRUCTIONS.get(parts[0], ()):
@@ -4431,11 +4447,22 @@ INSTRUCTION_CASES = [
         2,
     ),
     (
-        "a family with nothing pinned owes nothing: this is a list of what may not be lost, not a "
-        "demand that every recipe carry a sentence",
+        "a recipe that SHIPS and lost its row: the other half of the anchoring, and the one that "
+        "matters, because a guard you can switch off by deleting a row is not a guard. Measured "
+        "in review of whatsapp_inbox#112: dropping `reservation-from-whatsapp-unattended` from "
+        "the table and THEN losing the advance-window sentence from its Spanish document — which "
+        "is whatsapp_inbox#108 again, in the half nobody is watching — left this battery green",
         "task-from-whatsapp.en.flow.json",
         _saying("whatever this recipe wants to say"),
         _SHIPPED_FAMILIES | {"task-from-whatsapp"},
+        1,
+    ),
+    (
+        "the four recipes that really ship are all in the table, so the rule above costs nothing "
+        "on a healthy tree: a red here means a row went missing, never that a recipe is new",
+        _RESERVATION_EN,
+        _saying(_EN_BLOCKED, _EN_ADVANCE),
+        _SHIPPED_FAMILIES,
         0,
     ),
     (
