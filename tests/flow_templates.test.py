@@ -1316,12 +1316,20 @@ def unpinned_command_problems(name, doc, pins):
     checks that the person asking is the person on the appointment. Nothing downstream refuses it:
     the command was granted and the payload is valid.
 
-    `PINNED_COMMAND_PAYLOAD` is the answer, and `check_payload_pin` (hub#1623) is what applies it,
-    at the one door the dispatcher goes through, before the schema, the handler and the outbox.
-    What this rule holds is that the pin is really in the file — because the pin is one JSON key
-    deep in a sidecar nobody reads out loud, and the day it goes missing every other rule here
-    stays green: the grant still covers the tool, the prompt still says `customer`, the document
-    still parses.
+    `PINNED_COMMAND_PAYLOAD` is the answer, and what this rule holds is that the pin is really in
+    the file — because the pin is one JSON key deep in a sidecar nobody reads out loud, and the day
+    it goes missing every other rule here stays green: the grant still covers the tool, the prompt
+    still says `customer`, the document still parses.
+
+    ⚠️ **The hub does not apply this pin YET, and saying otherwise here would be the expensive
+    lie.** The machinery exists — `check_payload_pin` (hub#1623) refuses a payload that omits or
+    contradicts a pinned field, at the door the dispatcher goes through and at the approval door
+    too — but a pin declared in THIS file never reaches it: `FlowTemplateGrant`
+    (`crates/runtime/src/manifest.rs`) is `{kind, value}`, so serde drops `payload` without a word
+    and the factory recipe is installed with the WIDE permission (hub#1654, open). What keeps a
+    real hub narrow today is the gallery card's own `grantPins` in `ERPlora/flows`, a copy of this
+    by hand. So this rule guards the module's DECLARATION, which is the half that lives here; the
+    day hub#1654 lands, the declaration is also what is enforced, and nothing here has to change.
 
     🔴 **Every `ai` step that is handed the command owes the pin, whoever is watching**
     (whatsapp_inbox#107). The rule used to skip steps under `policy: "manual"`, on the grounds that
@@ -1339,9 +1347,10 @@ def unpinned_command_problems(name, doc, pins):
     wrote in, and the salon's legitimate way to cancel on its own account is the Appointments
     screen with its own role, not a stranger's WhatsApp thread.
 
-    The hub agrees with reading it per step rather than per policy: `check_command_grant` runs at
-    the approval door too (`flows_api.rs`) and not only in the dispatcher (`commands.rs`), so a pin
-    survives the tray instead of being redundant with it.
+    The hub reads it per step rather than per policy too: `check_command_grant` runs at the
+    approval door (`flows_api.rs`) and not only in the dispatcher (`commands.rs`), so a pin that
+    gets there survives the tray instead of being redundant with it — «that gets there» being the
+    hole hub#1654 closes, above.
 
     Deterministic `kind: command` steps stay out: there the payload is mapped by the DOCUMENT, so
     no model chooses the channel and pinning would break a template that legitimately cancels for
@@ -4297,8 +4306,8 @@ PIN_CASES = [
     ),
     (
         "what this module ships after whatsapp_inbox#107: the same attended writer, and its grant "
-        "says AS THE CUSTOMER — the hub checks the pin at the approval door too "
-        "(`flows_api.rs::check_command_grant`), so the limit survives the tray",
+        "says AS THE CUSTOMER — which is the declaration this battery can hold it to, not proof "
+        "that a hub enforces it (hub#1654) nor that the gallery card copies it (ERPlora/flows#99)",
         ATTENDED,
         _fixture_doc(_ai_step("propose_appointment", "manual", (BOOKING_COMMAND, CANCEL_COMMAND))),
         _PIN_OK,
