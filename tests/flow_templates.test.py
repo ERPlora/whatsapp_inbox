@@ -975,6 +975,7 @@ HOUR_RULE = {
     "es": "La hora no la eliges tú. La elige ella.",
 }
 BOOKING_COMMAND = "appointments.appointments.create"
+CANCEL_COMMAND = "appointments.appointments.cancel"
 
 
 def hour_choice_problems(name, doc):
@@ -1019,6 +1020,123 @@ def hour_choice_problems(name, doc):
                 f"only thing keeping the model from booking people into hours they never asked "
                 f"for. If the wording changed, change HOUR_RULE with it — it is the contract of "
                 f"the `-unattended` family, not a nicety"
+            )
+    return problems
+
+
+# ── «moving is one call, never two» ───────────────────────────────────────────────────────────
+#
+# whatsapp_inbox#74. Of the three things a customer asks a salon by WhatsApp — book, move, cancel
+# — moving is the one most often asked for, and it was the one the automation answered with «one
+# of us will get back to you». `appointments.appointments.reschedule` moves the appointment ROW:
+# the same customer, the same professional, a new time, with the salon's own rules (minimum
+# notice, maximum advance, blocked periods) deciding whether it may.
+#
+# The tempting substitute — cancel it and book again — is not the same operation, and it is not a
+# worse-but-equivalent one. It spends the customer's cancellation allowance, it loses the row the
+# salon had in front of her, and when the second call then fails (the slot went in between, or
+# `check` answers `held`) the customer who wrote asking to KEEP her hour is left with nothing at
+# all. That is the shortcut this rule exists to make expensive: both calls are already in the same
+# step's hands for the other branches, so it is always one sentence away.
+MOVE_COMMAND = "appointments.appointments.reschedule"
+OWNED_APPOINTMENTS_QUERY = "appointments.appointments.list_for_customer"
+MOVE_RULE = {
+    "en": "Moving is one call, never two.",
+    "es": "Mover es una sola llamada, nunca dos.",
+}
+# The order these templates carried while the branch did not exist. It is not dead prose left
+# behind: it is an ORDER, and a model obeys the order over the tool list. A step handed
+# `reschedule` whose prompt still says the automation cannot move keeps answering «somebody will
+# get back to you» with the permission granted, asked of the owner, and spent on nothing — which
+# is exactly what a half-applied fix for this issue looks like from the outside: green tests, and
+# a customer who still cannot move her appointment.
+CANNOT_MOVE = {
+    "en": "this automation cannot do yet",
+    "es": "esta automatización todavía no sabe hacer",
+}
+
+
+def moving_problems(name, doc):
+    """The step that can BOOK an appointment can also MOVE one, and says how — whatsapp_inbox#74.
+
+    Judged on the step that hands `BOOKING_COMMAND`, which is the appointment writer of both
+    families: what a customer can ask this channel for is decided there, in one place, and a
+    channel that books and cancels but cannot move pushes «change it to Thursday» into the one
+    answer it exists to avoid. Silent on every other step and on any future template that does not
+    book appointments at all (table reservations, whatsapp_inbox#60): they owe nothing here.
+
+    Four marks, and each of them is one edit away from being lost:
+
+    * **it can move** — `MOVE_COMMAND` in `tools.commands`. This is the red the issue itself is;
+    * **it can look up WHAT it is moving** — `OWNED_APPOINTMENTS_QUERY` in `tools.queries`. This
+      one is not a nicety and it is not symmetry with cancelling: unlike
+      `appointments.appointments.cancel`, this command carries no `channel` and no `customer_id`
+      (`schemas/appointment_reschedule.json` is `additionalProperties: false` over
+      `appointment_id`, `start_datetime` and `duration_minutes`), so `appointments` CANNOT refuse
+      the move of somebody else's appointment. The only thing standing between a customer and
+      another person's hour is that the id came out of that query, for the customer resolved from
+      her own phone number;
+    * **the prompt says moving never becomes cancel-plus-book**, in the language it is written in,
+      the same way and for the same reason `hour_choice_problems` pins its sentence: a model reads
+      the prompt it was given, so a Spanish document carrying only the English sentence has the
+      rule for nobody who reads it. A language this battery has no wording for is a document it
+      cannot vouch for — the translation is added to `MOVE_RULE` in the same commit, or it does
+      not ship;
+    * **and the old «it cannot» order is gone** — `CANNOT_MOVE`. Adding the tool and leaving the
+      sentence is the half-fix that passes everything else here.
+    """
+    parts = name.split(".")
+    lang = parts[1] if len(parts) >= 3 else ""
+    problems = []
+    for step in doc.get("steps", []):
+        if step.get("kind") != "ai":
+            continue
+        tools = step.get("tools") or {}
+        if BOOKING_COMMAND not in (tools.get("commands") or []):
+            continue
+        sid = step.get("id")
+        if MOVE_COMMAND not in (tools.get("commands") or []):
+            problems.append(
+                f"{name} step `{sid}` can book and cancel an appointment and cannot MOVE one "
+                f"(`{MOVE_COMMAND}` is not in its `tools.commands`): «can you change it to "
+                f"Thursday?» is the most common thing a customer writes and the only one this "
+                f"channel answers with «somebody will get back to you», which is the wait the "
+                f"automation exists to remove"
+            )
+            continue
+        prompt = prompt_of(step)
+        if OWNED_APPOINTMENTS_QUERY not in (tools.get("queries") or []):
+            problems.append(
+                f"{name} step `{sid}` can move an appointment and was never handed "
+                f"`{OWNED_APPOINTMENTS_QUERY}`: `{MOVE_COMMAND}` takes no `channel` and no "
+                f"`customer_id`, so `appointments` cannot refuse a move of somebody else's "
+                f"appointment — that query, filtered by the customer resolved from her own phone "
+                f"number, is the ONLY thing that makes the id honest"
+            )
+        sentence = MOVE_RULE.get(lang)
+        if sentence is None:
+            problems.append(
+                f"{name} step `{sid}` can move an appointment and this battery has no wording of "
+                f"the «one call, never two» rule for language `{lang}`: add the translation to "
+                f"MOVE_RULE in the same commit, or the rule is a promise this document does not "
+                f"make to the model that reads it"
+            )
+        elif sentence not in prompt:
+            problems.append(
+                f"{name} step `{sid}` can move an appointment and its prompt no longer says "
+                f"«{sentence}»: it holds both `{CANCEL_COMMAND}` and `{BOOKING_COMMAND}` for the "
+                f"other branches, so cancelling and re-booking is always available as a shortcut "
+                f"— and it spends the customer's cancellation allowance and leaves her with "
+                f"NOTHING when the second call fails. If the wording changed, change MOVE_RULE "
+                f"with it"
+            )
+        stale = CANNOT_MOVE.get(lang)
+        if stale is not None and stale in prompt:
+            problems.append(
+                f"{name} step `{sid}` was handed `{MOVE_COMMAND}` and its prompt still orders "
+                f"that moving is «{stale}»: the model obeys the sentence, not the tool list, so "
+                f"the branch is dead, the owner was asked for a permission nothing spends, and "
+                f"every other rule here stays green over it"
             )
     return problems
 
@@ -1239,6 +1357,7 @@ DOCUMENT_RULES = (
     enum_value_problems,
     unattended_problems,
     hour_choice_problems,
+    moving_problems,
     only_the_customer_problems,
 )
 
@@ -1259,6 +1378,7 @@ SELF_CHECKED_RULES = (
     enum_value_problems,
     unattended_problems,
     hour_choice_problems,
+    moving_problems,
     only_the_customer_problems,
 )
 
@@ -1376,7 +1496,7 @@ _FIXTURE_READS = {
 }
 
 
-def _ai_step(step_id, policy, commands, prompt="", on_reject=None):
+def _ai_step(step_id, policy, commands, prompt="", on_reject=None, queries=()):
     step = {
         "id": step_id,
         "kind": "ai",
@@ -1384,6 +1504,8 @@ def _ai_step(step_id, policy, commands, prompt="", on_reject=None):
         "prompt": prompt,
         "tools": {"commands": list(commands)},
     }
+    if queries:
+        step["tools"]["queries"] = list(queries)
     if on_reject is not None:
         step["on_reject"] = on_reject
     return step
@@ -1640,6 +1762,147 @@ HOUR_CASES = [
         "translation adds its sentence to HOUR_RULE in the same commit, or it does not ship",
         "appointment-from-whatsapp-unattended.fr.flow.json",
         _fixture_doc(_ai_step("book", "auto", [BOOKING_COMMAND], f"Réserve. {HOUR_RULE['en']}")),
+        1,
+    ),
+]
+
+
+# `(label, file name, document, problems expected)` — same shape as HOUR_CASES, and judged under a
+# file name for the same reason: the language of the document is in its name.
+_MOVE_TOOLS = (BOOKING_COMMAND, CANCEL_COMMAND, MOVE_COMMAND)
+_MOVE_QUERIES = (OWNED_APPOINTMENTS_QUERY,)
+
+MOVE_CASES = [
+    (
+        "the shape whatsapp_inbox#74 ships: the appointment writer can book, cancel AND move, it "
+        "can list what the customer already has, and it says how moving is done",
+        ATTENDED,
+        _fixture_doc(
+            _ai_step(
+                "propose",
+                "manual",
+                _MOVE_TOOLS,
+                f"Book, move or cancel. {MOVE_RULE['en']}",
+                queries=_MOVE_QUERIES,
+            )
+        ),
+        0,
+    ),
+    (
+        "the issue itself: the writer books and cancels and has no way to move, so «can you "
+        "change it to Thursday?» is answered with «somebody will get back to you»",
+        ATTENDED,
+        _fixture_doc(
+            _ai_step(
+                "propose",
+                "manual",
+                (BOOKING_COMMAND, CANCEL_COMMAND),
+                "Book or cancel.",
+                queries=_MOVE_QUERIES,
+            )
+        ),
+        1,
+    ),
+    (
+        "it can move and cannot look up what it is moving: `reschedule` takes no `channel` and no "
+        "`customer_id`, so nothing downstream refuses another person's appointment",
+        ATTENDED,
+        _fixture_doc(
+            _ai_step("propose", "manual", _MOVE_TOOLS, f"Move it. {MOVE_RULE['en']}")
+        ),
+        1,
+    ),
+    (
+        "the sentence reworded away: cancelling and re-booking is still in the same hands, and it "
+        "leaves the customer who asked to KEEP her hour with nothing when the second call fails",
+        ATTENDED,
+        _fixture_doc(
+            _ai_step(
+                "propose",
+                "manual",
+                _MOVE_TOOLS,
+                "Move it however you like.",
+                queries=_MOVE_QUERIES,
+            )
+        ),
+        1,
+    ),
+    (
+        "the Spanish document carries the Spanish wording",
+        "appointment-from-whatsapp.es.flow.json",
+        _fixture_doc(
+            _ai_step(
+                "propose",
+                "manual",
+                _MOVE_TOOLS,
+                f"Muévela. {MOVE_RULE['es']}",
+                queries=_MOVE_QUERIES,
+            )
+        ),
+        0,
+    ),
+    (
+        "a translation that kept the English sentence dropped the rule for the reader it has",
+        "appointment-from-whatsapp.es.flow.json",
+        _fixture_doc(
+            _ai_step(
+                "propose",
+                "manual",
+                _MOVE_TOOLS,
+                f"Muévela. {MOVE_RULE['en']}",
+                queries=_MOVE_QUERIES,
+            )
+        ),
+        1,
+    ),
+    (
+        "the half-fix: the tool is handed over and the old «it cannot» order is still there, so "
+        "the model keeps refusing and the granted permission is spent on nothing",
+        ATTENDED,
+        _fixture_doc(
+            _ai_step(
+                "propose",
+                "manual",
+                _MOVE_TOOLS,
+                f"{MOVE_RULE['en']} Moving is something {CANNOT_MOVE['en']}.",
+                queries=_MOVE_QUERIES,
+            )
+        ),
+        1,
+    ),
+    (
+        "the unattended family owes the same: nobody is watching there either",
+        UNATTENDED,
+        _fixture_doc(
+            _ai_step(
+                "book",
+                "auto",
+                (BOOKING_COMMAND, CANCEL_COMMAND),
+                "Book or cancel.",
+                queries=_MOVE_QUERIES,
+            )
+        ),
+        1,
+    ),
+    (
+        "a step that cannot book owes nothing: the customer-record step writes, but not into the "
+        "diary",
+        ATTENDED,
+        _fixture_doc(_ai_step("know", "manual", ["customers.create"], "Find or create them.")),
+        0,
+    ),
+    (
+        "a language this battery has no wording for is a document it cannot vouch for",
+        "appointment-from-whatsapp.fr.flow.json",
+        _fixture_doc(
+            _ai_step(
+                "propose",
+                "manual",
+                _MOVE_TOOLS,
+                f"Déplace-le. {MOVE_RULE['en']}",
+                queries=_MOVE_QUERIES,
+            )
+        ),
         1,
     ),
 ]
@@ -2328,6 +2591,13 @@ def self_check():
                 f"the battery's own «the model never picks the hour» rule is wrong — {label}: "
                 f"expected {expected} problem(s), got {len(got)}: {got}"
             )
+    for label, name, doc, expected in MOVE_CASES:
+        got = moving_problems(name, doc)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «moving is one call, never two» rule is wrong — {label}: "
+                f"expected {expected} problem(s), got {len(got)}: {got}"
+            )
     for label, doc, expected in SILENCE_CASES:
         got = silence_problems("(self-check)", doc)
         if len(got) != expected:
@@ -2583,6 +2853,11 @@ def main():
         # 3a-bis-iii) …and, in that family, the step that can book still says in so many words that
         # it never picks the hour (whatsapp_inbox#58, reviewer mutant N2). Prose, pinned on purpose.
         problems += applied(ledger, hour_choice_problems, path.name, doc)
+
+        # 3a-bis-iv) …and the appointment writer of BOTH families can move an appointment, looks
+        # up whose it is before it does, and says that moving never becomes cancel-plus-book
+        # (whatsapp_inbox#74).
+        problems += applied(ledger, moving_problems, path.name, doc)
 
         # 3a-ter) …and every tool its prompts ORDER was actually handed over (whatsapp_inbox#61).
         # Needs the manifests: «is this a tool name or is it prose» is a question only they answer.
