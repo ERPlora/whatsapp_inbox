@@ -2077,7 +2077,14 @@ def tappable_option_problems(name, doc):
 
 
 def parking_producer_problems(name, doc, commands_def, read_perms):
-    """The step whose rows a list sends has to be able to FINISH — judged by what its commands DO.
+    """A step that owes DATA has to be able to FINISH — judged by what its commands DO.
+
+    It is asked of every `ai` step that declares `output`, and not only of the one whose rows a
+    list sends. The two are the same dead end seen from two sides: a step that can neither park
+    its write nor run it books nothing, and the list going out with `rows: null` is just the
+    loudest way that shows. `writing_ai_steps` steps aside for exactly these steps — declaring
+    `output` is what takes them out of it — so if this rule looked only at the published ones,
+    nothing at all would judge the rest.
 
     The kernel's refusal is not «a step with `output` and commands»: it is a step that declares
     `output` and PROPOSES A WRITE (`agent_runner.rs`, hub#1639). A proposal ends the turn, so
@@ -2096,7 +2103,11 @@ def parking_producer_problems(name, doc, commands_def, read_perms):
     saying so.
     """
     problems = []
-    by_id = {s.get("id"): s for s in doc.get("steps", [])}
+    # Which step publishes the rows of a list, and under which name — for the sentence, and only
+    # for it. The question below is asked of EVERY step that owes data, whether or not a `notify`
+    # reads it: judging only the published ones left the same dead end unguarded one step away —
+    # a step whose write can neither park nor run, so the booking simply never happens.
+    published = {}
     for step in doc.get("steps", []):
         if step.get("kind") != "notify" or not step.get("interactive"):
             continue
@@ -2106,27 +2117,38 @@ def parking_producer_problems(name, doc, commands_def, read_perms):
             parts = value.split(".")
             if len(parts) != 3 or parts[0] != "steps":
                 continue
-            producer = by_id.get(parts[1])
-            if producer is None or producer.get("kind") != "ai":
-                continue
-            if (producer.get("policy") or "manual") == "auto":
-                continue  # `auto` runs its writes in the turn: there is no proposal to park
-            writes = sorted(
-                cname
-                for cname in ((producer.get("tools") or {}).get("commands") or [])
-                if cname in commands_def
-                and not command_only_answers(commands_def[cname][1], read_perms.get(cname))
-            )
-            if writes:
-                problems.append(
-                    f"{name} step `{parts[1]}` declares `output.{parts[2]}` and can PARK a "
-                    f"proposal: under `policy: {producer.get('policy') or 'manual'}` it may propose "
-                    f"{', '.join(f'`{w}`' for w in writes)}, which WRITES. The kernel refuses a "
-                    f"proposal from a step that owes data, by name, because a proposal ends the "
-                    f"turn and `flow_answer` would never be called — so the rows would leave for "
-                    f"Meta as `null`. The step that finds the slots has to be one that can finish: "
-                    f"reads only, or `policy: auto`"
-                )
+            published.setdefault(parts[1], set()).add(parts[2])
+
+    for step in doc.get("steps", []):
+        if step.get("kind") != "ai" or not step.get("output"):
+            continue
+        if (step.get("policy") or "manual") == "auto":
+            continue  # `auto` runs its writes in the turn: there is no proposal to park
+        writes = sorted(
+            cname
+            for cname in ((step.get("tools") or {}).get("commands") or [])
+            if cname in commands_def
+            and not command_only_answers(commands_def[cname][1], read_perms.get(cname))
+        )
+        if not writes:
+            continue
+        step_id = step.get("id")
+        fields = sorted(published.get(step_id) or step.get("output"))
+        consequence = (
+            "so the rows would leave for Meta as `null`"
+            if step_id in published
+            else "so that write can never happen at all — the model is handed a tool every call "
+            "of which comes back refused, and nobody is told"
+        )
+        problems.append(
+            f"{name} step `{step_id}` declares "
+            f"{', '.join(f'`output.{f}`' for f in fields)} and can PARK a "
+            f"proposal: under `policy: {step.get('policy') or 'manual'}` it may propose "
+            f"{', '.join(f'`{w}`' for w in writes)}, which WRITES. The kernel refuses a "
+            f"proposal from a step that owes data, by name, because a proposal ends the "
+            f"turn and `flow_answer` would never be called — {consequence}. The step that owes "
+            f"the data has to be one that can finish: reads only, or `policy: auto`"
+        )
     return problems
 
 
@@ -4270,6 +4292,24 @@ PARKING_CASES = [
         _tap_doc(policy="auto"),
         0,
     ),
+    (
+        "🔴 the same dead end with NOBODY sending its rows: a `manual` step that owes data "
+        "cannot park its write and cannot run it either, so the booking never happens at all. "
+        "Declaring `output` is exactly what takes it out of `writing_ai_steps`, so no rule above "
+        "looks at it any more and the only thing left is this one (whatsapp_inbox#109)",
+        ATTENDED,
+        _fixture_doc(
+            {
+                "id": "book",
+                "kind": "ai",
+                "policy": "manual",
+                "prompt": "propose `appointments.appointments.create` for her",
+                "tools": {"commands": ["appointments.appointments.create"]},
+                "output": {"picked": {"type": "text", "describe": "what she picked"}},
+            }
+        ),
+        1,
+    ),
 ]
 
 
@@ -4709,8 +4749,9 @@ def main():
         problems += applied(ledger, only_the_customer_problems, path.name, doc)
         problems += applied(ledger, tappable_option_problems, path.name, doc)
 
-        # 3a-viii) …and the step whose rows that list sends can FINISH: a producer that may propose
-        # a WRITE never reaches `flow_answer`, so the rows leave for Meta as `null` (hub#1639).
+        # 3a-viii) …and every step that owes DATA can FINISH: one that may propose a WRITE never
+        # reaches `flow_answer`, so its write neither parks nor runs — and, when a list sends its
+        # rows, they leave for Meta as `null` (hub#1639).
         # Manifest-aware — telling a read from a write needs the module that declares it.
         if commands_def is not None:
             problems += applied(
