@@ -51,6 +51,10 @@
     {
       "kind": "command",
       "value": "appointments.appointments.cancel"
+    },
+    {
+      "kind": "command",
+      "value": "appointments.appointments.reschedule"
     }
   ]
 }

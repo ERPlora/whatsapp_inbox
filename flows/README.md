@@ -52,7 +52,9 @@ más deja de ser una traducción.
 
 ## `appointment-from-whatsapp-unattended` — la misma automatización, sin nadie delante
 
-Mismos cuatro steps, mismas tools, mismos grants. Cambian **dos cosas**: los dos steps `ai` llevan
+Mismos cuatro steps y casi las mismas tools —**menos una**: esta familia NO puede mover una cita
+(13 grants contra los 14 de la atendida; el porqué, abajo)—. Cambian **dos cosas** más: los dos
+steps `ai` llevan
 `policy: "auto"`, así que lo que el modelo llama **ocurre en el turno** (ADR-0283 D3, por la puerta
 de `Origin::Automation`); y los prompts están escritos para eso — no dicen «lo revisa una persona»,
 porque no la hay.
@@ -120,10 +122,11 @@ síntoma es una cita que nunca aparece.
 siguiente, y hoy no hay dónde: solo se persisten los mensajes **entrantes**
 (`events.listen` → `_ingest_inbound_message`), un paso `query` deja en el run los campos de la
 **primera** fila (`result: "first"`; `rows` no existe en v1) y el pipeline de `requests` está
-desconectado. Por eso el prompt pide la hora en palabras. Sale como issue aparte, y es la misma
-capacidad que le falta a whatsapp_inbox#74 para mover una cita.
+desconectado. Por eso el prompt pide la hora en palabras. Sale aparte, en whatsapp_inbox#76.
+Mover una cita **ya no depende de eso**: se mueve la que la clienta ya tiene, no una que elija de
+una lista.
 
-### Por qué reservar y anular caben en el MISMO paso
+### Por qué reservar y anular caben en el MISMO paso — y mover, solo con alguien delante
 
 «Cancela mi cita» era la mitad de los mensajes que recibe un salón y la automatización solo sabía
 reservar: contestaba proponiendo OTRA cita (whatsapp_inbox#61). Lo arregla el mismo paso, no uno
@@ -137,8 +140,9 @@ nuevo, y la razón es que las alternativas no salen:
 - **Un paso de intención aparte** cuesta un turno de IA más por cada mensaje que entra.
 
 El modelo ya está leyendo el mensaje: distinguir «quiero hora» de «no puedo ir» es exactamente lo
-que sabe hacer, y hacerlo ahí cuesta **cero** turnos extra. Las dos ramas se excluyen, así que el
-presupuesto de `max_iters` no se toca: reservar gasta hasta 9 llamadas y anular gasta 3.
+que sabe hacer, y hacerlo ahí cuesta **cero** turnos extra. Las ramas se excluyen entre sí, así que
+el presupuesto de `max_iters` no se toca: reservar gasta hasta 9 llamadas, mover gasta 6 (solo en
+la familia atendida) y anular gasta 3.
 
 **Anular respeta las reglas del salón sin re-derivarlas.** La propuesta lleva `channel: "customer"`,
 y eso hace que `appointments` aplique sus propios `allow_customer_cancellation` y
@@ -146,8 +150,33 @@ y eso hace que `appointments` aplique sus propios `allow_customer_cancellation` 
 1.1.32). El prompt tiene prohibido calcular la antelación por su cuenta: es la misma regla que con el
 horario —quien contesta con autoridad es el módulo dueño del dato, no el modelo—.
 
-⚠️ **Mover una cita a otro día NO está** (whatsapp_inbox#74): pide ofrecer huecos y que la clienta
-elija uno de una lista numerada, y eso hoy no se puede escribir en un documento de flujo.
+**Mover cabe en el mismo paso porque es UNA sola llamada** (whatsapp_inbox#74). El salón ya tenía
+`appointments.appointments.reschedule`, que lleva la cita a otra hora conservando clienta,
+profesional y duración, y aplica las reglas propias del negocio al ejecutarse. Anular y volver a
+reservar NO es lo mismo: gasta la anulación que el salón le permite a la clienta, suelta el hueco
+que tenía delante y, si la segunda mitad falla —el hueco voló, o `availability.check` contesta
+`held`—, quien escribió para CONSERVAR su hora se queda sin nada. Por eso el prompt lo prohíbe
+explícitamente.
+
+El `appointment_id` sale SIEMPRE de `appointments.appointments.list_for_customer` sobre la clienta
+que se resolvió por su teléfono. No es una preferencia de estilo: a diferencia de anular, el command
+de mover **no lleva `channel` ni `customer_id`** (`additionalProperties: false` sobre
+`{appointment_id, start_datetime, duration_minutes?}`, appointments 1.1.72), así que Citas no puede
+saber de quién es la cita que le pasan — un id adivinado movería la hora de otra persona y no hay
+nada más abajo que lo pare.
+
+🔴 **Y por eso mover vive SOLO en la familia atendida.** Anular sí se puede acotar: con
+`channel: "customer"` el handler compara el `customer_id` que se le pasa con el de la cita y
+rechaza la ajena, y por eso whatsapp_inbox#100 puede clavar ese campo en el propio grant cuando
+llegue hub#1632. Mover **no tiene campo que clavar**, y su handler no mira de quién es la cita: la
+cadena `customers.list` (busca por nombre) → `list_for_customer` (acepta cualquier `customer_id`) →
+`reschedule` cabe entera dentro de los grants de la plantilla, y lo único que se interpone es el
+párrafo del prompt — que es justo lo que hub#1623 dice que **no** es un control. Con `policy:
+"manual"` hay una persona que ve la propuesta antes de que ocurra; con `policy: "auto"` no hay
+nadie. Así que la desatendida contesta «alguien del salón te responde» y se queda en 13 grants.
+El arreglo de verdad es **appointments#142** (dar a `reschedule` su `channel` + `customer_id`, el
+gemelo de appointments#140) y, solo después, **whatsapp_inbox#103** reabre el caso desatendido —
+en ese orden, nunca al revés.
 
 ### Por qué la confirmación va DESPUÉS del paso que propone
 
@@ -166,8 +195,15 @@ primer mensaje: el salón veía la cita en su agenda y la clienta seguía espera
 `notify` **detrás**, es un FAIL. El acuse de recibo de arriba no cuenta — se manda antes de que pase
 nada, así que no puede contar lo que pasó.
 
-⚠️ **Lo que todavía NO cubre:** si el salón **rechaza** la propuesta, el run se cancela
-(`RejectPolicy::Cancel`, el defecto del kernel) y la clienta no recibe nada. Sale como issue aparte.
+El **rechazo** ya está cubierto desde whatsapp_inbox#67: el paso lleva `on_reject: "continue"`, así
+que el run no muere en la tarjeta rechazada y el paso `reply_to_customer` de detrás le escribe a la
+clienta lo que de verdad pasó, en vez de mandarle un texto que habla de una cita que no tiene.
+
+⚠️ **Lo que todavía NO cubre:** las otras dos salidas de la bandeja —que la propuesta **caduque**
+sin que nadie la decida, y que **falle al ejecutarse** después de aprobada—. En ambas el run muere
+donde estaba y la clienta se queda esperando (whatsapp_inbox#70). No se arregla desde el documento:
+el kernel no tiene todavía dónde engancharlo, y esas dos mitades son **hub#1634** (avisar cuando una
+aprobación caduca) y **hub#1635** (avisar cuando un paso falla).
 
 ### Por qué preguntar y proponer caben en UN paso
 
