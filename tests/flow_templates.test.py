@@ -831,13 +831,20 @@ IDENTITY_BOUND_PAYLOAD = {
 
 
 def identified_cancellation_problems(name, doc):
-    """A prompt that orders the customer channel and never orders WHO the customer is.
+    """An INSTRUCTION that orders the customer channel and never orders WHO the customer is.
 
     Reached through `ORDERED_VALUE`, the same three phrasings `enum_value_problems` reads, so the
-    two rules see the same orders: the one judges the value, this one judges what has to come WITH
+    two rules see the same orders: that one judges the value, this one judges what has to come WITH
     it. The companion only has to be NAMED in backticks — like `unordered_tool_problems`, this does
-    not judge what the prompt says about it, only that it says something, because the sentence that
-    orders it is prose and prose is not this battery's business.
+    not judge what the prompt SAYS about it, only that it says something, because the sentence is
+    prose and prose is not this battery's business.
+
+    🔴 Judged line by line, and that is the whole rule rather than a detail. Asking for the
+    companion anywhere in the prompt was the first version, and its own mutant survived: these
+    prompts explain underneath WHY the id travels with the channel, so stripping the field from the
+    numbered instruction that orders the call left the explanation behind and the battery green
+    over a template that no longer sends it. The order and its fields are one instruction; a
+    paragraph about them further down is not the order.
     """
     problems = []
     for step in doc.get("steps", []):
@@ -845,17 +852,21 @@ def identified_cancellation_problems(name, doc):
         if not prompt:
             continue
         handed = ((step.get("tools") or {}).get("commands")) or []
-        ordered = set(ORDERED_VALUE.findall(prompt))
-        for cname in handed:
-            for (field, value), companion in sorted((IDENTITY_BOUND_PAYLOAD.get(cname) or {}).items()):
-                if (field, value) not in ordered or f"`{companion}`" in prompt:
-                    continue
-                problems.append(
-                    f"{name} step `{step.get('id')}` orders `{field}` = `{value}` for `{cname}` "
-                    f"and never names `{companion}`: that pair is what makes the command demand "
-                    f"who is asking, so the call is refused as `invalid_payload` after the salon "
-                    f"has already approved it, and the customer hears nothing"
-                )
+        for line in prompt.split("\n"):
+            ordered = set(ORDERED_VALUE.findall(line))
+            if not ordered:
+                continue
+            for cname in handed:
+                for (field, value), companion in sorted((IDENTITY_BOUND_PAYLOAD.get(cname) or {}).items()):
+                    if (field, value) not in ordered or f"`{companion}`" in line:
+                        continue
+                    problems.append(
+                        f"{name} step `{step.get('id')}` orders `{field}` = `{value}` for "
+                        f"`{cname}` in an instruction that never names `{companion}`: that pair is "
+                        f"what makes the command demand who is asking, so the call is refused as "
+                        f"`invalid_payload` after the salon has already approved it, and the "
+                        f"customer hears nothing"
+                    )
     return problems
 
 
@@ -2163,6 +2174,16 @@ IDENTITY_CASES = [
         _enum_step(
             "Anulala con `appointments.appointments.cancel`: ese `appointment_id`, un `reason`, y "
             "`channel` puesto a `customer`."
+        ),
+        1,
+    ),
+    (
+        "the mutant that survived the first version: the order loses the field and the paragraph "
+        "underneath still explains it",
+        _enum_step(
+            "Cancel it with `appointments.appointments.cancel`: that `appointment_id`, a `reason`, "
+            "and `channel` set to `customer`.\n\nAnd that is why the `customer_id` goes with it: "
+            "Citas refuses a cancellation that does not say who is asking."
         ),
         1,
     ),
