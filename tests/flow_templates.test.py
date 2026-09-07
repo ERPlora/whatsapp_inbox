@@ -396,16 +396,26 @@ def command_only_answers(cdef, read_permissions):
     return permission in (read_permissions or set())
 
 
-def quoted_steps(doc):
+def quoted_steps(doc, worked_from=False):
     """Step ids that some OTHER step interpolates (`{{steps.<id>.…}}`) — who feeds whom.
 
     Read the way the hub reads it (`flows::def::render_template`): every `{{ … }}` pair, the path
     TRIMMED before it is resolved. So `{{ steps.look.text }}` names `look` exactly as
     `{{steps.look.text}}` does — a guard that only knew the unspaced spelling let the two-step
     workaround back in with one space.
+
+    `worked_from=True` asks the narrower question the two-step rule needs: who quotes it **to work
+    from it**. A `notify` quoting a step is the DELIVERY — the words going to the customer, which
+    is what the step that wrote them is for — and counting it made the rule refuse the only shape
+    the attended family has for offering slots (whatsapp_inbox#109): there the step that books can
+    never declare `output`, so the step that writes the message is the one that looks them up, and
+    a `notify` sends its words. Every other kind still counts: a `command` or an `ai` step reading
+    another step's PROSE is exactly the handoff where the ids and the minutes get lost.
     """
     out = set()
     for step in doc.get("steps", []):
+        if worked_from and step.get("kind") == "notify":
+            continue
         for path in quoted_paths(step):
             quoted = path[len("steps.") :].split(".")[0].strip()
             if quoted and quoted != step.get("id"):
@@ -475,7 +485,7 @@ def policy_problems(name, doc, commands_def, read_perms):
     where the ids, the offsets and the minutes get lost.
     """
     problems = []
-    quoted = quoted_steps(doc)
+    quoted = quoted_steps(doc, worked_from=True)
     for step_id, policy, names in ai_steps(doc):
         verdicts = []
         for cname in names:
@@ -505,10 +515,24 @@ def policy_problems(name, doc, commands_def, read_perms):
 
 
 def writing_ai_steps(doc):
-    """Indexes of the `ai` steps that can PROPOSE a write — the ones a customer waits on."""
+    """Indexes of the `ai` steps that can PROPOSE a write — the ones a customer waits on.
+
+    A step that declares `output` under anything but `auto` is NOT one of them, and that is the
+    kernel's own arithmetic rather than a convention of this file: a proposal ends the turn, so a
+    step that owes data could never fill it, and `agent_runner.rs` refuses the proposal by name
+    before the approval row exists (hub#1639). Nothing parks, so nobody can say «no» to it, so the
+    rules built on this list — survive a rejection, be followed by a `notify` that carries the
+    words, run `auto` where nobody is watching — have nothing to ask of it.
+
+    Which is what lets the attended family offer slots at all (whatsapp_inbox#109): the step that
+    writes the message holds the reads and hands the rows over, `manual` and unrejectable, while
+    the step that PROPOSES the appointment stays the one this list is about.
+    """
     out = []
     for i, step in enumerate(doc.get("steps", [])):
         if step.get("kind") != "ai":
+            continue
+        if step.get("output") and (step.get("policy") or "manual") != "auto":
             continue
         if ((step.get("tools") or {}).get("commands")) or []:
             out.append(i)
@@ -769,6 +793,20 @@ def budget_problems(name, doc):
                 f"{name} step `{step.get('id')}` asks for `max_iters` {n!r}: the hub accepts 1 to "
                 f"{MAX_ITERS_CAP} (`def.rs::MAX_ITERS_CAP`) and refuses the whole document past "
                 f"that — split the step, do not raise the number"
+            )
+    for step in doc.get("steps", []):
+        if step.get("kind") != "ai":
+            continue
+        tools = step.get("tools") or {}
+        handed = (tools.get("commands") or []) + (tools.get("queries") or [])
+        if handed and step.get("max_iters") == 1:
+            problems.append(
+                f"{name} step `{step.get('id')}` is handed {len(handed)} tool(s) and one single "
+                f"turn: `max_iters` counts MODEL CALLS (`agent_runner.rs`, `for _ in "
+                f"0..max_iters`), so the call spends the only turn there was and the step dies "
+                f"with `flow.agent_max_iters` — the customer is not answered at all, by anybody. "
+                f"Two is the floor that works (ask, then answer) and a step that reads twice "
+                f"before writing needs three"
             )
     return problems
 
@@ -1953,16 +1991,6 @@ def tappable_option_problems(name, doc):
                     f"not look again, and the send leaves with `rows: null`"
                 )
                 continue
-            if (producer.get("policy") or "manual") != "auto" and (
-                (producer.get("tools") or {}).get("commands") or []
-            ):
-                problems.append(
-                    f"{name} step `{source}` declares `output.{field}` and can PARK a proposal "
-                    f"(`policy: {producer.get('policy') or 'manual'}` with commands): the kernel "
-                    f"refuses a proposal from a step that owes data, by name, because a proposal "
-                    f"ends the turn and `flow_answer` would never be called. The step that finds "
-                    f"the slots has to be one that can finish — reads only, or `policy: auto`"
-                )
             sentence = TAP_WORDS.get(lang)
             if sentence is None:
                 problems.append(
@@ -1997,19 +2025,19 @@ def tappable_option_problems(name, doc):
         if s.get("kind") == "ai"
         and any(b in ((s.get("tools") or {}).get("commands") or []) for b in TAPPABLE_BOOKINGS)
     ]
-    # …and the family that books with nobody watching HAS to offer them, because it is the one
-    # whose customer chooses the hour herself. Its attended sibling is deliberately out: there the
-    # step that finds the slots is the same one that PROPOSES the appointment, and the kernel
-    # refuses a proposal from a step that owes data — a proposal ends the turn, so `flow_answer`
-    # would never be called and the booking would become impossible. The step that could publish
-    # them (`reply_to_customer`) only ever sees the proposal's PROSE, which carries no ids by
-    # design, so it cannot name a slot. Reopening that needs a step this template does not have:
-    # whatsapp_inbox#109.
-    if booking_steps and not offers and is_unattended(name):
+    # …and a recipe that BOOKS has to offer them, in either family. The attended one was out of
+    # this rule until whatsapp_inbox#109, and the reason was real but narrower than it looked: the
+    # step that proposes the appointment can never declare `output` (the kernel refuses a proposal
+    # from a step that owes data, so the booking would become impossible), and the step that could
+    # publish them saw only the proposal's PROSE, which carries no ids by design. What that argues
+    # is WHICH step publishes them — the one that writes the message, holding the reads itself —
+    # not that the customer who is being reviewed deserves the worse experience. She was the one
+    # left typing «corte, mañana a las 10:30» at the salon that chose to be careful.
+    if booking_steps and not offers:
         problems.append(
-            f"{name} books with {', '.join(TAPPABLE_BOOKINGS)} unattended and never offers the "
-            f"customer anything to TAP: the free slots go out as prose and she has to type «corte, "
-            f"mañana a las 10:30» back, which is where the bookings are lost (whatsapp_inbox#101)"
+            f"{name} books with {', '.join(TAPPABLE_BOOKINGS)} and never offers the customer "
+            f"anything to TAP: the free slots go out as prose and she has to type «corte, mañana a "
+            f"las 10:30» back, which is where the bookings are lost (whatsapp_inbox#101/#109)"
         )
 
     if offers:
@@ -2048,6 +2076,82 @@ def tappable_option_problems(name, doc):
     return problems
 
 
+def parking_producer_problems(name, doc, commands_def, read_perms):
+    """A step that owes DATA has to be able to FINISH — judged by what its commands DO.
+
+    It is asked of every `ai` step that declares `output`, and not only of the one whose rows a
+    list sends. The two are the same dead end seen from two sides: a step that can neither park
+    its write nor run it books nothing, and the list going out with `rows: null` is just the
+    loudest way that shows. `writing_ai_steps` steps aside for exactly these steps — declaring
+    `output` is what takes them out of it — so if this rule looked only at the published ones,
+    nothing at all would judge the rest.
+
+    The kernel's refusal is not «a step with `output` and commands»: it is a step that declares
+    `output` and PROPOSES A WRITE (`agent_runner.rs`, hub#1639). A proposal ends the turn, so
+    `flow_answer` is never called and the declared fields never arrive — approving it hours later
+    publishes `{text, tool_calls}` and the names simply ABSENT, `rows` leaves for Meta as `null`.
+
+    So the question is per COMMAND, not per step, and it is the same one hub#1595 answered for the
+    approval tray: a command that only ANSWERS runs in the turn whatever the policy says and can
+    never park. Reading it as «has commands» is stricter than the kernel by exactly the shape the
+    attended family needs (whatsapp_inbox#109): there the step that books can never publish the
+    slots, so the step that WRITES THE MESSAGE looks them up — `manual`, and with nothing but reads
+    in its hands, it always reaches `flow_answer`.
+
+    Manifest-aware, so it lives in the layer that skips OUT LOUD with no modules next door: without
+    them nothing here can tell a read from a write, and guessing in either direction is worse than
+    saying so.
+    """
+    problems = []
+    # Which step publishes the rows of a list, and under which name — for the sentence, and only
+    # for it. The question below is asked of EVERY step that owes data, whether or not a `notify`
+    # reads it: judging only the published ones left the same dead end unguarded one step away —
+    # a step whose write can neither park nor run, so the booking simply never happens.
+    published = {}
+    for step in doc.get("steps", []):
+        if step.get("kind") != "notify" or not step.get("interactive"):
+            continue
+        for _, value in option_slots(step.get("interactive")):
+            if not isinstance(value, str) or not _is_path(value):
+                continue
+            parts = value.split(".")
+            if len(parts) != 3 or parts[0] != "steps":
+                continue
+            published.setdefault(parts[1], set()).add(parts[2])
+
+    for step in doc.get("steps", []):
+        if step.get("kind") != "ai" or not step.get("output"):
+            continue
+        if (step.get("policy") or "manual") == "auto":
+            continue  # `auto` runs its writes in the turn: there is no proposal to park
+        writes = sorted(
+            cname
+            for cname in ((step.get("tools") or {}).get("commands") or [])
+            if cname in commands_def
+            and not command_only_answers(commands_def[cname][1], read_perms.get(cname))
+        )
+        if not writes:
+            continue
+        step_id = step.get("id")
+        fields = sorted(published.get(step_id) or step.get("output"))
+        consequence = (
+            "so the rows would leave for Meta as `null`"
+            if step_id in published
+            else "so that write can never happen at all — the model is handed a tool every call "
+            "of which comes back refused, and nobody is told"
+        )
+        problems.append(
+            f"{name} step `{step_id}` declares "
+            f"{', '.join(f'`output.{f}`' for f in fields)} and can PARK a "
+            f"proposal: under `policy: {step.get('policy') or 'manual'}` it may propose "
+            f"{', '.join(f'`{w}`' for w in writes)}, which WRITES. The kernel refuses a "
+            f"proposal from a step that owes data, by name, because a proposal ends the "
+            f"turn and `flow_answer` would never be called — {consequence}. The step that owes "
+            f"the data has to be one that can finish: reads only, or `policy: auto`"
+        )
+    return problems
+
+
 DOCUMENT_RULES = (
     policy_problems,
     identified_cancellation_problems,
@@ -2066,6 +2170,7 @@ DOCUMENT_RULES = (
     own_customer_only_problems,
     only_the_customer_problems,
     tappable_option_problems,
+    parking_producer_problems,
 )
 
 # …and the registry itself is guarded, because it is the next place the same hole moves to. The
@@ -2091,6 +2196,7 @@ SELF_CHECKED_RULES = (
     own_customer_only_problems,
     only_the_customer_problems,
     tappable_option_problems,
+    parking_producer_problems,
 )
 
 
@@ -2121,6 +2227,67 @@ def addressed_queries(doc):
     return out
 
 
+# The prose that lives INSIDE `interactive` and `output`: the two keys that are words AND
+# machinery at once, so a translation may change part of them and no more (module-toolkit#209).
+# The list is the toolkit's, on purpose. The same document is judged by both doors, and a battery
+# that allowed what `erplora validate` refuses would only teach the author to ignore one of them.
+# `*` is any key (the field names of `output` are the author's), `[]` any item of a LIST, and of a
+# list only, so `rows` given as a mapping path stays the machinery it is.
+PROSE_INSIDE = (
+    "interactive.header.text",
+    "interactive.body.text",
+    "interactive.footer.text",
+    "interactive.action.button",
+    "interactive.action.sections[].title",
+    "interactive.action.sections[].rows[].title",
+    "interactive.action.sections[].rows[].description",
+    "interactive.action.buttons[].reply.title",
+    "output.*.describe",
+)
+
+# What a masked leaf reads as. A string no document carries and, being a string, it cannot be
+# confused with a missing key: an absent `body.text` is not the same shape as a translated one.
+PROSE = " prose"
+
+
+def without_prose(value, paths):
+    """`value` with the words the `paths` name masked out, so two languages that differ only in
+    words compare equal. A path that does not fit what it lands on masks NOTHING: the value goes
+    through untouched and is compared as machinery."""
+    if any(not p for p in paths):
+        return PROSE
+    if isinstance(value, list):
+        inside = [p[1:] for p in paths if p and p[0] == "[]"]
+        return [without_prose(v, inside) for v in value] if inside else value
+    if not isinstance(value, dict):
+        return value
+    out = {}
+    for key, inner in value.items():
+        inside = [p[1:] for p in paths if p and p[0] in (key, "*")]
+        out[key] = without_prose(inner, inside) if inside else inner
+    return out
+
+
+def segments(path):
+    """The path without its root key, with every `[]` as a step of its own."""
+    out = []
+    for part in path.split("."):
+        if part.endswith("[]"):
+            out.extend([part[:-2], "[]"])
+        else:
+            out.append(part)
+    return out[1:]
+
+
+def machinery_of(step, key):
+    """What a translation must not change inside a MIXED key: everything except its prose."""
+    if key not in step:
+        return None
+    return without_prose(
+        step[key], [segments(p) for p in PROSE_INSIDE if p.split(".")[0] == key]
+    )
+
+
 def structural_shape(doc):
     """Everything about a document EXCEPT the human text — what a translation must not change."""
     return {
@@ -2146,10 +2313,99 @@ def structural_shape(doc):
                 "command": s.get("command"),
                 "when": s.get("when"),
                 "seconds": s.get("seconds"),
+                # The two keys that carry words AND machinery (hub#1633/#1639), compared with the
+                # words masked out: the Spanish list may say «Toca el hueco que te venga bien.»
+                # while its `type`, its `rows` and the ids that come back stay identical. Left out
+                # of this dict, a translation could point its rows at another step or declare
+                # `slots` as `text`, and only the toolkit gate would ever notice (#109).
+                "interactive": machinery_of(s, "interactive"),
+                "output": machinery_of(s, "output"),
             }
             for s in doc.get("steps", [])
         ],
     }
+
+
+def _offer(body="Tap one", button="See slots", section="Free slots", rows="steps.reply.slots",
+           footer=None, kind="list"):
+    """A `notify` that offers rows, with one screw loosened at a time."""
+    interactive = {
+        "type": kind,
+        "body": {"text": body},
+        "action": {"button": button, "sections": [{"title": section, "rows": rows}]},
+    }
+    if footer:
+        interactive["footer"] = {"text": footer}
+    return {"id": "offer", "kind": "notify", "channel": "whatsapp", "interactive": interactive}
+
+
+def _publisher(describe="the free slots", field="slots", type_="options"):
+    return {
+        "id": "reply",
+        "kind": "ai",
+        "prompt": "write to her",
+        "output": {field: {"type": type_, "describe": describe}},
+    }
+
+
+# `(label, English step, translated step, they are the SAME automation)`. The prose may differ and
+# nothing else — the half of the parity check that reads the two MIXED keys (whatsapp_inbox#109).
+SHAPE_CASES = [
+    (
+        "the words she reads are translated and it is the same automation",
+        _offer(),
+        _offer(body="Toca el que te venga bien", button="Ver huecos", section="Huecos libres"),
+        True,
+    ),
+    (
+        "…and so is what the MODEL reads about the field it publishes",
+        _publisher(),
+        _publisher(describe="los huecos libres"),
+        True,
+    ),
+    (
+        "🔴 the rows come from another step: the Spanish list would leave for Meta as `null`",
+        _offer(),
+        _offer(rows="steps.other.slots"),
+        False,
+    ),
+    (
+        "🔴 one of them is a button message and the other a list: two different messages",
+        _offer(),
+        _offer(kind="button"),
+        False,
+    ),
+    (
+        "🔴 a footer only one of them carries is a line only one customer reads",
+        _offer(),
+        _offer(footer="Te esperamos"),
+        False,
+    ),
+    (
+        "🔴 the field is declared as `text` in one and `options` in the other",
+        _publisher(),
+        _publisher(type_="text"),
+        False,
+    ),
+    (
+        "🔴 …or under another NAME, which later steps read by",
+        _publisher(),
+        _publisher(field="huecos"),
+        False,
+    ),
+    (
+        "a row written out in full may have its words translated, never its id",
+        _offer(rows=[{"id": "2026-09-08T10:30|staff:12", "title": "Tuesday 10:30"}]),
+        _offer(rows=[{"id": "2026-09-08T10:30|staff:12", "title": "Martes 10:30"}]),
+        True,
+    ),
+    (
+        "🔴 …and that id is what comes back when she taps: another one books another hour",
+        _offer(rows=[{"id": "2026-09-08T10:30|staff:12", "title": "Tuesday 10:30"}]),
+        _offer(rows=[{"id": "2026-09-08T12:00|staff:12", "title": "Martes 10:30"}]),
+        False,
+    ),
+]
 
 
 # ── layer 0: the battery checks its OWN rules before it judges anybody's file ─────────────────
@@ -2207,7 +2463,7 @@ _FIXTURE_READS = {
 }
 
 
-def _ai_step(step_id, policy, commands, prompt="", on_reject=None, queries=()):
+def _ai_step(step_id, policy, commands, prompt="", on_reject=None, queries=(), max_iters=None):
     step = {
         "id": step_id,
         "kind": "ai",
@@ -2219,6 +2475,8 @@ def _ai_step(step_id, policy, commands, prompt="", on_reject=None, queries=()):
         step["tools"]["queries"] = list(queries)
     if on_reject is not None:
         step["on_reject"] = on_reject
+    if max_iters is not None:
+        step["max_iters"] = max_iters
     return step
 
 
@@ -2259,6 +2517,11 @@ def _fixture_doc(*steps):
 ATTENDED = "appointment-from-whatsapp.en.flow.json"
 UNATTENDED = "appointment-from-whatsapp-unattended.en.flow.json"
 
+def _sends(step_id, text):
+    """A `notify` that SENDS what an earlier step wrote — the delivery, not a handoff of findings."""
+    return {"id": step_id, "kind": "notify", "channel": "whatsapp", "template": "", "vars": {"text": text}}
+
+
 POLICY_CASES = [
     (
         "a read inside a `manual` step is what hub#1595 made legal",
@@ -2298,6 +2561,29 @@ POLICY_CASES = [
         ATTENDED,
         _fixture_doc(_ai_step("s", "auto", ["appointments.availability.slots"])),
         0,
+    ),
+    (
+        "the step that WRITES the message, whose words a `notify` SENDS, is not the split: nobody "
+        "reads its prose to work from it — it goes to the customer, which is what that step is "
+        "for. It is also the only step of the attended family that can look the slots up and "
+        "publish them, because the one that books can never declare `output` (whatsapp_inbox#109)",
+        ATTENDED,
+        _fixture_doc(
+            _ai_step("reply", "manual", ["appointments.availability.slots"]),
+            _sends("send", "{{steps.reply.text}}"),
+        ),
+        0,
+    ),
+    (
+        "…and the split is still the split when the reader feeds a step that ACTS, even if a "
+        "notify quotes it too: one reader, two mouths, and the ids still travel as words",
+        ATTENDED,
+        _fixture_doc(
+            _ai_step("look", "auto", ["appointments.availability.slots"]),
+            _ai_step("act", "manual", ["appointments.appointments.create"], "{{steps.look.text}}"),
+            _sends("send", "{{steps.look.text}}"),
+        ),
+        1,
     ),
     (
         "a step that only asks, feeding a step that acts, is the split whatsapp_inbox#55 removed",
@@ -3332,6 +3618,27 @@ SILENCE_CASES = [
 # `(label, document, problems expected)` — the mutants of «a «no» reaches the customer too».
 REFUSAL_CASES = [
     (
+        "a step that declares `output` under `manual` can never BE rejected: the kernel refuses "
+        "its proposals by name (a proposal ends the turn and the fields would never arrive), so "
+        "it owes no `on_reject` and it is not the writer this rule is about. It is the shape the "
+        "attended family uses to hand over the slots she taps (whatsapp_inbox#109)",
+        _fixture_doc(
+            _ai_step(
+                "book", "manual", ["appointments.appointments.create"], on_reject="continue"
+            ),
+            {
+                "id": "reply",
+                "kind": "ai",
+                "policy": "manual",
+                "prompt": "{{steps.book.text}} {{steps.book.status}}",
+                "tools": {"commands": ["appointments.availability.slots"]},
+                "output": {"slots": {"type": "options", "describe": "what she may tap"}},
+            },
+            _notify_step("tell", "{{steps.reply.text}}"),
+        ),
+        0,
+    ),
+    (
         "the shape whatsapp_inbox#67 ships: the booking step survives a «no» and the step that "
         "writes the reply knows how the turn ended",
         _fixture_doc(
@@ -3540,6 +3847,22 @@ BUDGET_CASES = [
     ("one past the cap is a document no hub saves", _fixture_doc(_budget_step(MAX_ITERS_CAP + 1)), 1),
     ("zero turns is not a step", _fixture_doc(_budget_step(0)), 1),
     ("a step that leaves it unset takes the hub's default", _fixture_doc(_ai_step("s", "manual", [])), 0),
+    (
+        "🔴 one turn and a tool in its hands: the call spends the only turn it has, the step dies "
+        "with `flow.agent_max_iters` and she is answered by nobody",
+        _fixture_doc(_ai_step("s", "manual", ["appointments.availability.slots"], max_iters=1)),
+        1,
+    ),
+    (
+        "two turns is the floor that works: one to ask, one to answer",
+        _fixture_doc(_ai_step("s", "manual", ["appointments.availability.slots"], max_iters=2)),
+        0,
+    ),
+    (
+        "…and a step with no tools at all is fine with one: there is nothing to call",
+        _fixture_doc(_ai_step("s", "manual", [], max_iters=1)),
+        0,
+    ),
 ]
 
 _FIXTURE_ENUMS = {"appointments.appointments.cancel": {"channel": ["staff", "customer"]}}
@@ -3857,19 +4180,6 @@ TAPPABLE_CASES = [
         1,
     ),
     (
-        "🔴 the producer can PARK a proposal: the kernel refuses it, so `flow_answer` is never "
-        "called and the fields never arrive",
-        ATTENDED,
-        _tap_doc(policy="manual"),
-        1,
-    ),
-    (
-        "a `manual` producer that only READS can still finish, so it is allowed",
-        ATTENDED,
-        _tap_doc(policy="manual", commands=()),
-        0,
-    ),
-    (
         "🔴 nothing refuses the empty list: the turn booked, `slots` is `[]`, and the send fails "
         "after she was already answered",
         ATTENDED,
@@ -3916,9 +4226,10 @@ TAPPABLE_CASES = [
         1,
     ),
     (
-        "its attended sibling books too and is deliberately out of this rule: there the step that "
-        "finds the slots is the one that proposes, and a proposal ends the turn "
-        "(whatsapp_inbox#109)",
+        "🔴 the ATTENDED family books too and owes her the same list: the salon that chose to "
+        "review before confirming used to get the WORSE experience, which is backwards "
+        "(whatsapp_inbox#109). Its slots come from the step that writes the message, never from "
+        "the one that proposes — that one can never declare `output`",
         ATTENDED,
         {
             "schema_version": 1,
@@ -3941,13 +4252,63 @@ TAPPABLE_CASES = [
                 _notify_step(),
             ],
         },
-        0,
+        1,
     ),
     (
         "a family that offers nothing and books nothing is not this rule's business",
         ATTENDED,
         _wa_doc(LIVE_INBOUND),
         0,
+    ),
+]
+
+
+# `(label, file name, document, problems expected)` — the producer of the rows, judged by what its
+# commands DO. The row above it in `TAPPABLE_CASES` proves the wiring; these prove the FINISHING.
+PARKING_CASES = [
+    (
+        "🔴 the producer may propose a WRITE: the kernel refuses it, `flow_answer` is never called "
+        "and the rows leave for Meta as `null`",
+        ATTENDED,
+        _tap_doc(policy="manual"),
+        1,
+    ),
+    (
+        "a `manual` producer whose commands only ANSWER can always finish (hub#1595), which is the "
+        "only shape the attended family has: the step that books can never publish the slots",
+        ATTENDED,
+        _tap_doc(policy="manual", commands=("appointments.availability.slots",)),
+        0,
+    ),
+    (
+        "a `manual` producer with no commands at all has nothing to park either",
+        ATTENDED,
+        _tap_doc(policy="manual", commands=()),
+        0,
+    ),
+    (
+        "…and `auto` never parks, whatever it declares: it runs the write in the turn",
+        ATTENDED,
+        _tap_doc(policy="auto"),
+        0,
+    ),
+    (
+        "🔴 the same dead end with NOBODY sending its rows: a `manual` step that owes data "
+        "cannot park its write and cannot run it either, so the booking never happens at all. "
+        "Declaring `output` is exactly what takes it out of `writing_ai_steps`, so no rule above "
+        "looks at it any more and the only thing left is this one (whatsapp_inbox#109)",
+        ATTENDED,
+        _fixture_doc(
+            {
+                "id": "book",
+                "kind": "ai",
+                "policy": "manual",
+                "prompt": "propose `appointments.appointments.create` for her",
+                "tools": {"commands": ["appointments.appointments.create"]},
+                "output": {"picked": {"type": "text", "describe": "what she picked"}},
+            }
+        ),
+        1,
     ),
 ]
 
@@ -3981,6 +4342,21 @@ def self_check():
             problems.append(
                 f"the battery's own «she taps it» rule is wrong — {label}: expected {expected} "
                 f"problem(s), got {len(got)}: {got}"
+            )
+    for label, source, translation, same in SHAPE_CASES:
+        got = structural_shape({"steps": [source]}) == structural_shape({"steps": [translation]})
+        if got is not same:
+            problems.append(
+                f"the battery's own «a translation is words» rule is wrong — {label}: expected "
+                f"{'the same' if same else 'a different'} automation, got the "
+                f"{'same' if got else 'opposite'}"
+            )
+    for label, name, doc, expected in PARKING_CASES:
+        got = parking_producer_problems(name, doc, _FIXTURE_COMMANDS, _FIXTURE_READS)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «the producer can finish» rule is wrong — {label}: expected "
+                f"{expected} problem(s), got {len(got)}: {got}"
             )
     for label, name, doc, expected in ONLY_CUSTOMER_CASES:
         got = only_the_customer_problems(name, doc)
@@ -4373,6 +4749,15 @@ def main():
         problems += applied(ledger, only_the_customer_problems, path.name, doc)
         problems += applied(ledger, tappable_option_problems, path.name, doc)
 
+        # 3a-viii) …and every step that owes DATA can FINISH: one that may propose a WRITE never
+        # reaches `flow_answer`, so its write neither parks nor runs — and, when a list sends its
+        # rows, they leave for Meta as `null` (hub#1639).
+        # Manifest-aware — telling a read from a write needs the module that declares it.
+        if commands_def is not None:
+            problems += applied(
+                ledger, parking_producer_problems, path.name, doc, commands_def, read_perms
+            )
+
         # The trigger this whole issue is about: a template that listens to something else is a
         # different product wearing the same file name.
         events = {
@@ -4391,6 +4776,7 @@ def main():
             undeclared_tool_problems.__name__,
             enum_value_problems.__name__,
             identity_field_problems.__name__,
+            parking_producer_problems.__name__,
         }
         if commands_def is None
         else set()
