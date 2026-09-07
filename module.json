@@ -80,7 +80,8 @@
       "migrations/postgres/002_free_tier.sql",
       "migrations/postgres/003_request_counter.sql",
       "migrations/postgres/004_booking_handoff.sql",
-      "migrations/postgres/005_message_dedup.sql"
+      "migrations/postgres/005_message_dedup.sql",
+      "migrations/postgres/006_message_source.sql"
     ]
   },
   "queries": {

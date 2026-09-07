@@ -28,14 +28,29 @@
 -- `jsonb` there and `text` here is `inconsistent types deduced for parameter` — the statement would
 -- not even PREPARE, which in this module has already happened twice (#22, #24).
 --
+-- **`source` comes from the event and is STORED** (whatsapp_inbox#91). hub#1612 carries `live` or
+-- `history`, and until now it died at this door: nothing in the table could hold it, so the moment
+-- the row committed a message of the coexistence backlog and a customer writing at 3 AM were the
+-- same row. The meter below is the reason it has to survive — see migration 006. Same fallback
+-- shape as `direction`, for the same reason: a hub older than hub#1612 sends no `source`, and
+-- everything such a hub could serve was live traffic.
+--
 -- **The free-tier guard travels with the traffic — but it may only stop what it COUNTS.** It is
 -- the same guard as `commands/message_ingest_msg.sql` and it has to be here for the same reason it
 -- is there: this is the door every real inbound message now comes through, and a second door past a
--- meter is not a feature, it is the meter being off. What it meters is `direction = 'inbound'`, so
--- since whatsapp_inbox#66 it is armed only for a LIVE INBOUND message: an owner who answers their
--- own customers must not run their business out of quota by replying, a message of the 180-day
--- coexistence backlog (`source = 'history'`) is not new traffic, and a direction nobody recognises
--- cannot be claimed to be a customer. Month boundary compared in the TEXT domain (`:now` is
+-- meter is not a feature, it is the meter being off. It is armed only for a LIVE INBOUND message:
+-- an owner who answers their own customers must not run their business out of quota by replying, a
+-- message of the 180-day coexistence backlog (`source = 'history'`) is not new traffic, and a
+-- direction nobody recognises cannot be claimed to be a customer.
+--
+-- 🔴 **And what it COUNTS has to be the same set it refuses to stop** (whatsapp_inbox#91). Letting
+-- the backlog through while still counting it is not half a fix, it is the worse failure: the rows
+-- land, they are stamped with the runtime clock of the connection — today, this month — and a salon
+-- with 300 messages of history was out of allowance in the minute it connected the number, with
+-- every message that DID arrive dropped until the month rolled over. Hence `m.source = 'live'`
+-- here, in the twin guard of `commands/message_ingest_msg.sql`, and in `queries/usage_get.sql`:
+-- three places that must agree, or the merchant reads one number while a different one cuts their
+-- channel off. Month boundary compared in the TEXT domain (`:now` is
 -- always UTC RFC-3339, so its first 7 chars ARE the UTC month and lexicographic order over that
 -- prefix IS chronological order) — never `erp_month_start`, see whatsapp_inbox#24 for the full
 -- reasoning. 0 rows = over the limit; the stats statement that follows checks whether the row
@@ -50,7 +65,7 @@
 --
 -- Runtime injects :new_id, :hub_id, :current_user_id, :now.
 INSERT INTO whatsapp_inbox_message
-  (id, hub_id, conversation_id, direction, wa_message_id, extra_metadata,
+  (id, hub_id, conversation_id, direction, source, wa_message_id, extra_metadata,
    body, message_type, media_url, status,
    is_deleted, created_by, updated_by, created_at, updated_at)
 SELECT
@@ -62,6 +77,7 @@ SELECT
      AND c.is_deleted = 0
    LIMIT 1),
   COALESCE(NULLIF((:direction)::text, ''), 'inbound'),
+  COALESCE(NULLIF((:source)::text, ''), 'live'),
   :wa_message_id,
   COALESCE(:message, '{}'::text),
   COALESCE(:text, ''::text),
@@ -78,7 +94,8 @@ WHERE (
       AND s.free_tier_monthly_limit > 0
       AND (
         SELECT COUNT(*) FROM whatsapp_inbox_message m
-        WHERE m.hub_id = :hub_id AND m.direction = 'inbound' AND m.is_deleted = 0
+        WHERE m.hub_id = :hub_id AND m.direction = 'inbound' AND m.source = 'live'
+          AND m.is_deleted = 0
           AND m.created_at >= substr(:now, 1, 7) || '-01'
       ) >= s.free_tier_monthly_limit
   )

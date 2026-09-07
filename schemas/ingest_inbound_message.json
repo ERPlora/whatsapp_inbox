@@ -26,7 +26,7 @@
     },
     "source": {
       "type": "string",
-      "description": "`live` (traffic arriving now) or `history` (the 180-day coexistence backlog the SaaS backfilled when the number was connected). Absent means `live`. It never reaches a column: it is what tells the free-tier meter and the unread badge that a backlog message is not new traffic. Not an enum, for the same reason `direction` is not."
+      "description": "`live` (traffic arriving now) or `history` (the 180-day coexistence backlog the SaaS backfilled when the number was connected). Absent means `live`. STORED on the row since migration 006 (whatsapp_inbox#91): the free-tier meter counts `live` rows only, so the distinction has to survive the commit — a backlog message is shown and never charged. It also keeps the unread badge still. Not an enum, for the same reason `direction` is not."
     },
     "text": {
       "type": "string",

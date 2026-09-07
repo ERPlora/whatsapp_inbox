@@ -519,6 +519,244 @@ def check_the_meter_only_stops_what_it_counts(db, command):
     return problems
 
 
+
+def usage_reported(db, hub_id):
+    """`inbound_this_month/monthly_limit` as `queries/usage_get.sql` answers it — run, not rewritten.
+
+    The screen and the guard have to say the SAME number: a merchant whose channel stopped at the
+    limit while the settings screen reads 0 has no way of knowing what happened. So this runs the
+    SHIPPED query, lowered exactly as the runtime lowers it, instead of a hand-written COUNT that
+    could agree with the guard by accident.
+    """
+    rel = MANIFEST["queries"]["whatsapp_inbox.usage.get"]["sql"]
+    sql, names = translate((MODULE_DIR / rel).read_text())
+    binds = {"hub_id": hub_id, "now": "2026-09-02T12:00:00+00:00"}
+    values = ", ".join(sql_literal(binds[n]) for n in names)
+    r = psql(
+        db,
+        "\\pset tuples_only on\n\\pset format unaligned\n"
+        f"PREPARE u AS {sql}\nEXECUTE u({values});\nDEALLOCATE u;\n",
+    )
+    if r.returncode != 0:
+        error = " ".join(x for x in r.stderr.splitlines() if x.startswith("ERROR"))
+        return f"<`{rel}` could not run: {error}>"
+    row = r.stdout.strip().splitlines()[-1].strip() if r.stdout.strip() else ""
+    return row.replace("|", "/")
+
+
+def check_the_history_does_not_eat_the_month(db, command):
+    """whatsapp_inbox#91 — the 180-day backlog is SHOWN, never billed.
+
+    whatsapp_inbox#66 stopped the cap from BLOCKING a backlog message, which was the urgent half.
+    The other half is that the backlog must not be COUNTED either: those rows land as
+    `direction = 'inbound'` like any customer message, so a salon whose six months of history is 300
+    messages had its whole monthly allowance spent in the minute it connected the number — before a
+    single customer had written. From then on the messages that DID arrive were dropped until the
+    month rolled over.
+
+    The guard of `commands/inbound_message_insert.sql` and the number `queries/usage_get.sql` puts
+    on the settings screen are asserted TOGETHER on purpose: two definitions of «this month» is a
+    merchant reading one figure while a different one cuts their channel off.
+    """
+    hub = "h-backfill"
+    limit = 3
+    r = seed_quota(db, limit, hub)
+    if r.returncode != 0:
+        return [f"could not seed the quota: {r.stderr}"]
+
+    # What WhatsApp hands over the moment the number is connected: more backlog than the whole
+    # allowance. Every one of them has to land — that half is whatsapp_inbox#66.
+    problems = []
+    for n in range(1, limit + 2):
+        failed = run_listener(
+            db, command,
+            served_payload(
+                f"wamid.H{n}", f"vieja {n}", f"2026-09-02T08:0{n}:00+00:00", source="history"
+            ),
+            hub_id=hub,
+        )
+        if failed:
+            return failed
+
+    reported = usage_reported(db, hub)
+    if reported != f"0/{limit}":
+        problems.append(
+            f"after {limit + 1} backlog messages the settings screen reads [{reported}], expected "
+            f"[0/{limit}]: the history is what already happened, so it is shown but does not spend "
+            "the allowance"
+        )
+
+    # The whole allowance still has to be there for the customers who write NOW.
+    for n in range(1, limit + 1):
+        failed = run_listener(
+            db, command,
+            served_payload(f"wamid.N{n}", f"nueva {n}", f"2026-09-02T09:0{n}:00+00:00"),
+            hub_id=hub,
+        )
+        if failed:
+            return failed
+
+    # The positive control: the meter is still armed and cuts off the one over the limit.
+    failed = run_listener(
+        db, command,
+        served_payload("wamid.N9", "una de mas", "2026-09-02T09:09:00+00:00"),
+        hub_id=hub,
+    )
+    if failed:
+        return failed
+
+    landed = scalar(
+        db,
+        "SELECT COALESCE(string_agg(wa_message_id, ',' ORDER BY wa_message_id), '')"
+        f" FROM whatsapp_inbox_message WHERE hub_id = {sql_literal(hub)} AND is_deleted = 0;",
+    )
+    want = "wamid.H1,wamid.H2,wamid.H3,wamid.H4,wamid.N1,wamid.N2,wamid.N3"
+    if landed != want:
+        problems.append(
+            f"with a free tier of {limit} and {limit + 1} backlog messages the rows that landed are "
+            f"[{landed}], expected [{want}]: the backlog does not spend the allowance, the "
+            f"{limit} live messages do, and `wamid.N9` is the positive control that the cap still "
+            "cuts off live traffic over the limit"
+        )
+
+    reported = usage_reported(db, hub)
+    if reported != f"{limit}/{limit}":
+        problems.append(
+            f"after the {limit} live messages the settings screen reads [{reported}], expected "
+            f"[{limit}/{limit}] — the guard and the screen have to show the same number, or the "
+            "merchant sees a consumption that disagrees with the one that cut their channel off"
+        )
+
+    # And the distinction has to survive in the ROW: a meter that can only tell the two apart while
+    # the event is in front of it stops working the moment the transaction commits.
+    stored = scalar(
+        db,
+        "SELECT COALESCE(string_agg(source || ':' || wa_message_id, ',' ORDER BY wa_message_id), '')"
+        f" FROM whatsapp_inbox_message WHERE hub_id = {sql_literal(hub)} AND is_deleted = 0;",
+    )
+    want_stored = (
+        "history:wamid.H1,history:wamid.H2,history:wamid.H3,history:wamid.H4,"
+        "live:wamid.N1,live:wamid.N2,live:wamid.N3"
+    )
+    if stored != want_stored:
+        problems.append(
+            f"the rows store [{stored}], expected [{want_stored}]: `source` has to be written WITH "
+            "the row, or once the event is gone the backlog and live traffic are indistinguishable"
+        )
+    return problems
+
+
+def check_the_meter_is_per_hub(db, command):
+    """`hub_id` is the FIRST predicate of the meter, on the guard and on the screen alike.
+
+    Every hub of a marketplace-served module shares one table shape, and the meter is a COUNT over
+    that table. Drop `m.hub_id = :hub_id` from it and two things happen at once: a salon reads on
+    its settings screen the traffic of every other business, and a neighbour who has used up ITS
+    allowance shuts THIS salon's door before a single customer has written to it.
+
+    Why this is its own check and not a side effect of the others: with several hubs seeded in the
+    same scratch database, a meter without `hub_id` already fails the checks above — but only by
+    accident of ordering and dates, and a test that dies by accident survives the next refactor.
+    Here the neighbour is seeded ON PURPOSE, at its limit, in the metered month, and BOTH rows are
+    asserted on: the neighbour's own screen and door (the foreign row), and this salon's (the own
+    row), in that order, so a leak in either direction has a sentence naming it.
+    """
+    mine, other = "h-mine", "h-neighbour"
+    limit = 2
+    for hub in (mine, other):
+        r = seed_quota(db, limit, hub)
+        if r.returncode != 0:
+            return [f"could not seed the quota of {hub}: {r.stderr}"]
+
+    # The neighbour spends its whole allowance on live customer traffic, in the metered month.
+    problems = []
+    for n in range(1, limit + 1):
+        problems += run_listener(
+            db,
+            command,
+            served_payload(
+                f"wamid.O{n}", f"vecino {n}", f"2026-09-02T10:0{n}:00+00:00"
+            ),
+            hub_id=other,
+        )
+    if problems:
+        return problems
+
+    # The foreign row: the neighbour's screen shows the neighbour's traffic, and only there.
+    reported = usage_reported(db, other)
+    if reported != f"{limit}/{limit}":
+        problems.append(
+            f"the neighbour hub's settings screen reads [{reported}] after {limit} live messages, "
+            f"expected [{limit}/{limit}]: its own traffic has to be metered on its own screen"
+        )
+    reported = usage_reported(db, mine)
+    if reported != f"0/{limit}":
+        problems.append(
+            f"this hub's settings screen reads [{reported}] while it has received NOTHING, expected "
+            f"[0/{limit}]: the meter is leaking the neighbour's traffic across hubs "
+            "(`queries/usage_get.sql` without `m.hub_id = :hub_id`)"
+        )
+
+    # The own row: a neighbour at its cap must not shut THIS door. My allowance is whole, my
+    # (limit+1)th message is the positive control that my own cap still cuts me off — and the
+    # neighbour's next one is refused by ITS cap, so a cap that stopped counting altogether cannot
+    # pass this either.
+    for n in range(1, limit + 1):
+        problems += run_listener(
+            db,
+            command,
+            served_payload(f"wamid.P{n}", f"mia {n}", f"2026-09-02T11:0{n}:00+00:00"),
+            hub_id=mine,
+        )
+    problems += run_listener(
+        db,
+        command,
+        served_payload("wamid.P9", "una de mas", "2026-09-02T11:09:00+00:00"),
+        hub_id=mine,
+    )
+    problems += run_listener(
+        db,
+        command,
+        served_payload("wamid.O9", "vecino de mas", "2026-09-02T10:09:00+00:00"),
+        hub_id=other,
+    )
+    if problems:
+        return problems
+
+    landed_mine = scalar(
+        db,
+        "SELECT COALESCE(string_agg(wa_message_id, ',' ORDER BY wa_message_id), '')"
+        f" FROM whatsapp_inbox_message WHERE hub_id = {sql_literal(mine)} AND is_deleted = 0;",
+    )
+    want_mine = ",".join(f"wamid.P{n}" for n in range(1, limit + 1))
+    if landed_mine != want_mine:
+        problems.append(
+            f"with a neighbour hub at its cap, the rows that landed in THIS hub are [{landed_mine}], "
+            f"expected [{want_mine}]: the guard of `commands/inbound_message_insert.sql` counted the "
+            "neighbour's traffic against this hub (`m.hub_id = :hub_id` missing from the COUNT), or "
+            "`wamid.P9` got through and the cap no longer cuts anything"
+        )
+    landed_other = scalar(
+        db,
+        "SELECT COALESCE(string_agg(wa_message_id, ',' ORDER BY wa_message_id), '')"
+        f" FROM whatsapp_inbox_message WHERE hub_id = {sql_literal(other)} AND is_deleted = 0;",
+    )
+    want_other = ",".join(f"wamid.O{n}" for n in range(1, limit + 1))
+    if landed_other != want_other:
+        problems.append(
+            f"the rows that landed in the neighbour hub are [{landed_other}], expected "
+            f"[{want_other}]: its cap has to cut its own `wamid.O9`, and nothing of this hub may "
+            "be filed under it"
+        )
+    reported = usage_reported(db, mine)
+    if reported != f"{limit}/{limit}":
+        problems.append(
+            f"after {limit} live messages this hub's settings screen reads [{reported}], expected "
+            f"[{limit}/{limit}]"
+        )
+    return problems
+
+
 def check_a_hub_before_1612_still_ingests(db, command):
     """A hub that sends no `direction`/`contact`/`source` keeps working exactly as before.
 
@@ -599,6 +837,8 @@ def main():
         problems += check_echo_lands_in_the_customers_thread(db, command)
         problems += check_an_unknown_direction_is_never_repainted(db, command)
         problems += check_the_meter_only_stops_what_it_counts(db, command)
+        problems += check_the_history_does_not_eat_the_month(db, command)
+        problems += check_the_meter_is_per_hub(db, command)
         problems += check_a_hub_before_1612_still_ingests(db, command)
         for p in problems:
             print(f"FAIL  {p}")
