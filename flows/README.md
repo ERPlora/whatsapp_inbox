@@ -195,9 +195,10 @@ y nunca al revés: primero el campo en el command, después el caso desatendido.
 
 ⚠️ **Y el pin del grant no se da por aplicado solo por declararlo.** Los dos
 `*.grants.json` fijan `payload: {"channel": "customer"}` sobre `reschedule`, que es donde tiene que
-estar — pero **hub#1654** está abierta: hoy el `payload` del sidecar de un módulo **se pierde al
-llegar a la puerta del hub**, así que la receta acaba pidiendo el permiso ancho. Mientras eso siga
-así, lo que aplica el límite de verdad en la tarjeta de la galería es **ERPlora/flows#99**, y lo que
+estar — pero hasta **hub#1654** el `payload` del sidecar de un módulo **se perdía al llegar a la
+puerta del hub**, y la receta acababa pidiendo el permiso ancho. Ese arreglo está entregado
+(07/09) y **todavía no en la flota**: mientras la imagen no esté desplegada, lo que aplica el
+límite de verdad en la tarjeta de la galería es **ERPlora/flows#99**, y lo que
 sostiene el canal en el prompt es la instrucción pineada de `PINNED_INSTRUCTIONS` — la que ordena
 `channel` = `customer` y el `customer_id` en la MISMA línea. Son tres capas para lo mismo a
 propósito: la del grant es la única que no depende del modelo, y todavía no llega.
