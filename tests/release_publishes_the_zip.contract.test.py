@@ -148,7 +148,7 @@ def main() -> int:
                 f"`{entry}` travels inside the zip but is not in `on.push.paths:`, so a merge that "
                 f"touches only `{entry}` bumps no version — the marketplace keeps serving the "
                 "previous zip and no installed hub is offered the change. Add "
-                f"`- '{entry}/**'` beside `- 'locales/**'`"
+                f"`- '{entry}/**'` to the `paths:` block of `.github/workflows/release.yml`"
             )
     if not failures:
         print(
