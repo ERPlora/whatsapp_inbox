@@ -24,7 +24,7 @@ Cada familia son cuatro ficheros con el mismo nombre delante:
 | `<familia>.en.flow.json` | **La fuente.** Inglés, como todo lo que se escribe aquí |
 | `<familia>.es.flow.json` | La traducción que acompaña al blueprint **es** de su sector |
 | `<familia>.grants.json` | Los grants que el documento necesita. Van aparte porque el kernel los guarda aparte (`PUT …/grants` es una pantalla distinta a propósito: es donde una persona decide qué puede hacer el hub sin nadie delante) |
-| `<familia>.requires.json` | El **suelo de versión** de los módulos cuyas operaciones piden estas plantillas. NO viaja al hub: lo lee `tests/flow_templates.test.py` para no resolver los nombres contra un checkout vecino viejo (ver «Por qué hay un suelo de versión») |
+| `<familia>.requires.json` | El **suelo de versión** de los módulos cuyas operaciones piden estas plantillas. **Viaja al hub** desde hub#1611: `flow_template_floor_is_met` (`crates/runtime/src/registry.rs`) es quien decide si la receta se **ofrece**. Y lo lee además `tests/flow_templates.test.py`, para no resolver los nombres contra un checkout vecino viejo (ver «Por qué hay un suelo de versión») |
 
 Los dos idiomas son **la misma automatización**: mismos steps, mismas tools, mismos grants. Solo
 cambia el texto que lee una persona. El test lo comprueba — una traducción que se lleva una tool de
@@ -59,9 +59,9 @@ más deja de ser una traducción.
 
 ## `appointment-from-whatsapp-unattended` — la misma automatización, sin nadie delante
 
-Mismos cuatro steps y casi las mismas tools —**menos una**: esta familia NO puede mover una cita
-(13 grants contra los 14 de la atendida; el porqué, abajo)—. Cambian **dos cosas** más: los dos
-steps `ai` llevan
+Mismos cuatro steps y **las mismas tools**: desde whatsapp_inbox#105 esta familia también mueve
+una cita, así que son 14 grants en las dos (el porqué de que antes fueran 13, abajo). Cambian **dos
+cosas**: los dos steps `ai` llevan
 `policy: "auto"`, así que lo que el modelo llama **ocurre en el turno** (ADR-0283 D3, por la puerta
 de `Origin::Automation`); y los prompts están escritos para eso — no dicen «lo revisa una persona»,
 porque no la hay.
@@ -141,7 +141,7 @@ desconectado. Por eso el prompt pide la hora en palabras. Sale aparte, en whatsa
 Mover una cita **ya no depende de eso**: se mueve la que la clienta ya tiene, no una que elija de
 una lista.
 
-### Por qué reservar y anular caben en el MISMO paso — y mover, solo con alguien delante
+### Por qué reservar, anular y mover caben en el MISMO paso
 
 «Cancela mi cita» era la mitad de los mensajes que recibe un salón y la automatización solo sabía
 reservar: contestaba proponiendo OTRA cita (whatsapp_inbox#61). Lo arregla el mismo paso, no uno
@@ -156,8 +156,8 @@ nuevo, y la razón es que las alternativas no salen:
 
 El modelo ya está leyendo el mensaje: distinguir «quiero hora» de «no puedo ir» es exactamente lo
 que sabe hacer, y hacerlo ahí cuesta **cero** turnos extra. Las ramas se excluyen entre sí, así que
-el presupuesto de `max_iters` no se toca: reservar gasta hasta 9 llamadas, mover gasta 6 (solo en
-la familia atendida) y anular gasta 3.
+el presupuesto de `max_iters` no se toca: reservar gasta hasta 9 llamadas, mover gasta 6 y anular
+gasta 3, y el step tiene 10 en las dos familias.
 
 **Anular respeta las reglas del salón sin re-derivarlas.** La propuesta lleva `channel: "customer"`,
 y eso hace que `appointments` aplique sus propios `allow_customer_cancellation` y
@@ -174,24 +174,34 @@ que tenía delante y, si la segunda mitad falla —el hueco voló, o `availabili
 explícitamente.
 
 El `appointment_id` sale SIEMPRE de `appointments.appointments.list_for_customer` sobre la clienta
-que se resolvió por su teléfono. No es una preferencia de estilo: a diferencia de anular, el command
-de mover **no lleva `channel` ni `customer_id`** (`additionalProperties: false` sobre
-`{appointment_id, start_datetime, duration_minutes?}`, appointments 1.1.72), así que Citas no puede
-saber de quién es la cita que le pasan — un id adivinado movería la hora de otra persona y no hay
-nada más abajo que lo pare.
+que se resolvió por su teléfono, y mover dice **quién lo pide**: `channel: "customer"` +
+`customer_id`, el mismo par que anular. Eso es nuevo — hasta appointments 1.1.72 el command era
+`additionalProperties: false` sobre `{appointment_id, start_datetime, duration_minutes?}` y Citas no
+podía saber de quién era la cita que le pasaban, así que un id adivinado movía la hora de otra
+persona y no había nada más abajo que lo parase. **appointments 1.1.73** (appointments#142, PR #144)
+le da a `reschedule` ese par y el mismo `customer_identity_refusal` que anular: en el canal de la
+clienta, Citas rechaza mover una cita que no es suya. Por eso el suelo de las dos familias es
+**1.1.73** y no 1.1.72: por debajo, la llamada no se degrada — se rechaza entera con
+`invalid_payload`.
 
-🔴 **Y por eso mover vive SOLO en la familia atendida.** Anular sí se puede acotar: con
-`channel: "customer"` el handler compara el `customer_id` que se le pasa con el de la cita y
-rechaza la ajena, y por eso whatsapp_inbox#100 puede clavar ese campo en el propio grant cuando
-llegue hub#1632. Mover **no tiene campo que clavar**, y su handler no mira de quién es la cita: la
-cadena `customers.list` (busca por nombre) → `list_for_customer` (acepta cualquier `customer_id`) →
-`reschedule` cabe entera dentro de los grants de la plantilla, y lo único que se interpone es el
-párrafo del prompt — que es justo lo que hub#1623 dice que **no** es un control. Con `policy:
-"manual"` hay una persona que ve la propuesta antes de que ocurra; con `policy: "auto"` no hay
-nadie. Así que la desatendida contesta «alguien del salón te responde» y se queda en 13 grants.
-El arreglo de verdad es **appointments#142** (dar a `reschedule` su `channel` + `customer_id`, el
-gemelo de appointments#140) y, solo después, **whatsapp_inbox#103** reabre el caso desatendido —
-en ese orden, nunca al revés.
+🔴 **Por qué mover vivió una temporada SOLO en la familia atendida.** Mientras `reschedule` no
+tuvo campo que clavar, su handler no miraba de quién era la cita: la cadena `customers.list` (busca
+por nombre) → `list_for_customer` (acepta cualquier `customer_id`) → `reschedule` cabía entera
+dentro de los grants de la plantilla, y lo único que se interponía era el párrafo del prompt — que
+es justo lo que hub#1623 dice que **no** es un control. Con `policy: "manual"` hay una persona que
+ve la propuesta antes de que ocurra; con `policy: "auto"` no hay nadie, así que la desatendida
+contestaba «alguien del salón te responde». Lo que lo desbloqueó fue appointments#142, en ese orden
+y nunca al revés: primero el campo en el command, después el caso desatendido.
+
+⚠️ **Y el pin del grant no se da por aplicado solo por declararlo.** Los dos
+`*.grants.json` fijan `payload: {"channel": "customer"}` sobre `reschedule`, que es donde tiene que
+estar — pero hasta **hub#1654** el `payload` del sidecar de un módulo **se perdía al llegar a la
+puerta del hub**, y la receta acababa pidiendo el permiso ancho. Ese arreglo está entregado
+(07/09) y **todavía no en la flota**: mientras la imagen no esté desplegada, lo que aplica el
+límite de verdad en la tarjeta de la galería es **ERPlora/flows#99**, y lo que
+sostiene el canal en el prompt es la instrucción pineada de `PINNED_INSTRUCTIONS` — la que ordena
+`channel` = `customer` y el `customer_id` en la MISMA línea. Son tres capas para lo mismo a
+propósito: la del grant es la única que no depende del modelo, y todavía no llega.
 
 ### Por qué la confirmación va DESPUÉS del paso que propone
 
@@ -292,6 +302,18 @@ donde `availability.slots` todavía era una `query`, así que la batería daba O
 perdía la tool en producción — que es exactamente whatsapp_inbox#52. `requires.json` declara la
 versión mínima; la batería **imprime** contra qué copia resolvió cada nombre y **falla** si ninguna
 copia del workspace la alcanza.
+
+**Y el suelo se comprueba contra el pasado del vecino, no contra el checkout de esta máquina**
+(whatsapp_inbox#105). Lo anterior solo decía «la copia que tengo aquí llega al suelo», que es una
+pregunta distinta: con el suelo puesto en 1.1.72 y un `appointments/` en 1.1.73 la batería imprimía
+`RESOLVED appointments@1.1.73 (needs >= 1.1.72)` y se quedaba tan tranquila, aunque el schema de
+1.1.72 no tuviera `channel`. Como el suelo **viaja al hub** y decide si la receta se ofrece, ese
+número de menos ofrece la receta a un hub donde cada cambio de hora vuelve con `invalid_payload`.
+`floor_field_problems` lee el `module.json` y el schema **en el commit de ese release** —los repos
+de módulo no llevan tags, así que se busca por `-S` sobre `module.json` y se abre cada candidato,
+porque el commit más nuevo que `-S` devuelve suele ser el que SUBIÓ la versión— y exige que todo
+campo que estas plantillas mandan ya estuviera declarado ahí. Si no se puede leer, lo dice en voz
+alta; nunca calla.
 
 **La duración estimada se ve.** Va en `duration_minutes` del payload propuesto (que es lo que se
 ejecuta al aprobar, sin re-derivar) y además **en palabras en `internal_notes`**, para que se lea en
@@ -394,7 +416,7 @@ La vía declarativa para que un blueprint la reparta está propuesta en **ERPlor
   que enciende el poller que trae los mensajes (hub#664), y es lo que crea la conversación de la
   que sale el destinatario.
 - Los módulos que aportan las tools. Para las familias de **cita**: `customers`, `services`,
-  `appointments` (>= 1.1.72, ver `requires.json`) y `staff`. Para las de **mesa**: `customers` y
+  `appointments` (>= 1.1.73, ver `requires.json`) y `staff`. Para las de **mesa**: `customers` y
   `reservations` (>= 1.1.72 no, **>= 3.0.19** — el suelo lo fija `blocked_dates.on_date`, que es la
   única lectura con la que la plantilla sabe que el restaurante cierra ese día; ver
   `reservation-from-whatsapp.requires.json`). El horario del negocio ya **no** se le pregunta a `schedules` desde el

@@ -49,6 +49,7 @@ Usage: tests/flow_templates.test.py   (exit 0 = green)
 import json
 import pathlib
 import re
+import subprocess
 import sys
 import tempfile
 
@@ -902,6 +903,11 @@ def enum_value_problems(name, doc, enums):
 # closed on purpose so that an external channel wired without the customer fails LOUDLY).
 IDENTITY_BOUND_PAYLOAD = {
     "appointments.appointments.cancel": {("channel", "customer"): "customer_id"},
+    # Since appointments#144 (v1.1.73) moving carries the same pair as cancelling and shares the
+    # same guard (`customer_identity_refusal`), so it earns the same row: an instruction that
+    # orders the customer channel and forgets who the customer is fails as `invalid_payload`
+    # AFTER the salon approved it, and the customer hears nothing (whatsapp_inbox#105).
+    "appointments.appointments.reschedule": {("channel", "customer"): "customer_id"},
 }
 
 
@@ -1015,6 +1021,153 @@ def identity_field_problems(name, doc, props, enums=None):
                     f"{name}: PINNED_COMMAND_PAYLOAD fixes `{field}` = `{value}` for `{cname}`, "
                     f"which only accepts {allowed}: the grant pins a value the command refuses, so "
                     f"the pin stops being «narrower» and becomes «never»"
+                )
+    return problems
+
+
+def sent_payload_fields():
+    """`command id -> {field names}` this repo puts in a payload, from BOTH tables that name one.
+
+    `IDENTITY_BOUND_PAYLOAD` names what the prompts must SEND and `PINNED_COMMAND_PAYLOAD` what the
+    grant FIXES; against a neighbour one release too old they fail the same way, so the floor reads
+    them as one list.
+    """
+    out = {}
+    for cname, pairs in IDENTITY_BOUND_PAYLOAD.items():
+        for (field, _value), companion in pairs.items():
+            out.setdefault(cname, set()).update((field, companion))
+    for cname, fixed in PINNED_COMMAND_PAYLOAD.items():
+        out.setdefault(cname, set()).update(fixed)
+    return out
+
+
+def schema_at_version(module_dir, version, rel):
+    """The `properties` a command's payload schema declared AT a released version of its module.
+
+    Read out of the neighbour's own git history, because that is the only copy of the past there
+    is: the module repos carry no tags at all (`git tag` is empty in every one of them), so a
+    release is found as the commit whose `module.json` declares exactly that version.
+
+    ⚠️ `-S` answers with the commits where the count of the string CHANGED, which is the one that
+    added the version and the one that bumped it away — and the newest is usually the second. So
+    every candidate is opened and only the one whose manifest really reads that version answers.
+    Taking the first sha reads the schema of the release ABOVE the floor, which is precisely the
+    reading this rule exists to distrust (measured by hand: `-S '"version": "1.1.72"' -n1` on
+    `appointments/` answers `7c1c7f9`, which IS 1.1.73).
+
+    Returns `(properties, None)` or `(None, reason)` — never a quiet empty set, because «the field
+    was not there» and «I could not look» are opposite answers and only one of them is a bug.
+    """
+
+    def git(*args):
+        try:
+            done = subprocess.run(
+                ("git", "-C", str(module_dir)) + args,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+        except (OSError, subprocess.SubprocessError) as e:
+            return None, f"`git` could not be run ({e})"
+        if done.returncode != 0:
+            return None, (done.stderr.strip().splitlines() or ["git failed"])[0]
+        return done.stdout, None
+
+    out, why = git("rev-parse", "--git-dir")
+    if out is None:
+        return None, f"{module_dir.name}/ is not a git checkout ({why})"
+    out, why = git(
+        "log", "--format=%H", "-S", f'"version": "{version}"', "--", "module.json"
+    )
+    if out is None:
+        return None, f"the history of {module_dir.name}/module.json could not be read ({why})"
+    for sha in out.split():
+        blob, _ = git("show", f"{sha}:module.json")
+        if blob is None:
+            continue
+        try:
+            if (json.loads(blob) or {}).get("version") != version:
+                continue
+        except ValueError:
+            continue
+        blob, why = git("show", f"{sha}:{rel}")
+        if blob is None:
+            return None, f"{module_dir.name}/{rel} is not in the tree of {version} ({why})"
+        try:
+            return set((json.loads(blob).get("properties") or {}).keys()), None
+        except ValueError as e:
+            return None, f"{module_dir.name}/{rel} at {version} is not readable JSON ({e})"
+    return None, f"no commit of {module_dir.name}/ declares version {version}"
+
+
+def floor_payload_properties(floors, commands_def, resolved):
+    """`command id -> {declared property names}` AS OF the floor this family declares.
+
+    The twin of `payload_properties`, one or more releases behind on purpose. That one reads the
+    neighbour's WORKING TREE — whatever checkout this machine happens to hold, which on a developer
+    box is the newest thing there is; this one reads the OLDEST version these templates promise to
+    work on. They answer different questions, and only both together say «what this recipe sends is
+    taken everywhere this recipe is offered».
+
+    Returns `(props, skipped)`: a command whose past could not be read is named out loud, never
+    dropped, because an unreadable floor and a floor that is high enough look identical from here.
+    """
+    props, skipped = {}, []
+    owners = {module_dir: mid for mid, (module_dir, _) in resolved.items()}
+    for cname in sorted(sent_payload_fields()):
+        target = commands_def.get(cname)
+        if target is None:
+            continue  # a name no module declares — layer 3 already says so
+        module_dir, cdef = target
+        floor = floors.get(owners.get(module_dir))
+        if floor is None:
+            continue  # this family pins no floor for that module: nothing to read against
+        rel = cdef.get("schema")
+        if not isinstance(rel, str):
+            continue  # a command with no payload schema declares no field to be missing
+        declared, why = schema_at_version(module_dir, floor, rel)
+        if declared is None:
+            skipped.append(
+                f"the payload of `{cname}` as of the declared floor {floor} could not be read "
+                f"({why}) — whether that floor is high enough for what these templates SEND was "
+                f"NOT verified"
+            )
+            continue
+        props[cname] = declared
+    return props, skipped
+
+
+def floor_field_problems(name, doc, floor_props):
+    """Every field these templates SEND is one the command ALREADY TOOK at the declared floor.
+
+    The floor stopped being a footnote of this battery with hub#1611: `requires.json` TRAVELS to
+    the hub, and `flow_template_floor_is_met` (`crates/runtime/src/registry.rs`) is what decides
+    whether a recipe is OFFERED at all. So the floor is the oldest neighbour this template promises
+    to work on, and a floor one release too low is a promise the command refuses to keep.
+
+    🔴 Measured, and it is the whole reason this rule exists (whatsapp_inbox#105, mutant M9).
+    `channel` + `customer_id` enter `appointments.appointments.reschedule` in 1.1.73. Leaving the
+    floor at 1.1.72 left every other rule here green: layer 1b only compares the floor against the
+    checkout on THIS machine, which is newer, so it printed `RESOLVED appointments@1.1.73 (needs
+    >= 1.1.72)` and said nothing, and `identity_field_problems` reads that same new working tree.
+    A hub sitting at exactly 1.1.72 would then be offered the recipe against a schema that is
+    `additionalProperties: false` without those fields: every customer who asks to move her
+    appointment is told it is being moved and the call comes back `invalid_payload`.
+    """
+    problems, sent = [], sent_payload_fields()
+    for step in doc.get("steps", []):
+        for cname in ((step.get("tools") or {}).get("commands")) or []:
+            declared = floor_props.get(cname)
+            if declared is None:
+                continue  # unfloored or unreadable: `main()` said so out loud
+            for field in sorted((sent.get(cname) or set()) - declared):
+                problems.append(
+                    f"{name} step `{step.get('id')}` hands over `{cname}`, whose payload this repo "
+                    f"fills with `{field}`, and at the floor this family declares that command "
+                    f"took {sorted(declared)}: the floor is below the release that started taking "
+                    f"the field, so the hub OFFERS this recipe to a copy that answers "
+                    f"`invalid_payload` to every one of these calls — raise `modules` in "
+                    f"`{name.split('.')[0]}.requires.json` to the version that introduced it"
                 )
     return problems
 
@@ -1300,6 +1453,12 @@ TRUSTED_PHONE = "input.from"
 # permission is a permission; prose is not one, however emphatic (whatsapp_inbox#100).
 PINNED_COMMAND_PAYLOAD = {
     CANCEL_COMMAND: {"channel": "customer"},
+    # And MOVING, for the same reason and with the same default (whatsapp_inbox#105): since
+    # appointments#144 `reschedule` takes `channel` + `customer_id` and runs the same
+    # `customer_identity_refusal`, and its `channel` also defaults to `staff`. So «say nothing» is
+    # the WIDE move — no minimum notice, no maximum advance, and no check that the appointment
+    # belongs to whoever wrote in.
+    MOVE_COMMAND: {"channel": "customer"},
 }
 
 
@@ -1422,6 +1581,13 @@ PINNED_INSTRUCTIONS = {
                 "es": "Ese `channel` no es un adorno: es lo que hace que se apliquen las reglas PROPIAS del salón",
             },
         ),
+        (
+            "who is asking when MOVING, not only when cancelling",
+            {
+                "en": "Moving says who is asking too: `channel` set to `customer` and the `customer_id` you looked up from THEIR phone number",
+                "es": "Mover también dice quién lo pide: `channel` puesto a `customer` y el `customer_id` que buscaste por SU teléfono",
+            },
+        ),
     ),
     "appointment-from-whatsapp-unattended": (
         (
@@ -1429,6 +1595,13 @@ PINNED_INSTRUCTIONS = {
             {
                 "en": "That `channel` is not decoration: it is what makes the salon's OWN rules apply",
                 "es": "Ese `channel` no es un adorno: es lo que hace que se apliquen las reglas PROPIAS del salón",
+            },
+        ),
+        (
+            "who is asking when MOVING, not only when cancelling",
+            {
+                "en": "Moving says who is asking too: `channel` set to `customer` and the `customer_id` you looked up from THEIR phone number",
+                "es": "Mover también dice quién lo pide: `channel` puesto a `customer` y el `customer_id` que buscaste por SU teléfono",
             },
         ),
     ),
@@ -1548,65 +1721,76 @@ CANNOT_MOVE = {
     "en": "this automation cannot do yet",
     "es": "esta automatización todavía no sabe hacer",
 }
+# The other stale order, and the one that outlived the branch it described (whatsapp_inbox#105).
+# The attended recipe has moved appointments since whatsapp_inbox#74, and its MOVING section told
+# the model WHY it had to be careful with the id: `reschedule` said nothing about who was asking,
+# so `appointments` could not tell whose appointment it had been handed. That was true, and since
+# appointments#144 (v1.1.73) it is FALSE — the command takes `channel` + `customer_id` and refuses
+# a move of somebody else's appointment. A sentence like this one is worse than out of date: it
+# tells the model the field it is about to send does not exist, which is the reading that ends
+# with the move going out on the salon's own account.
+MOVE_BLIND = {
+    "en": "this operation says nothing about who is asking",
+    "es": "esta operación no dice quién la pide",
+}
 
 
 def moving_problems(name, doc):
-    """Who may MOVE an appointment depends on who approves the write — whatsapp_inbox#74, #103.
+    """Both appointment families MOVE, and moving says who is asking — whatsapp_inbox#74, #105.
 
     Judged on the step that hands `BOOKING_COMMAND`, which is the appointment writer of both
     families: what a customer can ask this channel for is decided there, in one place. Silent on
     every other step and on any future template that does not book appointments at all (table
     reservations, whatsapp_inbox#60): they owe nothing here.
 
-    🔴 **And the answer is not the same for the two families, because the binding moving now has
-    is one the MODEL can decline.** `appointments.appointments.cancel` binds its customer channel
-    — handed `channel: "customer"`, the handler refuses an appointment whose `customer_id` is not
-    the one asking. Since appointments#144 (v1.1.73) `reschedule` has the same two fields and the
-    guard is EXTRACTED — `customer_identity_refusal(channel, payload, row)`, called by both doors
-    — so the sentence this docstring used to carry, «it has no such field to bind», is no longer
-    true and the reason for the split moved rather than disappeared.
+    🔴 **The split by `policy` is GONE, and that is the change this issue is** (whatsapp_inbox#105).
+    The rule used to demand the opposite of each family — the attended one moved, the unattended one
+    had to be UNABLE to and had to say so — and the reason was real while it lasted: `reschedule`
+    took no `channel` and no `customer_id`, its handler never looked at whose appointment it was,
+    and so the chain `customers.list` (searchable by name) → `list_for_customer` (takes any
+    `customer_id`) → move was a stranger's hour changed with nobody in the loop. Since
+    appointments#144 (v1.1.73) that is no longer the shape of the command: it carries the same two
+    fields cancelling does and runs the same EXTRACTED guard, `customer_identity_refusal(channel,
+    payload, row)`, so a move on the customer channel is refused when the appointment belongs to
+    somebody else.
 
-    Where it moved: `channel` is an enum `staff|customer` whose **default is `staff`**, and the
-    guard opens with `if channel != Customer { return Ok(None) }`. A model that simply omits the
-    field is a receptionist as far as `appointments` is concerned, and the whole chain
-    `customers.list` (searchable by name) → `list_for_customer` (takes any `customer_id`) →
-    `reschedule` is back, inside the grants this template already asks for. What makes the field
-    honest is the grant PINNING it (`payload` on a `command` grant, hub#1623) so the value is not
-    the model's to choose — which is whatsapp_inbox#100, still open and waiting on hub#1623 being
-    DEPLOYED rather than merged. Until then the unattended family keeps the verdict below for a
-    new reason: not «there is nothing to pin», but «nothing pins it yet».
+    What replaced the split is `PINNED_COMMAND_PAYLOAD` — the value is pinned in the GRANT, where
+    the model cannot choose it — and that is a different rule with its own red, on purpose: this one
+    holds the DOCUMENT, that one holds the sidecar. A review does not stand in for either
+    (whatsapp_inbox#107): permissions decide what may be done, an approval tray decides whether a
+    permitted thing needs a person, and one is not the other. So there is no family here that owes
+    LESS: «can you change it to Thursday?» is the most common thing a customer writes, and the
+    unattended salon — the one-chair salon whatsapp_inbox#58 ships for, with nobody reading — is
+    precisely the one where «somebody will get back to you» is the wait this automation exists to
+    remove.
 
-    Hence the split:
-
-    * where a PERSON approves the write (`policy: "manual"` → `_flow_approvals`, and at the yes it
-      runs exactly as proposed) the channel moves appointments, with the four marks below;
-    * where NOBODY is watching (`policy: "auto"`, the family whatsapp_inbox#58 ships for the
-      one-chair salon) the channel must NOT be able to move at all, and must say so in its prompt
-      so the customer is told a person will answer instead of being ignored. The first half of
-      reopening it is DONE — appointments#142 shipped as appointments#144 — and what is left is
-      pinning the channel from this side (whatsapp_inbox#100), never the other way round.
-
-    A missing `policy` counts as «nobody is watching»: this fails CLOSED, because the family that
-    gets the write wrong is the one where nothing downstream notices.
-
-    Four marks for the attended family, and each of them is one edit away from being lost:
+    Five marks, each one edit away from being lost:
 
     * **it can move** — `MOVE_COMMAND` in `tools.commands`. This is the red the issue itself is;
-    * **it can look up WHAT it is moving** — `OWNED_APPOINTMENTS_QUERY` in `tools.queries`. This
-      one is not a nicety and it is not symmetry with cancelling: the `channel` that would let
-      `appointments` refuse somebody else's appointment defaults to `staff`, and nothing in this
-      template pins it to `customer` yet (whatsapp_inbox#100), so the handler is not being asked
-      to check whose appointment it is. The only thing standing between a customer and another
-      person's hour is that the id came out of that query, for the customer resolved from her own
-      phone number;
+    * **it can look up WHAT it is moving** — `OWNED_APPOINTMENTS_QUERY` in `tools.queries`. Not a
+      nicety and not symmetry with cancelling: the id it moves has to come out of the diary of the
+      customer resolved from her own phone number (whatsapp_inbox#103), because the pin makes
+      `appointments` refuse a stranger's appointment only once it is ASKED, and asking with an id
+      picked out of the message is a refusal the customer reads instead of an answer;
     * **the prompt says moving never becomes cancel-plus-book**, in the language it is written in,
       the same way and for the same reason `hour_choice_problems` pins its sentence: a model reads
       the prompt it was given, so a Spanish document carrying only the English sentence has the
       rule for nobody who reads it. A language this battery has no wording for is a document it
       cannot vouch for — the translation is added to `MOVE_RULE` in the same commit, or it does
       not ship;
-    * **and the old «it cannot» order is gone** — `CANNOT_MOVE`. Adding the tool and leaving the
-      sentence is the half-fix that passes everything else here.
+    * **the old «it cannot» order is gone** — `CANNOT_MOVE`. Adding the tool and leaving the
+      sentence is the half-fix that passes everything else here: a model obeys the order over the
+      tool list, so the branch stays dead, the owner was asked for a permission nothing spends,
+      and the customer still waits for a person;
+    * **and the old «it cannot say who is asking» order is gone too** — `MOVE_BLIND`. Same failure
+      one layer down, and the one this issue found in the ATTENDED family, which has moved
+      appointments since whatsapp_inbox#74: its MOVING section still ordered that `appointments`
+      cannot tell whose appointment it is. A model told the field does not exist does not send it,
+      and a move with no `channel` is a move on the salon's own account — no minimum notice, no
+      maximum advance, no check of whose hour it is.
+
+    Silent about `policy` on purpose now: a document that forgets to declare one is judged exactly
+    like its twins, so there is no reading of this file where forgetting a line buys a weaker rule.
     """
     parts = name.split(".")
     lang = parts[1] if len(parts) >= 3 else ""
@@ -1619,58 +1803,24 @@ def moving_problems(name, doc):
             continue
         sid = step.get("id")
         prompt = prompt_of(step)
-        can_move = MOVE_COMMAND in (tools.get("commands") or [])
-        # `manual` is the ONLY policy with a person in front of the write: it parks the proposal in
-        # `_flow_approvals` and ends the turn. Anything else — `auto`, or a step that forgot to say
-        # — writes inside the turn with nobody reading.
-        if step.get("policy") != "manual":
-            if can_move:
-                problems.append(
-                    f"{name} step `{sid}` runs with nobody watching "
-                    f"(`policy: {step.get('policy')!r}`) and was handed `{MOVE_COMMAND}`: that "
-                    f"command takes no `channel` and no `customer_id`, and its handler never "
-                    f"checks whose appointment it is, so `customers.list` → "
-                    f"`{OWNED_APPOINTMENTS_QUERY}` → move is a stranger's hour changed with no "
-                    f"person in the loop and nothing downstream to refuse it. Pinning the payload "
-                    f"in the grant (hub#1632) cannot help: there is no field to pin. It reopens "
-                    f"with appointments#142 first, then whatsapp_inbox#103"
-                )
-                continue
-            stale = CANNOT_MOVE.get(lang)
-            if stale is None:
-                problems.append(
-                    f"{name} step `{sid}` cannot move an appointment and this battery has no "
-                    f"wording of the «not yet» sentence for language `{lang}`: add the "
-                    f"translation to CANNOT_MOVE in the same commit, or the customer who asks to "
-                    f"change her hour is answered by whatever the model improvises"
-                )
-            elif stale not in prompt:
-                problems.append(
-                    f"{name} step `{sid}` cannot move an appointment and its prompt no longer "
-                    f"says so («{stale}»): «can you change it to Thursday?» then falls to "
-                    f"whatever the model decides — silence, or a SECOND appointment booked on top "
-                    f"of the one she was trying to keep. Until appointments#142 lands, that "
-                    f"sentence is what this family answers with"
-                )
-            continue
-        if not can_move:
+        if MOVE_COMMAND not in (tools.get("commands") or []):
             problems.append(
                 f"{name} step `{sid}` can book and cancel an appointment and cannot MOVE one "
                 f"(`{MOVE_COMMAND}` is not in its `tools.commands`): «can you change it to "
                 f"Thursday?» is the most common thing a customer writes and the only one this "
                 f"channel answers with «somebody will get back to you», which is the wait the "
-                f"automation exists to remove"
+                f"automation exists to remove. Since appointments#144 the command carries "
+                f"`channel` + `customer_id` and refuses a move of somebody else's appointment, so "
+                f"there is nothing left for this family to wait for"
             )
             continue
         if OWNED_APPOINTMENTS_QUERY not in (tools.get("queries") or []):
             problems.append(
                 f"{name} step `{sid}` can move an appointment and was never handed "
-                f"`{OWNED_APPOINTMENTS_QUERY}`: since appointments#144 `{MOVE_COMMAND}` does take "
-                f"`channel` + `customer_id`, but `channel` DEFAULTS to `staff` and nothing here "
-                f"pins it to `customer` yet (whatsapp_inbox#100), so `appointments` is never "
-                f"asked to refuse a move of somebody else's appointment — that query, filtered by "
-                f"the customer resolved from her own phone number, is the ONLY thing that makes "
-                f"the id honest"
+                f"`{OWNED_APPOINTMENTS_QUERY}`: the `customer_id` it sends has to be the one "
+                f"resolved from HER phone number and the `appointment_id` has to come out of HER "
+                f"diary, so an id taken from the message is refused by `appointments` "
+                f"(`customer_identity_refusal`) and she reads a refusal instead of a new hour"
             )
         sentence = MOVE_RULE.get(lang)
         if sentence is None:
@@ -1696,6 +1846,16 @@ def moving_problems(name, doc):
                 f"that moving is «{stale}»: the model obeys the sentence, not the tool list, so "
                 f"the branch is dead, the owner was asked for a permission nothing spends, and "
                 f"every other rule here stays green over it"
+            )
+        blind = MOVE_BLIND.get(lang)
+        if blind is not None and blind in prompt:
+            problems.append(
+                f"{name} step `{sid}` was handed `{MOVE_COMMAND}` and its prompt still orders "
+                f"that «{blind}»: since appointments#144 it does — `channel` + `customer_id`, the "
+                f"same pair cancelling sends and the same guard. A model told the field is not "
+                f"there omits it, and `channel` DEFAULTS to `staff`, so the move goes out on the "
+                f"salon's own account: no minimum notice, no maximum advance, and no check of "
+                f"whose appointment it is"
             )
     return problems
 
@@ -2458,6 +2618,7 @@ DOCUMENT_RULES = (
     policy_problems,
     identified_cancellation_problems,
     identity_field_problems,
+    floor_field_problems,
     silence_problems,
     mute_refusal_problems,
     undeclared_tool_problems,
@@ -2486,6 +2647,7 @@ SELF_CHECKED_RULES = (
     policy_problems,
     identified_cancellation_problems,
     identity_field_problems,
+    floor_field_problems,
     silence_problems,
     mute_refusal_problems,
     undeclared_tool_problems,
@@ -3304,8 +3466,9 @@ MOVE_CASES = [
         1,
     ),
     (
-        "it can move and cannot look up what it is moving: `reschedule` takes no `channel` and no "
-        "`customer_id`, so nothing downstream refuses another person's appointment",
+        "it can move and cannot look up what it is moving: the `appointment_id` and the "
+        "`customer_id` have to come out of HER diary, so without that query the id is one the "
+        "model picked out of the message and `appointments` answers her with a refusal",
         ATTENDED,
         _fixture_doc(
             _ai_step("propose", "manual", _MOVE_TOOLS, f"Move it. {MOVE_RULE['en']}")
@@ -3371,8 +3534,25 @@ MOVE_CASES = [
         1,
     ),
     (
-        "the unattended family owes the OPPOSITE, and this is the shape it ships: it cannot move, "
-        "and its prompt says so, so «change it to Thursday» is answered by a person",
+        "the shape whatsapp_inbox#105 ships for the UNATTENDED family, which used to owe the "
+        "opposite: with nobody watching it moves too, because since appointments#144 the command "
+        "carries who is asking and refuses somebody else's appointment",
+        UNATTENDED,
+        _fixture_doc(
+            _ai_step(
+                "book",
+                "auto",
+                _MOVE_TOOLS,
+                f"Book, move or cancel. {MOVE_RULE['en']}",
+                queries=_MOVE_QUERIES,
+            )
+        ),
+        0,
+    ),
+    (
+        "🔴 the red whatsapp_inbox#105 IS: the one-chair salon whose automation still answers "
+        "«somebody will get back to you» to the most common thing a customer writes, with the "
+        "whole point of running unattended being that nobody is there to answer it",
         UNATTENDED,
         _fixture_doc(
             _ai_step(
@@ -3383,27 +3563,12 @@ MOVE_CASES = [
                 queries=_MOVE_QUERIES,
             )
         ),
-        0,
-    ),
-    (
-        "🔴 the regression this rule exists to stop: with nobody watching, moving is a write "
-        "nothing can scope — `reschedule` takes no `customer_id` and its handler never checks "
-        "whose appointment it is, so the id can be anybody's",
-        UNATTENDED,
-        _fixture_doc(
-            _ai_step(
-                "book",
-                "auto",
-                _MOVE_TOOLS,
-                f"Move it. {MOVE_RULE['en']}",
-                queries=_MOVE_QUERIES,
-            )
-        ),
         1,
     ),
     (
-        "and it is the POLICY that decides, not the file name: a writer that forgot to say who "
-        "approves it is treated as nobody watching, because that is the side that fails silently",
+        "and the POLICY no longer decides anything here: a writer that never declared one is held "
+        "to exactly the same five marks, so no reading of this file makes a missing line the way "
+        "to a weaker rule",
         ATTENDED,
         _fixture_doc(
             {
@@ -3416,11 +3581,12 @@ MOVE_CASES = [
                 },
             }
         ),
-        1,
+        0,
     ),
     (
-        "the sentence that sends her to a person, reworded away: she asks to move her hour and "
-        "the model improvises — silence, or a SECOND appointment on top of the one she wanted",
+        "the unattended writer with no move tool and no «not yet» sentence either: she asks to "
+        "move her hour and the model improvises — silence, or a SECOND appointment on top of the "
+        "one she was trying to keep",
         UNATTENDED,
         _fixture_doc(
             _ai_step(
@@ -3434,8 +3600,8 @@ MOVE_CASES = [
         1,
     ),
     (
-        "a language this battery has no «not yet» wording for is a document it cannot vouch for "
-        "on that side either",
+        "and a language this battery has no wording for does not buy the unattended family a way "
+        "out of moving either: the tool is missing whatever the document is written in",
         "appointment-from-whatsapp-unattended.fr.flow.json",
         _fixture_doc(
             _ai_step(
@@ -3443,6 +3609,53 @@ MOVE_CASES = [
                 "auto",
                 (BOOKING_COMMAND, CANCEL_COMMAND),
                 "Réserve ou annule.",
+                queries=_MOVE_QUERIES,
+            )
+        ),
+        1,
+    ),
+    (
+        "🔴 the defect whatsapp_inbox#105 found in the ATTENDED family, which has moved since "
+        "whatsapp_inbox#74: the tool is there, the rule is there, and the prompt still orders "
+        "that the command says nothing about who is asking — so the model omits the field and "
+        "`channel` falls back to `staff`, which is the move on the salon's own account",
+        ATTENDED,
+        _fixture_doc(
+            _ai_step(
+                "propose",
+                "manual",
+                _MOVE_TOOLS,
+                f"{MOVE_RULE['en']} Unlike cancelling, {MOVE_BLIND['en']}.",
+                queries=_MOVE_QUERIES,
+            )
+        ),
+        1,
+    ),
+    (
+        "and the same stale order in the Spanish twin, read out of its own row: a mark that only "
+        "knows one language is a mark half the documents can lose",
+        "appointment-from-whatsapp.es.flow.json",
+        _fixture_doc(
+            _ai_step(
+                "propose",
+                "manual",
+                _MOVE_TOOLS,
+                f"{MOVE_RULE['es']} A diferencia de anular, {MOVE_BLIND['es']}.",
+                queries=_MOVE_QUERIES,
+            )
+        ),
+        1,
+    ),
+    (
+        "the unattended twin owes the same: it is the family that moves with nobody reading, so a "
+        "sentence telling it the field is not there is the one that costs most",
+        UNATTENDED,
+        _fixture_doc(
+            _ai_step(
+                "book",
+                "auto",
+                _MOVE_TOOLS,
+                f"{MOVE_RULE['en']} Unlike cancelling, {MOVE_BLIND['en']}.",
                 queries=_MOVE_QUERIES,
             )
         ),
@@ -4270,11 +4483,21 @@ IDENTITY_CASES = [
 # what the grant fixed), and only half of that lives in the document.
 _PIN_OK = {CANCEL_COMMAND: {"channel": "customer"}}
 _PIN_NONE = {CANCEL_COMMAND: {}}
+# …and the same pair for MOVING (whatsapp_inbox#105). Kept apart from `_PIN_OK` so a row can
+# describe the half-applied fix this issue is most likely to ship: cancelling narrowed months ago,
+# moving added afterwards with the grant left wide.
+_PIN_OK_BOTH = {CANCEL_COMMAND: {"channel": "customer"}, MOVE_COMMAND: {"channel": "customer"}}
+_PIN_MOVE_WIDE = {CANCEL_COMMAND: {"channel": "customer"}, MOVE_COMMAND: {}}
 
 
 def _unwatched_canceller(policy="auto"):
     """The step whatsapp_inbox#100 is about: books and cancels, and nobody reads it first."""
     return _ai_step("book_appointment", policy, (BOOKING_COMMAND, CANCEL_COMMAND))
+
+
+def _mover(policy="auto", sid="book_appointment"):
+    """The step whatsapp_inbox#105 adds: it books, cancels AND moves."""
+    return _ai_step(sid, policy, (BOOKING_COMMAND, CANCEL_COMMAND, MOVE_COMMAND))
 
 
 PIN_CASES = [
@@ -4365,6 +4588,41 @@ PIN_CASES = [
         _PIN_NONE,
         0,
     ),
+    (
+        "what this module ships after whatsapp_inbox#105: the unwatched writer may MOVE too, and "
+        "both permissions say AS THE CUSTOMER",
+        UNATTENDED,
+        _fixture_doc(_mover()),
+        _PIN_OK_BOTH,
+        0,
+    ),
+    (
+        "🔴 the half-applied fix this issue is one edit away from: cancelling was narrowed in "
+        "whatsapp_inbox#100 and moving arrives with its grant wide, so `channel` falls back to "
+        "`staff` and the move goes out on the salon's own account — no notice window, no maximum "
+        "advance, no check of whose appointment it is",
+        UNATTENDED,
+        _fixture_doc(_mover()),
+        _PIN_MOVE_WIDE,
+        1,
+    ),
+    (
+        "the move pin CONTRADICTED, which reads like a narrower grant and is the wide one written "
+        "down",
+        UNATTENDED,
+        _fixture_doc(_mover()),
+        {CANCEL_COMMAND: {"channel": "customer"}, MOVE_COMMAND: {"channel": "staff"}},
+        1,
+    ),
+    (
+        "and the ATTENDED twin owes the move pin on the same grounds as its cancellation one "
+        "(whatsapp_inbox#107): what the salon reads in the tray is a draft for the customer, and "
+        "no screen there says which `channel` the move will carry",
+        ATTENDED,
+        _fixture_doc(_mover("manual", "propose_appointment")),
+        _PIN_MOVE_WIDE,
+        1,
+    ),
 ]
 
 
@@ -4389,6 +4647,8 @@ def _saying(*sentences):
 
 _ES_CHANNEL = PINNED_INSTRUCTIONS["appointment-from-whatsapp"][0][1]["es"]
 _ES_CHANNEL_UNATTENDED = PINNED_INSTRUCTIONS["appointment-from-whatsapp-unattended"][0][1]["es"]
+_ES_MOVE_WHO = PINNED_INSTRUCTIONS["appointment-from-whatsapp"][1][1]["es"]
+_ES_MOVE_WHO_UNATTENDED = PINNED_INSTRUCTIONS["appointment-from-whatsapp-unattended"][1][1]["es"]
 _EN_BLOCKED = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][0][1]["en"]
 _EN_ADVANCE = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][1][1]["en"]
 _ES_BLOCKED = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][0][1]["es"]
@@ -4470,7 +4730,7 @@ INSTRUCTION_CASES = [
         "is what makes the table itself tamper-evident: delete the row and this row stops naming "
         "anything",
         "appointment-from-whatsapp.es.flow.json",
-        _saying(_ES_CHANNEL),
+        _saying(_ES_CHANNEL, _ES_MOVE_WHO),
         _SHIPPED_FAMILIES,
         0,
     ),
@@ -4479,16 +4739,26 @@ INSTRUCTION_CASES = [
         "are pinned separately on purpose, so this row stops naming anything the day that entry "
         "goes",
         "appointment-from-whatsapp-unattended.es.flow.json",
-        _saying(_ES_CHANNEL_UNATTENDED),
+        _saying(_ES_CHANNEL_UNATTENDED, _ES_MOVE_WHO_UNATTENDED),
         _SHIPPED_FAMILIES,
         0,
     ),
     (
-        "and the unattended twin that lost it, which is the one that cancels with nobody watching: "
-        "a model with no sentence telling it why `channel` is `customer` decides on its own what "
-        "it means",
+        "and the unattended twin that lost them both, which is the one that writes with nobody "
+        "watching: a model with no sentence telling it why `channel` is `customer` decides on its "
+        "own what it means",
         "appointment-from-whatsapp-unattended.es.flow.json",
         _saying("aquí no se dice nada del `channel`"),
+        _SHIPPED_FAMILIES,
+        2,
+    ),
+    (
+        "🔴 and the row whatsapp_inbox#105 adds, losable on its own: the Spanish document still "
+        "explains the channel it CANCELS with and never says that moving carries it too — which "
+        "is exactly the shape whatsapp_inbox#108 had, a paragraph kept and the sentence at the "
+        "end of it dropped, in the half nobody reads",
+        "appointment-from-whatsapp-unattended.es.flow.json",
+        _saying(_ES_CHANNEL_UNATTENDED),
         _SHIPPED_FAMILIES,
         1,
     ),
@@ -4502,6 +4772,203 @@ INSTRUCTION_CASES = [
         1,
     ),
 ]
+
+
+# The floor rule's own mutants. A document that hands MOVE over, one that does not, and the two
+# readings of the neighbour's past: the release that already took the fields and the one below it.
+_FLOOR_MOVER = {
+    "steps": [{"id": "book_appointment", "kind": "ai", "tools": {"commands": [MOVE_COMMAND]}}]
+}
+_FLOOR_BOOKER = {
+    "steps": [
+        {
+            "id": "book_appointment",
+            "kind": "ai",
+            "tools": {"commands": ["appointments.appointments.create"]},
+        }
+    ]
+}
+_FLOOR_TAKES_BOTH = {
+    MOVE_COMMAND: {"appointment_id", "start_datetime", "channel", "customer_id"}
+}
+_FLOOR_TAKES_NEITHER = {MOVE_COMMAND: {"appointment_id", "start_datetime"}}
+
+FLOOR_CASES = [
+    (
+        "the floor already takes every field these templates send",
+        _FLOOR_MOVER,
+        _FLOOR_TAKES_BOTH,
+        0,
+    ),
+    (
+        "whatsapp_inbox#105 as the mutant M9 left it: the floor is the release BELOW the one that "
+        "started taking `channel` + `customer_id`",
+        _FLOOR_MOVER,
+        _FLOOR_TAKES_NEITHER,
+        2,
+    ),
+    (
+        "no step hands the command over, so this family promises nothing about it",
+        _FLOOR_BOOKER,
+        _FLOOR_TAKES_NEITHER,
+        0,
+    ),
+    (
+        "the schema at the floor could not be read — `main()` skipped it out loud, and guessing "
+        "here would be this rule inventing a floor it never saw",
+        _FLOOR_MOVER,
+        {},
+        0,
+    ),
+    (
+        "a command handed over whose payload no table here fills: nothing is promised, so nothing "
+        "is demanded of the floor",
+        _FLOOR_BOOKER,
+        {"appointments.appointments.create": set()},
+        0,
+    ),
+]
+
+
+def _floor_reading_problems():
+    """`schema_at_version` reads a real git history, so `floor_field_problems` is only worth what
+    this proves: the release that HAS the fields, the one below it, a version nobody released and a
+    directory that is not a checkout at all.
+
+    The trap it pins is the one that costs an hour by hand — `-S` also answers with the commit that
+    bumped the version AWAY, and that commit is the NEWEST. A reader that took the first sha would
+    read the schema of the release ABOVE every floor and call every floor good, which is the exact
+    shape of the bug this whole rule is here to catch.
+    """
+    problems = []
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        (root / "schemas").mkdir()
+
+        def commit(version, props, message):
+            (root / "module.json").write_text(
+                json.dumps({"id": "appointments", "version": version}, indent=2)
+            )
+            (root / "schemas" / "reschedule.json").write_text(
+                json.dumps(
+                    {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {p: {"type": "string"} for p in props},
+                    }
+                )
+            )
+            for args in (
+                ["add", "-A"],
+                ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false",
+                 "commit", "-q", "-m", message],
+            ):
+                done = subprocess.run(
+                    ["git", "-C", str(root)] + args, capture_output=True, text=True
+                )
+                if done.returncode != 0:
+                    problems.append(
+                        f"the battery could not build its own git fixture (`git {args[0]}`): "
+                        f"{done.stderr.strip()} — `schema_at_version` was NOT proved"
+                    )
+                    return False
+            return True
+
+        done = subprocess.run(
+            ["git", "-C", str(root), "init", "-q"], capture_output=True, text=True
+        )
+        if done.returncode != 0:
+            return [
+                f"the battery could not build its own git fixture (`git init`): "
+                f"{done.stderr.strip()} — `schema_at_version` was NOT proved"
+            ]
+        # Two releases, the shape `appointments` really has: the fields land in the SECOND one.
+        if not commit("1.1.72", ["appointment_id", "start_datetime"], "chore(release): v1.1.72"):
+            return problems
+        if not commit(
+            "1.1.73",
+            ["appointment_id", "start_datetime", "channel", "customer_id"],
+            "chore(release): v1.1.73",
+        ):
+            return problems
+
+        rel = "schemas/reschedule.json"
+        for label, version, want in [
+            (
+                "the floor that predates the fields — and the newest commit `-S` answers with is "
+                "the one that bumped this version AWAY, so a reader taking the first sha reads "
+                "1.1.73 here and never sees the hole",
+                "1.1.72",
+                {"appointment_id", "start_datetime"},
+            ),
+            (
+                "the release that introduced them",
+                "1.1.73",
+                {"appointment_id", "start_datetime", "channel", "customer_id"},
+            ),
+        ]:
+            got, why = schema_at_version(root, version, rel)
+            if got != want:
+                problems.append(
+                    f"the battery's own reading of a released schema is wrong — {label}: expected "
+                    f"{sorted(want)}, got {got if got is None else sorted(got)} ({why})"
+                )
+
+        got, why = schema_at_version(root, "9.9.9", rel)
+        if got is not None or not why:
+            problems.append(
+                f"the battery reads a version nobody released as an answer instead of a skip: "
+                f"got {got} ({why}) — a floor typo would then be a silent green"
+            )
+        got, why = schema_at_version(root, "1.1.73", "schemas/nowhere.json")
+        if got is not None or not why:
+            problems.append(
+                f"the battery reads a schema absent from the release as an answer instead of a "
+                f"skip: got {got} ({why})"
+            )
+
+        # …and the collector on top of it, because the SKIP is the half that can go quiet. A floor
+        # whose past could not be read has to be NAMED: dropping the command from `props` alone
+        # makes `floor_field_problems` say nothing about it, and «I could not look» would then
+        # read exactly like «the floor is high enough» (measured: that mutant survived).
+        commands_def = {MOVE_COMMAND: (root, {"schema": rel})}
+        resolved = {"appointments": (root, {"id": "appointments"})}
+        for label, floors, want_props, want_skips in [
+            (
+                "the floor that takes everything these templates send",
+                {"appointments": "1.1.73"},
+                {MOVE_COMMAND: {"appointment_id", "start_datetime", "channel", "customer_id"}},
+                0,
+            ),
+            (
+                "a floor no release ever carried — a typo in `requires.json`",
+                {"appointments": "9.9.9"},
+                {},
+                1,
+            ),
+            (
+                "the family pins no floor for that module, so there is nothing to read it against",
+                {},
+                {},
+                0,
+            ),
+        ]:
+            got_props, got_skips = floor_payload_properties(floors, commands_def, resolved)
+            if got_props != want_props or len(got_skips) != want_skips:
+                problems.append(
+                    f"the battery's own collection of floor payloads is wrong — {label}: expected "
+                    f"{want_props} and {want_skips} skip(s), got {got_props} and {got_skips}"
+                )
+
+    with tempfile.TemporaryDirectory() as bare:
+        got, why = schema_at_version(pathlib.Path(bare), "1.1.73", rel)
+        if got is not None or not why:
+            problems.append(
+                f"the battery reads a directory that is not a git checkout as an answer instead "
+                f"of a skip: got {got} ({why}) — on a CI runner with no neighbours that is a "
+                f"green over nothing"
+            )
+    return problems
 
 
 def _identity_reading_problems():
@@ -5034,6 +5501,14 @@ def self_check():
                 f"{label}: expected {expected} problem(s), got {len(got)}: {got}"
             )
     problems += _identity_reading_problems()
+    for label, doc, floor_props, expected in FLOOR_CASES:
+        got = floor_field_problems("(self-check)", doc, floor_props)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «the floor already takes what we send» rule is wrong — "
+                f"{label}: expected {expected} problem(s), got {len(got)}: {got}"
+            )
+    problems += _floor_reading_problems()
     for label, name, doc, expected in POLICY_CASES:
         got = policy_problems(name, doc, _FIXTURE_COMMANDS, _FIXTURE_READS)
         if len(got) != expected:
@@ -5187,6 +5662,10 @@ def main():
     # and a row pointing at a name nothing carries is a guard over nothing.
     shipped_families = {path.name.split(".")[0] for path in docs}
 
+    # …and what each family's declared FLOOR really takes, read once per `requires.json` because it
+    # walks the neighbour's git history and both languages of a family share the same floor.
+    floor_props_by_family = {}
+
     for path in docs:
         doc = json.loads(path.read_text())
 
@@ -5310,6 +5789,22 @@ def main():
                 ledger, identity_field_problems, path.name, doc, identity_props, enums
             )
 
+        # 3a-vi-quater) …and the command TOOK those fields already at the floor this family
+        # declares, not just in the checkout this machine happens to hold (whatsapp_inbox#105).
+        # The floor travels to the hub since hub#1611 and decides whether the recipe is OFFERED,
+        # so a floor one release too low hands the recipe to a hub that refuses every call.
+        if commands_def is not None:
+            fpath = floors_of(path)
+            if fpath not in floor_props_by_family:
+                declared = (json.loads(fpath.read_text()) or {}).get("modules") or {} if fpath.is_file() else {}
+                floor_props_by_family[fpath], floor_skips = floor_payload_properties(
+                    declared, commands_def, resolved
+                )
+                skipped += [f"{fpath.name}: {why}" for why in floor_skips]
+            problems += applied(
+                ledger, floor_field_problems, path.name, doc, floor_props_by_family[fpath]
+            )
+
         # 3b) Every parameter is a word the query it addresses actually knows.
         #
         # A name that exists is not a name that filters. `whatsapp_inbox.conversations.list`
@@ -5378,6 +5873,7 @@ def main():
             undeclared_tool_problems.__name__,
             enum_value_problems.__name__,
             identity_field_problems.__name__,
+            floor_field_problems.__name__,
             parking_producer_problems.__name__,
         }
         if commands_def is None

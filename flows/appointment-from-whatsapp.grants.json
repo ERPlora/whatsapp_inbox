@@ -57,7 +57,10 @@
     },
     {
       "kind": "command",
-      "value": "appointments.appointments.reschedule"
+      "value": "appointments.appointments.reschedule",
+      "payload": {
+        "channel": "customer"
+      }
     }
   ]
 }
