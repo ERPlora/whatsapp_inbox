@@ -21,6 +21,14 @@ name: Release
 # manifest out of `paths` meant such a fix merged green, closed its issue and never republished:
 # the broken version stayed as the latest one served by the marketplace.
 #
+# `flows/**` IS a trigger path (#80), for the same reason and with the same evidence. The templates
+# this module ships travel inside the zip (`INCLUDE` in the toolkit's `src/pack.mjs`), so the only
+# way an edited prompt reaches a business is a new version. While it was missing, nine of the ten
+# merges that touched `flows/` touched nothing else listed here and started NO run at all: the tip
+# of main was an edit to the automation's own prompts and left the module at the version two merges
+# older. `tests/release_publishes_the_zip.contract.test.py` is what keeps this list honest — it
+# parses the block below and fails when something that ships is not in it.
+#
 # ANTI-LOOP — three independent layers, none of them the `paths` filter:
 #   1. The bump is pushed with GITHUB_TOKEN, and GitHub does NOT trigger workflows for pushes made
 #      with that token. No run is even created for the bot's `chore(release)` commit.
@@ -41,6 +49,7 @@ on:
       - 'handler/**'
       - 'schemas/**'
       - 'locales/**'
+      - 'flows/**'
       - 'dist/**'
   workflow_dispatch:
 
