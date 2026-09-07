@@ -12,7 +12,10 @@
       "whatsapp_inbox.templates.list",
       "whatsapp_inbox.usage.get"
     ],
-    "optional_queries": [],
+    "optional_queries": [
+      "appointments.settings.get",
+      "flows.drafts.list"
+    ],
     "commands": [
       "whatsapp_inbox.conversations.assign",
       "whatsapp_inbox.requests.approve",
