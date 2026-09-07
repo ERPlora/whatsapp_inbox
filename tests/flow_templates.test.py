@@ -813,6 +813,110 @@ def enum_value_problems(name, doc, enums):
     return problems
 
 
+# `command -> {(field, value) a prompt may ORDER: the companion field that has to travel with it}`.
+#
+# A payload field that is mandatory only in COMBINATION with another one is invisible to every
+# layer above. It is not in the schema's `required` — the rule reads two fields at once and is
+# decided against the appointment row, so the handler owns it
+# (`appointments/handler/src/lib.rs::cancel_appointment_pure`) — `additionalProperties` accepts a
+# payload without it, and `enum_value_problems` only judges the VALUE of the field the prompt does
+# order. So a template that orders `channel` = `customer` and never says WHO is asking parses,
+# saves, arms its trigger, is approved by the salon, and is refused at the last step with
+# `invalid_payload: customer_id is required when channel is `customer``: the customer who wrote
+# «cancel it» is told nothing and keeps the chair (whatsapp_inbox#82, the door appointments#140
+# closed on purpose so that an external channel wired without the customer fails LOUDLY).
+IDENTITY_BOUND_PAYLOAD = {
+    "appointments.appointments.cancel": {("channel", "customer"): "customer_id"},
+}
+
+
+def identified_cancellation_problems(name, doc):
+    """An INSTRUCTION that orders the customer channel and never orders WHO the customer is.
+
+    Reached through `ORDERED_VALUE`, the same three phrasings `enum_value_problems` reads, so the
+    two rules see the same orders: that one judges the value, this one judges what has to come WITH
+    it. The companion only has to be NAMED in backticks — like `unordered_tool_problems`, this does
+    not judge what the prompt SAYS about it, only that it says something, because the sentence is
+    prose and prose is not this battery's business.
+
+    🔴 Judged line by line, and that is the whole rule rather than a detail. Asking for the
+    companion anywhere in the prompt was the first version, and its own mutant survived: these
+    prompts explain underneath WHY the id travels with the channel, so stripping the field from the
+    numbered instruction that orders the call left the explanation behind and the battery green
+    over a template that no longer sends it. The order and its fields are one instruction; a
+    paragraph about them further down is not the order.
+    """
+    problems = []
+    for step in doc.get("steps", []):
+        prompt = prompt_of(step)
+        if not prompt:
+            continue
+        handed = ((step.get("tools") or {}).get("commands")) or []
+        for line in prompt.split("\n"):
+            ordered = set(ORDERED_VALUE.findall(line))
+            if not ordered:
+                continue
+            for cname in handed:
+                for (field, value), companion in sorted((IDENTITY_BOUND_PAYLOAD.get(cname) or {}).items()):
+                    if (field, value) not in ordered or f"`{companion}`" in line:
+                        continue
+                    problems.append(
+                        f"{name} step `{step.get('id')}` orders `{field}` = `{value}` for "
+                        f"`{cname}` in an instruction that never names `{companion}`: that pair is "
+                        f"what makes the command demand who is asking, so the call is refused as "
+                        f"`invalid_payload` after the salon has already approved it, and the "
+                        f"customer hears nothing"
+                    )
+    return problems
+
+
+def payload_properties(commands_def):
+    """`command id -> {property names}` for every command whose payload schema is readable.
+
+    The anchor of `IDENTITY_BOUND_PAYLOAD`: a table of field names written HERE about a schema that
+    lives in ANOTHER repository is a rule that can go quietly wrong in two directions, and this is
+    the one that cannot be seen from this side — `appointments` renaming or dropping `customer_id`
+    would leave this battery demanding a word no command accepts, green forever over a template
+    that always fails.
+    """
+    out = {}
+    for cid, (module_dir, cdef) in commands_def.items():
+        rel = cdef.get("schema")
+        if not isinstance(rel, str) or module_dir is None:
+            continue
+        path = pathlib.Path(module_dir) / rel
+        if not path.is_file():
+            continue
+        out[cid] = set((json.loads(path.read_text()).get("properties") or {}).keys())
+    return out
+
+
+def identity_field_problems(name, doc, props):
+    """Every field `IDENTITY_BOUND_PAYLOAD` names is one the command's own schema really declares.
+
+    A document rule that never reads the document, and on purpose: what it needs is the ledger. As
+    a one-off call in `main()` it was the only check here that nothing required — deleting its
+    single line let `appointments` rename or drop `customer_id` with this battery green over
+    templates that would then fail on every cancellation (measured: the mutant survived). Registered
+    like every other rule, that deletion is refused by name.
+    """
+    problems = []
+    for cname, pairs in sorted(IDENTITY_BOUND_PAYLOAD.items()):
+        declared = props.get(cname)
+        if declared is None:
+            continue  # no readable schema next door: layer 1b already said so out loud
+        for (field, value), companion in sorted(pairs.items()):
+            for prop in (field, companion):
+                if prop not in declared:
+                    problems.append(
+                        f"{name}: IDENTITY_BOUND_PAYLOAD names `{prop}` for `{cname}`, whose "
+                        f"schema declares {sorted(declared)}: the table is about a contract that "
+                        f"lives in another repository and that contract moved, so this rule is now "
+                        f"asking the templates for a word nothing accepts"
+                    )
+    return problems
+
+
 def unattended_problems(name, doc):
     """A family that CALLS itself unattended has to actually run with nobody watching.
 
@@ -1125,6 +1229,8 @@ def only_the_customer_problems(name, doc):
 
 DOCUMENT_RULES = (
     policy_problems,
+    identified_cancellation_problems,
+    identity_field_problems,
     silence_problems,
     mute_refusal_problems,
     undeclared_tool_problems,
@@ -1143,6 +1249,8 @@ DOCUMENT_RULES = (
 # REQUIRED to apply, and that is asserted rather than assumed.
 SELF_CHECKED_RULES = (
     policy_problems,
+    identified_cancellation_problems,
+    identity_field_problems,
     silence_problems,
     mute_refusal_problems,
     undeclared_tool_problems,
@@ -2053,6 +2161,110 @@ ENUM_CASES = [
 ]
 
 
+IDENTITY_CASES = [
+    (
+        "the order that works: who is asking travels with the customer channel",
+        _enum_step(
+            "Cancel it with `appointments.appointments.cancel`: that `appointment_id`, a `reason`, "
+            "`channel` set to `customer` and the `customer_id` you looked up."
+        ),
+        0,
+    ),
+    (
+        "whatsapp_inbox#82 as it shipped: the channel is ordered and nobody is named",
+        _enum_step(
+            "Cancel it with `appointments.appointments.cancel`: that `appointment_id`, a `reason`, "
+            "and `channel` set to `customer`."
+        ),
+        1,
+    ),
+    (
+        "the Spanish order reads the same",
+        _enum_step(
+            "Anulala con `appointments.appointments.cancel`: ese `appointment_id`, un `reason`, y "
+            "`channel` puesto a `customer`."
+        ),
+        1,
+    ),
+    (
+        "the mutant that survived the first version: the order loses the field and the paragraph "
+        "underneath still explains it",
+        _enum_step(
+            "Cancel it with `appointments.appointments.cancel`: that `appointment_id`, a `reason`, "
+            "and `channel` set to `customer`.\n\nAnd that is why the `customer_id` goes with it: "
+            "Citas refuses a cancellation that does not say who is asking."
+        ),
+        1,
+    ),
+    (
+        "the staff channel names nobody on purpose — the agenda screen owns the appointment",
+        _enum_step("`appointments.appointments.cancel` with `channel` = `staff`."),
+        0,
+    ),
+    (
+        "a command the step never handed over binds nothing here",
+        _enum_step(
+            "`appointments.appointments.create`, `channel` set to `customer`",
+            ("appointments.appointments.create",),
+        ),
+        0,
+    ),
+    (
+        "a prompt that never orders the channel is not ordering a cancellation either",
+        _enum_step("You may call `appointments.appointments.cancel` if she asks for it."),
+        0,
+    ),
+]
+
+
+def _identity_reading_problems():
+    """`payload_properties` reads the real schema files, so `identity_field_problems` is only worth
+    what this proves: a schema on disk, one whose file is missing, one with no `schema` at all."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        (root / "schemas").mkdir()
+        (root / "schemas" / "cancel.json").write_text(
+            json.dumps({
+                "type": "object",
+                "properties": {
+                    "appointment_id": {"type": "string"},
+                    "channel": {"type": "string"},
+                    "customer_id": {"type": "string"},
+                },
+            })
+        )
+        got = payload_properties({
+            "appointments.appointments.cancel": (root, {"schema": "schemas/cancel.json"}),
+            "appointments.appointments.create": (root, {"schema": "schemas/missing.json"}),
+            "customers.list": (root, {}),
+        })
+        problems = []
+        want = {"appointments.appointments.cancel": {"appointment_id", "channel", "customer_id"}}
+        if got != want:
+            problems.append(
+                f"the battery's own reading of payload properties is wrong: expected {want}, got {got}"
+            )
+    # …and the anchor itself: the real table against a schema that HAS the pair, against one that
+    # lost it (the shape `appointments` dropping `customer_id` would take), and against a workspace
+    # whose schema could not be read — which stays quiet, because layer 1b already said so.
+    for label, props, expected in [
+        ("the schema declares both fields", want, 0),
+        (
+            "`customer_id` is gone from the schema",
+            {"appointments.appointments.cancel": {"appointment_id", "channel"}},
+            1,
+        ),
+        ("the command's schema could not be read", {}, 0),
+    ]:
+        got_anchor = identity_field_problems("(self-check)", {}, props)
+        if len(got_anchor) != expected:
+            problems.append(
+                f"the battery's own identity anchor is wrong — {label}: expected {expected} "
+                f"problem(s), got {len(got_anchor)}: {got_anchor}"
+            )
+    return problems
+
+
 def _enum_reading_problems():
     """`payload_enums` reads the real schema file, so `enum_value_problems` is only worth what this
     proves: a schema on disk with one enum field, one whose file is missing, one with no schema."""
@@ -2159,6 +2371,14 @@ def self_check():
                 f"{label}: expected {expected} problem(s), got {len(got)}: {got}"
             )
     problems += _enum_reading_problems()
+    for label, doc, expected in IDENTITY_CASES:
+        got = identified_cancellation_problems("(self-check)", doc)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «the customer channel says who is asking» rule is wrong — "
+                f"{label}: expected {expected} problem(s), got {len(got)}: {got}"
+            )
+    problems += _identity_reading_problems()
     for label, name, doc, expected in POLICY_CASES:
         got = policy_problems(name, doc, _FIXTURE_COMMANDS, _FIXTURE_READS)
         if len(got) != expected:
@@ -2302,6 +2522,7 @@ def main():
         commands_def = command_definitions(resolved)
         read_perms = module_read_permissions(resolved)
         enums = payload_enums(commands_def)
+        identity_props = payload_properties(commands_def)
 
     for path in docs:
         doc = json.loads(path.read_text())
@@ -2382,6 +2603,16 @@ def main():
         if commands_def is not None:
             problems += applied(ledger, enum_value_problems, path.name, doc, enums)
 
+        # 3a-vi-bis) …and when it orders `channel` = `customer` it also says WHO is asking
+        # (whatsapp_inbox#82). Needs no manifest: the pair is named in `IDENTITY_BOUND_PAYLOAD`,
+        # and `identity_field_problems` below is what keeps that table honest.
+        problems += applied(ledger, identified_cancellation_problems, path.name, doc)
+
+        # 3a-vi-ter) …and the table that rule reads still describes the command's REAL schema
+        # (whatsapp_inbox#82). Needs the manifests: the schema lives next to them.
+        if commands_def is not None:
+            problems += applied(ledger, identity_field_problems, path.name, doc, identity_props)
+
         # 3b) Every parameter is a word the query it addresses actually knows.
         #
         # A name that exists is not a name that filters. `whatsapp_inbox.conversations.list`
@@ -2439,6 +2670,7 @@ def main():
             policy_problems.__name__,
             undeclared_tool_problems.__name__,
             enum_value_problems.__name__,
+            identity_field_problems.__name__,
         }
         if commands_def is None
         else set()
