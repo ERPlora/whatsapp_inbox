@@ -287,7 +287,7 @@ La vía declarativa para que un blueprint la reparta está propuesta en **ERPlor
 - El módulo **`whatsapp_inbox` instalado y activo** con entitlement, y el hub **enrolado**: es lo
   que enciende el poller que trae los mensajes (hub#664), y es lo que crea la conversación de la
   que sale el destinatario.
-- Los módulos que aportan las tools: `customers`, `services`, `appointments` (>= 1.1.69, ver
+- Los módulos que aportan las tools: `customers`, `services`, `appointments` (>= 1.1.72, ver
   `requires.json`) y `staff`. El horario del negocio ya **no** se le pregunta a `schedules` desde el
   prompt: lo resuelve `appointments.availability.day_opening`, que aplica su precedencia con la
   misma función que la reserva (whatsapp_inbox#48).
