@@ -1383,6 +1383,132 @@ def unpinned_command_problems(name, doc, pins):
     return problems
 
 
+# ── «una instrucción no se pierde en la traducción» — whatsapp_inbox#112 ──────────────────────
+#
+# The recipes are written in English and translated into Spanish, and until this rule nothing held
+# the two texts to saying the SAME THING. What they DO is checked to death — steps, triggers, tools,
+# grants — but the instructions the model reads are free prose, so a paragraph that never made it
+# into one of the four documents leaves every rule in this battery green.
+#
+# It is not a fear, it is what happened (whatsapp_inbox#108): the notice-window warning was added to
+# the four booking templates and in one of them it did not land. The battery passed, `erplora
+# validate` passed, and it was caught by opening the four files by hand. In production that is a
+# Spanish business whose automation skips a rule its English twin respects — and the customer is the
+# one who finds out, at the door, after choosing.
+#
+# So the same thing is done here that `BOOKING_RULES` and `TAP_WORDS` already do for one sentence
+# each, only generalised: what may NOT be lost goes in a table, by family and by language, and a
+# rule walks the documents demanding it. Adding a safety instruction becomes adding a row; losing it
+# in one language becomes a red.
+#
+# What this is NOT: a word-by-word comparison of the two prompts. A real translation splits
+# sentences, reorders them and moves them between steps — all three happen in these files. Only the
+# sentence that carries the RULE is pinned, and it is looked for anywhere in the document.
+PINNED_INSTRUCTIONS = {
+    "appointment-from-whatsapp": (
+        (
+            "why `channel` is `customer`",
+            {
+                "en": "That `channel` is not decoration: it is what makes the salon's OWN rules apply",
+                "es": "Ese `channel` no es un adorno: es lo que hace que se apliquen las reglas PROPIAS del salón",
+            },
+        ),
+    ),
+    "appointment-from-whatsapp-unattended": (
+        (
+            "why `channel` is `customer`",
+            {
+                "en": "That `channel` is not decoration: it is what makes the salon's OWN rules apply",
+                "es": "Ese `channel` no es un adorno: es lo que hace que se apliquen las reglas PROPIAS del salón",
+            },
+        ),
+    ),
+    "reservation-from-whatsapp": (
+        (
+            "never a blocked day, never a window without room",
+            {
+                "en": "Never offer a time on a blocked day, and never offer a window with less room than they need.",
+                "es": "No ofrezcas nunca una hora de un día bloqueado, ni una franja con menos sitio del que necesitan.",
+            },
+        ),
+        (
+            "never a day outside the restaurant's advance window",
+            {
+                "en": "never offer a day the step before you already said this restaurant does not book",
+                "es": "no ofrezcas nunca un día que el paso anterior ya haya dicho que este restaurante no reserva",
+            },
+        ),
+    ),
+    "reservation-from-whatsapp-unattended": (
+        (
+            "never a blocked day, never a window without room",
+            {
+                "en": "Never offer a time on a blocked day, and never offer a window with less room than they need.",
+                "es": "No ofrezcas nunca una hora de un día bloqueado, ni una franja con menos sitio del que necesitan.",
+            },
+        ),
+        (
+            "never a day outside the restaurant's advance window",
+            {
+                "en": "never offer a day OUTSIDE that advance window",
+                "es": "no ofrezcas nunca un día FUERA de esa ventana de antelación",
+            },
+        ),
+    ),
+}
+
+
+def missing_instruction_problems(name, doc, families):
+    """Every instruction `PINNED_INSTRUCTIONS` names is really in the document, IN ITS LANGUAGE.
+
+    Judged per language, because the model reads the prompt in the language it is written in: a
+    Spanish document that carries only the English sentence has the rule for nobody who reads it.
+    And judged per FAMILY, because the same promise is worded differently by the attended and the
+    unattended halves — the attended one leans on what an earlier step already told the customer,
+    the unattended one names the setting it read — and flattening the two into one wording would
+    force a document to say something it has no reason to say.
+
+    Looked for anywhere in the document rather than in a named step, on purpose: which step holds a
+    sentence is exactly what a legitimate rewrite moves around, and a rule that also pins the step
+    turns every honest edit into a red — which is how a guard stops being read.
+
+    The table is anchored against what really ships (`families`), the hole
+    `shipped_recipe_problems` closes for `BOOKING_RULES`: rename a recipe and the row keeps guarding
+    a document that no longer exists, with this battery green, because every rule here only judges
+    the documents that are there.
+    """
+    problems = []
+    for family in sorted(PINNED_INSTRUCTIONS):
+        if family not in families:
+            problems.append(
+                f"{name}: `PINNED_INSTRUCTIONS` pins instructions for `{family}`, and no document "
+                f"in `flows/` belongs to that family: the row guards nothing and reads as if it "
+                f"did. Point it at the family that shipped, or take it out"
+            )
+    parts = name.split(".")
+    lang = parts[1] if len(parts) >= 3 else ""
+    for label, wording in PINNED_INSTRUCTIONS.get(parts[0], ()):
+        sentence = wording.get(lang)
+        if sentence is None:
+            problems.append(
+                f"{name} is pinned to say «{label}» and this battery has no wording of it for "
+                f"language `{lang}`: add the translation to `PINNED_INSTRUCTIONS` in the same "
+                f"commit that ships the document, or the instruction is a promise this language "
+                f"does not make"
+            )
+            continue
+        if any(sentence in prompt_of(step) for step in doc.get("steps", [])):
+            continue
+        problems.append(
+            f"{name} no longer says «{label}»: no prompt in it carries «{sentence}». That "
+            f"sentence is a rule the model has no other way of knowing — nothing in the document, "
+            f"the grants or the kernel says it — so the language that loses it gets an automation "
+            f"that behaves differently from its twin, and everything here stays green while it "
+            f"does. If the wording changed, change `PINNED_INSTRUCTIONS` with it"
+        )
+    return problems
+
+
 MOVE_RULE = {
     "en": "Moving is one call, never two.",
     "es": "Mover es una sola llamada, nunca dos.",
@@ -2320,6 +2446,7 @@ DOCUMENT_RULES = (
     moving_problems,
     own_customer_only_problems,
     unpinned_command_problems,
+    missing_instruction_problems,
     only_the_customer_problems,
     tappable_option_problems,
     parking_producer_problems,
@@ -2347,6 +2474,7 @@ SELF_CHECKED_RULES = (
     moving_problems,
     own_customer_only_problems,
     unpinned_command_problems,
+    missing_instruction_problems,
     only_the_customer_problems,
     tappable_option_problems,
     parking_producer_problems,
@@ -4215,6 +4343,131 @@ PIN_CASES = [
 ]
 
 
+# `(label, file name, document, the families that really ship, problems expected)` — the unit
+# tests of `missing_instruction_problems`. The families are handed in for the same reason the pins
+# are in `PIN_CASES`: half of what the rule judges is not in the document, and a row has to be able
+# to describe a `flows/` folder that does not exist here.
+_SHIPPED_FAMILIES = {
+    "appointment-from-whatsapp",
+    "appointment-from-whatsapp-unattended",
+    "reservation-from-whatsapp",
+    "reservation-from-whatsapp-unattended",
+}
+_RESERVATION_EN = "reservation-from-whatsapp.en.flow.json"
+_RESERVATION_ES = "reservation-from-whatsapp.es.flow.json"
+
+
+def _saying(*sentences):
+    """A document whose one `ai` step says exactly these lines and nothing else."""
+    return _fixture_doc(_ai_step("s", "manual", (), "\n".join(sentences)))
+
+
+_ES_CHANNEL = PINNED_INSTRUCTIONS["appointment-from-whatsapp"][0][1]["es"]
+_ES_CHANNEL_UNATTENDED = PINNED_INSTRUCTIONS["appointment-from-whatsapp-unattended"][0][1]["es"]
+_EN_BLOCKED = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][0][1]["en"]
+_EN_ADVANCE = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][1][1]["en"]
+_ES_BLOCKED = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][0][1]["es"]
+_ES_ADVANCE = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][1][1]["es"]
+
+
+INSTRUCTION_CASES = [
+    (
+        "the English document says both pinned instructions",
+        _RESERVATION_EN,
+        _saying(_EN_BLOCKED, _EN_ADVANCE),
+        _SHIPPED_FAMILIES,
+        0,
+    ),
+    (
+        "and so does the Spanish one, in Spanish",
+        _RESERVATION_ES,
+        _saying(_ES_BLOCKED, _ES_ADVANCE),
+        _SHIPPED_FAMILIES,
+        0,
+    ),
+    (
+        "whatsapp_inbox#112 ITSELF: the Spanish translation lost both instructions and carries the "
+        "English ones instead — every other rule here stays green, because they judge what the "
+        "document DOES and this is what it SAYS",
+        _RESERVATION_ES,
+        _saying(_EN_BLOCKED, _EN_ADVANCE),
+        _SHIPPED_FAMILIES,
+        2,
+    ),
+    (
+        "one of the two lost, which is how it really happens: a translator keeps the paragraph and "
+        "drops the sentence at the end of it",
+        _RESERVATION_ES,
+        _saying(_ES_BLOCKED),
+        _SHIPPED_FAMILIES,
+        1,
+    ),
+    (
+        "the sentence may live in ANY step of the document: the attended family says it where it "
+        "writes the reply and the unattended one where it books, and both are the same promise",
+        _RESERVATION_EN,
+        _fixture_doc(
+            _ai_step("first", "manual", (), "nothing to see here"),
+            _ai_step("second", "manual", (), _EN_BLOCKED + "\n" + _EN_ADVANCE),
+        ),
+        _SHIPPED_FAMILIES,
+        0,
+    ),
+    (
+        "a language this battery has no wording for is a document nobody can be held to: the "
+        "translation goes in the table in the same commit that ships the document",
+        "reservation-from-whatsapp.fr.flow.json",
+        _saying(_EN_BLOCKED, _EN_ADVANCE),
+        _SHIPPED_FAMILIES,
+        2,
+    ),
+    (
+        "a family with nothing pinned owes nothing: this is a list of what may not be lost, not a "
+        "demand that every recipe carry a sentence",
+        "task-from-whatsapp.en.flow.json",
+        _saying("whatever this recipe wants to say"),
+        _SHIPPED_FAMILIES | {"task-from-whatsapp"},
+        0,
+    ),
+    (
+        "the salon families are pinned to the same sentence, and reading it out of the table here "
+        "is what makes the table itself tamper-evident: delete the row and this row stops naming "
+        "anything",
+        "appointment-from-whatsapp.es.flow.json",
+        _saying(_ES_CHANNEL),
+        _SHIPPED_FAMILIES,
+        0,
+    ),
+    (
+        "and the unattended salon twin says it too, read out of ITS OWN entry: the two families "
+        "are pinned separately on purpose, so this row stops naming anything the day that entry "
+        "goes",
+        "appointment-from-whatsapp-unattended.es.flow.json",
+        _saying(_ES_CHANNEL_UNATTENDED),
+        _SHIPPED_FAMILIES,
+        0,
+    ),
+    (
+        "and the unattended twin that lost it, which is the one that cancels with nobody watching: "
+        "a model with no sentence telling it why `channel` is `customer` decides on its own what "
+        "it means",
+        "appointment-from-whatsapp-unattended.es.flow.json",
+        _saying("aquí no se dice nada del `channel`"),
+        _SHIPPED_FAMILIES,
+        1,
+    ),
+    (
+        "a family that is pinned and no longer SHIPS: renaming a recipe leaves the row guarding a "
+        "document that does not exist, and every rule here stays green because they only judge the "
+        "documents that are there (the hole `shipped_recipe_problems` closes for BOOKING_RULES)",
+        _RESERVATION_EN,
+        _saying(_EN_BLOCKED, _EN_ADVANCE),
+        _SHIPPED_FAMILIES - {"appointment-from-whatsapp-unattended"},
+        1,
+    ),
+]
+
+
 def _identity_reading_problems():
     """`payload_properties` reads the real schema files, so `identity_field_problems` is only worth
     what this proves: a schema on disk, one whose file is missing, one with no `schema` at all."""
@@ -4680,6 +4933,13 @@ def self_check():
                 f"the battery's own «the narrow value lives in the grant» rule is wrong — {label}: "
                 f"expected {expected} problem(s), got {len(got)}: {got}"
             )
+    for label, name, doc, families, expected in INSTRUCTION_CASES:
+        got = missing_instruction_problems(name, doc, families)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «an instruction may not be lost in translation» rule is wrong "
+                f"— {label}: expected {expected} problem(s), got {len(got)}: {got}"
+            )
     for label, name, doc, expected in OWN_CUSTOMER_CASES:
         got = own_customer_only_problems(name, doc)
         if len(got) != expected:
@@ -4887,6 +5147,10 @@ def main():
     # documents, and the set is not visible from any one of them.
     booked = booked_families((path, json.loads(path.read_text())) for path in docs)
 
+    # …and which families ship AT ALL, for the same reason: `PINNED_INSTRUCTIONS` names families,
+    # and a row pointing at a name nothing carries is a guard over nothing.
+    shipped_families = {path.name.split(".")[0] for path in docs}
+
     for path in docs:
         doc = json.loads(path.read_text())
 
@@ -4971,6 +5235,12 @@ def main():
         # Reads the sidecar, never a manifest: a bare checkout judges it too.
         problems += applied(
             ledger, unpinned_command_problems, path.name, doc, declared_command_pins(gpath)
+        )
+
+        # 3a-bis-vii) …and the instructions that may not be lost are in the document, IN ITS OWN
+        # LANGUAGE (whatsapp_inbox#112). Reads nothing but the prompts and the names in `flows/`.
+        problems += applied(
+            ledger, missing_instruction_problems, path.name, doc, shipped_families
         )
 
         # 3a-ter) …and every tool its prompts ORDER was actually handed over (whatsapp_inbox#61).
