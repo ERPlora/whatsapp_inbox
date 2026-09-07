@@ -520,7 +520,12 @@ def silence_problems(name, doc):
     in exactly one place — the `text` that step wrote for the customer. A `notify` after the
     booking whose words are its own («Done.») is a message that cannot carry them, and it passed
     this rule until a reviewer sent it (whatsapp_inbox#58, mutant N7). Some `notify` after the
-    last booking step has to quote `{{steps.<that step>.text}}`.
+    last booking step has to carry `{{steps.<that step>.text}}`.
+
+    ONE HOP is allowed, and it is what whatsapp_inbox#67 needs: the message can come from a step
+    in between that reads how the turn ended and quotes the booking step itself (`relays_of`).
+    What is not allowed is the hop losing the words on the way — a middle step that quotes nobody
+    is the same «Done.» wearing an extra step.
     """
     steps = doc.get("steps", [])
     writing = writing_ai_steps(doc)
@@ -537,15 +542,104 @@ def silence_problems(name, doc):
             f"with `Done`), so a `notify` written after this step covers both endings — booked, and "
             f"nothing found"
         ]
-    if any(f"steps.{writer}.text" in quoted_paths(s) for s in after):
+    speakers = {writer} | relays_of(steps, last, writer)
+    if any(
+        any(f"steps.{sp}.text" in quoted_paths(s) for sp in speakers) for s in after
+    ):
         return []
     return [
-        f"{name} step `{writer}` can book something and the `notify` after it never quotes "
-        f"`{{{{steps.{writer}.text}}}}`: the day, the hour and the professional live only in the "
-        f"text that step wrote for the customer (`result` is `{{ok, new_ids}}` and "
-        f"`proposed.arguments` is an opaque string), so a notify with words of its own tells them "
-        f"nothing about what happened"
+        f"{name} step `{writer}` can book something and the `notify` after it never carries "
+        f"`{{{{steps.{writer}.text}}}}`, directly or through a step that quotes it: the day, the "
+        f"hour and the professional live only in the text that step wrote for the customer "
+        f"(`result` is `{{ok, new_ids}}` and `proposed.arguments` is an opaque string), so a "
+        f"notify with words of its own tells them nothing about what happened"
     ]
+
+
+def relays_of(steps, writer_index, writer):
+    """Ids of the steps after the writer that pass the writer's OWN words on.
+
+    The one hop `silence_problems` allows, and it is the shape whatsapp_inbox#67 needs: the
+    message that reaches the customer cannot be the booking text verbatim any more, because that
+    text was written before anybody said yes or no. A step in between reads how the turn ended and
+    writes what to send — so the `notify` quotes the relay, and the relay quotes the writer.
+
+    One hop, not a chain: what is being protected is that the day, the hour and the professional
+    survive to the customer, and a relay that never quotes the writer cannot carry them however
+    many steps follow it. That is the mutant this keeps killing — a step in the middle that writes
+    «Done.» of its own (whatsapp_inbox#58, reviewer mutant N7) is not a relay, it is a wall.
+    """
+    out = set()
+    for step in steps[writer_index + 1 :]:
+        sid = step.get("id")
+        if sid and f"steps.{writer}.text" in quoted_paths(step):
+            out.add(sid)
+    return out
+
+
+def mute_refusal_problems(name, doc):
+    """A «no» from the salon has to reach the customer too — whatsapp_inbox#67.
+
+    `silence_problems` covers the endings where the automation ACTED: it booked, or it proposed
+    nothing. This is the third ending, and until hub#1622 it was the one nobody could write: the
+    salon opens the tray at 9 AM, reads the proposal and REJECTS it. The customer, who was told at
+    3 AM «we will confirm as soon as the salon opens», is never told anything. She waits for a
+    message that cannot arrive, because the run is already dead — a rejection used to end it as
+    `cancelled` before the `notify` was ever reached.
+
+    Two things have to be true, and they are two halves of the same fix:
+
+    * **the run has to survive the «no»** — the step that can be rejected declares
+      `"on_reject": "continue"`. Without it the kernel cancels the run at the rejection and every
+      step written after it, `notify` included, is dead code;
+    * **and what goes out has to know it was a «no»** — the step whose `text` the `notify` sends
+      has to read `steps.<writer>.status`. With `continue` alone the run reaches the `notify` and
+      sends the booking text the model wrote BEFORE the decision: «you are booked, Tuesday at 10
+      with Ana». Telling a customer she has an appointment the salon just refused is worse than
+      telling her nothing, so half this fix is not a partial fix — it is a new defect.
+
+    Only the LAST `ai` step that can write is judged, and only when it is `manual`: `auto` never
+    asks anybody, so there is no «no» to survive (the `-unattended` family lives there). And only
+    when a `notify` follows it — a document that says nothing to anybody is `silence_problems`.
+    """
+    steps = doc.get("steps", [])
+    writing = writing_ai_steps(doc)
+    if not writing:
+        return []
+    last = writing[-1]
+    step = steps[last]
+    if (step.get("policy") or "manual") != "manual":
+        return []
+    writer = step.get("id")
+    after = [s for s in steps[last + 1 :] if s.get("kind") == "notify"]
+    if not after:
+        return []
+
+    problems = []
+    if step.get("on_reject") != "continue":
+        problems.append(
+            f"{name} step `{writer}` can be REJECTED (`policy: manual`) and does not declare "
+            f"`\"on_reject\": \"continue\"`: a «no» ends the run as `cancelled` right there, so "
+            f"the `notify` written after it never runs and the customer keeps waiting for the "
+            f"answer the automation promised her"
+        )
+
+    by_id = {s.get("id"): s for s in steps}
+    for notify in after:
+        for path in sorted(quoted_paths(notify)):
+            if not path.endswith(".text"):
+                continue
+            speaker = path[len("steps.") :].split(".")[0].strip()
+            source = by_id.get(speaker)
+            if source is not None and f"steps.{writer}.status" in quoted_paths(source):
+                continue
+            problems.append(
+                f"{name} `notify` step `{notify.get('id')}` sends `{{{{{path}}}}}`, and "
+                f"`{speaker}` never reads `{{{{steps.{writer}.status}}}}`: it cannot tell an "
+                f"approved booking from a rejected one, so a customer whose appointment the salon "
+                f"just refused is told the day, the hour and the professional she is NOT getting"
+            )
+    return problems
 
 
 # The rules `main()` has to apply to EVERY real document. `self_check()` proves each of them against
@@ -828,6 +922,7 @@ def hour_choice_problems(name, doc):
 DOCUMENT_RULES = (
     policy_problems,
     silence_problems,
+    mute_refusal_problems,
     undeclared_tool_problems,
     unordered_tool_problems,
     budget_problems,
@@ -844,6 +939,7 @@ DOCUMENT_RULES = (
 SELF_CHECKED_RULES = (
     policy_problems,
     silence_problems,
+    mute_refusal_problems,
     undeclared_tool_problems,
     unordered_tool_problems,
     budget_problems,
@@ -896,6 +992,12 @@ def structural_shape(doc):
                 "tools": s.get("tools"),
                 "policy": s.get("policy"),
                 "max_iters": s.get("max_iters"),
+                # Machinery, not words: a Spanish document that dropped `on_reject` would cancel
+                # its run at the rejection while the English one carried on, and the guard read
+                # only the keys it was told about, so it saw two identical automations
+                # (whatsapp_inbox#67).
+                "on_reject": s.get("on_reject"),
+                "on_expire": s.get("on_expire"),
                 "command": s.get("command"),
                 "when": s.get("when"),
                 "seconds": s.get("seconds"),
@@ -960,13 +1062,30 @@ _FIXTURE_READS = {
 }
 
 
-def _ai_step(step_id, policy, commands, prompt=""):
-    return {
+def _ai_step(step_id, policy, commands, prompt="", on_reject=None):
+    step = {
         "id": step_id,
         "kind": "ai",
         "policy": policy,
         "prompt": prompt,
         "tools": {"commands": list(commands)},
+    }
+    if on_reject is not None:
+        step["on_reject"] = on_reject
+    return step
+
+
+def _relay_step(step_id, writer, prompt=""):
+    """The step whatsapp_inbox#67 adds: it reads how the turn ended and writes what to send."""
+    return {
+        "id": step_id,
+        "kind": "ai",
+        "policy": "manual",
+        "max_iters": 1,
+        "prompt": (
+            f"{prompt}Outcome: {{{{steps.{writer}.status}}}}. "
+            f"Words: {{{{steps.{writer}.text}}}}"
+        ),
     }
 
 
@@ -1277,6 +1396,133 @@ SILENCE_CASES = [
         ),
         1,
     ),
+    (
+        "ONE HOP is a confirmation: the message can come from a step in between, as long as that "
+        "step carries the booking step's own words (whatsapp_inbox#67)",
+        _fixture_doc(
+            _ai_step("book", "manual", ["appointments.appointments.create"]),
+            _relay_step("reply", "book"),
+            _notify_step("tell", "{{steps.reply.text}}"),
+        ),
+        0,
+    ),
+    (
+        "…and a hop that quotes NOBODY is the same «Done.» wearing an extra step: the day, the "
+        "hour and the professional never left the booking step",
+        _fixture_doc(
+            _ai_step("book", "manual", ["appointments.appointments.create"]),
+            {"id": "reply", "kind": "ai", "policy": "manual", "prompt": "Say something nice."},
+            _notify_step("tell", "{{steps.reply.text}}"),
+        ),
+        1,
+    ),
+]
+
+
+# `(label, document, problems expected)` — the mutants of «a «no» reaches the customer too».
+REFUSAL_CASES = [
+    (
+        "the shape whatsapp_inbox#67 ships: the booking step survives a «no» and the step that "
+        "writes the reply knows how the turn ended",
+        _fixture_doc(
+            _ai_step(
+                "book", "manual", ["appointments.appointments.create"], on_reject="continue"
+            ),
+            _relay_step("reply", "book"),
+            _notify_step("tell", "{{steps.reply.text}}"),
+        ),
+        0,
+    ),
+    (
+        "without `on_reject` the kernel cancels the run AT the rejection, so the notify after it "
+        "is dead code and the customer waits forever",
+        _fixture_doc(
+            _ai_step("book", "manual", ["appointments.appointments.create"]),
+            _relay_step("reply", "book"),
+            _notify_step("tell", "{{steps.reply.text}}"),
+        ),
+        1,
+    ),
+    (
+        "…and saying `cancel` out loud is the same ending, not an exemption",
+        _fixture_doc(
+            _ai_step("book", "manual", ["appointments.appointments.create"], on_reject="cancel"),
+            _relay_step("reply", "book"),
+            _notify_step("tell", "{{steps.reply.text}}"),
+        ),
+        1,
+    ),
+    (
+        "surviving the «no» is only half: a notify that sends the booking step's own text tells a "
+        "customer whose appointment was just refused the day, the hour and the professional she "
+        "is NOT getting",
+        _fixture_doc(
+            _ai_step(
+                "book", "manual", ["appointments.appointments.create"], on_reject="continue"
+            ),
+            _notify_step("tell", "{{steps.book.text}}"),
+        ),
+        1,
+    ),
+    (
+        "a step in between that never reads `status` is just as blind — it relays the same "
+        "sentence the model wrote before anybody decided",
+        _fixture_doc(
+            _ai_step(
+                "book", "manual", ["appointments.appointments.create"], on_reject="continue"
+            ),
+            {"id": "reply", "kind": "ai", "policy": "manual", "prompt": "Send {{steps.book.text}}"},
+            _notify_step("tell", "{{steps.reply.text}}"),
+        ),
+        1,
+    ),
+    (
+        "both halves missing is two defects, not one: the run dies AND what it would have sent "
+        "was wrong",
+        _fixture_doc(
+            _ai_step("book", "manual", ["appointments.appointments.create"]),
+            _notify_step("tell", "{{steps.book.text}}"),
+        ),
+        2,
+    ),
+    (
+        "a missing `policy` key is `manual` — the default the kernel applies, and the one that "
+        "can be rejected",
+        _fixture_doc(
+            {
+                "id": "book",
+                "kind": "ai",
+                "prompt": "",
+                "tools": {"commands": ["appointments.appointments.create"]},
+            },
+            _relay_step("reply", "book"),
+            _notify_step("tell", "{{steps.reply.text}}"),
+        ),
+        1,
+    ),
+    (
+        "`auto` never asks anybody, so there is no «no» to survive: the `-unattended` family is "
+        "silent here on purpose",
+        _fixture_doc(
+            _ai_step("book", "auto", ["appointments.appointments.create"]),
+            _notify_step("tell", "{{steps.book.text}}"),
+        ),
+        0,
+    ),
+    (
+        "a document that says nothing to anybody is `silence_problems`, not this rule — one hole, "
+        "one owner",
+        _fixture_doc(_ai_step("book", "manual", ["appointments.appointments.create"])),
+        0,
+    ),
+    (
+        "and a document that proposes nothing owes nobody an answer",
+        _fixture_doc(
+            {"id": "look", "kind": "ai", "policy": "manual", "prompt": "", "tools": {"queries": ["customers.list"]}},
+            _notify_step("tell", "hello"),
+        ),
+        0,
+    ),
 ]
 
 
@@ -1485,6 +1731,13 @@ def self_check():
             problems.append(
                 f"the battery's own «say something back» rule is wrong — {label}: expected "
                 f"{expected} problem(s), got {len(got)}: {got}"
+            )
+    for label, doc, expected in REFUSAL_CASES:
+        got = mute_refusal_problems("(self-check)", doc)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «a «no» reaches the customer too» rule is wrong — {label}: "
+                f"expected {expected} problem(s), got {len(got)}: {got}"
             )
     for label, doc, expected in TOOL_CASES:
         got = undeclared_tool_problems("(self-check)", doc, _KNOWN_OPS)
@@ -1706,6 +1959,10 @@ def main():
         # 3a-bis) …and it SAYS so afterwards (whatsapp_inbox#58). Needs no manifest: it is about the
         # shape of the document, so it runs on a bare checkout too.
         problems += applied(ledger, silence_problems, path.name, doc)
+
+        # 3a-bis-i) …and it says something back when the answer is «no» too (whatsapp_inbox#67).
+        # The ending `silence_problems` cannot see: the run used to die AT the rejection.
+        problems += applied(ledger, mute_refusal_problems, path.name, doc)
 
         # 3a-bis-ii) …and a family that CALLS itself unattended really is (whatsapp_inbox#58): the
         # other half of the exception `policy_problems` grants it. Needs no manifest either.
