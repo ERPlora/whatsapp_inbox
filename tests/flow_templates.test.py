@@ -86,16 +86,37 @@ def is_unattended(name):
 
 
 def needed_grants(doc):
-    """Exactly the grants this document needs, as `(kind, value)` pairs."""
+    """Exactly the grants this document needs, as `(kind, value)` pairs.
+
+    A model is not the only thing that spends a grant, and this used to read as if it were. The
+    DETERMINISTIC steps go through the very same gates — `crates/runtime/src/flows/grants.rs`
+    puts `kind: query` (hub#954) through `check_query_grant` and `kind: command` through
+    `check_command_grant`, the same two doors the `ai` step's tools use — so a document whose
+    only reader is a `query` step needed a grant this function said nobody needed. Both
+    directions of the comparison lied because of it: the missing grant was never demanded, and
+    the grant that IS spent was reported as «an authorisation nobody spends» and invited to be
+    deleted, which would have taken the step down with `flow.grant_denied` on the first run
+    (whatsapp_inbox#103).
+
+    `kind: http` is deliberately absent: its grant is a URL PATTERN and the step carries a
+    templated URL, so what it needs cannot be derived from the document — `allows_http` decides
+    that against the URL as really built. A template that adds an `http` step has to bring its
+    own rule.
+    """
     needed = set()
     for step in doc.get("steps", []):
-        if step.get("kind") == "ai":
+        kind = step.get("kind")
+        if kind == "ai":
             tools = step.get("tools", {})
             for q in tools.get("queries", []):
                 needed.add(("query", q))
             for c in tools.get("commands", []):
                 needed.add(("command", c))
-        elif step.get("kind") == "notify":
+        elif kind == "query":
+            needed.add(("query", step["query"]))
+        elif kind == "command":
+            needed.add(("command", step["command"]))
+        elif kind == "notify":
             needed.add(("notify", step["channel"]))
             to = step["to"]
             needed.add(("recipient_query", f"{to['query']}#{to['field']}"))
@@ -1175,6 +1196,14 @@ def hour_choice_problems(name, doc):
 # step's hands for the other branches, so it is always one sentence away.
 MOVE_COMMAND = "appointments.appointments.reschedule"
 OWNED_APPOINTMENTS_QUERY = "appointments.appointments.list_for_customer"
+# The ADDRESS BOOK, searchable by name (`customers.list` declares `search: [name, …]` and a
+# `name` filter with `op: like`, so on the wire `f_name`/`search` reach whoever holds it).
+# Harmless in a hub screen; not in the hands of a model that is reading a stranger's WhatsApp.
+DIRECTORY_QUERY = "customers.list"
+# What the trigger carries and no model can touch: the phone the message came FROM. It is mapped
+# in `triggers[].input`, so it reaches a step as `{{input.from}}` — the one identity in this run
+# that WhatsApp itself vouched for.
+TRUSTED_PHONE = "input.from"
 MOVE_RULE = {
     "en": "Moving is one call, never two.",
     "es": "Mover es una sola llamada, nunca dos.",
@@ -1199,18 +1228,23 @@ def moving_problems(name, doc):
     every other step and on any future template that does not book appointments at all (table
     reservations, whatsapp_inbox#60): they owe nothing here.
 
-    🔴 **And the answer is not the same for the two families, because moving CANNOT BE SCOPED.**
-    `appointments.appointments.cancel` binds its customer channel — handed `channel: "customer"`,
-    the handler refuses an appointment whose `customer_id` is not the one asking
-    (`cancel_appointment_pure`). `appointments.appointments.reschedule` has no such field to bind:
-    its schema is `additionalProperties: false` over `appointment_id`, `start_datetime` and
-    `duration_minutes`, and the handler checks state, notice, hours, blocks and overlap — never
-    WHOSE appointment it is. So the whole chain `customers.list` (searchable by name) →
-    `list_for_customer` (takes any `customer_id`) → `reschedule` sits inside the grants this
-    template asks for, and the only thing between a customer and a stranger's hour is a paragraph
-    of prompt. That is precisely what hub#1623 and whatsapp_inbox#100 declare is NOT a control —
-    and the fix that closes it for cancelling (pinning `payload` in the grant, hub#1632) has
-    nothing to pin here, so the hole would survive its own fix.
+    🔴 **And the answer is not the same for the two families, because the binding moving now has
+    is one the MODEL can decline.** `appointments.appointments.cancel` binds its customer channel
+    — handed `channel: "customer"`, the handler refuses an appointment whose `customer_id` is not
+    the one asking. Since appointments#144 (v1.1.73) `reschedule` has the same two fields and the
+    guard is EXTRACTED — `customer_identity_refusal(channel, payload, row)`, called by both doors
+    — so the sentence this docstring used to carry, «it has no such field to bind», is no longer
+    true and the reason for the split moved rather than disappeared.
+
+    Where it moved: `channel` is an enum `staff|customer` whose **default is `staff`**, and the
+    guard opens with `if channel != Customer { return Ok(None) }`. A model that simply omits the
+    field is a receptionist as far as `appointments` is concerned, and the whole chain
+    `customers.list` (searchable by name) → `list_for_customer` (takes any `customer_id`) →
+    `reschedule` is back, inside the grants this template already asks for. What makes the field
+    honest is the grant PINNING it (`payload` on a `command` grant, hub#1623) so the value is not
+    the model's to choose — which is whatsapp_inbox#100, still open and waiting on hub#1623 being
+    DEPLOYED rather than merged. Until then the unattended family keeps the verdict below for a
+    new reason: not «there is nothing to pin», but «nothing pins it yet».
 
     Hence the split:
 
@@ -1218,9 +1252,9 @@ def moving_problems(name, doc):
       runs exactly as proposed) the channel moves appointments, with the four marks below;
     * where NOBODY is watching (`policy: "auto"`, the family whatsapp_inbox#58 ships for the
       one-chair salon) the channel must NOT be able to move at all, and must say so in its prompt
-      so the customer is told a person will answer instead of being ignored. Reopening that case
-      is appointments#142 (give `reschedule` its `channel` + `customer_id`, the twin of
-      appointments#140) and then whatsapp_inbox#103 — in that order, never the other way.
+      so the customer is told a person will answer instead of being ignored. The first half of
+      reopening it is DONE — appointments#142 shipped as appointments#144 — and what is left is
+      pinning the channel from this side (whatsapp_inbox#100), never the other way round.
 
     A missing `policy` counts as «nobody is watching»: this fails CLOSED, because the family that
     gets the write wrong is the one where nothing downstream notices.
@@ -1229,13 +1263,12 @@ def moving_problems(name, doc):
 
     * **it can move** — `MOVE_COMMAND` in `tools.commands`. This is the red the issue itself is;
     * **it can look up WHAT it is moving** — `OWNED_APPOINTMENTS_QUERY` in `tools.queries`. This
-      one is not a nicety and it is not symmetry with cancelling: unlike
-      `appointments.appointments.cancel`, this command carries no `channel` and no `customer_id`
-      (`schemas/appointment_reschedule.json` is `additionalProperties: false` over
-      `appointment_id`, `start_datetime` and `duration_minutes`), so `appointments` CANNOT refuse
-      the move of somebody else's appointment. The only thing standing between a customer and
-      another person's hour is that the id came out of that query, for the customer resolved from
-      her own phone number;
+      one is not a nicety and it is not symmetry with cancelling: the `channel` that would let
+      `appointments` refuse somebody else's appointment defaults to `staff`, and nothing in this
+      template pins it to `customer` yet (whatsapp_inbox#100), so the handler is not being asked
+      to check whose appointment it is. The only thing standing between a customer and another
+      person's hour is that the id came out of that query, for the customer resolved from her own
+      phone number;
     * **the prompt says moving never becomes cancel-plus-book**, in the language it is written in,
       the same way and for the same reason `hour_choice_problems` pins its sentence: a model reads
       the prompt it was given, so a Spanish document carrying only the English sentence has the
@@ -1302,10 +1335,12 @@ def moving_problems(name, doc):
         if OWNED_APPOINTMENTS_QUERY not in (tools.get("queries") or []):
             problems.append(
                 f"{name} step `{sid}` can move an appointment and was never handed "
-                f"`{OWNED_APPOINTMENTS_QUERY}`: `{MOVE_COMMAND}` takes no `channel` and no "
-                f"`customer_id`, so `appointments` cannot refuse a move of somebody else's "
-                f"appointment — that query, filtered by the customer resolved from her own phone "
-                f"number, is the ONLY thing that makes the id honest"
+                f"`{OWNED_APPOINTMENTS_QUERY}`: since appointments#144 `{MOVE_COMMAND}` does take "
+                f"`channel` + `customer_id`, but `channel` DEFAULTS to `staff` and nothing here "
+                f"pins it to `customer` yet (whatsapp_inbox#100), so `appointments` is never "
+                f"asked to refuse a move of somebody else's appointment — that query, filtered by "
+                f"the customer resolved from her own phone number, is the ONLY thing that makes "
+                f"the id honest"
             )
         sentence = MOVE_RULE.get(lang)
         if sentence is None:
@@ -1331,6 +1366,186 @@ def moving_problems(name, doc):
                 f"that moving is «{stale}»: the model obeys the sentence, not the tool list, so "
                 f"the branch is dead, the owner was asked for a permission nothing spends, and "
                 f"every other rule here stays green over it"
+            )
+    return problems
+
+
+def _query_steps(doc, query):
+    """`(index, step)` of every deterministic `query` step (hub#954) reading `query`."""
+    return [
+        (i, s)
+        for i, s in enumerate(doc.get("steps", []))
+        if s.get("kind") == "query" and s.get("query") == query
+    ]
+
+
+def own_customer_only_problems(name, doc):
+    """A model reading a stranger's message never holds the ADDRESS BOOK — whatsapp_inbox#103.
+
+    The chain this closes needs no bug and no jailbreak, only the two reads these templates were
+    already granted: `customers.list` is searchable by NAME, so «what has María got booked?»
+    resolves a stranger to her `id`; `list_for_customer` takes ANY `customer_id`, so that id
+    returns her diary — day, hour, professional, `notes` and `internal_notes`; and what the step
+    reads is what the step writes back, to whoever wrote in. Nothing downstream can refuse it: a
+    read is not a write, so no approval tray sees it, and `appointments` is answering a question
+    it was asked correctly. The only thing in the way was a paragraph of prompt telling the model
+    to search by phone — which is the same «control» whatsapp_inbox#100 and hub#1623 exist to say
+    is not one.
+
+    🔴 **And it cannot be closed the way the write side is.** A grant pins payload values
+    (hub#1623), but only on a `command`: `crates/runtime/src/flows/grants.rs` refuses a `payload`
+    on any other kind with `flow.invalid_grant_payload`, because `check_command_grant` is the one
+    gate handed a payload and a restriction nothing applies is worse than none. Both links here
+    are `query` grants. So there is nothing to pin, and taking the reads away instead would take
+    cancelling with them.
+
+    What closes it is moving the LOOKUP out of the model's hands. The kernel already has the
+    shape: a `query` step (hub#954) is a deterministic read whose params are mapped by the
+    DOCUMENT, not chosen by a model — and `{{input.from}}` is the phone WhatsApp itself vouched
+    for. Resolve the customer there, and the only `customer_id` that exists in the run is the one
+    the number belongs to. Four marks, each of them one edit away from being lost:
+
+    * **the model is never handed the address book** — `DIRECTORY_QUERY` out of every `ai` step's
+      `tools.queries`. This is the red the issue is: leave it in and every other mark here is
+      decoration, because the model can resolve anybody by name whatever the prompt says;
+    * **whoever can read a diary has a deterministic resolver BEFORE it** — a `kind: query` step
+      over `DIRECTORY_QUERY` earlier in the document. «Earlier» is not pedantry: `steps.x` of a
+      step that has not run resolves to `null` (`resolve_path`), so a resolver placed after the
+      reader hands it nothing and the model improvises again;
+    * **that resolver is keyed on the phone and on nothing a model wrote** — every param
+      templated from `input.`, and none of them reading `steps.` . A resolver fed
+      `{{steps.know_the_customer.text}}` is the same hole with an extra step in it, and it would
+      pass the two marks above;
+    * **and the reader actually USES it** — `{{steps.<resolver>.id}}` named in the prompt.
+      Without this the fix is only a restriction: the step has no customer, so it invents one or
+      answers nothing, and «closed the hole» would mean «broke cancelling».
+
+    Silent on documents that read no diary and hold no address book: a template that books
+    nothing for a named person owes nothing here.
+    """
+    problems = []
+    steps = doc.get("steps", [])
+    resolvers = _query_steps(doc, DIRECTORY_QUERY)
+
+    # Mark 5, and the one that caught a real bug in this very commit: a resolver ANSWERS in
+    # `{{steps.<id>.…}}`, and the braces are the whole mechanism. Written with one brace the
+    # runtime never resolves it (`resolve_path` is only reached from `{{…}}`), so the model is
+    # handed the literal text `{steps.find_customer.id}`, finds no id in it, and goes back to
+    # deciding who this run is about — with every other mark here still green, because the step
+    # LOOKS wired. The reservation templates have no diary read, so mark 4 does not cover them:
+    # this one is owed by every resolver in every family.
+    for index, step in enumerate(steps):
+        if step.get("kind") != "query" or step.get("query") != DIRECTORY_QUERY:
+            continue
+        sid = step.get("id")
+        later = json.dumps(steps[index + 1:], ensure_ascii=False, sort_keys=True)
+        if "{{steps." + str(sid) + "." not in later:
+            problems.append(
+                f"{name} resolves the customer in `{sid}` and no later step ever reads "
+                f"`{{{{steps.{sid}.…}}}}`: the answer is fetched and dropped. Either a step is "
+                f"meant to use it — and then the hole is still open, because whoever books is "
+                f"choosing the customer some other way — or the reference lost a brace, which "
+                f"reads as plain text to the model and resolves to nothing. A grant is spent "
+                f"either way"
+            )
+
+        # The same reference, HALF-WRITTEN. `{{steps.x.id}}` is the whole mechanism; `{steps.x.id}`
+        # is plain text the runtime never resolves (`resolve_path` is only reached from `{{…}}`),
+        # so the model is handed the words and goes straight back to choosing the customer itself.
+        # Neither mark above catches it on its own: mark 5 is satisfied whenever the resolver is
+        # ALSO read correctly somewhere else (`.found`, `.count`), and mark 4 below only runs for
+        # steps that read a diary — which the TABLE families (whatsapp_inbox#104) never do. So in
+        # exactly those four documents the one reference carrying the identity could sit in the
+        # prompt as plain text with the battery green. Not hypothetical: `str.format` produced this
+        # shape while these very templates were being written.
+        for broken in sorted(
+            set(re.findall(r"(?<!\{)\{steps\." + re.escape(str(sid)) + r"\.[A-Za-z0-9_]+\}", later))
+        ):
+            problems.append(
+                f"{name} names `{broken}` with ONE brace: the runtime resolves `{{{{…}}}}` and "
+                f"nothing else, so `{sid}` is read and the step is handed that text verbatim "
+                f"instead of the value. It LOOKS wired and resolves to nothing, which is how the "
+                f"reference that carries the customer's identity goes missing with every other "
+                f"mark still green"
+            )
+
+    for index, step in enumerate(steps):
+        if step.get("kind") != "ai":
+            continue
+        sid = step.get("id")
+        tools = step.get("tools") or {}
+        queries = tools.get("queries") or []
+
+        if DIRECTORY_QUERY in queries:
+            problems.append(
+                f"{name} step `{sid}` hands the model `{DIRECTORY_QUERY}`, which searches the "
+                f"address book by NAME (`f_name`/`search`). Steered by a stranger's message that "
+                f"is «find María» → her `id` → `{OWNED_APPOINTMENTS_QUERY}` → her diary, notes "
+                f"and internal notes, written straight back to whoever asked. A `query` grant "
+                f"cannot pin its params (`flow.invalid_grant_payload`), so the lookup has to "
+                f"leave the model: resolve the customer in a `kind: query` step keyed on "
+                f"`{{{{{TRUSTED_PHONE}}}}}` and hand the step the id, not the search"
+            )
+
+        if OWNED_APPOINTMENTS_QUERY not in queries:
+            continue
+
+        earlier = [(i, s) for i, s in resolvers if i < index]
+        if not earlier:
+            problems.append(
+                f"{name} step `{sid}` can read one customer's whole diary with "
+                f"`{OWNED_APPOINTMENTS_QUERY}` and no `kind: query` step resolved that customer "
+                f"before it: the `customer_id` can only come from the model, so it is whoever the "
+                f"message named. Add a deterministic read of `{DIRECTORY_QUERY}` keyed on "
+                f"`{{{{{TRUSTED_PHONE}}}}}` ahead of this step"
+            )
+            continue
+
+        for _, resolver in earlier:
+            rid = resolver.get("id")
+            params = resolver.get("params") or {}
+            if not params:
+                problems.append(
+                    f"{name} step `{rid}` resolves the customer with `{DIRECTORY_QUERY}` and "
+                    f"passes NO params: that is the whole address book, and its first row is "
+                    f"somebody. Key it on `{{{{{TRUSTED_PHONE}}}}}`"
+                )
+                continue
+            for key, expr in sorted(params.items()):
+                text = expr if isinstance(expr, str) else json.dumps(expr, sort_keys=True)
+                if "{{steps." in text or text.startswith("steps."):
+                    problems.append(
+                        f"{name} step `{rid}` resolves the customer with `{DIRECTORY_QUERY}` and "
+                        f"takes `{key}` from another step's output (`{text}`). If that step is an "
+                        f"`ai` one, the model is choosing who this run is about again — the "
+                        f"lookup moved, the hole did not. Key it on `{{{{{TRUSTED_PHONE}}}}}`"
+                    )
+            if not any(
+                TRUSTED_PHONE in (expr if isinstance(expr, str) else "")
+                for expr in params.values()
+            ):
+                problems.append(
+                    f"{name} step `{rid}` resolves the customer with `{DIRECTORY_QUERY}` and "
+                    f"never reads `{TRUSTED_PHONE}`: it is keyed on "
+                    f"{json.dumps(params, sort_keys=True)}, so it answers about somebody the "
+                    f"phone number never picked out. The trigger's own `from` is the only "
+                    f"identity in this run WhatsApp vouched for"
+                )
+
+        prompt = prompt_of(step)
+        # The DOUBLE brace is the check, not `steps.<id>.id` as a substring: `{steps.x.id}` with
+        # one brace contains it and resolves to nothing, so a substring match reads a broken
+        # reference as a working one. Mark 5 does not cover this either when the same resolver is
+        # read correctly elsewhere (`.found`, `.count`) and only `.id` — the one that carries the
+        # identity — lost its braces. Measured: that mutant SURVIVED both marks.
+        if not any("{{steps." + str(s.get("id")) + ".id}}" in prompt for _, s in earlier):
+            named = ", ".join(f"`{s.get('id')}`" for _, s in earlier)
+            problems.append(
+                f"{name} step `{sid}` reads diaries with `{OWNED_APPOINTMENTS_QUERY}` and its "
+                f"prompt never names the resolved customer ({{{{steps.<{named}>.id}}}}): the id "
+                f"it passes has to come from somewhere, and with the resolver unmentioned that "
+                f"somewhere is the model. Closing the lookup without handing over its answer does "
+                f"not secure this step, it breaks it"
             )
     return problems
 
@@ -1554,6 +1769,7 @@ DOCUMENT_RULES = (
     shipped_recipe_problems,
     unowned_table_problems,
     moving_problems,
+    own_customer_only_problems,
     only_the_customer_problems,
 )
 
@@ -1577,6 +1793,7 @@ SELF_CHECKED_RULES = (
     shipped_recipe_problems,
     unowned_table_problems,
     moving_problems,
+    own_customer_only_problems,
     only_the_customer_problems,
 )
 
@@ -1706,6 +1923,20 @@ def _ai_step(step_id, policy, commands, prompt="", on_reject=None, queries=()):
         step["tools"]["queries"] = list(queries)
     if on_reject is not None:
         step["on_reject"] = on_reject
+    return step
+
+
+def _query_step(step_id, query=None, params=None):
+    """The deterministic read (hub#954): the DOCUMENT maps the params, never the model."""
+    step = {
+        "id": step_id,
+        "kind": "query",
+        "query": DIRECTORY_QUERY if query is None else query,
+        "result": "first",
+        "limit": 1,
+    }
+    if params is not None:
+        step["params"] = dict(params)
     return step
 
 
@@ -2351,6 +2582,145 @@ MOVE_CASES = [
         1,
     ),
 ]
+
+
+# The mutants of «one customer, and only that one» (whatsapp_inbox#103). The shape every row below
+# is a deviation FROM is the one the four templates ship: a `kind: query` resolver keyed on the
+# phone WhatsApp vouched for, and a reader that is handed its answer instead of a search box.
+_OWN_PHONE = {"f_phone": "+{{" + TRUSTED_PHONE + "}}"}
+_DIARY = (OWNED_APPOINTMENTS_QUERY,)
+
+
+def _own_customer_doc(prompt, queries, params=_OWN_PHONE, resolver_first=True):
+    """The shipped shape, with one thing moved — whatever the row under test is about."""
+    resolver = _query_step("resolve", params=params)
+    reader = _ai_step("book", "auto", [BOOKING_COMMAND], prompt, queries=queries)
+    return _fixture_doc(*((resolver, reader) if resolver_first else (reader, resolver)))
+
+
+_BOOK_FOR_HER = "Book for {{steps.resolve.id}} and for nobody else."
+
+OWN_CUSTOMER_CASES = [
+    (
+        "the shape the fix ships: the customer is resolved from her own number in a `query` step, "
+        "and the model is handed her id instead of the address book",
+        UNATTENDED,
+        _own_customer_doc(_BOOK_FOR_HER, _DIARY),
+        0,
+    ),
+    (
+        "🔴 the row this rule exists for, and the one a test that only looks at the customer's OWN "
+        "path lets through: her resolution is PERFECT — resolver on `input.from`, id named in the "
+        "prompt — and the model still holds the address book, so «what has María got booked?» is "
+        "one search away from her diary. Own path built right is not the foreign path closed",
+        UNATTENDED,
+        _own_customer_doc(_BOOK_FOR_HER, (DIRECTORY_QUERY,) + _DIARY),
+        1,
+    ),
+    (
+        "the address book is refused even where no diary is read at all: a step that only books "
+        "can still answer «is María a customer here?» with her phone and her name. The mark is "
+        "universal on purpose — every template that resolves a stranger owes the `query` step",
+        UNATTENDED,
+        _fixture_doc(
+            _ai_step("book", "auto", [BOOKING_COMMAND], "Book it.", queries=(DIRECTORY_QUERY,))
+        ),
+        1,
+    ),
+    (
+        "the pre-fix document: the search box is in two hands at once, and both are counted — the "
+        "step that identifies her and the step that books for her",
+        UNATTENDED,
+        _fixture_doc(
+            _ai_step("know", "auto", ["customers.create"], "Who?", queries=(DIRECTORY_QUERY,)),
+            _ai_step("book", "auto", [BOOKING_COMMAND], "Book.", queries=(DIRECTORY_QUERY,)),
+        ),
+        2,
+    ),
+    (
+        "a diary read with no deterministic resolver anywhere: the `customer_id` can only come "
+        "from the model, so it is whoever the message named",
+        UNATTENDED,
+        _fixture_doc(
+            _ai_step("book", "auto", [BOOKING_COMMAND], "Book it.", queries=_DIARY)
+        ),
+        1,
+    ),
+    (
+        "the resolver exists but runs AFTER the reader: `steps.resolve` of a step that has not "
+        "run resolves to `null`, so the model improvises the id again",
+        UNATTENDED,
+        _own_customer_doc(_BOOK_FOR_HER, _DIARY, resolver_first=False),
+        2,  # …and nothing after it reads its answer either (mark 5)
+    ),
+    (
+        "the lookup moved into a `query` step and the hole moved with it: the resolver is keyed "
+        "on what a model wrote, so the model still picks who this run is about (counted twice — "
+        "it reads another step, and it never reads the trusted phone)",
+        UNATTENDED,
+        _own_customer_doc(_BOOK_FOR_HER, _DIARY, params={"f_name": "{{steps.know.text}}"}),
+        2,
+    ),
+    (
+        "the resolver is deterministic and keyed on a NAME: the model is out of the loop and the "
+        "wrong customer is picked anyway, because the only identity in this run WhatsApp vouched "
+        "for is the number the message came from",
+        UNATTENDED,
+        _own_customer_doc(_BOOK_FOR_HER, _DIARY, params={"f_name": "Mar\u00eda"}),
+        1,
+    ),
+    (
+        "a resolver with no params at all is the whole address book, and its first row is "
+        "somebody — just not the somebody who wrote in",
+        UNATTENDED,
+        _own_customer_doc(_BOOK_FOR_HER, _DIARY, params=None),
+        1,
+    ),
+    (
+        "the resolver is right and its answer is never used: the step has no customer, so it "
+        "invents one. Closing the lookup without handing over its answer breaks the step instead "
+        "of securing it",
+        UNATTENDED,
+        _own_customer_doc("Book whatever she asked for.", _DIARY),
+        2,  # the same defect from both sides: the prompt does not name it (4), nobody reads it (5)
+    ),
+    (
+        "🔴 the resolver is named with ONE brace: `{steps.resolve.id}` is plain text to the "
+        "runtime, so the model is handed the words instead of the id and picks the customer "
+        "itself — and the step LOOKS wired, which is why mark 4 (a substring match on "
+        "`steps.<id>.id`) sails straight past it. This is a bug that really happened while "
+        "writing this commit",
+        UNATTENDED,
+        _own_customer_doc("Book for {steps.resolve.id} and for nobody else.", _DIARY),
+        3,  # mark 4 (no resolvable `.id`), mark 5 (nothing reads the answer) and the lost brace
+        # itself, which is the only one of the three that NAMES what went wrong
+    ),
+    (
+        "\U0001f534 the SAME lost brace, in the family that reads no diary (the table recipes "
+        "whatsapp_inbox#104 brought): `.found` still resolves, so mark 5 is satisfied, and mark 4 "
+        "never runs because nothing here reads a diary — so the one reference that carries the "
+        "IDENTITY can sit in the prompt as plain text with the battery green. This is the shape "
+        "`str.format` really produced while these templates were being written",
+        UNATTENDED,
+        _fixture_doc(
+            _query_step("resolve", params=_OWN_PHONE),
+            _ai_step(
+                "book",
+                "auto",
+                [BOOKING_COMMAND],
+                "On file: {{steps.resolve.found}}. Book for {steps.resolve.id}.",
+            ),
+        ),
+        1,
+    ),
+    (
+        "silent where nothing is owed: a step that reads no diary and holds no address book",
+        ATTENDED,
+        _fixture_doc(_ai_step("reply", "manual", [], "Say hello back.")),
+        0,
+    ),
+]
+
 
 
 def _wa_doc(condition=None, mapping=None, steps=None):
@@ -3057,6 +3427,13 @@ def self_check():
                 f"the battery's own «moving is one call, never two» rule is wrong — {label}: "
                 f"expected {expected} problem(s), got {len(got)}: {got}"
             )
+    for label, name, doc, expected in OWN_CUSTOMER_CASES:
+        got = own_customer_only_problems(name, doc)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «one customer, and only that one» rule is wrong — {label}: "
+                f"expected {expected} problem(s), got {len(got)}: {got}"
+            )
     for label, doc, expected in SILENCE_CASES:
         got = silence_problems("(self-check)", doc)
         if len(got) != expected:
@@ -3330,6 +3707,11 @@ def main():
         # up whose it is before it does, and says that moving never becomes cancel-plus-book
         # (whatsapp_inbox#74).
         problems += applied(ledger, moving_problems, path.name, doc)
+
+        # 3a-bis-v) …and no step of either family holds the address book, so the customer this
+        # run is about is the one the PHONE picked out and never the one the message named
+        # (whatsapp_inbox#103). Needs no manifest: it is the document's own shape.
+        problems += applied(ledger, own_customer_only_problems, path.name, doc)
 
         # 3a-ter) …and every tool its prompts ORDER was actually handed over (whatsapp_inbox#61).
         # Needs the manifests: «is this a tool name or is it prose» is a question only they answer.
