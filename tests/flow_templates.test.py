@@ -2191,6 +2191,67 @@ def addressed_queries(doc):
     return out
 
 
+# The prose that lives INSIDE `interactive` and `output`: the two keys that are words AND
+# machinery at once, so a translation may change part of them and no more (module-toolkit#209).
+# The list is the toolkit's, on purpose. The same document is judged by both doors, and a battery
+# that allowed what `erplora validate` refuses would only teach the author to ignore one of them.
+# `*` is any key (the field names of `output` are the author's), `[]` any item of a LIST, and of a
+# list only, so `rows` given as a mapping path stays the machinery it is.
+PROSE_INSIDE = (
+    "interactive.header.text",
+    "interactive.body.text",
+    "interactive.footer.text",
+    "interactive.action.button",
+    "interactive.action.sections[].title",
+    "interactive.action.sections[].rows[].title",
+    "interactive.action.sections[].rows[].description",
+    "interactive.action.buttons[].reply.title",
+    "output.*.describe",
+)
+
+# What a masked leaf reads as. A string no document carries and, being a string, it cannot be
+# confused with a missing key: an absent `body.text` is not the same shape as a translated one.
+PROSE = " prose"
+
+
+def without_prose(value, paths):
+    """`value` with the words the `paths` name masked out, so two languages that differ only in
+    words compare equal. A path that does not fit what it lands on masks NOTHING: the value goes
+    through untouched and is compared as machinery."""
+    if any(not p for p in paths):
+        return PROSE
+    if isinstance(value, list):
+        inside = [p[1:] for p in paths if p and p[0] == "[]"]
+        return [without_prose(v, inside) for v in value] if inside else value
+    if not isinstance(value, dict):
+        return value
+    out = {}
+    for key, inner in value.items():
+        inside = [p[1:] for p in paths if p and p[0] in (key, "*")]
+        out[key] = without_prose(inner, inside) if inside else inner
+    return out
+
+
+def segments(path):
+    """The path without its root key, with every `[]` as a step of its own."""
+    out = []
+    for part in path.split("."):
+        if part.endswith("[]"):
+            out.extend([part[:-2], "[]"])
+        else:
+            out.append(part)
+    return out[1:]
+
+
+def machinery_of(step, key):
+    """What a translation must not change inside a MIXED key: everything except its prose."""
+    if key not in step:
+        return None
+    return without_prose(
+        step[key], [segments(p) for p in PROSE_INSIDE if p.split(".")[0] == key]
+    )
+
+
 def structural_shape(doc):
     """Everything about a document EXCEPT the human text — what a translation must not change."""
     return {
@@ -2216,10 +2277,99 @@ def structural_shape(doc):
                 "command": s.get("command"),
                 "when": s.get("when"),
                 "seconds": s.get("seconds"),
+                # The two keys that carry words AND machinery (hub#1633/#1639), compared with the
+                # words masked out: the Spanish list may say «Toca el hueco que te venga bien.»
+                # while its `type`, its `rows` and the ids that come back stay identical. Left out
+                # of this dict, a translation could point its rows at another step or declare
+                # `slots` as `text`, and only the toolkit gate would ever notice (#109).
+                "interactive": machinery_of(s, "interactive"),
+                "output": machinery_of(s, "output"),
             }
             for s in doc.get("steps", [])
         ],
     }
+
+
+def _offer(body="Tap one", button="See slots", section="Free slots", rows="steps.reply.slots",
+           footer=None, kind="list"):
+    """A `notify` that offers rows, with one screw loosened at a time."""
+    interactive = {
+        "type": kind,
+        "body": {"text": body},
+        "action": {"button": button, "sections": [{"title": section, "rows": rows}]},
+    }
+    if footer:
+        interactive["footer"] = {"text": footer}
+    return {"id": "offer", "kind": "notify", "channel": "whatsapp", "interactive": interactive}
+
+
+def _publisher(describe="the free slots", field="slots", type_="options"):
+    return {
+        "id": "reply",
+        "kind": "ai",
+        "prompt": "write to her",
+        "output": {field: {"type": type_, "describe": describe}},
+    }
+
+
+# `(label, English step, translated step, they are the SAME automation)`. The prose may differ and
+# nothing else — the half of the parity check that reads the two MIXED keys (whatsapp_inbox#109).
+SHAPE_CASES = [
+    (
+        "the words she reads are translated and it is the same automation",
+        _offer(),
+        _offer(body="Toca el que te venga bien", button="Ver huecos", section="Huecos libres"),
+        True,
+    ),
+    (
+        "…and so is what the MODEL reads about the field it publishes",
+        _publisher(),
+        _publisher(describe="los huecos libres"),
+        True,
+    ),
+    (
+        "🔴 the rows come from another step: the Spanish list would leave for Meta as `null`",
+        _offer(),
+        _offer(rows="steps.other.slots"),
+        False,
+    ),
+    (
+        "🔴 one of them is a button message and the other a list: two different messages",
+        _offer(),
+        _offer(kind="button"),
+        False,
+    ),
+    (
+        "🔴 a footer only one of them carries is a line only one customer reads",
+        _offer(),
+        _offer(footer="Te esperamos"),
+        False,
+    ),
+    (
+        "🔴 the field is declared as `text` in one and `options` in the other",
+        _publisher(),
+        _publisher(type_="text"),
+        False,
+    ),
+    (
+        "🔴 …or under another NAME, which later steps read by",
+        _publisher(),
+        _publisher(field="huecos"),
+        False,
+    ),
+    (
+        "a row written out in full may have its words translated, never its id",
+        _offer(rows=[{"id": "2026-09-08T10:30|staff:12", "title": "Tuesday 10:30"}]),
+        _offer(rows=[{"id": "2026-09-08T10:30|staff:12", "title": "Martes 10:30"}]),
+        True,
+    ),
+    (
+        "🔴 …and that id is what comes back when she taps: another one books another hour",
+        _offer(rows=[{"id": "2026-09-08T10:30|staff:12", "title": "Tuesday 10:30"}]),
+        _offer(rows=[{"id": "2026-09-08T12:00|staff:12", "title": "Martes 10:30"}]),
+        False,
+    ),
+]
 
 
 # ── layer 0: the battery checks its OWN rules before it judges anybody's file ─────────────────
@@ -4120,6 +4270,14 @@ def self_check():
             problems.append(
                 f"the battery's own «she taps it» rule is wrong — {label}: expected {expected} "
                 f"problem(s), got {len(got)}: {got}"
+            )
+    for label, source, translation, same in SHAPE_CASES:
+        got = structural_shape({"steps": [source]}) == structural_shape({"steps": [translation]})
+        if got is not same:
+            problems.append(
+                f"the battery's own «a translation is words» rule is wrong — {label}: expected "
+                f"{'the same' if same else 'a different'} automation, got the "
+                f"{'same' if got else 'opposite'}"
             )
     for label, name, doc, expected in PARKING_CASES:
         got = parking_producer_problems(name, doc, _FIXTURE_COMMANDS, _FIXTURE_READS)
