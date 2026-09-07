@@ -1963,16 +1963,6 @@ def tappable_option_problems(name, doc):
                     f"not look again, and the send leaves with `rows: null`"
                 )
                 continue
-            if (producer.get("policy") or "manual") != "auto" and (
-                (producer.get("tools") or {}).get("commands") or []
-            ):
-                problems.append(
-                    f"{name} step `{source}` declares `output.{field}` and can PARK a proposal "
-                    f"(`policy: {producer.get('policy') or 'manual'}` with commands): the kernel "
-                    f"refuses a proposal from a step that owes data, by name, because a proposal "
-                    f"ends the turn and `flow_answer` would never be called. The step that finds "
-                    f"the slots has to be one that can finish — reads only, or `policy: auto`"
-                )
             sentence = TAP_WORDS.get(lang)
             if sentence is None:
                 problems.append(
@@ -2058,6 +2048,60 @@ def tappable_option_problems(name, doc):
     return problems
 
 
+def parking_producer_problems(name, doc, commands_def, read_perms):
+    """The step whose rows a list sends has to be able to FINISH — judged by what its commands DO.
+
+    The kernel's refusal is not «a step with `output` and commands»: it is a step that declares
+    `output` and PROPOSES A WRITE (`agent_runner.rs`, hub#1639). A proposal ends the turn, so
+    `flow_answer` is never called and the declared fields never arrive — approving it hours later
+    publishes `{text, tool_calls}` and the names simply ABSENT, `rows` leaves for Meta as `null`.
+
+    So the question is per COMMAND, not per step, and it is the same one hub#1595 answered for the
+    approval tray: a command that only ANSWERS runs in the turn whatever the policy says and can
+    never park. Reading it as «has commands» is stricter than the kernel by exactly the shape the
+    attended family needs (whatsapp_inbox#109): there the step that books can never publish the
+    slots, so the step that WRITES THE MESSAGE looks them up — `manual`, and with nothing but reads
+    in its hands, it always reaches `flow_answer`.
+
+    Manifest-aware, so it lives in the layer that skips OUT LOUD with no modules next door: without
+    them nothing here can tell a read from a write, and guessing in either direction is worse than
+    saying so.
+    """
+    problems = []
+    by_id = {s.get("id"): s for s in doc.get("steps", [])}
+    for step in doc.get("steps", []):
+        if step.get("kind") != "notify" or not step.get("interactive"):
+            continue
+        for _, value in option_slots(step.get("interactive")):
+            if not isinstance(value, str) or not _is_path(value):
+                continue
+            parts = value.split(".")
+            if len(parts) != 3 or parts[0] != "steps":
+                continue
+            producer = by_id.get(parts[1])
+            if producer is None or producer.get("kind") != "ai":
+                continue
+            if (producer.get("policy") or "manual") == "auto":
+                continue  # `auto` runs its writes in the turn: there is no proposal to park
+            writes = sorted(
+                cname
+                for cname in ((producer.get("tools") or {}).get("commands") or [])
+                if cname in commands_def
+                and not command_only_answers(commands_def[cname][1], read_perms.get(cname))
+            )
+            if writes:
+                problems.append(
+                    f"{name} step `{parts[1]}` declares `output.{parts[2]}` and can PARK a "
+                    f"proposal: under `policy: {producer.get('policy') or 'manual'}` it may propose "
+                    f"{', '.join(f'`{w}`' for w in writes)}, which WRITES. The kernel refuses a "
+                    f"proposal from a step that owes data, by name, because a proposal ends the "
+                    f"turn and `flow_answer` would never be called — so the rows would leave for "
+                    f"Meta as `null`. The step that finds the slots has to be one that can finish: "
+                    f"reads only, or `policy: auto`"
+                )
+    return problems
+
+
 DOCUMENT_RULES = (
     policy_problems,
     identified_cancellation_problems,
@@ -2076,6 +2120,7 @@ DOCUMENT_RULES = (
     own_customer_only_problems,
     only_the_customer_problems,
     tappable_option_problems,
+    parking_producer_problems,
 )
 
 # …and the registry itself is guarded, because it is the next place the same hole moves to. The
@@ -2101,6 +2146,7 @@ SELF_CHECKED_RULES = (
     own_customer_only_problems,
     only_the_customer_problems,
     tappable_option_problems,
+    parking_producer_problems,
 )
 
 
@@ -3895,19 +3941,6 @@ TAPPABLE_CASES = [
         1,
     ),
     (
-        "🔴 the producer can PARK a proposal: the kernel refuses it, so `flow_answer` is never "
-        "called and the fields never arrive",
-        ATTENDED,
-        _tap_doc(policy="manual"),
-        1,
-    ),
-    (
-        "a `manual` producer that only READS can still finish, so it is allowed",
-        ATTENDED,
-        _tap_doc(policy="manual", commands=()),
-        0,
-    ),
-    (
         "🔴 nothing refuses the empty list: the turn booked, `slots` is `[]`, and the send fails "
         "after she was already answered",
         ATTENDED,
@@ -3990,6 +4023,38 @@ TAPPABLE_CASES = [
 ]
 
 
+# `(label, file name, document, problems expected)` — the producer of the rows, judged by what its
+# commands DO. The row above it in `TAPPABLE_CASES` proves the wiring; these prove the FINISHING.
+PARKING_CASES = [
+    (
+        "🔴 the producer may propose a WRITE: the kernel refuses it, `flow_answer` is never called "
+        "and the rows leave for Meta as `null`",
+        ATTENDED,
+        _tap_doc(policy="manual"),
+        1,
+    ),
+    (
+        "a `manual` producer whose commands only ANSWER can always finish (hub#1595), which is the "
+        "only shape the attended family has: the step that books can never publish the slots",
+        ATTENDED,
+        _tap_doc(policy="manual", commands=("appointments.availability.slots",)),
+        0,
+    ),
+    (
+        "a `manual` producer with no commands at all has nothing to park either",
+        ATTENDED,
+        _tap_doc(policy="manual", commands=()),
+        0,
+    ),
+    (
+        "…and `auto` never parks, whatever it declares: it runs the write in the turn",
+        ATTENDED,
+        _tap_doc(policy="auto"),
+        0,
+    ),
+]
+
+
 def self_check():
     """The mutants of the rules above, run every time, before any real document is opened."""
     problems = []
@@ -4019,6 +4084,13 @@ def self_check():
             problems.append(
                 f"the battery's own «she taps it» rule is wrong — {label}: expected {expected} "
                 f"problem(s), got {len(got)}: {got}"
+            )
+    for label, name, doc, expected in PARKING_CASES:
+        got = parking_producer_problems(name, doc, _FIXTURE_COMMANDS, _FIXTURE_READS)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «the producer can finish» rule is wrong — {label}: expected "
+                f"{expected} problem(s), got {len(got)}: {got}"
             )
     for label, name, doc, expected in ONLY_CUSTOMER_CASES:
         got = only_the_customer_problems(name, doc)
@@ -4411,6 +4483,14 @@ def main():
         problems += applied(ledger, only_the_customer_problems, path.name, doc)
         problems += applied(ledger, tappable_option_problems, path.name, doc)
 
+        # 3a-viii) …and the step whose rows that list sends can FINISH: a producer that may propose
+        # a WRITE never reaches `flow_answer`, so the rows leave for Meta as `null` (hub#1639).
+        # Manifest-aware — telling a read from a write needs the module that declares it.
+        if commands_def is not None:
+            problems += applied(
+                ledger, parking_producer_problems, path.name, doc, commands_def, read_perms
+            )
+
         # The trigger this whole issue is about: a template that listens to something else is a
         # different product wearing the same file name.
         events = {
@@ -4429,6 +4509,7 @@ def main():
             undeclared_tool_problems.__name__,
             enum_value_problems.__name__,
             identity_field_problems.__name__,
+            parking_producer_problems.__name__,
         }
         if commands_def is None
         else set()
