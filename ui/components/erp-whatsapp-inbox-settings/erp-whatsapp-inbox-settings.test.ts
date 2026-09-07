@@ -76,6 +76,16 @@ interface Neighbours {
   brokenWitness?: string;
   /** A witness whose answer never arrives: the hub is slow, the screen is still finding out. */
   pendingWitness?: string;
+  /**
+   * What `flows.automations.status` answers about the use's automation: how many listen to its
+   * event and may run its command, how many of those are switched on, and how many listen but were
+   * never granted anything. Left out, the hub answers what an untouched one answers — nothing set
+   * up — which is the state the card was written for before whatsapp_inbox#79.
+   */
+  automations?: { total: number; enabled: number; unfinished: number };
+  /** Query names this hub answers `not_found` to: a neighbour module from before the query
+   *  existed. That is a broken contract, never an absence, so `queryOptional` re-throws it. */
+  notFound?: string[];
 }
 
 function mountWith(row: Record<string, unknown> | null = SAVED_SETTINGS, hub: Neighbours = {}) {
@@ -95,6 +105,12 @@ function mountWith(row: Record<string, unknown> | null = SAVED_SETTINGS, hub: Ne
       }
       if (legacyInactive.has(ownerOf(name))) {
         throw Object.assign(new Error('module_inactive'), { code: 'module_inactive' });
+      }
+      if ((hub.notFound ?? []).includes(name)) {
+        throw Object.assign(new Error('not_found'), { code: 'not_found' });
+      }
+      if (name === 'flows.automations.status') {
+        return [hub.automations ?? { total: 0, enabled: 0, unfinished: 0 }];
       }
       if (ownerOf(name) !== 'whatsapp_inbox') return [];
       return row ? [row] : [];
@@ -530,9 +546,114 @@ describe('the settings screen says what this WhatsApp can be used for (whatsapp_
     expect(push).toHaveBeenCalledWith({}, '', '/apps');
   });
 
+  // ---------------------------------------------------------------------------------------------
+  // «Already set up?» (whatsapp_inbox#79).
+  //
+  // Until this, the card said «Set it up» to the salon that connected the number a minute ago AND
+  // to the one that has been taking appointments through it for three weeks. The second one is the
+  // expensive reader: it follows an invitation it has already accepted, and ends up with two
+  // automations answering the same message — both of them replying to the customer.
+  //
+  // The states are three because the gallery leaves a real third one behind: it creates every
+  // template PAUSED and with no grants (`flows/ui/lib/templates.ts`, rule 3) and hands the owner to
+  // Permissions, so «listens but may do nothing» is where a half-finished setup stops. Calling that
+  // absent would put the invitation back and buy the duplicate; calling it active would promise
+  // something that is not running.
+  describe('and whether it is already set up here', () => {
+    const badge = (el: HTMLElement & { shadowRoot: ShadowRoot }) =>
+      el.shadowRoot.querySelector(`[data-testid="automation-state-${APPOINTMENTS.id}"]`);
+    const button = (el: HTMLElement & { shadowRoot: ShadowRoot }) =>
+      el.shadowRoot.querySelector(testid(APPOINTMENTS));
+
+    it('asks Automations about the event and the command that identify this use', async () => {
+      mountWith();
+      await mount();
+      const asked = queries.find((q) => q.name === 'flows.automations.status');
+      expect(asked, 'never asked whether the automation of the use is already there').toBeTruthy();
+      expect(asked!.params).toEqual({
+        event: APPOINTMENTS.triggerEvent,
+        command: APPOINTMENTS.setupCommand,
+      });
+    });
+
+    it('says it is running, and offers to see it instead of setting it up again', async () => {
+      mountWith(SAVED_SETTINGS, { automations: { total: 1, enabled: 1, unfinished: 0 } });
+      const el = await mount();
+      expect(badge(el)?.textContent?.trim(), 'no badge on an automation that is running').toBe(
+        esLocale.ui.usesActive,
+      );
+      expect(
+        button(el)?.textContent?.trim(),
+        'invited the owner to set up an automation they already have: two would answer the same message',
+      ).toBe(esLocale.ui.usesView);
+    });
+
+    it('says it is paused — which is set up, so the invitation still does not come back', async () => {
+      mountWith(SAVED_SETTINGS, { automations: { total: 1, enabled: 0, unfinished: 0 } });
+      const el = await mount();
+      expect(badge(el)?.textContent?.trim()).toBe(esLocale.ui.usesPaused);
+      expect(button(el)?.textContent?.trim()).toBe(esLocale.ui.usesView);
+    });
+
+    it('says it was left unfinished when it listens but was never granted the command', async () => {
+      mountWith(SAVED_SETTINGS, { automations: { total: 0, enabled: 0, unfinished: 1 } });
+      const el = await mount();
+      expect(badge(el)?.textContent?.trim()).toBe(esLocale.ui.usesUnfinished);
+      expect(button(el)?.textContent?.trim()).toBe(esLocale.ui.usesView);
+    });
+
+    it('keeps the invitation when there is really nothing set up', async () => {
+      mountWith(SAVED_SETTINGS, { automations: { total: 0, enabled: 0, unfinished: 0 } });
+      const el = await mount();
+      expect(badge(el), 'put a badge on a hub that has no automation for this use').toBeNull();
+      expect(button(el)?.textContent?.trim()).toBe(esLocale.ui.usesOpen);
+    });
+
+    // The card must never say more than it knows. An `flows` from before the status query answers
+    // `not_found`, which is a broken contract and not an absence — so the honest reading is «I
+    // could not find out», and that has to look exactly like the card looked before #79.
+    it('behaves as it did before, on an Automations too old to answer the question', async () => {
+      mountWith(SAVED_SETTINGS, { notFound: ['flows.automations.status'] });
+      const el = await mount();
+      expect(
+        badge(el),
+        'told the owner what state their automation is in on the strength of a failed request',
+      ).toBeNull();
+      expect(button(el)?.textContent?.trim()).toBe(esLocale.ui.usesOpen);
+    });
+
+    it('says in the console why the status could not be read, so a renamed query is not silent', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      mountWith(SAVED_SETTINGS, { notFound: ['flows.automations.status'] });
+      await mount();
+      const said = warn.mock.calls.map((c) => c.map(String).join(' '));
+      expect(
+        said.find((line) => line.includes('flows.automations.status') && line.includes('not_found')),
+        `nothing in the console names the query and its failure code; console.warn calls were: ${JSON.stringify(said)}`,
+      ).toBeTruthy();
+    });
+
+    it('stays quiet in the console when Automations is simply not installed', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      mountWith(SAVED_SETTINGS, { absent: ['flows'] });
+      await mount();
+      const said = warn.mock.calls.map((c) => c.map(String).join(' '));
+      expect(said.filter((line) => line.includes('flows.automations.status'))).toEqual([]);
+    });
+
+    it('still takes the owner to the same gallery card when the automation is already there', async () => {
+      mountWith(SAVED_SETTINGS, { automations: { total: 1, enabled: 1, unfinished: 0 } });
+      const el = await mount();
+      const push = vi.spyOn(window.history, 'pushState');
+      button(el)!.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+      expect(push).toHaveBeenCalledWith({}, '', `/m/flows/automations?template=${APPOINTMENTS.id}`);
+    });
+  });
+
   it('ships every sentence of the card in both languages, translated (ADR-0055/0199)', () => {
     const keys = [
       'sectionUses', 'helpUses', 'usesOpen', 'usesEmpty', 'usesNeedAutomations', 'usesGoToApps',
+      'usesActive', 'usesPaused', 'usesUnfinished', 'usesView',
       ...WHATSAPP_USES.flatMap((u) => [u.nameKey.split('.')[1], u.summaryKey.split('.')[1]]),
     ];
     for (const key of keys) {

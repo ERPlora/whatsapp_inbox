@@ -4,9 +4,13 @@ import { define } from '@erplora/outfitkit/define';
 import {
   APPS_PATH,
   AUTOMATIONS_WITNESS,
+  AUTOMATION_STATUS_WITNESS,
   WHATSAPP_USES,
+  automationState,
   galleryPath,
   probeAutomations,
+  probeAutomationStatus,
+  type AutomationState,
   type WhatsAppUse,
   type WitnessAsker,
 } from '../../lib/whatsapp-uses';
@@ -14,6 +18,30 @@ import {
 import esLocale from '../../../locales/es.json';
 import enLocale from '../../../locales/en.json';
 const CATALOG: Record<string, unknown> = { es: esLocale, en: enLocale };
+
+/**
+ * What the card says about an automation it found, by state — and what it says about the two it did
+ * NOT find, which is nothing.
+ *
+ * `absent` and `unknown` share an entry on purpose: «there is none» and «I could not find out» look
+ * identical to the owner, because the only honest thing to show when the answer did not arrive is
+ * the card as it was before whatsapp_inbox#79. Having the badge decide the button too is what keeps
+ * the two from ever disagreeing — a badge saying «Active» over a button saying «Set it up» is the
+ * screen contradicting itself.
+ */
+const STATE_BADGE: Record<AutomationState, string | null> = {
+  unknown: null,
+  absent: null,
+  unfinished: 'ui.usesUnfinished',
+  paused: 'ui.usesPaused',
+  active: 'ui.usesActive',
+};
+
+/** Colour of the badge. Paused keeps the neutral one: it is a decision the owner made, not a fault. */
+const STATE_CLASS: Partial<Record<AutomationState, string>> = {
+  active: 'is-active',
+  unfinished: 'is-unfinished',
+};
 
 // erp-whatsapp-inbox-settings — the channel's settings screen (whatsapp_inbox#6).
 //
@@ -139,6 +167,19 @@ export class ErpWhatsappInboxSettings extends LitElement {
     .use-text b { display:block; font-size:.95rem; }
     .use-text .help { margin:.1rem 0 0; }
     .use-icon { font-size:1.35rem; color: var(--ion-color-medium,#6b6557); flex:0 0 auto; }
+    /* The badge sits with the name, not with the button: what the owner reads first is «is mine
+       already there?», and the answer belongs next to the thing it is about. */
+    .use-state {
+      display:inline-block; margin-top:.15rem; padding:.1rem .45rem; border-radius:.7rem;
+      font-size:.72rem; font-weight:600; text-transform:uppercase; letter-spacing:.02em;
+      background: var(--ion-color-light,#f1efe9); color: var(--ion-color-medium-shade,#5b5648);
+    }
+    .use-state.is-active {
+      background: var(--ion-color-success-tint,#dff3e4); color: var(--ion-color-success-shade,#1c7a3e);
+    }
+    .use-state.is-unfinished {
+      background: var(--ion-color-warning-tint,#fbeecd); color: var(--ion-color-warning-shade,#8a6300);
+    }
     /* 44px minimum touch target: this screen is used one-handed, at a counter. */
     ion-button { --min-height: 44px; }
   `;
@@ -168,7 +209,10 @@ export class ErpWhatsappInboxSettings extends LitElement {
    * «there is nothing to use WhatsApp for» is a sentence the owner reads and believes, and saying
    * it before the answers arrive tells them their channel is useless when it is not.
    */
-  @state() uses: { automationsHere: boolean; available: readonly WhatsAppUse[] } | null = null;
+  @state() uses: {
+    automationsHere: boolean;
+    available: readonly { use: WhatsAppUse; state: AutomationState }[];
+  } | null = null;
 
   private readonly onLocaleChange = (): void => this.requestUpdate();
 
@@ -313,13 +357,56 @@ export class ErpWhatsappInboxSettings extends LitElement {
     }
   }
 
-  /** Resolved in one go so the section never renders half-answered — see `availableUses`. */
+  /**
+   * **How far along the automation of one use is here** (whatsapp_inbox#79), or `unknown` when the
+   * question could not be answered at all.
+   *
+   * Every failure ends in `unknown`, and `unknown` renders exactly as this card rendered before
+   * #79 — no badge, «Set it up». Being wrong in that direction costs the owner a trip to a gallery
+   * card they already have; being wrong the other way tells a salon its automation is running when
+   * nothing is. Only the failures that are NOT a plain absence say so in the console: an
+   * `flows.automations.status` that has been renamed would otherwise put the #79 bug back
+   * permanently, with nothing anywhere to say why.
+   */
+  private async automationStateOf(use: WhatsAppUse): Promise<AutomationState> {
+    try {
+      return automationState(await probeAutomationStatus(erplora() as unknown as WitnessAsker, use));
+    } catch (e) {
+      const code = (e as { code?: string }).code;
+      if (code === 'module_not_installed' || code === 'module_inactive') return 'unknown';
+      const reason = code ?? (e instanceof Error ? e.message : String(e));
+      console.warn(
+        `[whatsapp_inbox] ${AUTOMATION_STATUS_WITNESS} could not answer for ${use.id} (${reason}); ` +
+          'the card cannot say whether this use is already set up',
+      );
+      return 'unknown';
+    }
+  }
+
+  /**
+   * Resolved in one go so the section never renders half-answered — see `availableUses`.
+   *
+   * The status question travels in the SAME round as the presence one, and asked for every use
+   * rather than only the available ones: one round is the contract this section already had, and a
+   * second phase would add a rendered state nobody has ever seen. It costs one extra read-only
+   * query per use on a screen the owner opens rarely, and it is asked through `queryOptional`, so
+   * a hub without Automations answers «could not find out» instead of failing.
+   */
   private async resolveUses() {
-    const [automationsHere, ...present] = await Promise.all([
+    const [automationsHere, ...answers] = await Promise.all([
       this.isHere(AUTOMATIONS_WITNESS, probeAutomations),
-      ...WHATSAPP_USES.map((use) => this.isHere(use.witness, (client) => use.probe(client))),
+      ...WHATSAPP_USES.map(async (use) => {
+        const [present, state] = await Promise.all([
+          this.isHere(use.witness, (client) => use.probe(client)),
+          this.automationStateOf(use),
+        ]);
+        return { use, present, state };
+      }),
     ]);
-    this.uses = { automationsHere, available: WHATSAPP_USES.filter((_, i) => present[i]) };
+    this.uses = {
+      automationsHere,
+      available: answers.filter((a) => a.present).map(({ use, state }) => ({ use, state })),
+    };
   }
 
   /**
@@ -367,17 +454,24 @@ export class ErpWhatsappInboxSettings extends LitElement {
       }
       return html`<ul class="uses">
         ${resolved.available.map(
-          (use) => html`<li>
+          ({ use, state }) => html`<li>
             <ion-icon class="use-icon" name=${use.icon} aria-hidden="true"></ion-icon>
             <div class="use-text">
               <b>${t(use.nameKey)}</b>
               <p class="help">${t(use.summaryKey)}</p>
+              ${STATE_BADGE[state]
+                ? html`<span
+                    class="use-state ${STATE_CLASS[state] ?? ''}"
+                    data-testid="automation-state-${use.id}"
+                    >${t(STATE_BADGE[state]!)}</span
+                  >`
+                : nothing}
             </div>
             <ion-button
               size="small"
               data-testid="use-${use.id}"
               @click=${() => this.goTo(galleryPath(use.id))}
-            >${t('ui.usesOpen')}</ion-button>
+            >${t(STATE_BADGE[state] ? 'ui.usesView' : 'ui.usesOpen')}</ion-button>
           </li>`,
         )}
       </ul>`;

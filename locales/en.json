@@ -148,6 +148,10 @@
     "usesOpen": "Set it up",
     "usesEmpty": "There is nothing for this WhatsApp to do on its own yet: what it can be used for comes from the apps you have installed.",
     "usesNeedAutomations": "Answering on its own is done by Automations, and this hub does not have it yet.",
+    "usesActive": "Active",
+    "usesPaused": "Paused",
+    "usesUnfinished": "Unfinished",
+    "usesView": "View it",
     "usesGoToApps": "See apps"
   },
   "errors": {

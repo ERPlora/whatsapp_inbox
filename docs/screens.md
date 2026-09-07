@@ -118,15 +118,48 @@ never blanks a header somebody set. **Delete** asks for confirmation in the page
 
 ## Settings — the channel
 
-> ⚠️ **There is no settings screen.** `whatsapp_inbox.settings.get` and
-> `whatsapp_inbox.settings.upsert` exist and nothing in the UI calls them — the channel is
-> configured by whoever installs the module. Tracked in
-> [whatsapp_inbox#6](https://github.com/ERPlora/whatsapp_inbox/issues/6), and listed with its reason
-> in the `PENDING` block of `tests/surface_has_a_door.contract.test.py`. What follows is what the
-> settings mean, not a screen you can open.
+`<erp-whatsapp-inbox-settings>` — three blocks in this order: **the channel**, **what you use this
+WhatsApp for**, and **the requests**. Read with `whatsapp_inbox.settings.get` and saved with
+`whatsapp_inbox.settings.upsert`. Requires `whatsapp_inbox.manage_settings` — **admin only**.
 
-Read with `whatsapp_inbox.settings.get` and saved with `whatsapp_inbox.settings.upsert`. Requires
-`whatsapp_inbox.manage_settings` — **admin only**.
+**The channel** shows the meter (messages received this month against the plan's allowance,
+read-only: its only writer is `whatsapp_inbox._quota.set`, fed by the Cloud) and embeds the shell's
+`<erp-whatsapp-connect>`, which is where the number is connected by scanning Meta's QR with the
+WhatsApp Business app. There is no credential to type: Meta's token lives Fernet-sealed in the SaaS
+and the hub never sees it.
+
+### What do you use WhatsApp for?
+
+A shortcut into Automations, and deliberately nothing more: it does not create the flow or switch it
+on. Each card names a use this hub can actually run — the module of the recipe has to be installed —
+says what it does, and opens the gallery with that template named. Without the `flows` module there
+is no destination at all, so the block points at the app list instead.
+
+Each card also says whether that automation is **already set up here**
+([#79](https://github.com/ERPlora/whatsapp_inbox/issues/79)), so the salon that has been taking
+appointments through WhatsApp for weeks is not invited to build a second one that answers the same
+message. The answer comes from `flows.automations.status` — read-only, three integers about the one
+event and the one command that identify the use, never `manage_flows`:
+
+| What the card shows | When |
+|---|---|
+| **Active** + «View it» | at least one automation listens to the use's event, may run its command and is switched on |
+| **Paused** + «View it» | it is set up, and switched off |
+| **Unfinished** + «View it» | something listens to the event but was never granted any command — where the gallery leaves a half-finished setup, since it creates every template paused and ungranted |
+| no badge + «Set it up» | there is none — **or** the question could not be answered (an older `flows`, a denied permission). The card never says more than it knows |
+
+### The requests
+
+The one decision this screen offers: **approval mode** — whether a request the assistant parsed
+lands confirmed or waits for a person to review it (read by `commands/_insert_request.sql`).
+
+Everything the old bot used to configure — greeting, auto-reply, out-of-hours text, the prompt,
+which modules feed it — is said by the FLOW that answers now (`WASM-TODO.md`, revision of
+2026-08-11, pm#112 / ADR-0283). Those columns still exist and `settings.upsert` still requires them,
+so the screen carries them back untouched; it does not OFFER them, because a switch that promises
+behaviour no code reads is a dead switch.
+
+#### The columns, and what each one means
 
 | Setting | What it controls |
 |---|---|
