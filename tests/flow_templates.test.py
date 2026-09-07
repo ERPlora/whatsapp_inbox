@@ -998,6 +998,53 @@ BOOKING_RULES = {
 }
 
 
+# ── «a rule with no recipe is a promise nothing keeps» ────────────────────────────────────────
+#
+# whatsapp_inbox#60. `BOOKING_RULES` is the table of everything this channel knows how to book
+# unattended, and until this rule existed a row could sit in it with no document spending it: the
+# wording pinned, `hour_choice_problems` green — silently, because that rule only judges documents
+# that HAND the command — and the restaurant that connected its WhatsApp offered the two recipes of
+# a hairdresser and nothing it could use. That is the issue exactly: not a broken template, a
+# missing one, and every rule here was green over it.
+#
+# BOTH families or neither, because `flows/README.md` sells the choice and the business makes it at
+# install: only the attended one leaves the restaurant that runs its WhatsApp alone waiting for an
+# approval nobody will give at 3 AM; only the unattended one leaves the one that wants to read its
+# bookings first with nothing to install.
+def booked_families(docs):
+    """`family -> every command its `ai` steps can call`, over the documents shipped in `flows/`."""
+    out = {}
+    for path, doc in docs:
+        commands = out.setdefault(path.name.split(".")[0], set())
+        for step in doc.get("steps", []):
+            if step.get("kind") == "ai":
+                commands.update((step.get("tools") or {}).get("commands") or [])
+    return out
+
+
+def shipped_recipe_problems(name, doc, booked):
+    """Every booking `BOOKING_RULES` has a wording for really SHIPS, attended and unattended.
+
+    A document rule that never reads the document, and for the same reason as
+    `identity_field_problems`: what it needs is the ledger. As a one-off call in `main()` its
+    deletion would be invisible — the templates that DO exist stay green, and the business whose
+    recipe went missing is not a document this battery can miss, because there is no document.
+    """
+    problems = []
+    for booking in sorted(BOOKING_RULES):
+        shipped = {f for f, commands in booked.items() if booking in commands}
+        for unattended, label in ((True, "unattended"), (False, "attended")):
+            if any(is_unattended(f) is unattended for f in shipped):
+                continue
+            problems.append(
+                f"{name}: `{booking}` has its wording pinned in BOOKING_RULES and no {label} "
+                f"family in `flows/` hands it, so the business that books with it has no recipe to "
+                f"install and every other rule here stays green — they only judge the documents "
+                f"that exist. Ship the pair, or take the row out of the table"
+            )
+    return problems
+
+
 def hour_choice_problems(name, doc):
     """In the unattended family, the step that can BOOK says, in its own language, that it never
     picks the hour.
@@ -1438,6 +1485,7 @@ DOCUMENT_RULES = (
     enum_value_problems,
     unattended_problems,
     hour_choice_problems,
+    shipped_recipe_problems,
     moving_problems,
     only_the_customer_problems,
 )
@@ -1459,6 +1507,7 @@ SELF_CHECKED_RULES = (
     enum_value_problems,
     unattended_problems,
     hour_choice_problems,
+    shipped_recipe_problems,
     moving_problems,
     only_the_customer_problems,
 )
@@ -1911,6 +1960,55 @@ HOUR_CASES = [
 # file name for the same reason: the language of the document is in its name.
 _MOVE_TOOLS = (BOOKING_COMMAND, CANCEL_COMMAND, MOVE_COMMAND)
 _MOVE_QUERIES = (OWNED_APPOINTMENTS_QUERY,)
+
+_CHAIR_PAIR = {
+    "appointment-from-whatsapp": {BOOKING_COMMAND},
+    "appointment-from-whatsapp-unattended": {BOOKING_COMMAND},
+}
+_TABLE_ATTENDED = {"reservation-from-whatsapp": {TABLE_BOOKING_COMMAND}}
+_TABLE_UNATTENDED = {"reservation-from-whatsapp-unattended": {TABLE_BOOKING_COMMAND}}
+
+RECIPE_CASES = [
+    (
+        "what this module ships once whatsapp_inbox#60 lands: a pair of families for every "
+        "booking the battery has a wording for",
+        {**_CHAIR_PAIR, **_TABLE_ATTENDED, **_TABLE_UNATTENDED},
+        0,
+    ),
+    (
+        "the red whatsapp_inbox#60 IS: the table wording is pinned and no document anywhere books "
+        "a table, so the restaurant that connects its WhatsApp is offered a hairdresser's recipes "
+        "and nothing else",
+        _CHAIR_PAIR,
+        2,
+    ),
+    (
+        "half the delivery: the restaurant that runs its WhatsApp with nobody watching can install "
+        "the recipe, and the one that wants to read its bookings first has nothing",
+        {**_CHAIR_PAIR, **_TABLE_UNATTENDED},
+        1,
+    ),
+    (
+        "the other half: the recipe exists and parks every table at 3 AM in an approval tray the "
+        "restaurant that bought the unattended one does not open",
+        {**_CHAIR_PAIR, **_TABLE_ATTENDED},
+        1,
+    ),
+    (
+        "a family that books something else does not cover the row: `customers.create` writes, and "
+        "no customer ever sat at it",
+        {**_CHAIR_PAIR, "reservation-from-whatsapp": {"customers.create"},
+         "reservation-from-whatsapp-unattended": {"customers.create"}},
+        2,
+    ),
+    (
+        "and the row that started it all is judged the same way: delete the chair recipes and this "
+        "rule says so, so it cannot be one that only ever fires for tables",
+        {**_TABLE_ATTENDED, **_TABLE_UNATTENDED},
+        2,
+    ),
+]
+
 
 MOVE_CASES = [
     (
@@ -2795,6 +2893,13 @@ def self_check():
                 f"the battery's own «the model never picks the hour» rule is wrong — {label}: "
                 f"expected {expected} problem(s), got {len(got)}: {got}"
             )
+    for label, booked, expected in RECIPE_CASES:
+        got = shipped_recipe_problems("(self-check)", {}, booked)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «every wording has a recipe that ships» rule is wrong — "
+                f"{label}: expected {expected} problem(s), got {len(got)}: {got}"
+            )
     for label, name, doc, expected in MOVE_CASES:
         got = moving_problems(name, doc)
         if len(got) != expected:
@@ -2998,6 +3103,10 @@ def main():
         enums = payload_enums(commands_def)
         identity_props = payload_properties(commands_def)
 
+    # Which family books what, read once: `shipped_recipe_problems` judges the SET of
+    # documents, and the set is not visible from any one of them.
+    booked = booked_families((path, json.loads(path.read_text())) for path in docs)
+
     for path in docs:
         doc = json.loads(path.read_text())
 
@@ -3057,6 +3166,10 @@ def main():
         # 3a-bis-iii) …and, in that family, the step that can book still says in so many words that
         # it never picks the hour (whatsapp_inbox#58, reviewer mutant N2). Prose, pinned on purpose.
         problems += applied(ledger, hour_choice_problems, path.name, doc)
+
+        # 3a-bis-iii-bis) …and every booking that wording exists for is one this module really
+        # SHIPS, in both families (whatsapp_inbox#60). Needs no manifest: it reads `flows/`.
+        problems += applied(ledger, shipped_recipe_problems, path.name, doc, booked)
 
         # 3a-bis-iv) …and the appointment writer of BOTH families can move an appointment, looks
         # up whose it is before it does, and says that moving never becomes cancel-plus-book
