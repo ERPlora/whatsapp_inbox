@@ -1997,19 +1997,19 @@ def tappable_option_problems(name, doc):
         if s.get("kind") == "ai"
         and any(b in ((s.get("tools") or {}).get("commands") or []) for b in TAPPABLE_BOOKINGS)
     ]
-    # …and the family that books with nobody watching HAS to offer them, because it is the one
-    # whose customer chooses the hour herself. Its attended sibling is deliberately out: there the
-    # step that finds the slots is the same one that PROPOSES the appointment, and the kernel
-    # refuses a proposal from a step that owes data — a proposal ends the turn, so `flow_answer`
-    # would never be called and the booking would become impossible. The step that could publish
-    # them (`reply_to_customer`) only ever sees the proposal's PROSE, which carries no ids by
-    # design, so it cannot name a slot. Reopening that needs a step this template does not have:
-    # whatsapp_inbox#109.
-    if booking_steps and not offers and is_unattended(name):
+    # …and a recipe that BOOKS has to offer them, in either family. The attended one was out of
+    # this rule until whatsapp_inbox#109, and the reason was real but narrower than it looked: the
+    # step that proposes the appointment can never declare `output` (the kernel refuses a proposal
+    # from a step that owes data, so the booking would become impossible), and the step that could
+    # publish them saw only the proposal's PROSE, which carries no ids by design. What that argues
+    # is WHICH step publishes them — the one that writes the message, holding the reads itself —
+    # not that the customer who is being reviewed deserves the worse experience. She was the one
+    # left typing «corte, mañana a las 10:30» at the salon that chose to be careful.
+    if booking_steps and not offers:
         problems.append(
-            f"{name} books with {', '.join(TAPPABLE_BOOKINGS)} unattended and never offers the "
-            f"customer anything to TAP: the free slots go out as prose and she has to type «corte, "
-            f"mañana a las 10:30» back, which is where the bookings are lost (whatsapp_inbox#101)"
+            f"{name} books with {', '.join(TAPPABLE_BOOKINGS)} and never offers the customer "
+            f"anything to TAP: the free slots go out as prose and she has to type «corte, mañana a "
+            f"las 10:30» back, which is where the bookings are lost (whatsapp_inbox#101/#109)"
         )
 
     if offers:
@@ -3987,9 +3987,10 @@ TAPPABLE_CASES = [
         1,
     ),
     (
-        "its attended sibling books too and is deliberately out of this rule: there the step that "
-        "finds the slots is the one that proposes, and a proposal ends the turn "
-        "(whatsapp_inbox#109)",
+        "🔴 the ATTENDED family books too and owes her the same list: the salon that chose to "
+        "review before confirming used to get the WORSE experience, which is backwards "
+        "(whatsapp_inbox#109). Its slots come from the step that writes the message, never from "
+        "the one that proposes — that one can never declare `output`",
         ATTENDED,
         {
             "schema_version": 1,
@@ -4012,7 +4013,7 @@ TAPPABLE_CASES = [
                 _notify_step(),
             ],
         },
-        0,
+        1,
     ),
     (
         "a family that offers nothing and books nothing is not this rule's business",
