@@ -1670,6 +1670,53 @@ MESSAGE_KINDS = (
     ),
 )
 
+# The fifth thing that arrives on this same event, and the one the four above cannot describe: the
+# customer TAPPING a row of a list this automation sent her (whatsapp_inbox#101). Meta delivers a
+# tap with NO text at all — the id and the label travel in `interactive.list_reply` — and the core
+# hands the flow `reply_id`/`reply_title` filled and `text` EMPTY (hub#1633).
+#
+# It is kept OUT of `MESSAGE_KINDS` on purpose. Those four say who the automation is for, and every
+# family answers them the same way. A tap only means something to a family that offered something
+# to tap, so the half that depends on the family — «somebody has to wake up for it» — is asserted
+# in `tappable_option_problems`, where that is known. What is asserted here is the half that is
+# true everywhere, and it is the worst failure this channel has: never wake up TWICE.
+TAP_KIND = (
+    "a customer tapping a row of the list this automation sent her",
+    {
+        "text": "",
+        "reply_id": "2026-09-08T10:30|staff:12|service:3",
+        "reply_title": "mañana 10:30 · Ana",
+        "from": CUSTOMER_NUMBER,
+        "contact": CUSTOMER_NUMBER,
+        "direction": "inbound",
+        "source": "live",
+    },
+    None,
+    "whether this family should wake up for a tap is `tappable_option_problems`' question",
+)
+
+# And the SIXTH shape, the one that makes the tap trigger hard to write: a photo, a sticker or a
+# voice note, sent with no caption. It arrives with `text` EMPTY — like a tap — and the only thing
+# telling the two apart is `reply_id`, which the core serves **empty and never absent** (hub#1633,
+# `inbound_poll.rs`: "a flow comparing `reply_id` against something should simply not match a
+# photo"). So `exists` is TRUE for every message that ever arrives, and only `neq ""` says «she
+# tapped». A tap trigger written with `exists` reads exactly right and wakes the booking recipe up
+# for every picture a customer sends: a metered turn spent on an empty message, and an answer she
+# never asked for. Like TAP_KIND this belongs to the family that offers rows, so it is asserted in
+# `tappable_option_problems` where that is known.
+MEDIA_KIND = (
+    "a photo sent with no caption",
+    {
+        "text": "",
+        "reply_id": "",
+        "reply_title": "",
+        "from": CUSTOMER_NUMBER,
+        "contact": CUSTOMER_NUMBER,
+        "direction": "inbound",
+        "source": "live",
+    },
+)
+
 WHATSAPP_EVENT = "hub.whatsapp.message_received"
 
 
@@ -1705,11 +1752,26 @@ def only_the_customer_problems(name, doc):
     rises above hub#1621, and this rule goes red until it does.
     """
     problems = []
-    for trigger in whatsapp_triggers(doc):
-        condition = trigger.get("filter") or {}
-        for label, payload, wanted, why in MESSAGE_KINDS:
+    triggers = whatsapp_triggers(doc)
+    if not triggers:
+        # A document that waits on some other event is not this rule's business. Said here rather
+        # than falling out of an empty loop: with the union reading below, «no trigger matched the
+        # customer» and «this document has no WhatsApp trigger» are the same expression, and only
+        # the first one is a defect.
+        return problems
+    filters = [t.get("filter") or {} for t in triggers]
+
+    # **The UNION, never each trigger on its own** (whatsapp_inbox#101). A message wakes this
+    # automation up if ANY of its triggers matches it, so asking each one separately asks the wrong
+    # question the moment there is more than one: the trigger that waits for a TAP is SUPPOSED to
+    # ignore a customer writing words, and a per-trigger reading calls that «the automation is deaf
+    # to the only thing it exists for».
+    for label, payload, wanted, why in (*MESSAGE_KINDS, TAP_KIND):
+        matched = []
+        for condition in filters:
             try:
-                got = _filter_matches(condition, {"event": payload})
+                if _filter_matches(condition, {"event": payload}):
+                    matched.append(condition)
             except _UnjudgeableFilter as e:
                 problems.append(
                     f"{name} filters on `{e}`, an operator this battery has no faithful copy of, "
@@ -1717,14 +1779,27 @@ def only_the_customer_problems(name, doc):
                     f"`_clause_matches` from `eval()` in `crates/runtime/src/flows/def.rs` in the "
                     f"same commit"
                 )
-                break
-            if got == wanted:
-                continue
+                return problems
+        if wanted is not None and bool(matched) != wanted:
             problems.append(
-                f"{name} {'ignores' if wanted else 'answers'} {label}: {why}. Its trigger filter "
-                f"is {json.dumps(condition, sort_keys=True)}"
+                f"{name} {'ignores' if wanted else 'answers'} {label}: {why}. Its trigger filters "
+                f"are {json.dumps(filters, sort_keys=True)}"
+            )
+        # 🔴 …and exactly once. Two triggers that both match ONE message are two runs of the same
+        # document over it, and in this channel that is the worst thing that can happen: the same
+        # customer is booked twice, from one message, and nothing anywhere reports it — both runs
+        # succeeded. Disjointness has to be a property of the filters themselves, not of how the
+        # core happens to fill a field, which is why it is measured here against the payloads
+        # rather than reasoned about in a comment.
+        if len(matched) > 1:
+            problems.append(
+                f"{name} wakes up {len(matched)} times for {label}: the filters "
+                f"{json.dumps(matched, sort_keys=True)} all match that one message, so the hub "
+                f"starts that many runs of this document over it — two runs of a booking recipe "
+                f"is one customer with two appointments, and both runs end `done`"
             )
 
+    for trigger in triggers:
         mapping = trigger.get("input") or {}
         floor_event = next(p for lab, p, _, _ in MESSAGE_KINDS if lab.endswith("declared floor"))
         for step in doc.get("steps", []):
@@ -1754,6 +1829,225 @@ def only_the_customer_problems(name, doc):
 
 
 
+# ── «que la toque, no que la escriba» — whatsapp_inbox#101 ────────────────────────────────────
+#
+# The booking families offered the free slots as PROSE and asked the customer to type a whole
+# sentence back («corte, mañana a las 10:30»). She answers «10:30», or «el segundo», and what
+# arrives is a brand-new run that never saw the list. On WhatsApp the normal thing is to TAP.
+#
+# The kernel halves landed apart: `notify.interactive` carries Meta's own object (hub#1633), and an
+# `ai` step DECLARES what its turn leaves behind, with `options` being exactly Meta's row shape
+# (hub#1639). What this rule pins is the WIRING between them, because every way of getting it wrong
+# is silent — the document parses, the grants match, the run ends `done`:
+#
+#   * rows pointed at a step that never declared them resolve to `null`, and `notify` puts the
+#     resolved object in the outbox without looking again: the list leaves for Meta with no rows;
+#   * a producing step that can PARK a proposal never reaches `flow_answer` — the kernel refuses the
+#     proposal by name (`agent_runner.rs`, hub#1639) — so the declared fields never arrive at all;
+#   * an EMPTY list is a valid `options` answer and not a valid Meta message, so an unguarded send
+#     fails after the customer has already been answered;
+#   * and a list nobody can answer — no trigger that wakes for a tap — is worse than no list at all:
+#     she taps, and nothing happens, ever.
+#
+# The producing step also still owes the customer WORDS. Its `text` is what `silence_problems`
+# makes the `notify` carry, and with `output` declared the turn ends on a tool call whose
+# accompanying content a model may leave empty — an empty WhatsApp message where the confirmation
+# used to be. The kernel says so in its own briefing; the prompt has to say it too, because the
+# prompt is what the model reads last.
+TAP_WORDS = {
+    "en": "ALWAYS write your reply to the customer in the same turn in which you call",
+    "es": "Escribe SIEMPRE tu respuesta para la clienta en el mismo turno en el que llamas a",
+}
+
+# The bookings whose recipes have to let the customer TAP her slot. A table and not «every family»
+# on purpose: a table booking is chosen by party size and hour together and its family asks a
+# different question (whatsapp_inbox#108), so a row is earned by a booking whose customer picks
+# from a list — not by every booking there is.
+TAPPABLE_BOOKINGS = ("appointments.appointments.create",)
+
+
+def _is_path(value):
+    """`is_path` in `crates/runtime/src/flows/def.rs`: a bare mapping path, resolved with its TYPE
+    intact — which is the only reason an array of rows can travel inside `interactive` at all."""
+    if not isinstance(value, str):
+        return False
+    root = value.split(".")[0]
+    return root in ("input", "steps", "event", "secret") and len(value) > len(root) + 1
+
+
+def option_slots(interactive):
+    """`(where, value)` for every `rows`/`buttons` slot of a Meta interactive object."""
+    found = []
+
+    def walk(node, where):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key in ("rows", "buttons"):
+                    found.append((f"{where}.{key}", value))
+                else:
+                    walk(value, f"{where}.{key}")
+        elif isinstance(node, list):
+            for index, value in enumerate(node):
+                walk(value, f"{where}[{index}]")
+
+    walk(interactive or {}, "interactive")
+    return found
+
+
+def tappable_option_problems(name, doc):
+    """The customer TAPS the slot she was offered instead of typing it back.
+
+    whatsapp_inbox#101. Four things are pinned, and each of them is a way the recipe fails without
+    saying anything: where the rows come from, that the step producing them can actually finish,
+    that an empty list is never sent, and that a tap wakes something up — exactly once, which is
+    `only_the_customer_problems`' half of the same rule.
+    """
+    problems = []
+    steps = doc.get("steps", [])
+    by_id = {s.get("id"): s for s in steps}
+    lang = name.split(".")[1] if len(name.split(".")) >= 3 else ""
+    offers = [(i, s) for i, s in enumerate(steps) if s.get("kind") == "notify" and s.get("interactive")]
+
+    for index, step in offers:
+        sid = step.get("id")
+        if step.get("template") or (step.get("vars") or {}):
+            problems.append(
+                f"{name} step `{sid}` sends `interactive` AND its own copy: a WhatsApp message has "
+                f"one type, so the hub refuses the document at save time rather than choosing one "
+                f"of the two. The words belong in `interactive.body.text`"
+            )
+        for where, value in option_slots(step.get("interactive")):
+            if not isinstance(value, str):
+                # A literal list of rows is a fixed menu — legitimate, and nothing to wire.
+                continue
+            if not _is_path(value):
+                problems.append(
+                    f"{name} step `{sid}` fills `{where}` with `{value}`, which is not a mapping "
+                    f"path: `resolve` only keeps an ARRAY when the whole value is a bare path, so "
+                    f"anything else reaches Meta as the text of it"
+                )
+                continue
+            parts = value.split(".")
+            if len(parts) != 3 or parts[0] != "steps":
+                problems.append(
+                    f"{name} step `{sid}` fills `{where}` with `{value}`: the rows of a list come "
+                    f"from a field an `ai` step DECLARED (`steps.<step>.<field>`, hub#1639), and "
+                    f"any other path resolves to something with no `id`/`title` in it"
+                )
+                continue
+            _, source, field = parts
+            producer = by_id.get(source)
+            if producer is None or producer.get("kind") != "ai":
+                problems.append(
+                    f"{name} step `{sid}` takes its rows from `{value}` and `{source}` is not an "
+                    f"`ai` step of this document: the path resolves to `null` and the list is sent "
+                    f"to Meta with no rows"
+                )
+                continue
+            declared = (producer.get("output") or {}).get(field)
+            if not isinstance(declared, dict) or declared.get("type") != "options":
+                problems.append(
+                    f"{name} step `{source}` never declares `output.{field}` as `options`, and "
+                    f"step `{sid}` sends it as the rows of a list. Undeclared, the turn publishes "
+                    f"`{{text, tool_calls}}` and nothing else: `{value}` is `null`, `notify` does "
+                    f"not look again, and the send leaves with `rows: null`"
+                )
+                continue
+            if (producer.get("policy") or "manual") != "auto" and (
+                (producer.get("tools") or {}).get("commands") or []
+            ):
+                problems.append(
+                    f"{name} step `{source}` declares `output.{field}` and can PARK a proposal "
+                    f"(`policy: {producer.get('policy') or 'manual'}` with commands): the kernel "
+                    f"refuses a proposal from a step that owes data, by name, because a proposal "
+                    f"ends the turn and `flow_answer` would never be called. The step that finds "
+                    f"the slots has to be one that can finish — reads only, or `policy: auto`"
+                )
+            sentence = TAP_WORDS.get(lang)
+            if sentence is None:
+                problems.append(
+                    f"{name} step `{source}` hands data back and this battery has no wording for "
+                    f"language `{lang}`: add the translation to `TAP_WORDS` in the same commit"
+                )
+            elif sentence not in prompt_of(producer):
+                problems.append(
+                    f"{name} step `{source}` declares `output` and its prompt no longer says "
+                    f"«{sentence}…»: a turn that ends on a tool call may carry no words with it, "
+                    f"and `{sid}` would send the customer an empty message where her confirmation "
+                    f"used to be"
+                )
+            guards = [
+                s
+                for s in steps[:index]
+                if s.get("kind") == "condition"
+                and (s.get("when") or {}).get(value, {}).get("neq") == []
+            ]
+            if not guards:
+                problems.append(
+                    f"{name} sends `{value}` as rows with no `condition` before step `{sid}` "
+                    f"refusing the EMPTY list (`{{\"{value}\": {{\"neq\": []}}}}`). An empty list "
+                    f"is a perfectly good answer — the turn booked, or answered a question — and "
+                    f"is not a message Meta accepts, so the send fails AFTER she was answered. "
+                    f"`exists` cannot stand in for it: `[]` is not null"
+                )
+
+    booking_steps = [
+        s
+        for s in steps
+        if s.get("kind") == "ai"
+        and any(b in ((s.get("tools") or {}).get("commands") or []) for b in TAPPABLE_BOOKINGS)
+    ]
+    # …and the family that books with nobody watching HAS to offer them, because it is the one
+    # whose customer chooses the hour herself. Its attended sibling is deliberately out: there the
+    # step that finds the slots is the same one that PROPOSES the appointment, and the kernel
+    # refuses a proposal from a step that owes data — a proposal ends the turn, so `flow_answer`
+    # would never be called and the booking would become impossible. The step that could publish
+    # them (`reply_to_customer`) only ever sees the proposal's PROSE, which carries no ids by
+    # design, so it cannot name a slot. Reopening that needs a step this template does not have:
+    # whatsapp_inbox#109.
+    if booking_steps and not offers and is_unattended(name):
+        problems.append(
+            f"{name} books with {', '.join(TAPPABLE_BOOKINGS)} unattended and never offers the "
+            f"customer anything to TAP: the free slots go out as prose and she has to type «corte, "
+            f"mañana a las 10:30» back, which is where the bookings are lost (whatsapp_inbox#101)"
+        )
+
+    if offers:
+        woken = [
+            t
+            for t in whatsapp_triggers(doc)
+            if _filter_matches(t.get("filter") or {}, {"event": TAP_KIND[1]})
+        ]
+        if not woken:
+            problems.append(
+                f"{name} offers rows to tap and no trigger of it wakes up for a tap: Meta sends a "
+                f"tap with NO text, so a filter asking for `event.text` `neq` `\"\"` throws it "
+                f"away. She taps the slot she was offered and nothing happens, with no error "
+                f"anywhere — add a trigger on `event.reply_id`, disjoint from the one that waits "
+                f"for words"
+            )
+        for trigger in woken:
+            if "reply_id" not in (trigger.get("input") or {}):
+                problems.append(
+                    f"{name} wakes up for a tap and its `input` never maps `reply_id`: the run "
+                    f"knows somebody tapped and not WHICH row, which is the ambiguity this whole "
+                    f"change exists to remove"
+                )
+            # …and it has to tell a tap from a PHOTO, which arrives with `text` empty just the
+            # same. The core serves `reply_id` empty and never ABSENT, so `exists` — the way of
+            # writing this that reads right — is true for every message there is.
+            if _filter_matches(trigger.get("filter") or {}, {"event": MEDIA_KIND[1]}):
+                problems.append(
+                    f"{name} wakes up for {MEDIA_KIND[0]} as well as for a tap: its filter "
+                    f"{json.dumps(trigger.get('filter') or {}, sort_keys=True)} cannot tell them "
+                    f"apart, because the core serves `reply_id` EMPTY and never absent "
+                    f"(hub#1633), so anything but `neq \"\"` on it is true for a picture too. She "
+                    f"sends one and this booking recipe runs over a message with no words in it — "
+                    f"a metered turn, and an answer she never asked for"
+                )
+    return problems
+
+
 DOCUMENT_RULES = (
     policy_problems,
     identified_cancellation_problems,
@@ -1771,6 +2065,7 @@ DOCUMENT_RULES = (
     moving_problems,
     own_customer_only_problems,
     only_the_customer_problems,
+    tappable_option_problems,
 )
 
 # …and the registry itself is guarded, because it is the next place the same hole moves to. The
@@ -1795,6 +2090,7 @@ SELF_CHECKED_RULES = (
     moving_problems,
     own_customer_only_problems,
     only_the_customer_problems,
+    tappable_option_problems,
 )
 
 
@@ -2758,6 +3054,28 @@ def _contact_notify(step_id="tell"):
     return step
 
 
+# The two-trigger mutants of whatsapp_inbox#101. `_two` is `_wa_doc` with a second trigger, which
+# is the shape the tap needs and the shape that can book somebody twice.
+def _two(second_filter, second_input=None):
+    doc = _wa_doc(LIVE_INBOUND)
+    doc["triggers"].append(
+        {
+            "kind": "event",
+            "event": WHATSAPP_EVENT,
+            "filter": second_filter,
+            "input": second_input or {"from": "event.from", "text": "event.reply_title"},
+        }
+    )
+    return doc
+
+
+_TAP_FILTER = {
+    "event.text": {"eq": ""},
+    "event.reply_id": {"neq": ""},
+    "event.direction": {"neq": "outbound"},
+    "event.source": {"neq": "history"},
+}
+
 # `(label, file name, document, problems expected)` — the mutants of «a customer, and only now».
 ONLY_CUSTOMER_CASES = [
     (
@@ -2897,6 +3215,28 @@ ONLY_CUSTOMER_CASES = [
             "steps": [_notify_step()],
         },
         0,
+    ),
+    (
+        "the pair this issue ships: one trigger waits for words, the other for a tap, and no "
+        "message satisfies both — disjoint by construction, not by luck",
+        ATTENDED,
+        _two(_TAP_FILTER),
+        0,
+    ),
+    (
+        "🔴 the worst failure this channel has: two triggers that both match ONE message, so the "
+        "hub starts two runs of a booking recipe over it and the customer ends with two "
+        "appointments — both runs `done`, nothing reported",
+        ATTENDED,
+        _two(LIVE_INBOUND),
+        2,
+    ),
+    (
+        "🔴 the overlap that reads as disjoint: the tap trigger forgets to demand the ABSENCE of "
+        "text, so every word the customer writes matches it too",
+        ATTENDED,
+        _two({k: v for k, v in _TAP_FILTER.items() if k != "event.text"}),
+        2,
     ),
 ]
 
@@ -3369,6 +3709,249 @@ def _enum_reading_problems():
     return []
 
 
+# ── the mutants of «que la toque, no que la escriba» (whatsapp_inbox#101) ─────────────────────
+
+# The trigger that waits for a TAP, as these templates ship it. Disjoint from `LIVE_INBOUND` by
+# construction and not by luck: one demands words, the other demands their absence, so no message
+# can satisfy both however the core fills `reply_id`.
+TAP_TRIGGER = {
+    "event.text": {"eq": ""},
+    "event.reply_id": {"neq": ""},
+    "event.direction": {"neq": "outbound"},
+    "event.source": {"neq": "history"},
+}
+_TAP_PROMPT = f"find the free slots. {TAP_WORDS['en']} `flow_answer`."
+
+
+def _tap_doc(
+    *,
+    output=("options",),
+    policy="auto",
+    commands=("appointments.appointments.create",),
+    guard=True,
+    rows="steps.pick.slots",
+    triggers=("words", "tap"),
+    tap_filter=None,
+    tap_input=("from", "text", "reply_id"),
+    prompt=_TAP_PROMPT,
+    extra_copy=None,
+):
+    """A document that offers the customer rows to tap, with one screw loosened at a time."""
+    producer = {"id": "pick", "kind": "ai", "prompt": prompt, "policy": policy}
+    if commands:
+        producer["tools"] = {"commands": list(commands)}
+    if output:
+        producer["output"] = {
+            "slots": {"type": output[0], "describe": "the free slots you found"}
+        }
+    steps = [producer]
+    if guard:
+        steps.append({"id": "any", "kind": "condition", "when": {rows: {"neq": []}}})
+    offer = {
+        "id": "offer",
+        "kind": "notify",
+        "channel": "whatsapp",
+        "template": "",
+        "interactive": {
+            "type": "list",
+            "body": {"text": "pick one"},
+            "action": {"button": "See", "sections": [{"title": "Free", "rows": rows}]},
+        },
+    }
+    if extra_copy:
+        offer["vars"] = extra_copy
+    steps.append(offer)
+    built = []
+    if "words" in triggers:
+        built.append(
+            {
+                "kind": "event",
+                "event": WHATSAPP_EVENT,
+                "filter": LIVE_INBOUND,
+                "input": {"from": "event.from", "text": "event.text"},
+            }
+        )
+    if "tap" in triggers:
+        built.append(
+            {
+                "kind": "event",
+                "event": WHATSAPP_EVENT,
+                "filter": tap_filter or TAP_TRIGGER,
+                "input": {
+                    key: f"event.{ {'text': 'reply_title'}.get(key, key) }"
+                    for key in tap_input
+                },
+            }
+        )
+    return {"schema_version": 1, "triggers": built, "steps": steps}
+
+
+# `(label, file name, document, problems expected)`
+TAPPABLE_CASES = [
+    (
+        "\U0001f534 the tap trigger written with `exists`, which reads right and is not: the core "
+        "serves `reply_id` EMPTY and never absent, so it is true for a photo with no caption too "
+        "and the booking recipe runs over an empty message",
+        ATTENDED,
+        _tap_doc(
+            tap_filter={
+                "event.text": {"eq": ""},
+                "event.reply_id": {"exists": True},
+                "event.direction": {"neq": "outbound"},
+                "event.source": {"neq": "history"},
+            }
+        ),
+        1,
+    ),
+    (
+        "the trigger as it ships tells the two apart: `neq \"\"` wakes up for the tap and leaves "
+        "the photo alone",
+        ATTENDED,
+        _tap_doc(),
+        0,
+    ),
+    (
+        "the shape this issue ships: the slots the turn found become the rows she taps, guarded "
+        "against the empty list, with a trigger that wakes up for the tap",
+        ATTENDED,
+        _tap_doc(),
+        0,
+    ),
+    (
+        "the recipe as it was: it books unattended, and offers nothing to tap — she types the "
+        "sentence back",
+        UNATTENDED,
+        {
+            "schema_version": 1,
+            "triggers": [
+                {
+                    "kind": "event",
+                    "event": WHATSAPP_EVENT,
+                    "filter": LIVE_INBOUND,
+                    "input": {"from": "event.from", "text": "event.text"},
+                }
+            ],
+            "steps": [
+                {
+                    "id": "pick",
+                    "kind": "ai",
+                    "prompt": "book it",
+                    "policy": "auto",
+                    "tools": {"commands": ["appointments.appointments.create"]},
+                },
+                _notify_step(),
+            ],
+        },
+        1,
+    ),
+    (
+        "🔴 rows from a step that never declared them: `null` reaches Meta as the rows of the list",
+        ATTENDED,
+        _tap_doc(output=()),
+        1,
+    ),
+    (
+        "🔴 declared, but as text: `options` is Meta's row shape and nothing else fits in a list",
+        ATTENDED,
+        _tap_doc(output=("text",)),
+        1,
+    ),
+    (
+        "🔴 the producer can PARK a proposal: the kernel refuses it, so `flow_answer` is never "
+        "called and the fields never arrive",
+        ATTENDED,
+        _tap_doc(policy="manual"),
+        1,
+    ),
+    (
+        "a `manual` producer that only READS can still finish, so it is allowed",
+        ATTENDED,
+        _tap_doc(policy="manual", commands=()),
+        0,
+    ),
+    (
+        "🔴 nothing refuses the empty list: the turn booked, `slots` is `[]`, and the send fails "
+        "after she was already answered",
+        ATTENDED,
+        _tap_doc(guard=False),
+        1,
+    ),
+    (
+        "🔴 the guard is `exists`, which is true for `[]` — the mutant that reads right",
+        ATTENDED,
+        {
+            **_tap_doc(guard=False),
+            "steps": [
+                _tap_doc(guard=False)["steps"][0],
+                {"id": "any", "kind": "condition", "when": {"steps.pick.slots": {"exists": True}}},
+                _tap_doc(guard=False)["steps"][1],
+            ],
+        },
+        1,
+    ),
+    (
+        "🔴 no trigger wakes up for the tap: she taps, and nothing happens ever",
+        ATTENDED,
+        _tap_doc(triggers=("words",)),
+        1,
+    ),
+    (
+        "🔴 the tap wakes something up but `reply_id` never reaches the run: it knows somebody "
+        "tapped and not which row — the ambiguity this change exists to remove",
+        ATTENDED,
+        _tap_doc(tap_input=("from", "text")),
+        1,
+    ),
+    (
+        "🔴 the prompt stopped promising the words: a turn that ends on a tool call can carry "
+        "none, and the confirmation goes out empty",
+        ATTENDED,
+        _tap_doc(prompt="find the free slots."),
+        1,
+    ),
+    (
+        "🔴 `interactive` next to copy of its own: one message, two types — the hub refuses it",
+        ATTENDED,
+        _tap_doc(extra_copy={"text": "and this"}),
+        1,
+    ),
+    (
+        "its attended sibling books too and is deliberately out of this rule: there the step that "
+        "finds the slots is the one that proposes, and a proposal ends the turn "
+        "(whatsapp_inbox#109)",
+        ATTENDED,
+        {
+            "schema_version": 1,
+            "triggers": [
+                {
+                    "kind": "event",
+                    "event": WHATSAPP_EVENT,
+                    "filter": LIVE_INBOUND,
+                    "input": {"from": "event.from", "text": "event.text"},
+                }
+            ],
+            "steps": [
+                {
+                    "id": "pick",
+                    "kind": "ai",
+                    "prompt": "book it",
+                    "policy": "manual",
+                    "tools": {"commands": ["appointments.appointments.create"]},
+                },
+                _notify_step(),
+            ],
+        },
+        0,
+    ),
+    (
+        "a family that offers nothing and books nothing is not this rule's business",
+        ATTENDED,
+        _wa_doc(LIVE_INBOUND),
+        0,
+    ),
+]
+
+
 def self_check():
     """The mutants of the rules above, run every time, before any real document is opened."""
     problems = []
@@ -3391,6 +3974,13 @@ def self_check():
             problems.append(
                 f"the battery's own «unattended means unattended» rule is wrong — {label}: "
                 f"expected {expected} problem(s), got {len(got)}: {got}"
+            )
+    for label, name, doc, expected in TAPPABLE_CASES:
+        got = tappable_option_problems(name, doc)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «she taps it» rule is wrong — {label}: expected {expected} "
+                f"problem(s), got {len(got)}: {got}"
             )
     for label, name, doc, expected in ONLY_CUSTOMER_CASES:
         got = only_the_customer_problems(name, doc)
@@ -3781,6 +4371,7 @@ def main():
         # module claims to run on (whatsapp_inbox#90). Needs no manifest: filter and input map are
         # the document's own shape.
         problems += applied(ledger, only_the_customer_problems, path.name, doc)
+        problems += applied(ledger, tappable_option_problems, path.name, doc)
 
         # The trigger this whole issue is about: a template that listens to something else is a
         # different product wearing the same file name.

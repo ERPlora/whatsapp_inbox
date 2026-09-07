@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """This module says WHICH hub it needs, so an old one refuses it instead of failing mute (#62).
 
-WHY THIS FILE EXISTS. The appointment automation this module ships (`flows/`) leans on a kernel
-behaviour that landed in ERPlora/hub#1595: a command that only ANSWERS runs inside the turn
-whatever the policy says. On a hub without it the first availability read of `propose_appointment`
-turns into a row of `_flow_approvals` and the turn ends, so the owner gets a card asking them to
-approve «check availability» — which is not a decision anybody can take — and the appointment is
-never proposed. Nothing throws, nothing warns at install time, and the business finds out when a
-customer is left without an appointment.
+WHY THIS FILE EXISTS. The automations this module ships (`flows/`) lean on kernel behaviour, and
+every way of not having it is SILENT. On a hub without hub#1595 the first availability read of
+`propose_appointment` turns into a row of `_flow_approvals` and the turn ends, so the owner gets a
+card asking them to approve «check availability» — which is not a decision anybody can take — and
+the appointment is never proposed. Nothing throws, nothing warns at install time, and the business
+finds out when a customer is left without an appointment.
 
 The manifest is the only place that can say no in time. `compatibility.min_erplora_version` is read
 by the runtime (`Manifest::load` → `require_core_version`, hub#521): a core below the declared floor
@@ -16,26 +15,43 @@ terminal … update the hub and install it again" — instead of half-landing. U
 declared nothing, so every hub took it, and `flows/README.md` carried the requirement as prose:
 documentation is not a guard.
 
+🔴 **AND THE JSON SCHEMA IS NOT THE GATE** (whatsapp_inbox#101, measured 2026-09-07). It is tempting
+to protect a template by probing the `flow.schema.json` the hub serves, the way flows#75 protects a
+SCREEN. Measured against the fleet's own release, that probe answers WRONG: `flow.schema.json` at
+`v1.1.15` validates a document carrying `interactive` and `output` with **zero** errors, because the
+step object has no `additionalProperties: false`. What refuses it is the Rust parser one layer in —
+`def.rs` walks an ALLOWLIST per step kind and returns `flow.invalid_definition` on the first key it
+does not know. So the document does not degrade, it does not partly work, and the schema cannot see
+it coming: the whole automation is refused at save time. A version floor is the only control that
+runs BEFORE the module lands.
+
 WHAT THIS PINS:
 
   1. the manifest declares a core floor AT ALL (deleting it brings the mute failure back);
   2. the floor is a version the hub can compare against — an unreadable one is refused too
      (`ManifestCoreFloorUnreadable`), so a typo would brick the install rather than loosen it;
-  3. it is not below the kernel floor measured below;
-  4. and that measurement is RE-RUN here against the neighbouring hub checkout instead of trusted:
-     the marker has to be present at the declared tag AND absent at the tag before the kernel
-     floor. A control that cannot tell the two apart would pass no matter what the floor said.
+  3. it is not below what the SHIPPED TEMPLATES actually ask the kernel for. Derived from the
+     documents in `flows/` and not from a constant somebody remembers to bump: a template that
+     starts using a newer kernel feature raises the floor by existing, which is the whole point;
+  4. and every requirement is RE-MEASURED against the neighbouring hub checkout instead of
+     trusted: the marker has to be PRESENT at the declared release AND ABSENT at the release before
+     it. A control that cannot tell the two apart would pass no matter what the floor said.
 
-THE KERNEL FLOOR, MEASURED (2026-09-06, `crates/server/src/agent_runner.rs` per tag):
+THE KERNEL FLOORS, MEASURED (2026-09-07, `git show <tag>:<path> | grep -c <marker>`):
 
-  | ref      | `answers_only` |
-  |----------|----------------|
-  | v1.1.13  | absent         |
-  | v1.1.14  | absent         |
-  | v1.1.15  | present (x5)   |
+  | ref             | `answers_only` in agent_runner.rs | `AiOutputKind` in def.rs | `interactive` in def.rs |
+  |-----------------|-----------------------------------|--------------------------|-------------------------|
+  | v1.1.13         | absent                            | absent                   | absent                  |
+  | v1.1.14         | absent                            | absent                   | absent                  |
+  | v1.1.15         | present (x5)                      | absent                   | absent                  |
+  | origin/develop  | present (x5)                      | present (x17)            | present (x31)           |
 
-So `v1.1.15` is the first release that carries hub#1595. Raising the floor later is fine (check 3
-is a floor, not an equality); lowering it below 1.1.15 is the bug this file exists to catch.
+So `v1.1.15` is the first release carrying hub#1595, and NO release yet carries hub#1633/hub#1639 —
+`git tag --contains 53523796` is empty. `1.1.16` is therefore a floor pointing at a release that
+does not exist yet, which is the CORRECT way to ship something the fleet cannot run: the hub refuses
+the install with `core_version_too_old` instead of taking a template that explodes at save time.
+The positive half of the re-measure falls back to `origin/develop` while that tag is missing, so the
+marker still has to be real somewhere rather than merely asserted here.
 
 Usage: tests/core_floor.contract.test.py   (exit 0 = green). No Postgres, no Docker.
 """
@@ -45,18 +61,65 @@ import pathlib
 import re
 import subprocess
 import sys
+from typing import NamedTuple
 
 MODULE_DIR = pathlib.Path(__file__).resolve().parent.parent
 MANIFEST = json.loads((MODULE_DIR / "module.json").read_text())
-
-# The oldest hub that can run this module's automation, and the evidence for that number.
-KERNEL_FLOOR = (1, 1, 15)
-# The marker of ERPlora/hub#1595 in the file that decides whether a tool call waits for approval.
-KERNEL_MARKER = ("crates/server/src/agent_runner.rs", "answers_only")
-# The last release WITHOUT it — the negative the control has to be able to see.
-KERNEL_FLOOR_MINUS_ONE = "v1.1.14"
 # Sibling checkout of ERPlora/hub in the monorepo (`modules-workspace/modules/<id>` → root).
 HUB_CHECKOUT = MODULE_DIR.parent.parent.parent / "hub"
+
+
+class KernelNeed(NamedTuple):
+    """One kernel behaviour a template leans on, with the evidence for its release number."""
+
+    issue: str
+    floor: tuple[int, int, int]
+    path: str
+    marker: str
+    last_without: str
+    why: str
+
+
+NEED_ANSWERS_ONLY = KernelNeed(
+    issue="hub#1595",
+    floor=(1, 1, 15),
+    path="crates/server/src/agent_runner.rs",
+    marker="answers_only",
+    last_without="v1.1.14",
+    why="a command that only ANSWERS runs inside the turn whatever the policy says. Without it "
+    "the availability read parks as an approval nobody can grant and the appointment is never "
+    "proposed",
+)
+NEED_DECLARED_OUTPUT = KernelNeed(
+    issue="hub#1639",
+    floor=(1, 1, 16),
+    path="crates/runtime/src/flows/def.rs",
+    marker="AiOutputKind",
+    last_without="v1.1.15",
+    why="an `ai` step DECLARES what its turn leaves behind (`output`), so a later step can map "
+    "`steps.<id>.<field>`. Below it, `output` is an unknown key and the parser refuses the WHOLE "
+    "document with `flow.invalid_definition`",
+)
+NEED_INTERACTIVE = KernelNeed(
+    issue="hub#1633",
+    floor=(1, 1, 16),
+    path="crates/runtime/src/flows/def.rs",
+    marker="interactive",
+    last_without="v1.1.15",
+    why="a `notify` step carries Meta's own `interactive` object, which is what the customer TAPS. "
+    "Below it, `interactive` is an unknown key and the parser refuses the WHOLE document with "
+    "`flow.invalid_definition`",
+)
+
+# What a shipped document has to contain for each need to be REAL, so the floor is derived from the
+# templates rather than from a number somebody has to remember to raise (whatsapp_inbox#101).
+FEATURES = (
+    (NEED_INTERACTIVE, "interactive", lambda step: bool(step.get("interactive"))),
+    (NEED_DECLARED_OUTPUT, "output", lambda step: bool(step.get("output"))),
+)
+# …and this one is not a step key: it is why the module declared a floor in the first place, and
+# every template still rides on it, so it is asked of the whole family.
+ALWAYS = (NEED_ANSWERS_ONLY,)
 
 failures: list[str] = []
 
@@ -71,12 +134,11 @@ def dotted(version: tuple[int, int, int]) -> str:
     return ".".join(str(part) for part in version)
 
 
-def marker_count(tag: str) -> int | None:
-    """How many times the hub#1595 marker appears in that file at `tag`. `None` = cannot look."""
-    path, marker = KERNEL_MARKER
+def marker_count(ref: str, path: str, marker: str) -> int | None:
+    """How many times `marker` appears in `path` at `ref`. `None` = cannot look."""
     try:
         blob = subprocess.run(
-            ["git", "-C", str(HUB_CHECKOUT), "show", f"{tag}:{path}"],
+            ["git", "-C", str(HUB_CHECKOUT), "show", f"{ref}:{path}"],
             capture_output=True,
             text=True,
             check=False,
@@ -86,17 +148,41 @@ def marker_count(tag: str) -> int | None:
     return blob.stdout.count(marker) if blob.returncode == 0 else None
 
 
+def needs_of_templates() -> list[tuple[KernelNeed, str]]:
+    """Every kernel need the shipped documents actually demand, with who demands it."""
+    demanded: list[tuple[KernelNeed, str]] = []
+    templates = sorted((MODULE_DIR / "flows").glob("*.flow.json"))
+    for template in templates:
+        doc = json.loads(template.read_text(encoding="utf-8"))
+        for need, label, present in FEATURES:
+            hits = [s.get("id") for s in doc.get("steps", []) if present(s)]
+            if hits:
+                demanded.append((need, f"{template.name} step `{hits[0]}` uses `{label}`"))
+    if templates:
+        for need in ALWAYS:
+            demanded.append((need, f"all {len(templates)} template(s) ride on it"))
+    return demanded
+
+
 def main() -> int:
     print("· the manifest declares which hub this module needs (whatsapp_inbox#62)")
+
+    templates = sorted(p.name for p in (MODULE_DIR / "flows").glob("*.flow.json"))
+    if not templates:
+        failures.append(
+            "this module ships no `flows/*.flow.json` any more, so the reason for the core floor "
+            "is gone: re-derive it (or drop it) instead of leaving a number nobody can justify"
+        )
+        return report()
 
     declared = (MANIFEST.get("compatibility") or {}).get("min_erplora_version")
     if not declared:
         failures.append(
-            "`module.json` declares no `compatibility.min_erplora_version`, so a hub older than "
-            f"{dotted(KERNEL_FLOOR)} installs this module and the appointment automation fails "
-            "mute: the availability read waits for an approval nobody can grant. Declare "
-            f'`"compatibility": {{ "min_erplora_version": "{dotted(KERNEL_FLOOR)}" }}` — the hub '
-            "refuses the install with `core_version_too_old` (ERPlora/hub#521)"
+            "`module.json` declares no `compatibility.min_erplora_version`, so an old hub installs "
+            "this module and the automation fails mute — the availability read waits for an "
+            "approval nobody can grant, or the whole document is refused at save time. Declare "
+            '`"compatibility": { "min_erplora_version": "x.y.z" }` — the hub then refuses the '
+            "install with `core_version_too_old` (ERPlora/hub#521)"
         )
         return report()
 
@@ -110,63 +196,65 @@ def main() -> int:
         return report()
     print(f"  ok: declares `{declared}`, a version the runtime can compare")
 
-    if floor < KERNEL_FLOOR:
-        failures.append(
-            f"the declared floor `{declared}` is below {dotted(KERNEL_FLOOR)}, the first release "
-            "carrying ERPlora/hub#1595. Between the two, the automation installs and the "
-            "appointment is never proposed — which is the whole failure this floor prevents"
-        )
-    else:
+    demanded = needs_of_templates()
+    print(f"  ok: {len(templates)} template(s) demand {len(demanded)} kernel behaviour(s)")
+
+    # 3 · The floor covers everything the SHIPPED documents ask for.
+    for need, who in demanded:
+        if floor < need.floor:
+            failures.append(
+                f"{who}, which needs {need.issue} — first carried by {dotted(need.floor)} — and "
+                f"the manifest declares `{declared}`. {need.why}. On a hub between the two the "
+                f"module INSTALLS and the automation is dead, with nothing said anywhere: raise "
+                f"`compatibility.min_erplora_version` to {dotted(need.floor)} so the install is "
+                f"refused with `core_version_too_old` instead"
+            )
+    if not failures:
         print(
-            f"  ok: `{declared}` >= {dotted(KERNEL_FLOOR)}, the release that carries hub#1595"
+            f"  ok: `{declared}` >= every floor the templates demand "
+            f"({', '.join(sorted({dotted(n.floor) for n, _ in demanded}))})"
         )
 
-    # The floor stops being a claim about the kernel the moment nothing here needs the kernel.
-    templates = sorted(p.name for p in (MODULE_DIR / "flows").glob("*.flow.json"))
-    if not templates:
-        failures.append(
-            "this module ships no `flows/*.flow.json` any more, so the reason for the core floor "
-            "is gone: re-derive it (or drop it) instead of leaving a number nobody can justify"
+    # 4 · Re-measure each need instead of trusting the table in the docstring: PRESENT at its
+    #     release, ABSENT at the one before it.
+    for need in sorted({n for n, _ in demanded}):
+        at_floor, measured = marker_count(f"v{dotted(need.floor)}", need.path, need.marker), (
+            f"v{dotted(need.floor)}"
         )
-    else:
-        print(
-            f"  ok: {len(templates)} flow template(s) still ride on that kernel behaviour"
-        )
-
-    # 4 · Re-measure instead of trusting the table in the docstring.
-    path, marker = KERNEL_MARKER
-    at_floor, measured_tag = marker_count(f"v{declared}"), f"v{declared}"
-    if at_floor is None and floor > KERNEL_FLOOR:
-        # A floor above the newest published tag is the CORRECT way to ship something the fleet
-        # cannot run yet, so there is nothing to read at `v{declared}`. Falling back to the kernel
-        # floor keeps the control alive instead of turning that legitimate case into a blind skip.
-        at_floor, measured_tag = (
-            marker_count(f"v{dotted(KERNEL_FLOOR)}"),
-            f"v{dotted(KERNEL_FLOOR)}",
-        )
-    before = marker_count(KERNEL_FLOOR_MINUS_ONE)
-    if at_floor is None or before is None:
-        print(
-            f"  ⚠ SKIPPED the re-measure: cannot read `{path}` at {measured_tag}/"
-            f"{KERNEL_FLOOR_MINUS_ONE} from {HUB_CHECKOUT} (no hub checkout, or its tags are not "
-            "fetched). The three checks above still ran."
-        )
-    elif before:
-        failures.append(
-            f"`{marker}` already appears in `{path}` at {KERNEL_FLOOR_MINUS_ONE}, so this control "
-            "cannot tell the releases apart: the measurement behind the floor is stale, re-derive "
-            "which tag first carries hub#1595"
-        )
-    elif not at_floor:
-        failures.append(
-            f"`{marker}` is NOT in `{path}` at {measured_tag}: the declared floor points at a release "
-            "that does not carry hub#1595, so it promises something the hub does not do"
-        )
-    else:
-        print(
-            f"  ok: re-measured — `{marker}` appears {at_floor}x at {measured_tag} and 0x at "
-            f"{KERNEL_FLOOR_MINUS_ONE}"
-        )
+        if at_floor is None:
+            # A floor above the newest published tag is the CORRECT way to ship something the fleet
+            # cannot run yet, so there is nothing to read there. Reading `origin/develop` instead
+            # keeps the positive half alive — the capability still has to exist somewhere — rather
+            # than turning that legitimate case into a blind skip.
+            at_floor, measured = (
+                marker_count("origin/develop", need.path, need.marker),
+                "origin/develop",
+            )
+        before = marker_count(need.last_without, need.path, need.marker)
+        if at_floor is None or before is None:
+            print(
+                f"  ⚠ SKIPPED the re-measure of {need.issue}: cannot read `{need.path}` at "
+                f"{measured}/{need.last_without} from {HUB_CHECKOUT} (no hub checkout, or its tags "
+                "are not fetched). The checks above still ran."
+            )
+        elif before:
+            failures.append(
+                f"`{need.marker}` already appears in `{need.path}` at {need.last_without}, so this "
+                f"control cannot tell the releases apart: the measurement behind the "
+                f"{dotted(need.floor)} floor of {need.issue} is stale, re-derive which release "
+                f"first carries it"
+            )
+        elif not at_floor:
+            failures.append(
+                f"`{need.marker}` is NOT in `{need.path}` at {measured}: the floor "
+                f"{dotted(need.floor)} points at a release that does not carry {need.issue}, so it "
+                f"promises something the hub does not do"
+            )
+        else:
+            print(
+                f"  ok: re-measured {need.issue} — `{need.marker}` appears {at_floor}x at "
+                f"{measured} and 0x at {need.last_without}"
+            )
 
     return report()
 
@@ -177,7 +265,7 @@ def report() -> int:
         for failure in failures:
             print(f"  - {failure}")
         return 1
-    print("\nOK: an old hub is told to update instead of installing a mute automation")
+    print("\nOK: an old hub is told to update instead of installing an automation it cannot run")
     return 0
 
 
