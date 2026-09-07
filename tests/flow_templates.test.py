@@ -1859,11 +1859,21 @@ TAP_WORDS = {
     "es": "Escribe SIEMPRE tu respuesta para la clienta en el mismo turno en el que llamas a",
 }
 
-# The bookings whose recipes have to let the customer TAP her slot. A table and not «every family»
-# on purpose: a table booking is chosen by party size and hour together and its family asks a
-# different question (whatsapp_inbox#108), so a row is earned by a booking whose customer picks
-# from a list — not by every booking there is.
-TAPPABLE_BOOKINGS = ("appointments.appointments.create",)
+# The bookings whose recipes have to let the customer TAP what she was offered. A table and not
+# «every family» on purpose: a row is earned by a booking whose customer picks from a list.
+#
+# A TABLE was out until whatsapp_inbox#108, and the reason given was that it «is chosen by party
+# size and hour together». Looked up rather than assumed (8 references: OpenTable, TheFork, Toast,
+# Lightspeed, Square, Odoo, SevenRooms, Eat App): nobody offers the two together. Party size is an
+# INPUT to the availability search — Toast caps covers per reservation increment, Lightspeed caps
+# the party size per booking, Odoo filters the slots by «Number of People» — so every one of them
+# asks how many first and only then shows the times. Which is exactly what this recipe already
+# did in words («answer with what is really free»), so the list it earns is a list of TIMES for a
+# party size already known.
+TAPPABLE_BOOKINGS = (
+    "appointments.appointments.create",
+    "reservations.reservations.create",
+)
 
 
 def _is_path(value):
