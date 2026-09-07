@@ -3541,7 +3541,7 @@ var es_default = {
     colName: "Nombre",
     colLanguage: "Idioma",
     colCategory: "Categor\xEDa",
-    colMetaStatus: "Estado Meta",
+    colMetaStatus: "Estado en Meta",
     colActive: "Activa",
     colBody: "Cuerpo",
     statusActive: "Activas",
@@ -3560,9 +3560,19 @@ var es_default = {
     categoryUtility: "Utility",
     categoryMarketing: "Marketing",
     categoryAuthentication: "Authentication",
-    metaPending: "Pendiente",
+    metaPending: "En revisi\xF3n",
     metaApproved: "Aprobada",
     metaRejected: "Rechazada",
+    metaNotSent: "Sin enviar a Meta",
+    metaPaused: "Pausada por Meta",
+    metaDisabled: "Desactivada por Meta",
+    metaActionNotSent: "Meta no ha recibido esta plantilla. Solo puedes usarla para responder dentro de las 24 horas siguientes al \xFAltimo mensaje del cliente.",
+    metaActionPending: "Meta la est\xE1 revisando. Suele tardar unos minutos, hasta 24 horas. No la env\xEDes todav\xEDa.",
+    metaActionApproved: "Puedes enviarla cuando quieras, tambi\xE9n fuera de la ventana de 24 horas.",
+    metaActionRejected: "Meta la ha rechazado. Cambia el texto y guarda de nuevo para volver a enviarla a revisi\xF3n.",
+    metaActionPaused: "Demasiada gente la ha denunciado y Meta no la entregar\xE1 durante un tiempo. Cambia el texto y guarda de nuevo.",
+    metaActionDisabled: "Meta no volver\xE1 a aceptar esta plantilla. Escribe otra con un texto distinto.",
+    metaActionUnknown: "Consulta esta plantilla en WhatsApp Manager: Meta informa de un estado que esta pantalla a\xFAn no conoce.",
     yes: "S\xED",
     no: "No",
     searchInbox: "Filtrar contacto o tel\xE9fono\u2026",
@@ -3714,9 +3724,19 @@ var en_default = {
     categoryUtility: "Utility",
     categoryMarketing: "Marketing",
     categoryAuthentication: "Authentication",
-    metaPending: "Pending",
+    metaPending: "In review",
     metaApproved: "Approved",
     metaRejected: "Rejected",
+    metaNotSent: "Not sent to Meta",
+    metaPaused: "Paused by Meta",
+    metaDisabled: "Disabled by Meta",
+    metaActionNotSent: "Meta has not received this template. You can only use it to reply within 24 hours of the customer's last message.",
+    metaActionPending: "Meta is reviewing it. It usually takes a few minutes, up to 24 hours. Do not send it yet.",
+    metaActionApproved: "You can send it whenever you want, also outside the 24-hour window.",
+    metaActionRejected: "Meta turned it down. Change the wording and save again to send it back for review.",
+    metaActionPaused: "Too many people reported it, so Meta will not deliver it for a while. Change the wording and save again.",
+    metaActionDisabled: "Meta will not accept this template again. Write a new one with different wording.",
+    metaActionUnknown: "Check this template in WhatsApp Manager: Meta reports a status this screen does not know yet.",
     yes: "Yes",
     no: "No",
     searchInbox: "Filter contact or phone\u2026",
@@ -5107,6 +5127,33 @@ __decorateClass([
 ], ErpWhatsappInboxSettings.prototype, "uses", 2);
 define("erp-whatsapp-inbox-settings", ErpWhatsappInboxSettings);
 
+// ui/lib/meta-template-status.ts
+var META_TEMPLATE_STATES = [
+  "not_sent",
+  "pending",
+  "approved",
+  "rejected",
+  "paused",
+  "disabled"
+];
+var VIEWS = {
+  not_sent: { labelKey: "ui.metaNotSent", actionKey: "ui.metaActionNotSent", tone: "info" },
+  pending: { labelKey: "ui.metaPending", actionKey: "ui.metaActionPending", tone: "info" },
+  approved: { labelKey: "ui.metaApproved", actionKey: "ui.metaActionApproved", tone: "ok" },
+  rejected: { labelKey: "ui.metaRejected", actionKey: "ui.metaActionRejected", tone: "problem" },
+  paused: { labelKey: "ui.metaPaused", actionKey: "ui.metaActionPaused", tone: "problem" },
+  disabled: { labelKey: "ui.metaDisabled", actionKey: "ui.metaActionDisabled", tone: "problem" },
+  unknown: { labelKey: "", actionKey: "ui.metaActionUnknown", tone: "info" }
+};
+function metaTemplateState(raw) {
+  const value = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+  return META_TEMPLATE_STATES.includes(value) ? value : "unknown";
+}
+function metaTemplateView(raw) {
+  const state = metaTemplateState(raw);
+  return { state, ...VIEWS[state] };
+}
+
 // ui/components/erp-whatsapp-inbox-templates/erp-whatsapp-inbox-templates.ts
 var CATALOG4 = { es: es_default, en: en_default };
 function erplora4() {
@@ -5119,15 +5166,9 @@ function domainErrorText4(e5, fallbackKey) {
   if (declared) return declared;
   return (e5 instanceof Error ? e5.message : "") || erplora4().t(CATALOG4, fallbackKey);
 }
-var META_STATUS_KEYS = ["pending", "approved", "rejected"];
-var META_STATUS_LABEL_KEYS = {
-  pending: "ui.metaPending",
-  approved: "ui.metaApproved",
-  rejected: "ui.metaRejected"
-};
 function metaStatusLabel(status) {
-  const key = META_STATUS_LABEL_KEYS[status];
-  return key ? erplora4().t(CATALOG4, key) : status;
+  const { labelKey } = metaTemplateView(status);
+  return labelKey ? erplora4().t(CATALOG4, labelKey) : status;
 }
 var ErpWhatsappInboxTemplates = class extends i3 {
   constructor() {
@@ -5141,6 +5182,8 @@ var ErpWhatsappInboxTemplates = class extends i3 {
     this.tick = 0;
     this.editingId = "";
     this.pendingDelete = null;
+    this.editingMeta = null;
+    this.editingMetaCode = "";
     /** Carried through an edit so `templates.update` — whose schema requires every field — can send
      *  back untouched what this panel does not show. */
     this.editingRest = {
@@ -5166,6 +5209,15 @@ var ErpWhatsappInboxTemplates = class extends i3 {
       background:var(--ok-surface-2, var(--ion-color-step-50, rgba(0,0,0,.04))); }
     /* 44px minimum touch target: this screen is used one-handed, at a counter. */
     ion-button { --min-height: 44px; }
+    /* Meta's verdict: the colour is a second channel, never the only one — the sentence says it. */
+    .meta { border-left: 4px solid var(--ok-color-medium, #8a8578); padding: .5rem .75rem;
+      border-radius: var(--ok-radius-sm, 10px);
+      background: var(--ok-surface-2, var(--ion-color-step-50, rgba(0,0,0,.04))); }
+    .meta p { margin: .25rem 0 0; font-size: .9rem; }
+    .meta[data-state="approved"] { border-left-color: var(--ion-color-success, #2dd36f); }
+    .meta[data-state="rejected"],
+    .meta[data-state="paused"],
+    .meta[data-state="disabled"] { border-left-color: var(--ion-color-danger, #c5000f); }
   `;
   }
   get rowActions() {
@@ -5193,14 +5245,14 @@ var ErpWhatsappInboxTemplates = class extends i3 {
         ]
       },
       {
-        // El estado de Meta es dominio cerrado de la migración (pending|approved|rejected) y el
-        // servidor lo filtra por igualdad exacta: tecleándolo, un "aprobado" no casaría nunca.
+        // Meta's verdict is a closed vocabulary and the server filters it by exact equality on the
+        // value `queries/templates_list.sql` projects: typed by hand, «aprobado» would match no row.
         key: "meta_status",
         header: t5("ui.colMetaStatus"),
         sortable: true,
         filterable: true,
         filterType: "select",
-        options: META_STATUS_KEYS.map((value) => ({ value, label: metaStatusLabel(value) })),
+        options: META_TEMPLATE_STATES.map((value) => ({ value, label: metaStatusLabel(value) })),
         format: (r6) => metaStatusLabel(String(r6.meta_status ?? ""))
       },
       {
@@ -5290,7 +5342,23 @@ var ErpWhatsappInboxTemplates = class extends i3 {
       variables: row.variables ?? "[]",
       is_active: Number(row.is_active ?? 1)
     };
+    this.editingMeta = metaTemplateView(row.meta_status);
+    this.editingMetaCode = String(row.meta_status ?? "");
     this.formError = "";
+    this.dataTable()?.open("create");
+  }
+  /** Opens the panel as an ADD, on an empty form.
+   *
+   *  The «+» is dispatched by the MODULE (`primaryAction`) instead of being left to `addable`,
+   *  for the reason appointments#42 found first: the panel is ONE — it is the add and it is the
+   *  edit — and with `addable` the table opened it on its own, so the module never learnt about
+   *  it. Closing a template with the scrim and pressing «+» next handed back the previous
+   *  template: its name and body in the fields, its `editingId` (so «Add» saved an EDIT on top of
+   *  it) and, since whatsapp_inbox#65, Meta's verdict ON ANOTHER TEMPLATE next to them. */
+  async openCreate() {
+    this.resetForm();
+    this.formError = "";
+    await this.updateComplete;
     this.dataTable()?.open("create");
   }
   resetForm() {
@@ -5300,6 +5368,8 @@ var ErpWhatsappInboxTemplates = class extends i3 {
     this.newLanguage = "es";
     this.newCategory = "UTILITY";
     this.editingRest = { header: "", footer: "", variables: "[]", is_active: 1 };
+    this.editingMeta = null;
+    this.editingMetaCode = "";
   }
   cancelEdit() {
     this.resetForm();
@@ -5358,6 +5428,21 @@ var ErpWhatsappInboxTemplates = class extends i3 {
       this.formError = "";
     }
   }
+  /** What Meta says about this template and what the owner has to do about it.
+   *
+   *  It lives in the panel, next to the fields that fix it, which is where every WhatsApp tool the
+   *  market has (Meta's own WhatsApp Manager, Twilio, 360dialog, Brevo) puts it: the list carries
+   *  the short state, the detail carries the move. A whole sentence per row would drown the table
+   *  it is supposed to explain. */
+  renderMetaVerdict() {
+    if (!this.editingMeta) return A;
+    const t5 = (k2) => erplora4().t(CATALOG4, k2);
+    const { state, labelKey, actionKey } = this.editingMeta;
+    return b2`<div class="meta" data-state=${state}>
+      <strong>${t5("ui.colMetaStatus")}: ${labelKey ? t5(labelKey) : this.editingMetaCode}</strong>
+      <p>${t5(actionKey)}</p>
+    </div>`;
+  }
   renderDeleteConfirm() {
     if (!this.pendingDelete) return A;
     const t5 = (k2) => erplora4().t(CATALOG4, k2);
@@ -5374,10 +5459,11 @@ var ErpWhatsappInboxTemplates = class extends i3 {
         ${this.formError ? b2`<p class="err">${this.formError}</p>` : A}
         ${this.ctrl?.error ? b2`<p class="err">${this.ctrl.error}</p>` : A}
         ${this.renderDeleteConfirm()}
-        <ok-data-table .serverSide=${true} .fill=${true} .addable=${true} .views=${true} .actions=${this.rowActions} .rowClickable=${true} .cardTitle=${(row) => String(row.name ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "desc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchTemplates")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyTemplates")} @rowAction=${(e5) => this.onRowAction(e5)} @rowClick=${(e5) => this.onRowAction({ detail: { actionId: "edit", row: e5.detail.row } })} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @pageSizeChange=${(e5) => this.ctrl.setPageSize(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}>
+        <ok-data-table .serverSide=${true} .fill=${true} .primaryAction=${{ label: t5("ui.add"), icon: "add" }} @primaryAction=${() => this.openCreate()} .views=${true} .actions=${this.rowActions} .rowClickable=${true} .cardTitle=${(row) => String(row.name ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "desc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchTemplates")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyTemplates")} @rowAction=${(e5) => this.onRowAction(e5)} @rowClick=${(e5) => this.onRowAction({ detail: { actionId: "edit", row: e5.detail.row } })} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @pageSizeChange=${(e5) => this.ctrl.setPageSize(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}>
           <!-- Alta: se proyecta SIEMPRE (aunque el panel esté cerrado). Si solo se renderizara con el
                panel abierto, el «+» de la barra desplegaría un panel vacío. -->
           <form slot="create" class="form" @submit=${(e5) => this.createTemplate(e5)}>
+            ${this.renderMetaVerdict()}
             <ion-input mode="md" fill="outline" label-placement="floating" label=${t5("ui.colName")} .value=${this.newName} @ionInput=${(e5) => this.newName = e5.target.value}></ion-input>
             <ion-input mode="md" fill="outline" label-placement="floating" label=${t5("ui.colLanguage")} placeholder=${t5("ui.placeholderLanguage")} .value=${this.newLanguage} @ionInput=${(e5) => this.newLanguage = e5.target.value}></ion-input>
             <ion-select mode="md" fill="outline" label-placement="floating" label=${t5("ui.colCategory")} .value=${this.newCategory} @ionChange=${(e5) => this.newCategory = e5.target.value}>
@@ -5421,4 +5507,10 @@ __decorateClass([
 __decorateClass([
   r5()
 ], ErpWhatsappInboxTemplates.prototype, "pendingDelete", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxTemplates.prototype, "editingMeta", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxTemplates.prototype, "editingMetaCode", 2);
 define("erp-whatsapp-inbox-templates", ErpWhatsappInboxTemplates);

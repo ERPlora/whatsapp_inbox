@@ -6,6 +6,7 @@
 // `slot="create"`. Y el estado de Meta (pending|approved|rejected, dominio cerrado de la migración)
 // se filtra con un `select`, no tecleando el texto a pelo.
 import { beforeEach, describe, expect, it } from 'vitest';
+import { META_TEMPLATE_STATES } from '../../lib/meta-template-status';
 
 const PLANTILLA = {
   id: 't1', name: 'recordatorio_cita', language: 'es', category: 'UTILITY',
@@ -39,13 +40,35 @@ async function montar() {
   return el as HTMLElement & { shadowRoot: ShadowRoot };
 }
 
+type Tabla = HTMLElement & {
+  addable: boolean;
+  primaryAction?: { label: string; icon?: string };
+  fill: boolean;
+  open: (p?: string) => void;
+  close: () => void;
+  rowClickable: boolean;
+};
 const tabla = (el: HTMLElement & { shadowRoot: ShadowRoot }) =>
-  el.shadowRoot.querySelector('ok-data-table') as (HTMLElement & { addable: boolean; fill: boolean; close: () => void; rowClickable: boolean }) | null;
+  el.shadowRoot.querySelector('ok-data-table') as Tabla | null;
 
 describe('el alta vive DENTRO de la tabla (paridad con /employees e inventory)', () => {
-  it('la tabla declara `addable` → pinta el «+» en su barra', async () => {
+  // Lo exigido sigue siendo lo mismo —hay un «+» en la barra de la tabla y abre el panel de
+  // ALTA—; lo que cambia es quién lo despacha. Con `addable` la tabla abría el panel por su
+  // cuenta y el módulo no se enteraba, así que el «+» heredaba la plantilla que estuviera
+  // abierta antes (appointments#42, y con whatsapp_inbox#65 también su veredicto de Meta).
+  it('la barra de la tabla pinta el «+» y abre el panel de ALTA', async () => {
     const el = await montar();
-    expect(tabla(el)?.addable, 'sin `addable` no hay «+» en la barra de la tabla').toBe(true);
+    const t = tabla(el)!;
+    expect(t.primaryAction, 'sin acción primaria no hay «+» en la barra de la tabla').toBeTruthy();
+    expect(t.primaryAction!.icon).toBe('add');
+    expect(t.primaryAction!.label, 'el rótulo del «+» sale del catálogo del módulo, no del shell').toBe('ui.add');
+
+    let opened = '';
+    t.open = (p?: string) => { opened = p ?? ''; };
+    t.dispatchEvent(new CustomEvent('primaryAction', { detail: {}, bubbles: true, composed: true }));
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(opened, 'el «+» no despliega el panel de alta').toBe('create');
   });
 
   it('la tabla llena el alto (`fill`)', async () => {
@@ -96,12 +119,14 @@ describe('el alta sigue funcionando desde el panel', () => {
 });
 
 describe('los filtros de dominio cerrado son `select`', () => {
-  it('el estado de Meta se filtra con un select (pending|approved|rejected), no con texto', async () => {
+  it('el estado de Meta se filtra con un select sobre TODO el vocabulario de Meta, no con texto', async () => {
     const el = await montar();
     const cols = (el as unknown as { columns: { key: string; filterType?: string; options?: { value: string }[] }[] }).columns;
     const meta = cols.find((c) => c.key === 'meta_status');
     expect(meta?.filterType, 'el estado de Meta se filtra tecleando texto libre').toBe('select');
-    expect(meta?.options?.map((o) => o.value)).toEqual(['pending', 'approved', 'rejected']);
+    // Lo que `queries/templates_list.sql` puede proyectar, ni una opción más: el filtro va por
+    // igualdad en el servidor, así que una opción de más es un filtro que no casa nada.
+    expect(meta?.options?.map((o) => o.value)).toEqual([...META_TEMPLATE_STATES]);
   });
 
   it('la categoría sigue siendo un select (dominio cerrado de Meta)', async () => {
@@ -141,5 +166,134 @@ describe('clicking the row opens the template (pm#155)', () => {
     await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
     const wc = el as unknown as { editingId: string };
     expect(wc.editingId, 'the row was clicked and the edit form did not take the template').toBe('t1');
+  });
+});
+
+// ── whatsapp_inbox#65 ─────────────────────────────────────────────────────────────────────────
+//
+// A template is the ONLY way the business can write to a customer outside the 24 h that follow the
+// customer's last message, and Meta decides whether it may. The tab used to answer that question
+// with one of three bare words taken straight off the column — and the word was «Pending» for
+// every template ever written, because the column starts there and nothing has ever sent anything
+// to Meta. So the screen told a business «Meta is reviewing it» about a template Meta had never
+// received, and the owner waited for a verdict that was never coming.
+//
+// What the screen owes is not a badge: it is the MOVE each state asks for — wait, fix it and save
+// again, or stop using it and write another one.
+describe("Meta's verdict says what to DO about it (whatsapp_inbox#65)", () => {
+  const fila = (meta_status: string) => ({ ...PLANTILLA, meta_status });
+
+  async function montarCon(meta_status: string) {
+    (globalThis as Record<string, unknown>).erplora = {
+      ...((globalThis as Record<string, unknown>).erplora as Record<string, unknown>),
+      queryPage: async () => ({ rows: [fila(meta_status)], total: 1 }),
+    };
+    return montar();
+  }
+
+  it('a template Meta has never seen is NOT presented as one Meta is reviewing', async () => {
+    const el = await montarCon('not_sent');
+    const cols = (el as unknown as { columns: { key: string; format?: (r: Record<string, unknown>) => string }[] }).columns;
+    const pintado = cols.find((c) => c.key === 'meta_status')!.format!(fila('not_sent'));
+    expect(pintado, 'the tab still says «pending» about a template Meta never received').toBe('ui.metaNotSent');
+  });
+
+  it('paints the states the old three-word list could not (paused, disabled) instead of the raw code', async () => {
+    const el = await montarCon('paused');
+    const cols = (el as unknown as { columns: { key: string; format?: (r: Record<string, unknown>) => string }[] }).columns;
+    const format = cols.find((c) => c.key === 'meta_status')!.format!;
+    expect(format(fila('paused'))).toBe('ui.metaPaused');
+    expect(format(fila('disabled'))).toBe('ui.metaDisabled');
+    // Meta's UPPERCASE (what the SaaS gate hands back) is the same state, not an unknown code.
+    expect(format(fila('APPROVED'))).toBe('ui.metaApproved');
+  });
+
+  it('an unknown code keeps Meta`s own word — it is not dressed up as a state we understand', async () => {
+    const el = await montarCon('IN_APPEAL');
+    const cols = (el as unknown as { columns: { key: string; format?: (r: Record<string, unknown>) => string }[] }).columns;
+    expect(cols.find((c) => c.key === 'meta_status')!.format!(fila('IN_APPEAL'))).toBe('IN_APPEAL');
+  });
+
+  it('opening a template shows what to do about its state, inside the panel', async () => {
+    const el = await montarCon('rejected');
+    (el.shadowRoot.querySelector('ok-data-table') as unknown as { open: (p?: string) => void }).open = () => {};
+    (el as unknown as { startEdit: (row: Record<string, unknown>) => void }).startEdit(fila('rejected'));
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+
+    const bloque = el.shadowRoot.querySelector('form[slot="create"] .meta');
+    expect(bloque, 'the panel does not say anything about Meta`s verdict').toBeTruthy();
+    expect(bloque?.getAttribute('data-state')).toBe('rejected');
+    expect(bloque?.textContent, 'the panel names the state but not the move it asks for').toContain(
+      'ui.metaActionRejected',
+    );
+  });
+
+  it('the block is gone while the panel is an ADD: there is no verdict on a template that does not exist', async () => {
+    const el = await montarCon('approved');
+    expect(el.shadowRoot.querySelector('form[slot="create"] .meta')).toBeNull();
+  });
+
+  // The panel is ONE: it is the add and it is the edit. So «+» has to be the module's door, or the
+  // tab opens an «add» still carrying the template that was open before it — the verdict of another
+  // template on one that does not exist yet, and an `editingId` that turns the save into an
+  // overwrite. Same root cause and same fix as appointments#42.
+  it('the «+» after opening a template is a CLEAN add: no leftover verdict, no leftover template', async () => {
+    const el = await montarCon('rejected');
+    const t = tabla(el)!;
+    let opened = '';
+    t.open = (p?: string) => { opened = p ?? ''; };
+    t.close = () => {};
+
+    (el as unknown as { startEdit: (row: Record<string, unknown>) => void }).startEdit(fila('rejected'));
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    expect(el.shadowRoot.querySelector('form[slot="create"] .meta'), 'the edit panel lost its verdict').toBeTruthy();
+
+    // The owner closes the panel (scrim, Escape, the X) and presses «+» to write a NEW template.
+    t.close();
+    t.dispatchEvent(new CustomEvent('primaryAction', { detail: {}, bubbles: true, composed: true }));
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    await new Promise((r) => setTimeout(r, 0));
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+
+    expect(
+      el.shadowRoot.querySelector('form[slot="create"] .meta'),
+      "the ADD panel is showing the previous template's verdict from Meta",
+    ).toBeNull();
+    expect(
+      (el as unknown as { editingId: string }).editingId,
+      'the «+» is still editing the previous template: saving would overwrite it instead of adding',
+    ).toBe('');
+    expect(
+      (el as unknown as { newName: string }).newName,
+      'the «+» keeps the previous template name in the form',
+    ).toBe('');
+    expect(opened, 'the «+» does not open the add panel').toBe('create');
+  });
+});
+
+// The three states every screen owes (root CLAUDE.md, «UI completa»): a list that only ever draws
+// its happy path leaves the counter looking at an empty table wondering whether it is still loading.
+describe('loading / empty / error are painted, not assumed', () => {
+  it('while the page is loading the table says so', async () => {
+    const el = await montar();
+    const wc = el as unknown as { ctrl: { loading: boolean }; requestUpdate: () => void; updateComplete: Promise<unknown> };
+    wc.ctrl.loading = true;
+    wc.requestUpdate();
+    await wc.updateComplete;
+    expect((el.shadowRoot.querySelector('ok-data-table') as unknown as { emptyMessage: string }).emptyMessage).toBe('ui.loading');
+  });
+
+  it('with nothing loaded and nothing loading, it says the list is empty', async () => {
+    const el = await montar();
+    expect((el.shadowRoot.querySelector('ok-data-table') as unknown as { emptyMessage: string }).emptyMessage).toBe('ui.emptyTemplates');
+  });
+
+  it('a load that failed is shown, never swallowed', async () => {
+    const el = await montar();
+    const wc = el as unknown as { ctrl: { error: string }; requestUpdate: () => void; updateComplete: Promise<unknown> };
+    wc.ctrl.error = 'boom';
+    wc.requestUpdate();
+    await wc.updateComplete;
+    expect([...el.shadowRoot.querySelectorAll('.err')].map((n) => n.textContent)).toContain('boom');
   });
 });
