@@ -129,6 +129,22 @@ def declared_grants(path):
     return {(g["kind"], g["value"]) for g in items}
 
 
+def declared_command_pins(path):
+    """`command -> the payload fields its grant FIXES`, `{}` for a grant that fixes none.
+
+    Deliberately NOT part of `declared_grants`: that one answers «is this authorisation asked
+    for», and the pin does not change the answer — the hub's own identity for a grant row is
+    `(hub, flow, kind, value)` and the pin is a column of it, so folding it into the pair would
+    turn «the same grant, narrowed» into «a grant nobody asked for» in both directions of the
+    comparison `main()` runs.
+    """
+    body = json.loads(path.read_text())
+    items = body["grants"] if isinstance(body, dict) else body
+    return {
+        g["value"]: (g.get("payload") or {}) for g in items if g.get("kind") == "command"
+    }
+
+
 def workspace_manifests():
     """`(module_dir, manifest)` for this module and every SIBLING next to it, or None if bare.
 
@@ -950,14 +966,21 @@ def payload_properties(commands_def):
     return out
 
 
-def identity_field_problems(name, doc, props):
-    """Every field `IDENTITY_BOUND_PAYLOAD` names is one the command's own schema really declares.
+def identity_field_problems(name, doc, props, enums=None):
+    """Every field the tables here name is one the command's own schema really declares.
 
     A document rule that never reads the document, and on purpose: what it needs is the ledger. As
     a one-off call in `main()` it was the only check here that nothing required — deleting its
     single line let `appointments` rename or drop `customer_id` with this battery green over
     templates that would then fail on every cancellation (measured: the mutant survived). Registered
     like every other rule, that deletion is refused by name.
+
+    Two tables ride on the same anchor because they fail the same way and only from over here.
+    `IDENTITY_BOUND_PAYLOAD` names a field the templates must SEND; `PINNED_COMMAND_PAYLOAD` names
+    a field and a VALUE the grant FIXES, which is worse when it goes stale: a pin is applied before
+    the schema (`check_command_grant`), so a pin naming a word `appointments` no longer accepts does
+    not degrade — it refuses every cancellation this channel ever makes, with the templates, the
+    grants and every other rule here green.
     """
     problems = []
     for cname, pairs in sorted(IDENTITY_BOUND_PAYLOAD.items()):
@@ -973,6 +996,26 @@ def identity_field_problems(name, doc, props):
                         f"lives in another repository and that contract moved, so this rule is now "
                         f"asking the templates for a word nothing accepts"
                     )
+    for cname, fixed in sorted(PINNED_COMMAND_PAYLOAD.items()):
+        declared = props.get(cname)
+        if declared is None:
+            continue
+        for field, value in sorted(fixed.items()):
+            if field not in declared:
+                problems.append(
+                    f"{name}: PINNED_COMMAND_PAYLOAD fixes `{field}` for `{cname}`, whose schema "
+                    f"declares {sorted(declared)}: the grant would pin a field the command does "
+                    f"not take, and the hub applies a pin BEFORE the schema — every call this "
+                    f"channel makes is refused as `flow.grant_payload_denied`"
+                )
+                continue
+            allowed = (enums or {}).get(cname, {}).get(field)
+            if allowed is not None and value not in allowed:
+                problems.append(
+                    f"{name}: PINNED_COMMAND_PAYLOAD fixes `{field}` = `{value}` for `{cname}`, "
+                    f"which only accepts {allowed}: the grant pins a value the command refuses, so "
+                    f"the pin stops being «narrower» and becomes «never»"
+                )
     return problems
 
 
@@ -1242,6 +1285,96 @@ DIRECTORY_QUERY = "customers.list"
 # in `triggers[].input`, so it reaches a step as `{{input.from}}` — the one identity in this run
 # that WhatsApp itself vouched for.
 TRUSTED_PHONE = "input.from"
+
+# `command -> {payload field: the ONE value a template of this module may ever send}`.
+#
+# hub#1623 (ADR-0456): a `command` grant may FIX part of the payload, and the hub then refuses the
+# call that sends anything else — **and the call that omits the field**, which is the half that
+# matters here, because `appointments`' own `schemas/appointment_cancel.json` defaults `channel` to
+# `staff`. So «say nothing» is the WIDE cancellation: the one that skips whether customers may
+# cancel at all, how much notice they owe, and the check that whoever asks is the person on the
+# appointment (`cancel_appointment_pure`).
+#
+# The row exists because the only thing that used to hold the narrow value was a PARAGRAPH OF
+# PROMPT, written for a model that reads a stranger's WhatsApp message in the same turn. A
+# permission is a permission; prose is not one, however emphatic (whatsapp_inbox#100).
+PINNED_COMMAND_PAYLOAD = {
+    CANCEL_COMMAND: {"channel": "customer"},
+}
+
+
+# `"manual"` is the only policy that asks anybody (`def.rs::AiPolicy`), so anything else — `auto`,
+# a typo the kernel would refuse, or nothing at all — is a step that writes with NOBODY watching.
+# Read that way round on purpose: a rule about the absence of a human has to treat «I could not
+# tell» as «there is no human», or the one document that forgets to declare its policy is the one
+# it waves through.
+def writes_unwatched(step):
+    return step.get("policy") != "manual"
+
+
+def unpinned_command_problems(name, doc, pins):
+    """A command handed to a step NOBODY watches carries its narrow value in the GRANT, not in the
+    prompt.
+
+    The rodeo this closes needs no bug and no jailbreak. The customer writes «cancel it»; the model
+    that answers her also writes the payload of `appointments.appointments.cancel`; and the salon's
+    permission says «may cancel appointments», every argument included. Leave `channel` out — which
+    is easier than contradicting the prompt, because it is what a model does when a paragraph is
+    long — and `appointments` reads its own default, `staff`. The cancellation goes through as the
+    SALON's, so no notice window applies, no «may customers cancel?» setting applies, and nobody
+    checks that the person asking is the person on the appointment. Nothing downstream refuses it:
+    the command was granted and the payload is valid.
+
+    `PINNED_COMMAND_PAYLOAD` is the answer, and `check_payload_pin` (hub#1623) is what applies it,
+    at the one door the dispatcher goes through, before the schema, the handler and the outbox.
+    What this rule holds is that the pin is really in the file — because the pin is one JSON key
+    deep in a sidecar nobody reads out loud, and the day it goes missing every other rule here
+    stays green: the grant still covers the tool, the prompt still says `customer`, the document
+    still parses.
+
+    🔴 **Judged per STEP and not per document**, and that is the rule rather than a detail. A
+    template may hand the same command to a step a person approves and to a step that runs at 3 AM;
+    what decides whether prose is enough is which of the two is holding it. Today only the
+    `-unattended` family has the second kind — the attended twin parks every write in the approval
+    tray — and whether the pin is owed THERE too is a separate question about how much a review
+    really controls (whatsapp_inbox#107), not something to smuggle in by writing the loop wider
+    than the reason for it.
+
+    Silent when the grant is missing altogether: `main()` already compares needed against declared
+    and says so in its own words, and a second complaint about the same absent line would send
+    whoever reads it looking for a pin on a grant that is not there.
+    """
+    problems = []
+    for step in doc.get("steps", []):
+        if step.get("kind") != "ai" or not writes_unwatched(step):
+            continue
+        handed = ((step.get("tools") or {}).get("commands")) or []
+        for cname in handed:
+            required = PINNED_COMMAND_PAYLOAD.get(cname)
+            if not required:
+                continue
+            fixed = pins.get(cname)
+            if fixed is None:
+                continue  # no grant at all: main() is already saying that, louder
+            for field, value in sorted(required.items()):
+                if fixed.get(field) == value:
+                    continue
+                sent = (
+                    f"fixes `{field}` = `{fixed[field]}`"
+                    if field in fixed
+                    else "fixes nothing"
+                )
+                problems.append(
+                    f"{name} hands `{cname}` to `{step.get('id')}`, which runs with nobody "
+                    f"watching, and its grant {sent}: the payload is written by a model reading a "
+                    f"stranger's message, so `{field}` = `{value}` has to be pinned in "
+                    f"`{name.split('.')[0]}.grants.json` (`payload`, hub#1623). Left open, "
+                    f"omitting the field is enough to cancel AS THE SALON — no notice window, no "
+                    f"«may customers cancel», no check of whose appointment it is"
+                )
+    return problems
+
+
 MOVE_RULE = {
     "en": "Moving is one call, never two.",
     "es": "Mover es una sola llamada, nunca dos.",
@@ -2178,6 +2311,7 @@ DOCUMENT_RULES = (
     unowned_table_problems,
     moving_problems,
     own_customer_only_problems,
+    unpinned_command_problems,
     only_the_customer_problems,
     tappable_option_problems,
     parking_producer_problems,
@@ -2204,6 +2338,7 @@ SELF_CHECKED_RULES = (
     unowned_table_problems,
     moving_problems,
     own_customer_only_problems,
+    unpinned_command_problems,
     only_the_customer_problems,
     tappable_option_problems,
     parking_producer_problems,
@@ -3968,6 +4103,100 @@ IDENTITY_CASES = [
 ]
 
 
+# `(label, file name, document, the pins its grants declare, problems expected)` — the unit tests
+# of `unpinned_command_problems`. The pins are handed in rather than read off disk so a row can
+# describe a sidecar that does not exist: what the rule judges is the PAIR (what the step may call,
+# what the grant fixed), and only half of that lives in the document.
+_PIN_OK = {CANCEL_COMMAND: {"channel": "customer"}}
+_PIN_NONE = {CANCEL_COMMAND: {}}
+
+
+def _unwatched_canceller(policy="auto"):
+    """The step whatsapp_inbox#100 is about: books and cancels, and nobody reads it first."""
+    return _ai_step("book_appointment", policy, (BOOKING_COMMAND, CANCEL_COMMAND))
+
+
+PIN_CASES = [
+    (
+        "what this module ships after whatsapp_inbox#100: the unwatched writer may cancel, and its "
+        "grant says AS THE CUSTOMER",
+        UNATTENDED,
+        _fixture_doc(_unwatched_canceller()),
+        _PIN_OK,
+        0,
+    ),
+    (
+        "the red whatsapp_inbox#100 IS: the same permission with nothing fixed, so the salon's own "
+        "cancellation rules hang on a paragraph of prompt",
+        UNATTENDED,
+        _fixture_doc(_unwatched_canceller()),
+        _PIN_NONE,
+        1,
+    ),
+    (
+        "the pin CONTRADICTED: a grant that fixes the wide value is not a narrower grant, it is the "
+        "old one written down",
+        UNATTENDED,
+        _fixture_doc(_unwatched_canceller()),
+        {CANCEL_COMMAND: {"channel": "staff"}},
+        1,
+    ),
+    (
+        "a pin on ANOTHER field looks like a pinned grant and fixes nothing that matters: `channel` "
+        "is still the model's to choose, and omitting it is still `staff`",
+        UNATTENDED,
+        _fixture_doc(_unwatched_canceller()),
+        {CANCEL_COMMAND: {"reason": "asked by WhatsApp"}},
+        1,
+    ),
+    (
+        "the attended twin is OUT of this rule on purpose: its writer parks in the approval tray, "
+        "so a person sees the cancellation before it happens (whatsapp_inbox#107 is where that is "
+        "decided, and this row is what stops it being decided by widening a loop)",
+        ATTENDED,
+        _fixture_doc(_ai_step("propose_appointment", "manual", (BOOKING_COMMAND, CANCEL_COMMAND))),
+        _PIN_NONE,
+        0,
+    ),
+    (
+        "a step with NO policy at all counts as nobody watching: the kernel would refuse the "
+        "document, but a rule about the absence of a human that reads a missing declaration as «a "
+        "human, probably» is the wrong way round",
+        UNATTENDED,
+        _fixture_doc(
+            {"id": "book", "kind": "ai", "prompt": "", "tools": {"commands": [CANCEL_COMMAND]}}
+        ),
+        _PIN_NONE,
+        1,
+    ),
+    (
+        "a command the table does not name is not owed a pin: this is a list of the values that "
+        "must be narrowed, not a demand that every permission carry one",
+        UNATTENDED,
+        _fixture_doc(_ai_step("book_appointment", "auto", (BOOKING_COMMAND,))),
+        {BOOKING_COMMAND: {}},
+        0,
+    ),
+    (
+        "no grant for the command at all: `main()` is already saying that in its own words, and a "
+        "second complaint sends the reader looking for a pin on a line that is not there",
+        UNATTENDED,
+        _fixture_doc(_unwatched_canceller()),
+        {},
+        0,
+    ),
+    (
+        "a DETERMINISTIC command step is not what the pin is for: `kind: command` takes the payload "
+        "the DOCUMENT maps, so there is no model choosing the channel and pinning it would break a "
+        "template that legitimately cancels for the salon",
+        UNATTENDED,
+        _fixture_doc({"id": "drop_it", "kind": "command", "command": CANCEL_COMMAND, "params": {}}),
+        _PIN_NONE,
+        0,
+    ),
+]
+
+
 def _identity_reading_problems():
     """`payload_properties` reads the real schema files, so `identity_field_problems` is only worth
     what this proves: a schema on disk, one whose file is missing, one with no `schema` at all."""
@@ -3998,16 +4227,39 @@ def _identity_reading_problems():
     # …and the anchor itself: the real table against a schema that HAS the pair, against one that
     # lost it (the shape `appointments` dropping `customer_id` would take), and against a workspace
     # whose schema could not be read — which stays quiet, because layer 1b already said so.
-    for label, props, expected in [
-        ("the schema declares both fields", want, 0),
+    _CHANNEL_ENUM = {"appointments.appointments.cancel": {"channel": ["staff", "customer"]}}
+    for label, props, enums, expected in [
+        ("the schema declares both fields and the pinned value", want, _CHANNEL_ENUM, 0),
         (
             "`customer_id` is gone from the schema",
             {"appointments.appointments.cancel": {"appointment_id", "channel"}},
+            _CHANNEL_ENUM,
             1,
         ),
-        ("the command's schema could not be read", {}, 0),
+        ("the command's schema could not be read", {}, {}, 0),
+        (
+            "`channel` itself is gone: the grant would pin a field the command does not take, and "
+            "a pin is applied BEFORE the schema — every cancellation refused, nothing red",
+            {"appointments.appointments.cancel": {"appointment_id", "customer_id"}},
+            {},
+            2,
+        ),
+        (
+            "`customer` is no longer one of the values `channel` accepts: the pin stops being "
+            "narrower and becomes never",
+            want,
+            {"appointments.appointments.cancel": {"channel": ["staff", "client"]}},
+            1,
+        ),
+        (
+            "the property has no enum to read: nothing to say about the value, and saying it "
+            "anyway would be this rule inventing a contract",
+            want,
+            {},
+            0,
+        ),
     ]:
-        got_anchor = identity_field_problems("(self-check)", {}, props)
+        got_anchor = identity_field_problems("(self-check)", {}, props, enums)
         if len(got_anchor) != expected:
             problems.append(
                 f"the battery's own identity anchor is wrong — {label}: expected {expected} "
@@ -4403,6 +4655,13 @@ def self_check():
                 f"the battery's own «moving is one call, never two» rule is wrong — {label}: "
                 f"expected {expected} problem(s), got {len(got)}: {got}"
             )
+    for label, name, doc, pins, expected in PIN_CASES:
+        got = unpinned_command_problems(name, doc, pins)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «the narrow value lives in the grant» rule is wrong — {label}: "
+                f"expected {expected} problem(s), got {len(got)}: {got}"
+            )
     for label, name, doc, expected in OWN_CUSTOMER_CASES:
         got = own_customer_only_problems(name, doc)
         if len(got) != expected:
@@ -4689,6 +4948,13 @@ def main():
         # (whatsapp_inbox#103). Needs no manifest: it is the document's own shape.
         problems += applied(ledger, own_customer_only_problems, path.name, doc)
 
+        # 3a-bis-vi) …and the narrow value the salon's own cancellation rules hang on travels in
+        # the GRANT and not in the prompt, wherever nobody is watching (whatsapp_inbox#100).
+        # Reads the sidecar, never a manifest: a bare checkout judges it too.
+        problems += applied(
+            ledger, unpinned_command_problems, path.name, doc, declared_command_pins(gpath)
+        )
+
         # 3a-ter) …and every tool its prompts ORDER was actually handed over (whatsapp_inbox#61).
         # Needs the manifests: «is this a tool name or is it prose» is a question only they answer.
         if contracts is not None:
@@ -4716,7 +4982,9 @@ def main():
         # 3a-vi-ter) …and the table that rule reads still describes the command's REAL schema
         # (whatsapp_inbox#82). Needs the manifests: the schema lives next to them.
         if commands_def is not None:
-            problems += applied(ledger, identity_field_problems, path.name, doc, identity_props)
+            problems += applied(
+                ledger, identity_field_problems, path.name, doc, identity_props, enums
+            )
 
         # 3b) Every parameter is a word the query it addresses actually knows.
         #
