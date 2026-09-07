@@ -396,16 +396,26 @@ def command_only_answers(cdef, read_permissions):
     return permission in (read_permissions or set())
 
 
-def quoted_steps(doc):
+def quoted_steps(doc, worked_from=False):
     """Step ids that some OTHER step interpolates (`{{steps.<id>.…}}`) — who feeds whom.
 
     Read the way the hub reads it (`flows::def::render_template`): every `{{ … }}` pair, the path
     TRIMMED before it is resolved. So `{{ steps.look.text }}` names `look` exactly as
     `{{steps.look.text}}` does — a guard that only knew the unspaced spelling let the two-step
     workaround back in with one space.
+
+    `worked_from=True` asks the narrower question the two-step rule needs: who quotes it **to work
+    from it**. A `notify` quoting a step is the DELIVERY — the words going to the customer, which
+    is what the step that wrote them is for — and counting it made the rule refuse the only shape
+    the attended family has for offering slots (whatsapp_inbox#109): there the step that books can
+    never declare `output`, so the step that writes the message is the one that looks them up, and
+    a `notify` sends its words. Every other kind still counts: a `command` or an `ai` step reading
+    another step's PROSE is exactly the handoff where the ids and the minutes get lost.
     """
     out = set()
     for step in doc.get("steps", []):
+        if worked_from and step.get("kind") == "notify":
+            continue
         for path in quoted_paths(step):
             quoted = path[len("steps.") :].split(".")[0].strip()
             if quoted and quoted != step.get("id"):
@@ -475,7 +485,7 @@ def policy_problems(name, doc, commands_def, read_perms):
     where the ids, the offsets and the minutes get lost.
     """
     problems = []
-    quoted = quoted_steps(doc)
+    quoted = quoted_steps(doc, worked_from=True)
     for step_id, policy, names in ai_steps(doc):
         verdicts = []
         for cname in names:
@@ -2259,6 +2269,11 @@ def _fixture_doc(*steps):
 ATTENDED = "appointment-from-whatsapp.en.flow.json"
 UNATTENDED = "appointment-from-whatsapp-unattended.en.flow.json"
 
+def _sends(step_id, text):
+    """A `notify` that SENDS what an earlier step wrote — the delivery, not a handoff of findings."""
+    return {"id": step_id, "kind": "notify", "channel": "whatsapp", "template": "", "vars": {"text": text}}
+
+
 POLICY_CASES = [
     (
         "a read inside a `manual` step is what hub#1595 made legal",
@@ -2298,6 +2313,29 @@ POLICY_CASES = [
         ATTENDED,
         _fixture_doc(_ai_step("s", "auto", ["appointments.availability.slots"])),
         0,
+    ),
+    (
+        "the step that WRITES the message, whose words a `notify` SENDS, is not the split: nobody "
+        "reads its prose to work from it — it goes to the customer, which is what that step is "
+        "for. It is also the only step of the attended family that can look the slots up and "
+        "publish them, because the one that books can never declare `output` (whatsapp_inbox#109)",
+        ATTENDED,
+        _fixture_doc(
+            _ai_step("reply", "manual", ["appointments.availability.slots"]),
+            _sends("send", "{{steps.reply.text}}"),
+        ),
+        0,
+    ),
+    (
+        "…and the split is still the split when the reader feeds a step that ACTS, even if a "
+        "notify quotes it too: one reader, two mouths, and the ids still travel as words",
+        ATTENDED,
+        _fixture_doc(
+            _ai_step("look", "auto", ["appointments.availability.slots"]),
+            _ai_step("act", "manual", ["appointments.appointments.create"], "{{steps.look.text}}"),
+            _sends("send", "{{steps.look.text}}"),
+        ),
+        1,
     ),
     (
         "a step that only asks, feeding a step that acts, is the split whatsapp_inbox#55 removed",
