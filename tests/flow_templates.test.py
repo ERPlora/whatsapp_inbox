@@ -794,6 +794,20 @@ def budget_problems(name, doc):
                 f"{MAX_ITERS_CAP} (`def.rs::MAX_ITERS_CAP`) and refuses the whole document past "
                 f"that — split the step, do not raise the number"
             )
+    for step in doc.get("steps", []):
+        if step.get("kind") != "ai":
+            continue
+        tools = step.get("tools") or {}
+        handed = (tools.get("commands") or []) + (tools.get("queries") or [])
+        if handed and step.get("max_iters") == 1:
+            problems.append(
+                f"{name} step `{step.get('id')}` is handed {len(handed)} tool(s) and one single "
+                f"turn: `max_iters` counts MODEL CALLS (`agent_runner.rs`, `for _ in "
+                f"0..max_iters`), so the call spends the only turn there was and the step dies "
+                f"with `flow.agent_max_iters` — the customer is not answered at all, by anybody. "
+                f"Two is the floor that works (ask, then answer) and a step that reads twice "
+                f"before writing needs three"
+            )
     return problems
 
 
@@ -2427,7 +2441,7 @@ _FIXTURE_READS = {
 }
 
 
-def _ai_step(step_id, policy, commands, prompt="", on_reject=None, queries=()):
+def _ai_step(step_id, policy, commands, prompt="", on_reject=None, queries=(), max_iters=None):
     step = {
         "id": step_id,
         "kind": "ai",
@@ -2439,6 +2453,8 @@ def _ai_step(step_id, policy, commands, prompt="", on_reject=None, queries=()):
         step["tools"]["queries"] = list(queries)
     if on_reject is not None:
         step["on_reject"] = on_reject
+    if max_iters is not None:
+        step["max_iters"] = max_iters
     return step
 
 
@@ -3809,6 +3825,22 @@ BUDGET_CASES = [
     ("one past the cap is a document no hub saves", _fixture_doc(_budget_step(MAX_ITERS_CAP + 1)), 1),
     ("zero turns is not a step", _fixture_doc(_budget_step(0)), 1),
     ("a step that leaves it unset takes the hub's default", _fixture_doc(_ai_step("s", "manual", [])), 0),
+    (
+        "🔴 one turn and a tool in its hands: the call spends the only turn it has, the step dies "
+        "with `flow.agent_max_iters` and she is answered by nobody",
+        _fixture_doc(_ai_step("s", "manual", ["appointments.availability.slots"], max_iters=1)),
+        1,
+    ),
+    (
+        "two turns is the floor that works: one to ask, one to answer",
+        _fixture_doc(_ai_step("s", "manual", ["appointments.availability.slots"], max_iters=2)),
+        0,
+    ),
+    (
+        "…and a step with no tools at all is fine with one: there is nothing to call",
+        _fixture_doc(_ai_step("s", "manual", [], max_iters=1)),
+        0,
+    ),
 ]
 
 _FIXTURE_ENUMS = {"appointments.appointments.cancel": {"channel": ["staff", "customer"]}}
