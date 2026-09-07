@@ -342,7 +342,7 @@ hacer de forma segura sin nadie delante:
 
 Es el mismo agujero que Citas cerró en `appointments.appointments.cancel` dándole `channel` +
 `customer_id` (appointments#140) y que sigue abierto en su `reschedule` (appointments#142). Para
-Reservas sale como **ERPlora/reservations#54**. Hasta que aterrice, la regla es la de
+Reservas sale como **ERPlora/reservations#50**. Hasta que aterrice, la regla es la de
 `moving_problems` para la familia desatendida de citas: **si no se puede acotar a quien escribe, no
 se entrega la herramienta** — se contesta que una persona se ocupa, que es una espera, pero no la
 reserva de otro cambiada por un desconocido.
