@@ -115,6 +115,10 @@ export class ErpWhatsappInboxInbox extends LitElement {
       background:var(--ok-surface-2, var(--ion-color-step-50, rgba(0,0,0,.04))); }
     .msg.inbound { align-self:flex-start; }
     .msg.outbound { align-self:flex-end; background:var(--ion-color-primary-tint, #d0ebff); }
+    /* Neither side: centred and outlined so it reads as «we do not know who said this», never as
+       one more customer message (whatsapp_inbox#66). */
+    .msg.unknown { align-self:center; text-align:center;
+      border:1px dashed var(--ion-color-warning-shade, #b8860b); background:transparent; }
     .msg .body { white-space:pre-wrap; margin:0; }
     .msg .when { display:block; font-size:.75rem; color:var(--ion-color-medium,#6f6a5e); margin-top:.15rem; }
     .msg .kind { font-size:.75rem; font-weight:600; color:var(--ion-color-medium,#6f6a5e); }
@@ -283,11 +287,20 @@ export class ErpWhatsappInboxInbox extends LitElement {
 
   private renderMessage(m: Message) {
     const t = (k: string): string => erplora().t(CATALOG, k);
-    const outbound = m.direction === 'outbound';
+    // Who said it (whatsapp_inbox#66). Since hub#1612 the thread also carries the ECHO of what the
+    // owner answered from the WhatsApp Business app on their phone, so `outbound` is no longer
+    // hypothetical — and a value neither side recognises is NOT quietly treated as the customer's.
+    // The runtime forwards an unknown `direction` verbatim instead of normalising it precisely so
+    // nobody has to guess; guessing here would put words in the customer's mouth. It gets its own
+    // bubble that names what arrived, which is also the only way anyone can report it.
+    const side = m.direction === 'outbound' || m.direction === 'inbound' ? m.direction : 'unknown';
     // A photo, a location or a button reply is NOT an empty text message: say what arrived when
     // there is no body to show (Meta's own `type` vocabulary is this column).
     const bodyless = !m.body && m.message_type && m.message_type !== 'text';
-    return html`<div class=${`msg ${outbound ? 'outbound' : 'inbound'}`}>
+    return html`<div class=${`msg ${side}`}>
+      ${side === 'unknown'
+        ? html`<span class="kind">${t('ui.unknownDirection')} · ${m.direction}</span>`
+        : nothing}
       ${bodyless ? html`<span class="kind">${m.message_type}</span>` : nothing}
       ${m.body ? html`<p class="body">${m.body}</p>` : nothing}
       ${m.media_url ? html`<span class="kind">${t('ui.attachment')}</span>` : nothing}

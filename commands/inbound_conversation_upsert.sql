@@ -1,5 +1,14 @@
--- Upserts the conversation of the contact who wrote. Keyed by (hub_id, wa_contact_id), the unique
+-- Upserts the conversation THIS message belongs to. Keyed by (hub_id, wa_contact_id), the unique
 -- index `uq_wa_conv_hub_contact` of migration 002 — one thread per customer, not one per message.
+--
+-- **The thread is the number at the OTHER end (`contact`), never the sender (`from`)**
+-- (whatsapp_inbox#66). Since hub#1612 the poll asks the SaaS for `?direction=all`, so what arrives
+-- is no longer only what customers sent: it also carries the ECHO of what the owner answered from
+-- the WhatsApp Business app on their phone. In an echo `from` is the shop's own number, so keying
+-- by it opened a conversation between the business and ITSELF and filed every reply there — the
+-- customer's chat kept showing half a conversation. `contact` is the customer in both directions.
+-- `COALESCE` because a hub older than hub#1612 sends no `contact` at all (the bind arrives as SQL
+-- NULL): for every message such a hub could serve, the sender WAS the other end.
 --
 -- **`contact_phone` is normalised to E.164 here, and nowhere else.** Meta reports `from` as a
 -- wa_id: digits with NO leading `+` (`34600111222`). The hub can only dial `+34600111222` —
@@ -20,7 +29,9 @@ INSERT INTO whatsapp_inbox_conversation
   (id, hub_id, wa_contact_id, contact_name, contact_phone, phone_number_id,
    status, unread_count, context, is_deleted, created_by, updated_by, created_at, updated_at)
 VALUES
-  (gen_random_uuid()::text, :hub_id, :from, '', '+' || ltrim(:from, '+'), '',
+  (gen_random_uuid()::text, :hub_id,
+   COALESCE(NULLIF((:contact)::text, ''), :from), '',
+   '+' || ltrim(COALESCE(NULLIF((:contact)::text, ''), :from), '+'), '',
    'active', 0, '{}', 0, :current_user_id, :current_user_id, :now, :now)
 ON CONFLICT (hub_id, wa_contact_id) DO UPDATE SET
   contact_phone = EXCLUDED.contact_phone,

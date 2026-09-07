@@ -43,12 +43,16 @@ const MESSAGES = [
   },
 ];
 
+/** What `messages.list` answers. Per test, so a thread can carry the owner's own replies too. */
+let hiloDelHub: Record<string, unknown>[] = MESSAGES;
+
 const consultas: { name: string; params: Record<string, unknown> }[] = [];
 const comandos: { name: string; payload: Record<string, unknown> }[] = [];
 
 beforeEach(() => {
   consultas.length = 0;
   comandos.length = 0;
+  hiloDelHub = MESSAGES;
   (globalThis as Record<string, unknown>).erplora = {
     query: async (name: string, params: Record<string, unknown> = {}) => {
       consultas.push({ name, params });
@@ -57,7 +61,7 @@ beforeEach(() => {
     },
     queryPage: async (name: string, params: Record<string, unknown> = {}) => {
       consultas.push({ name, params });
-      if (name === 'whatsapp_inbox.messages.list') return { rows: MESSAGES, total: MESSAGES.length };
+      if (name === 'whatsapp_inbox.messages.list') return { rows: hiloDelHub, total: hiloDelHub.length };
       return { rows: [CONVERSATION], total: 1 };
     },
     command: async (name: string, payload: Record<string, unknown>) => {
@@ -225,5 +229,50 @@ describe('clicking the row opens the conversation (pm#155)', () => {
       cabecera?.params.conversation_id,
       'the row was clicked and the thread did not open',
     ).toBe('c1');
+  });
+});
+
+// whatsapp_inbox#66 — since hub#1612 the thread also carries the ECHO of what the owner answered
+// from the WhatsApp Business app on their phone. A bubble that does not tell the two apart is the
+// same defect the SQL had, one layer up: the merchant reads their own words as the customer's.
+describe('el hilo distingue QUIÉN habló (whatsapp_inbox#66)', () => {
+  const burbujas = (el: HTMLElement & { shadowRoot: ShadowRoot }) =>
+    [...el.shadowRoot.querySelectorAll('.msg')];
+
+  it('lo que contestó el dueño se pinta como SUYO, no como del cliente', async () => {
+    hiloDelHub = [
+      MESSAGES[0],
+      {
+        ...MESSAGES[1], id: 'm3', direction: 'outbound', wa_message_id: 'wamid.C',
+        body: '¿Te va bien el jueves?',
+      },
+    ];
+    const el = await montar();
+    await abrirConversacion(el);
+
+    const [delCliente, delDueno] = burbujas(el);
+    expect(delCliente.classList.contains('inbound'), 'el mensaje del cliente no se pinta como suyo').toBe(true);
+    expect(
+      delDueno.classList.contains('outbound'),
+      'la respuesta que el dueño escribió desde su móvil se pinta como si la hubiera mandado el cliente',
+    ).toBe(true);
+    expect(delDueno.textContent ?? '').toContain('¿Te va bien el jueves?');
+  });
+
+  it('un sentido que el módulo NO conoce se ve como lo que es: ni del cliente ni del dueño', async () => {
+    hiloDelHub = [{ ...MESSAGES[0], id: 'm4', direction: 'broadcast', body: 'oferta' }];
+    const el = await montar();
+    await abrirConversacion(el);
+
+    const [rara] = burbujas(el);
+    expect(
+      rara.classList.contains('inbound'),
+      'un `direction` desconocido se repinta como mensaje del cliente: eso es exactamente el daño '
+        + 'que hub#1612 evita al reenviar el valor tal cual en vez de normalizarlo',
+    ).toBe(false);
+    expect(rara.classList.contains('outbound'), 'tampoco es del dueño: no lo escribió el negocio').toBe(false);
+    expect(rara.classList.contains('unknown'), 'la burbuja no marca que el sentido es desconocido').toBe(true);
+    expect(rara.textContent ?? '', 'no se dice en pantalla qué llegó').toContain('ui.unknownDirection');
+    expect(rara.textContent ?? '', 'el valor que llegó no se enseña, así que nadie puede reportarlo').toContain('broadcast');
   });
 });
