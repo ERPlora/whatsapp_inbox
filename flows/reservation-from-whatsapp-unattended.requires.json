@@ -1,0 +1,7 @@
+{
+  "_why": "El suelo de version de los modulos cuyas operaciones pide esta plantilla. Existe por lo mismo que el de la familia de citas: tests/flow_templates.test.py resuelve los nombres contra los checkouts VECINOS del workspace, y un checkout viejo convierte un rojo en un verde (whatsapp_inbox#52). NO viaja al hub.",
+  "modules": {
+    "reservations": "3.0.19"
+  },
+  "_reservations": "Las siete operaciones que pide `book_table` NO aterrizaron a la vez, y la que fija el suelo es la lectura de los dias bloqueados: `reservations.blocked_dates.on_date` entra en el manifest con 45deaf5 (reservations#31/#35, module.json todavia en 3.0.18) y la publica el primer release posterior, 74e463d = v3.0.19. Las demas son mas viejas: `reservations.slots.count_for` viene de db7a145 (v3.0.16) y `reservations.timeslots.list`, `reservations.settings.get`, `reservations.reservations.create` y `reservations.waitlist.create` estan desde ca21c3e (v3.0.3). Comprobado ademas sobre el arbol de 74e463d que el handler ya contesta con motivo propio (`reservations.party_size_exceeded`, `.date_blocked`, `.no_service_day`, `.no_capacity`, `.phone_required`, `.email_required`) y que `schemas/reservation_create.json` ya declara `customer_id`, `guest_phone` y `notes`, que es lo que el prompt manda. 3.0.19 es un suelo MEDIDO, no una holgura: por debajo, la plantilla no se degrada — pierde la unica lectura con la que sabe que el restaurante cierra ese dia, y el rechazo llega despues de haber contestado al cliente."
+}

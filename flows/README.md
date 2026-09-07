@@ -1,21 +1,28 @@
-# Plantillas de flujo — «un cliente escribe por WhatsApp y acaba con una cita»
+# Plantillas de flujo — «un cliente escribe por WhatsApp y acaba con una cita (o con una mesa)»
 
 El caso estrella de [ADR-0283](https://github.com/ERPlora/architecture) escrito como un documento de
 flujo real, validado contra `hub/schemas/flow.schema.json` por `tests/flow_templates.test.py`.
 
-Hay **dos familias**, y el negocio elige UNA al instalar:
+Hay **cuatro familias, en dos pares** — el par que da HORA (peluquería, estética) y el par que da
+MESA (restaurante, bar) —, y el negocio elige **UNA**:
 
-| Familia | Quién decide que la cita entre |
-| --- | --- |
-| `appointment-from-whatsapp` | **El salón.** La escritura espera en la bandeja de aprobación del hub hasta que una persona la revisa |
-| `appointment-from-whatsapp-unattended` | **Nadie.** La cita entra en la agenda en el mismo turno, sin bandeja y sin que nadie del salón toque nada (whatsapp_inbox#58) |
+| Familia | Qué reserva | Quién decide que entre |
+| --- | --- | --- |
+| `appointment-from-whatsapp` | Una cita | **El salón.** La escritura espera en la bandeja de aprobación del hub hasta que una persona la revisa |
+| `appointment-from-whatsapp-unattended` | Una cita | **Nadie.** La cita entra en la agenda en el mismo turno, sin bandeja y sin que nadie del salón toque nada (whatsapp_inbox#58) |
+| `reservation-from-whatsapp` | Una mesa | **El restaurante.** La reserva espera en la misma bandeja hasta que alguien la lee |
+| `reservation-from-whatsapp-unattended` | Una mesa | **Nadie.** La mesa entra en el libro en el mismo turno, de madrugada incluida (whatsapp_inbox#60) |
+
+🔴 **UNA, y no es un consejo:** las cuatro disparan con el MISMO evento
+(`hub.whatsapp.message_received`), así que dos instaladas a la vez arrancan dos flujos con el mismo
+mensaje y el cliente acaba con dos reservas — o con una cita y una mesa.
 
 Cada familia son cuatro ficheros con el mismo nombre delante:
 
 | Fichero | Qué es |
 | --- | --- |
 | `<familia>.en.flow.json` | **La fuente.** Inglés, como todo lo que se escribe aquí |
-| `<familia>.es.flow.json` | La traducción que acompaña al blueprint de peluquería **es** |
+| `<familia>.es.flow.json` | La traducción que acompaña al blueprint **es** de su sector |
 | `<familia>.grants.json` | Los grants que el documento necesita. Van aparte porque el kernel los guarda aparte (`PUT …/grants` es una pantalla distinta a propósito: es donde una persona decide qué puede hacer el hub sin nadie delante) |
 | `<familia>.requires.json` | El **suelo de versión** de los módulos cuyas operaciones piden estas plantillas. NO viaja al hub: lo lee `tests/flow_templates.test.py` para no resolver los nombres contra un checkout vecino viejo (ver «Por qué hay un suelo de versión») |
 
@@ -80,6 +87,14 @@ lo cace antes de que la clienta se plante en el salón.
 Lo que el modelo **sí** elige es **quién** atiende, porque eso lo resuelve contra
 `staff.members.list` + `staff.schedules.list_for_member` y lo confirma con
 `appointments.availability.check`. Elegir QUIÉN es suyo; elegir CUÁNDO no.
+
+**La frase está PINEADA en la batería, y viaja con la ESCRITURA, no con Citas.**
+`hour_choice_problems` la exige literal, en el idioma de cada documento, y la busca en el paso que
+puede reservar — así que cada command que reserve algo sin nadie delante lleva su propia fila en
+`BOOKING_RULES` y su propia redacción. La de mesas dice una cosa más, porque en un restaurante hay
+un segundo dato que no es del modelo: **«Ni la hora ni cuántos sois lo eliges tú. Lo elige quien
+escribe.»** Adivinar cuántos vienen sienta a cuatro en una mesa de dos, y eso se descubre en la
+puerta.
 
 ### Por qué son dos plantillas y no un ajuste
 
@@ -283,6 +298,59 @@ ejecuta al aprobar, sin re-derivar) y además **en palabras en `internal_notes`*
 cualquier pantalla que pinte la propuesta y se pueda corregir antes de que entre en la agenda.
 `internal_notes` es solo para el personal: la clienta no lo lee.
 
+## `reservation-from-whatsapp` — la misma receta, para una MESA
+
+whatsapp_inbox#60. Un restaurante que conectaba su WhatsApp encontraba en la galería dos recetas de
+peluquería y nada que pudiera usar: la receta existía para la silla y no para la mesa. Estas dos
+familias son **la misma automatización con el módulo de destino cambiado** — mismo evento, mismo
+filtro, mismo destinatario, mismos pasos —, no un diseño nuevo. Lo que cambia es a quién le
+escriben y qué escriben.
+
+**Tres pasos en la desatendida, cuatro en la atendida** (uno menos que en citas, y por una razón del
+contrato ajeno): Citas exige `customer_id` para reservar, así que su plantilla lleva un paso entero
+—`know_the_customer`— dedicado a que la ficha exista. En Reservas el cliente es **opcional**: con
+`guest_name` y `guest_phone` basta. Así que la mesa se reserva **sin dar de alta a nadie**: se busca
+la ficha con `customers.list` y, si existe, se pasa su id; si no existe, no se crea. Un turno menos,
+una escritura menos y un grant menos.
+
+1. **`acknowledge`** — contesta al instante por WhatsApp, igual que en citas.
+2. **`book_table`** — decide qué le están pidiendo y, si es una mesa, **mira y reserva en el mismo
+   turno**: los ajustes del restaurante (`reservations.settings.get`), los días cerrados
+   (`reservations.blocked_dates.on_date`), los turnos de servicio de ese día
+   (`reservations.timeslots.list`) y cuánto queda libre en cada uno
+   (`reservations.slots.count_for`), y con eso reserva con `reservations.reservations.create` o
+   apunta en la lista de espera con `reservations.waitlist.create`.
+3. **`reply_to_customer`** (solo en la atendida) — lee cómo terminó la aprobación y escribe lo que
+   se manda, igual que en citas: un «no» del restaurante nunca puede salir como «tienes mesa».
+4. **`confirm_to_customer`** — se lo manda por el mismo WhatsApp por el que escribió.
+
+**Las cuatro lecturas de Reservas son `query` de verdad**, no commands que contestan. Eso las hace
+más simples que las de Citas: corren en el turno con cualquier política sin depender de hub#1595 —
+aunque el suelo del módulo (`compatibility.min_erplora_version`) siga siendo el mismo para todos.
+
+### 🔴 Lo que estas dos familias NO hacen: tocar una reserva que YA existe
+
+Y no es por falta de tiempo. Cambiar o anular una reserva es lo segundo que un cliente escribe, y
+aquí el prompt contesta **«alguien del restaurante se ocupa»** a propósito, porque hoy no se puede
+hacer de forma segura sin nadie delante:
+
+- las dos operaciones que lo harían (cambiar y cambiar de estado) son `additionalProperties: false`
+  sobre `{reservation_id, …}`: **no llevan `channel` ni `customer_id`**, y el handler solo valida la
+  máquina de estados — **nunca de quién es la fila**;
+- y la cadena entera cabe dentro de los grants que ya se piden: la lista de reservas filtra por
+  nombre y teléfono con `like`, así que de ahí sale cualquier `reservation_id`.
+
+Es el mismo agujero que Citas cerró en `appointments.appointments.cancel` dándole `channel` +
+`customer_id` (appointments#140) y que sigue abierto en su `reschedule` (appointments#142). Para
+Reservas sale como **ERPlora/reservations#50**. Hasta que aterrice, la regla es la de
+`moving_problems` para la familia desatendida de citas: **si no se puede acotar a quien escribe, no
+se entrega la herramienta** — se contesta que una persona se ocupa, que es una espera, pero no la
+reserva de otro cambiada por un desconocido.
+
+⚠️ **Y lo mismo que en citas: no hay lista numerada.** «Responde 2» necesita que la oferta se guarde
+entre un mensaje y el siguiente, y no hay dónde (whatsapp_inbox#76). Por eso el prompt pide el día,
+la hora **y cuántos sois** en palabras, con un ejemplo.
+
 ## Cómo se instala HOY (y por qué no se instala solo)
 
 ⚠️ **Esta carpeta NO viaja en el zip del módulo.** El empaquetador incluye una lista cerrada
@@ -298,9 +366,11 @@ kernel son `_flow*`. Es una guarda deliberada: `_flow_grants` es la tabla de cap
 Así que hoy la plantilla se instala **por la misma puerta que usa una persona**, con sesión de
 owner/admin:
 
-Sustituye `<familia>` por la que quieras instalar — `appointment-from-whatsapp` (con revisión)
-o `appointment-from-whatsapp-unattended` (sin revisión). **Una sola**: las dos a la vez disparan con
-el MISMO evento, así que el mensaje de la clienta arrancaría los dos flujos y acabaría con dos citas.
+Sustituye `<familia>` por la que quieras instalar: `appointment-from-whatsapp` /
+`appointment-from-whatsapp-unattended` para una cita, `reservation-from-whatsapp` /
+`reservation-from-whatsapp-unattended` para una mesa — con revisión la primera de cada par, sin ella
+la segunda. **Una sola**: las cuatro disparan con el MISMO evento, así que dos instaladas a la vez
+arrancarían dos flujos con el mismo mensaje y el cliente acabaría con dos reservas.
 
 ```bash
 # 1) crear el flujo
@@ -323,8 +393,11 @@ La vía declarativa para que un blueprint la reparta está propuesta en **ERPlor
 - El módulo **`whatsapp_inbox` instalado y activo** con entitlement, y el hub **enrolado**: es lo
   que enciende el poller que trae los mensajes (hub#664), y es lo que crea la conversación de la
   que sale el destinatario.
-- Los módulos que aportan las tools: `customers`, `services`, `appointments` (>= 1.1.72, ver
-  `requires.json`) y `staff`. El horario del negocio ya **no** se le pregunta a `schedules` desde el
+- Los módulos que aportan las tools. Para las familias de **cita**: `customers`, `services`,
+  `appointments` (>= 1.1.72, ver `requires.json`) y `staff`. Para las de **mesa**: `customers` y
+  `reservations` (>= 1.1.72 no, **>= 3.0.19** — el suelo lo fija `blocked_dates.on_date`, que es la
+  única lectura con la que la plantilla sabe que el restaurante cierra ese día; ver
+  `reservation-from-whatsapp.requires.json`). El horario del negocio ya **no** se le pregunta a `schedules` desde el
   prompt: lo resuelve `appointments.availability.day_opening`, que aplica su precedencia con la
   misma función que la reserva (whatsapp_inbox#48).
 - Una imagen del hub con **hub#821** (step `notify` + grant `recipient_query`). Sin ella el

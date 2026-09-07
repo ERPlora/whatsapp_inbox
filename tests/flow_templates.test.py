@@ -977,6 +977,139 @@ HOUR_RULE = {
 BOOKING_COMMAND = "appointments.appointments.create"
 CANCEL_COMMAND = "appointments.appointments.cancel"
 
+# The same bet, one module over — whatsapp_inbox#60. A restaurant's unattended automation writes
+# into `reservations` instead of `appointments`, and the harm is the same shape with one more
+# field: an hour nobody asked for, or a party size nobody said, seats four people at a table for
+# two. The wording is its own because the promise is its own — the chair sentence never mentions
+# how many are coming.
+TABLE_BOOKING_COMMAND = "reservations.reservations.create"
+TABLE_RULE = {
+    "en": "You never choose the hour or how many people are coming. They do.",
+    "es": "Ni la hora ni cuántos sois lo eliges tú. Lo elige quien escribe.",
+}
+
+# `booking command -> the sentence its unattended family has to carry, per language`. A table
+# rather than one constant because the rule travels with the WRITE, not with the module: any
+# future family that books something unattended earns its row here, and a family whose booking
+# command has no row is one this battery cannot vouch for.
+BOOKING_RULES = {
+    BOOKING_COMMAND: HOUR_RULE,
+    TABLE_BOOKING_COMMAND: TABLE_RULE,
+}
+
+
+# ── «a rule with no recipe is a promise nothing keeps» ────────────────────────────────────────
+#
+# whatsapp_inbox#60. `BOOKING_RULES` is the table of everything this channel knows how to book
+# unattended, and until this rule existed a row could sit in it with no document spending it: the
+# wording pinned, `hour_choice_problems` green — silently, because that rule only judges documents
+# that HAND the command — and the restaurant that connected its WhatsApp offered the two recipes of
+# a hairdresser and nothing it could use. That is the issue exactly: not a broken template, a
+# missing one, and every rule here was green over it.
+#
+# BOTH families or neither, because `flows/README.md` sells the choice and the business makes it at
+# install: only the attended one leaves the restaurant that runs its WhatsApp alone waiting for an
+# approval nobody will give at 3 AM; only the unattended one leaves the one that wants to read its
+# bookings first with nothing to install.
+def booked_families(docs):
+    """`family -> every command its `ai` steps can call`, over the documents shipped in `flows/`."""
+    out = {}
+    for path, doc in docs:
+        commands = out.setdefault(path.name.split(".")[0], set())
+        for step in doc.get("steps", []):
+            if step.get("kind") == "ai":
+                commands.update((step.get("tools") or {}).get("commands") or [])
+    return out
+
+
+def shipped_recipe_problems(name, doc, booked):
+    """Every booking `BOOKING_RULES` has a wording for really SHIPS, attended and unattended.
+
+    A document rule that never reads the document, and for the same reason as
+    `identity_field_problems`: what it needs is the ledger. As a one-off call in `main()` its
+    deletion would be invisible — the templates that DO exist stay green, and the business whose
+    recipe went missing is not a document this battery can miss, because there is no document.
+    """
+    problems = []
+    for booking in sorted(BOOKING_RULES):
+        shipped = {f for f, commands in booked.items() if booking in commands}
+        for unattended, label in ((True, "unattended"), (False, "attended")):
+            if any(is_unattended(f) is unattended for f in shipped):
+                continue
+            problems.append(
+                f"{name}: `{booking}` has its wording pinned in BOOKING_RULES and no {label} "
+                f"family in `flows/` hands it, so the business that books with it has no recipe to "
+                f"install and every other rule here stays green — they only judge the documents "
+                f"that exist. Ship the pair, or take the row out of the table"
+            )
+    return problems
+
+
+# ── «una reserva que no es suya» — la otra mitad de whatsapp_inbox#60 ─────────────────────────
+#
+# What this delivery DECLARES: the table families book, and they do not change and do not cancel,
+# because `reservations` cannot tell whose booking it is. `schemas/reservation_set_status.json` and
+# `schemas/reservation_update.json` are `additionalProperties: false` over `{reservation_id, …}`
+# with no `channel` and no `customer_id`, and the handler only walks the state machine
+# (`set_status_pure`) — it never asks whose row it is. The lookup that feeds them is a free search:
+# `reservations.reservations.list` filters `guest_phone` and `guest_name` with `op: like`, so any
+# `reservation_id` falls out of a fragment of somebody else's name.
+#
+# 🔴 **A declaration is not a control, and that is measured, not feared.** Handing the unattended
+# table writer `…reservations.list` + `…reservations.set_status`, naming both in the prompt of BOTH
+# languages and adding both grants left every rule in this battery GREEN over a recipe that cancels
+# a stranger's table. It is the same shape that had to be closed by hand twice in this repo already
+# (whatsapp_inbox#100, #103), and `moving_problems` says in so many words that it owes the table
+# families nothing — so the hole had no rule at all. It is pinned here for the same reason it is
+# pinned there: the fix that closes cancelling for chairs (pinning `payload` in the grant,
+# hub#1623) has NOTHING to pin on a command that carries no such field.
+#
+# Reopening it is ERPlora/reservations#50 — `channel` + `customer_id` on those commands, the twin
+# of appointments#140. The day it lands, these ops leave this table and get the treatment
+# cancelling a chair already gets; not one day before.
+UNOWNED_TABLE_OPS = {
+    "commands": (
+        "reservations.reservations.set_status",
+        "reservations.reservations.update",
+        "reservations.reservations.delete",
+    ),
+    "queries": ("reservations.reservations.list",),
+}
+
+
+def unowned_table_problems(name, doc):
+    """No step that writes with NOBODY watching may touch a booking that already exists.
+
+    Judged on every `ai` step and not on the table writer alone: the harm is the tool in the hands
+    of a turn that EXECUTES, so a second step added later owes exactly the same. A step that forgot
+    to say how it runs counts as «nobody is watching» — failing closed is the only direction in
+    which getting it wrong is visible.
+
+    Silent where a PERSON approves the write (`policy: "manual"` → `_flow_approvals`, and at the
+    yes it runs exactly as proposed). That is the same split `moving_problems` makes for chairs,
+    and it is what lets the attended family grow into changing and cancelling without touching this
+    rule.
+    """
+    problems = []
+    for step in doc.get("steps", []):
+        if step.get("kind") != "ai" or step.get("policy") == "manual":
+            continue
+        tools = step.get("tools") or {}
+        for where, ops in sorted(UNOWNED_TABLE_OPS.items()):
+            for op in ops:
+                if op not in (tools.get(where) or []):
+                    continue
+                problems.append(
+                    f"{name} step `{step.get('id')}` runs with nobody watching and is handed "
+                    f"`{op}`: `reservations` never checks whose booking it is — those commands "
+                    f"carry no `channel` and no `customer_id`, and the query that finds the id "
+                    f"searches `guest_name` and `guest_phone` with `op: like` — so a stranger's "
+                    f"table is one sentence of prompt away from being moved or cancelled from "
+                    f"this chat. Leave it to the attended family, where a person approves the "
+                    f"write, until ERPlora/reservations#50 lands"
+                )
+    return problems
+
 
 def hour_choice_problems(name, doc):
     """In the unattended family, the step that can BOOK says, in its own language, that it never
@@ -998,29 +1131,31 @@ def hour_choice_problems(name, doc):
         return []
     parts = name.split(".")
     lang = parts[1] if len(parts) >= 3 else ""
-    sentence = HOUR_RULE.get(lang)
     problems = []
     for step in doc.get("steps", []):
         if step.get("kind") != "ai":
             continue
         commands = (step.get("tools") or {}).get("commands") or []
-        if BOOKING_COMMAND not in commands:
-            continue
-        if sentence is None:
-            problems.append(
-                f"{name} step `{step.get('id')}` can book unattended and this battery has no "
-                f"wording of the hour rule for language `{lang}`: add the translation to "
-                f"HOUR_RULE in the same commit, or the rule is a promise this document does not "
-                f"make to the people who read it"
-            )
-        elif sentence not in prompt_of(step):
-            problems.append(
-                f"{name} step `{step.get('id')}` can book unattended and its prompt no longer says "
-                f"«{sentence}»: with `policy: auto` and nobody at the salon, that sentence is the "
-                f"only thing keeping the model from booking people into hours they never asked "
-                f"for. If the wording changed, change HOUR_RULE with it — it is the contract of "
-                f"the `-unattended` family, not a nicety"
-            )
+        for booking, wording in sorted(BOOKING_RULES.items()):
+            if booking not in commands:
+                continue
+            sentence = wording.get(lang)
+            if sentence is None:
+                problems.append(
+                    f"{name} step `{step.get('id')}` can book unattended with `{booking}` and this "
+                    f"battery has no wording of the hour rule for language `{lang}`: add the "
+                    f"translation to `BOOKING_RULES` in the same commit, or the rule is a promise "
+                    f"this document does not make to the people who read it"
+                )
+            elif sentence not in prompt_of(step):
+                problems.append(
+                    f"{name} step `{step.get('id')}` can book unattended with `{booking}` and its "
+                    f"prompt no longer says «{sentence}»: with `policy: auto` and nobody at the "
+                    f"business, that sentence is the only thing keeping the model from booking "
+                    f"people into hours they never asked for. If the wording changed, change "
+                    f"`BOOKING_RULES` with it — it is the contract of the `-unattended` family, "
+                    f"not a nicety"
+                )
     return problems
 
 
@@ -1416,6 +1551,8 @@ DOCUMENT_RULES = (
     enum_value_problems,
     unattended_problems,
     hour_choice_problems,
+    shipped_recipe_problems,
+    unowned_table_problems,
     moving_problems,
     only_the_customer_problems,
 )
@@ -1437,6 +1574,8 @@ SELF_CHECKED_RULES = (
     enum_value_problems,
     unattended_problems,
     hour_choice_problems,
+    shipped_recipe_problems,
+    unowned_table_problems,
     moving_problems,
     only_the_customer_problems,
 )
@@ -1773,6 +1912,11 @@ UNATTENDED_CASES = [
 
 
 UNATTENDED_ES = "appointment-from-whatsapp-unattended.es.flow.json"
+# The table families (whatsapp_inbox#60). A restaurant runs the same automation against
+# `reservations`, so it inherits the same rules — including this one, under its own wording.
+TABLE_ATTENDED = "reservation-from-whatsapp.en.flow.json"
+TABLE_UNATTENDED = "reservation-from-whatsapp-unattended.en.flow.json"
+TABLE_UNATTENDED_ES = "reservation-from-whatsapp-unattended.es.flow.json"
 
 HOUR_CASES = [
     (
@@ -1823,6 +1967,60 @@ HOUR_CASES = [
         _fixture_doc(_ai_step("book", "auto", [BOOKING_COMMAND], f"Réserve. {HOUR_RULE['en']}")),
         1,
     ),
+    (
+        "the shape the unattended TABLE family ships (whatsapp_inbox#60): booking a table is the "
+        "same bet as booking a chair, so the step that can book carries its own wording of the "
+        "rule",
+        TABLE_UNATTENDED,
+        _fixture_doc(
+            _ai_step("book", "auto", [TABLE_BOOKING_COMMAND], f"Book it. {TABLE_RULE['en']} Go.")
+        ),
+        0,
+    ),
+    (
+        "the SAME regression on the table family, and the reason this rule is a table and not one "
+        "command: a bot that picks the hour — or the number of diners — with nobody in the "
+        "restaurant seats four people at a table for two, and the document saves, the trigger arms "
+        "and nothing anywhere says so",
+        TABLE_UNATTENDED,
+        _fixture_doc(
+            _ai_step("book", "auto", [TABLE_BOOKING_COMMAND], "Book whatever fits best.")
+        ),
+        1,
+    ),
+    (
+        "the Spanish table document carries the Spanish wording",
+        TABLE_UNATTENDED_ES,
+        _fixture_doc(
+            _ai_step("book", "auto", [TABLE_BOOKING_COMMAND], f"Resérvala. {TABLE_RULE['es']}")
+        ),
+        0,
+    ),
+    (
+        "a table translation that kept the English sentence dropped the rule for the reader it has",
+        TABLE_UNATTENDED_ES,
+        _fixture_doc(
+            _ai_step("book", "auto", [TABLE_BOOKING_COMMAND], f"Resérvala. {TABLE_RULE['en']}")
+        ),
+        1,
+    ),
+    (
+        "silent on the attended table family: there a person reads the proposal before it books",
+        TABLE_ATTENDED,
+        _fixture_doc(
+            _ai_step("book", "manual", [TABLE_BOOKING_COMMAND], "Book whatever fits best.")
+        ),
+        0,
+    ),
+    (
+        "the appointment wording is NOT the table wording: a table document that carries the "
+        "chair sentence is a document whose rule never mentions how many people are coming",
+        TABLE_UNATTENDED,
+        _fixture_doc(
+            _ai_step("book", "auto", [TABLE_BOOKING_COMMAND], f"Book it. {HOUR_RULE['en']}")
+        ),
+        1,
+    ),
 ]
 
 
@@ -1830,6 +2028,130 @@ HOUR_CASES = [
 # file name for the same reason: the language of the document is in its name.
 _MOVE_TOOLS = (BOOKING_COMMAND, CANCEL_COMMAND, MOVE_COMMAND)
 _MOVE_QUERIES = (OWNED_APPOINTMENTS_QUERY,)
+
+_CHAIR_PAIR = {
+    "appointment-from-whatsapp": {BOOKING_COMMAND},
+    "appointment-from-whatsapp-unattended": {BOOKING_COMMAND},
+}
+_TABLE_ATTENDED = {"reservation-from-whatsapp": {TABLE_BOOKING_COMMAND}}
+_TABLE_UNATTENDED = {"reservation-from-whatsapp-unattended": {TABLE_BOOKING_COMMAND}}
+
+RECIPE_CASES = [
+    (
+        "what this module ships once whatsapp_inbox#60 lands: a pair of families for every "
+        "booking the battery has a wording for",
+        {**_CHAIR_PAIR, **_TABLE_ATTENDED, **_TABLE_UNATTENDED},
+        0,
+    ),
+    (
+        "the red whatsapp_inbox#60 IS: the table wording is pinned and no document anywhere books "
+        "a table, so the restaurant that connects its WhatsApp is offered a hairdresser's recipes "
+        "and nothing else",
+        _CHAIR_PAIR,
+        2,
+    ),
+    (
+        "half the delivery: the restaurant that runs its WhatsApp with nobody watching can install "
+        "the recipe, and the one that wants to read its bookings first has nothing",
+        {**_CHAIR_PAIR, **_TABLE_UNATTENDED},
+        1,
+    ),
+    (
+        "the other half: the recipe exists and parks every table at 3 AM in an approval tray the "
+        "restaurant that bought the unattended one does not open",
+        {**_CHAIR_PAIR, **_TABLE_ATTENDED},
+        1,
+    ),
+    (
+        "a family that books something else does not cover the row: `customers.create` writes, and "
+        "no customer ever sat at it",
+        {**_CHAIR_PAIR, "reservation-from-whatsapp": {"customers.create"},
+         "reservation-from-whatsapp-unattended": {"customers.create"}},
+        2,
+    ),
+    (
+        "and the row that started it all is judged the same way: delete the chair recipes and this "
+        "rule says so, so it cannot be one that only ever fires for tables",
+        {**_TABLE_ATTENDED, **_TABLE_UNATTENDED},
+        2,
+    ),
+]
+
+
+
+# `(label, file name, document, problems expected)` — the unit tests of `unowned_table_problems`,
+# the rule that keeps whatsapp_inbox#60's declared security decision from being prose.
+TABLE_SCOPE_CASES = [
+    (
+        "what this module ships: the unattended table writer books and puts people on the waiting "
+        "list, and nothing it holds can touch a booking that already exists",
+        TABLE_UNATTENDED,
+        _fixture_doc(
+            _ai_step(
+                "book",
+                "auto",
+                [TABLE_BOOKING_COMMAND, "reservations.waitlist.create"],
+                "Book it.",
+            )
+        ),
+        0,
+    ),
+    (
+        "the regression this rule exists for, and it was measured GREEN before the rule: the "
+        "unattended writer is handed the cancel command AND the free search that finds any id",
+        TABLE_UNATTENDED,
+        _fixture_doc(
+            _ai_step(
+                "book",
+                "auto",
+                [TABLE_BOOKING_COMMAND, "reservations.reservations.set_status"],
+                "Book it, and cancel it if they ask.",
+                queries=["reservations.reservations.list"],
+            )
+        ),
+        2,
+    ),
+    (
+        "a person approves every write there, so the attended family may grow into changing and "
+        "cancelling: this rule owes it nothing",
+        TABLE_ATTENDED,
+        _fixture_doc(
+            _ai_step(
+                "propose",
+                "manual",
+                [TABLE_BOOKING_COMMAND, "reservations.reservations.set_status"],
+                "Propose it.",
+                queries=["reservations.reservations.list"],
+            )
+        ),
+        0,
+    ),
+    (
+        "a step that forgot to say how it runs counts as nobody watching: the family that gets "
+        "this wrong is the one where nothing downstream notices",
+        TABLE_UNATTENDED,
+        _fixture_doc(
+            _ai_step(
+                "book",
+                None,
+                [TABLE_BOOKING_COMMAND, "reservations.reservations.update"],
+                "Change it.",
+            )
+        ),
+        1,
+    ),
+    (
+        "and it is not anchored on the booking step: a second `auto` step bolted on later owes "
+        "exactly the same, which is how this hole would come back",
+        TABLE_UNATTENDED,
+        _fixture_doc(
+            _ai_step("book", "manual", [TABLE_BOOKING_COMMAND], "Propose it."),
+            _ai_step("tidy", "auto", ["reservations.reservations.delete"], "Tidy up."),
+        ),
+        1,
+    ),
+]
+
 
 MOVE_CASES = [
     (
@@ -2714,6 +3036,20 @@ def self_check():
                 f"the battery's own «the model never picks the hour» rule is wrong — {label}: "
                 f"expected {expected} problem(s), got {len(got)}: {got}"
             )
+    for label, booked, expected in RECIPE_CASES:
+        got = shipped_recipe_problems("(self-check)", {}, booked)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «every wording has a recipe that ships» rule is wrong — "
+                f"{label}: expected {expected} problem(s), got {len(got)}: {got}"
+            )
+    for label, name, doc, expected in TABLE_SCOPE_CASES:
+        got = unowned_table_problems(name, doc)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «a booking that is not yours» rule is wrong — {label}: "
+                f"expected {expected} problem(s), got {len(got)}: {got}"
+            )
     for label, name, doc, expected in MOVE_CASES:
         got = moving_problems(name, doc)
         if len(got) != expected:
@@ -2917,6 +3253,10 @@ def main():
         enums = payload_enums(commands_def)
         identity_props = payload_properties(commands_def)
 
+    # Which family books what, read once: `shipped_recipe_problems` judges the SET of
+    # documents, and the set is not visible from any one of them.
+    booked = booked_families((path, json.loads(path.read_text())) for path in docs)
+
     for path in docs:
         doc = json.loads(path.read_text())
 
@@ -2976,6 +3316,15 @@ def main():
         # 3a-bis-iii) …and, in that family, the step that can book still says in so many words that
         # it never picks the hour (whatsapp_inbox#58, reviewer mutant N2). Prose, pinned on purpose.
         problems += applied(ledger, hour_choice_problems, path.name, doc)
+
+        # 3a-bis-iii-bis) …and every booking that wording exists for is one this module really
+        # SHIPS, in both families (whatsapp_inbox#60). Needs no manifest: it reads `flows/`.
+        problems += applied(ledger, shipped_recipe_problems, path.name, doc, booked)
+
+        # 3a-bis-iii-ter) …and no step that writes with NOBODY watching is handed an operation on a
+        # booking that already exists, because `reservations` cannot tell whose it is
+        # (whatsapp_inbox#60, reviewer mutant MX-b; reopens with ERPlora/reservations#50).
+        problems += applied(ledger, unowned_table_problems, path.name, doc)
 
         # 3a-bis-iv) …and the appointment writer of BOTH families can move an appointment, looks
         # up whose it is before it does, and says that moving never becomes cancel-plus-book
