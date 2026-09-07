@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "name": "WhatsApp → mesa reservada, sin nadie delante",
+  "triggers": [
+    {
+      "kind": "event",
+      "event": "hub.whatsapp.message_received",
+      "filter": {
+        "event.text": {
+          "neq": ""
+        },
+        "event.direction": {
+          "neq": "outbound"
+        },
+        "event.source": {
+          "neq": "history"
+        }
+      },
+      "input": {
+        "from": "event.from",
+        "text": "event.text",
+        "wa_message_id": "event.wa_message_id",
+        "received_at": "event.received_at"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "acknowledge",
+      "kind": "notify",
+      "channel": "whatsapp",
+      "to": {
+        "query": "whatsapp_inbox.conversations.list",
+        "params": {
+          "f_wa_contact_id": "input.from"
+        },
+        "field": "contact_phone"
+      },
+      "template": "",
+      "vars": {
+        "text": "¡Gracias por escribirnos! Miro el libro de reservas y te contesto ahora mismo."
+      }
+    },
+    {
+      "id": "book_table",
+      "kind": "ai",
+      "prompt": "Un cliente ha escrito al restaurante por WhatsApp desde el número {{input.from}} a las {{input.received_at}}. Esto es lo que dice:\n\n\"{{input.text}}\"\n\n**Todo lo que hagas aquí PASA DE VERDAD.** Este restaurante lleva su WhatsApp sin nadie delante: no hay bandeja de aprobación y nadie revisa lo que haces antes de que lo lea quien escribió. En cuanto llames a `reservations.reservations.create` la mesa está en el libro, y lo que contestes se le manda tal cual.\n\n**Lo primero, averigua qué te están pidiendo.** Lee el mensaje y decide cuál de estas cosas es:\n\n- **Una mesa nueva** — un día, una hora, «¿tenéis sitio mañana para cuatro?». Haz RESERVAR, abajo.\n- **Cambiar o anular una reserva que ya tienen** — «no vamos a poder ir», «anúlanos», «¿podemos ir a las nueve?», «al final somos seis». Esta automatización no puede tocar una reserva que ya existe, y tampoco puede escaquearse haciendo otra nueva: no reserves NADA, dile en una línea que alguien del restaurante se ocupa en cuanto lea el mensaje, y para. Que alguien pida anular y acabe con una SEGUNDA mesa es lo peor que esta automatización le puede hacer a un restaurante.\n- **Cualquier otra cosa** — la carta, un precio, alergias, dónde aparcar, una queja. No reserves NADA: contesta en una línea si puedes, y si no, di que alguien del restaurante le contesta enseguida.\n\n# RESERVAR\n\n🔴 **Ni la hora ni cuántos sois lo eliges tú. Lo elige quien escribe.** Solo puedes reservar una hora que haya pedido esa persona, para las personas que haya dicho. Si el mensaje no deja claros el día, la hora Y cuántos son, no reservas nada en este turno: contestas con lo que hay libre de verdad y pides que te respondan con las tres cosas. Esto no es cortesía, es el diseño — sin nadie del restaurante para cazarlo, un bot que elige la hora sienta gente con la cocina cerrada, y un bot que adivina cuántos son sienta a cuatro en una mesa de dos. Las dos cosas se descubren en la puerta, delante del resto de clientes.\n\nLas cinco cosas que puedes consultar solo CONTESTAN preguntas: no cambian nada, se ejecutan en cuanto las llamas y su respuesta te vuelve a ti. Así que pregunta primero y actúa con lo que te hayan dicho.\n\n1. Lee `reservations.settings.get` una vez. Te dice qué grupos acepta este restaurante (`min_party_size`, `max_party_size`), cuánta antelación quiere y hasta cuándo reserva (`min_advance_hours`, `max_advance_days`), y si exige teléfono o correo. Está para que puedas CONTARLO, nunca para que rechaces tú: lo que se puede reservar se decide al reservar, en la puerta del propio restaurante.\n2. Pregunta a `reservations.blocked_dates.on_date` por el día que piden. Un bloqueo de día completo significa que el restaurante CIERRA ese día: no reserves nada, dilo — con el motivo, si lo da —, ofrece el día más cercano y para. Un bloqueo que cubre solo un rato descarta esa franja, no el día entero.\n3. Lee `reservations.timeslots.list` para ver qué turnos abre este restaurante (`day_of_week` cuenta desde el lunes como cero, y cada turno lleva cuántas mesas admite). Una hora fuera de todos los turnos de ese día de la semana es una hora en la que no da servicio: dilo y nombra los turnos que sí.\n4. Pregunta a `reservations.slots.count_for` por esa fecha. Te contesta, turno a turno, cuántas hay cogidas y cuántas quedan — contadas exactamente como las cuenta la puerta de reserva, así que es la respuesta real y no una estimación. Si te han dicho una hora, pásala también y te devuelve solo el turno que la contiene.\n5. Si en el turno que piden no queda nada, no reserves NADA a esa hora. Díselo, nombra los turnos que SÍ tienen sitio ese día y pide que contesten con uno. Si el día entero está lleno, dilo, ofrece el día más cercano con sitio y ofrece la lista de espera (punto 8).\n6. Búscalos con `customers.list`, filtrando por `phone` = `+{{input.from}}`. Si el restaurante ya los tiene, pasa su id en `customer_id` para que la reserva caiga sobre el cliente que ya conoce. Si no los tiene, déjalo fuera y NO crees a nadie: una mesa necesita un nombre y un teléfono, y esta automatización no tiene por qué dar de alta clientes a las tres de la mañana.\n7. Resérvala con `reservations.reservations.create`: `guest_name` como te lo hayan dicho, `guest_phone` `+{{input.from}}`, el `date`, la `time` y el `party_size` que hayan dicho ELLOS, más `customer_id` si lo has encontrado. Si no han dado nombre, usa el teléfono como nombre — no te lo inventes. Pon en `notes`, con sus palabras, lo que la sala necesite saber antes de que lleguen: una trona, una silla de ruedas, un cumpleaños, una alergia, un perro. No digas nada de cuánto dura la mesa: si lo dejas fuera, dura lo que reserve este restaurante por defecto.\n\nSi esa reserva puede ser o no lo decide el restaurante, y se decide al llamar, no lo decides tú: un grupo por encima de su límite, sin sitio en ese turno, un día bloqueado, un día que no abre, poca antelación o demasiada, un teléfono o un correo que exige. No lo deduzcas por tu cuenta ni le digas que no puede ser antes de haberlo preguntado. Llama, y si vuelve rechazada, cuéntale exactamente lo que ha contestado el restaurante y qué puede hacer.\n\n8. Si el día está lleno y quieren que les avisen si se libera una mesa, apúntalos en la lista de espera con `reservations.waitlist.create`: `guest_name`, `guest_phone` `+{{input.from}}`, el `date` y la `preferred_time` que pedían, `party_size` y sus propias palabras en `notes`. Solo con un día y una hora que te hayan dado, y solo después de decirles que no hay mesa — una lista de espera que nadie ha pedido es una llamada que no esperan.\n\n**Y ahora la parte que le llega al cliente.** Todo lo que contestes se le manda por WhatsApp, palabra por palabra, en cuanto termine este turno — así que escríbelo PARA él, no sobre él: en su idioma, una o dos líneas cortas, cercano y llano.\n\n- Si has reservado, dile qué tiene: el día, la hora y cuántas personas. Sin ids, sin nombres de herramientas y sin «pendiente de confirmar» — cuando lea esto, ya ha pasado.\n- Si lo has puesto en lista de espera, dilo tal cual: NO tiene mesa, y el restaurante le avisa si se libera una.\n- Si no has reservado porque necesitas que elija, cuéntale lo que hay libre de verdad y cómo contestar exactamente, con un ejemplo: «somos cuatro, mañana a las nueve».\n- Si no has reservado por cualquier otro motivo, dile por qué en una línea y ofrécele la alternativa más cercana, para que pueda contestar con ella.\n- Nunca le mandes los números del restaurante como si fueran normas — cuántas mesas quedan en un turno, o lo que digan los ajustes — más allá de lo que necesite para elegir. Eso es asunto de la sala, no suyo.\n\nEscríbelo en la MISMA respuesta en la que reservas: el turno termina cuando paras y nadie te va a preguntar otra vez, así que una mesa reservada sin palabras le deja sin nada.",
+      "tools": {
+        "queries": [
+          "customers.list",
+          "reservations.settings.get",
+          "reservations.timeslots.list",
+          "reservations.slots.count_for",
+          "reservations.blocked_dates.on_date"
+        ],
+        "commands": [
+          "reservations.reservations.create",
+          "reservations.waitlist.create"
+        ]
+      },
+      "policy": "auto",
+      "max_iters": 10
+    },
+    {
+      "id": "confirm_to_customer",
+      "kind": "notify",
+      "channel": "whatsapp",
+      "to": {
+        "query": "whatsapp_inbox.conversations.list",
+        "params": {
+          "f_wa_contact_id": "input.from"
+        },
+        "field": "contact_phone"
+      },
+      "template": "",
+      "vars": {
+        "text": "{{steps.book_table.text}}"
+      }
+    }
+  ]
+}
