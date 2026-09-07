@@ -977,6 +977,26 @@ HOUR_RULE = {
 BOOKING_COMMAND = "appointments.appointments.create"
 CANCEL_COMMAND = "appointments.appointments.cancel"
 
+# The same bet, one module over — whatsapp_inbox#60. A restaurant's unattended automation writes
+# into `reservations` instead of `appointments`, and the harm is the same shape with one more
+# field: an hour nobody asked for, or a party size nobody said, seats four people at a table for
+# two. The wording is its own because the promise is its own — the chair sentence never mentions
+# how many are coming.
+TABLE_BOOKING_COMMAND = "reservations.reservations.create"
+TABLE_RULE = {
+    "en": "You never choose the hour or how many people are coming. They do.",
+    "es": "Ni la hora ni cuántos sois lo eliges tú. Lo elige quien escribe.",
+}
+
+# `booking command -> the sentence its unattended family has to carry, per language`. A table
+# rather than one constant because the rule travels with the WRITE, not with the module: any
+# future family that books something unattended earns its row here, and a family whose booking
+# command has no row is one this battery cannot vouch for.
+BOOKING_RULES = {
+    BOOKING_COMMAND: HOUR_RULE,
+    TABLE_BOOKING_COMMAND: TABLE_RULE,
+}
+
 
 def hour_choice_problems(name, doc):
     """In the unattended family, the step that can BOOK says, in its own language, that it never
@@ -998,29 +1018,31 @@ def hour_choice_problems(name, doc):
         return []
     parts = name.split(".")
     lang = parts[1] if len(parts) >= 3 else ""
-    sentence = HOUR_RULE.get(lang)
     problems = []
     for step in doc.get("steps", []):
         if step.get("kind") != "ai":
             continue
         commands = (step.get("tools") or {}).get("commands") or []
-        if BOOKING_COMMAND not in commands:
-            continue
-        if sentence is None:
-            problems.append(
-                f"{name} step `{step.get('id')}` can book unattended and this battery has no "
-                f"wording of the hour rule for language `{lang}`: add the translation to "
-                f"HOUR_RULE in the same commit, or the rule is a promise this document does not "
-                f"make to the people who read it"
-            )
-        elif sentence not in prompt_of(step):
-            problems.append(
-                f"{name} step `{step.get('id')}` can book unattended and its prompt no longer says "
-                f"«{sentence}»: with `policy: auto` and nobody at the salon, that sentence is the "
-                f"only thing keeping the model from booking people into hours they never asked "
-                f"for. If the wording changed, change HOUR_RULE with it — it is the contract of "
-                f"the `-unattended` family, not a nicety"
-            )
+        for booking, wording in sorted(BOOKING_RULES.items()):
+            if booking not in commands:
+                continue
+            sentence = wording.get(lang)
+            if sentence is None:
+                problems.append(
+                    f"{name} step `{step.get('id')}` can book unattended with `{booking}` and this "
+                    f"battery has no wording of the hour rule for language `{lang}`: add the "
+                    f"translation to `BOOKING_RULES` in the same commit, or the rule is a promise "
+                    f"this document does not make to the people who read it"
+                )
+            elif sentence not in prompt_of(step):
+                problems.append(
+                    f"{name} step `{step.get('id')}` can book unattended with `{booking}` and its "
+                    f"prompt no longer says «{sentence}»: with `policy: auto` and nobody at the "
+                    f"business, that sentence is the only thing keeping the model from booking "
+                    f"people into hours they never asked for. If the wording changed, change "
+                    f"`BOOKING_RULES` with it — it is the contract of the `-unattended` family, "
+                    f"not a nicety"
+                )
     return problems
 
 
@@ -1773,6 +1795,11 @@ UNATTENDED_CASES = [
 
 
 UNATTENDED_ES = "appointment-from-whatsapp-unattended.es.flow.json"
+# The table families (whatsapp_inbox#60). A restaurant runs the same automation against
+# `reservations`, so it inherits the same rules — including this one, under its own wording.
+TABLE_ATTENDED = "reservation-from-whatsapp.en.flow.json"
+TABLE_UNATTENDED = "reservation-from-whatsapp-unattended.en.flow.json"
+TABLE_UNATTENDED_ES = "reservation-from-whatsapp-unattended.es.flow.json"
 
 HOUR_CASES = [
     (
@@ -1821,6 +1848,60 @@ HOUR_CASES = [
         "translation adds its sentence to HOUR_RULE in the same commit, or it does not ship",
         "appointment-from-whatsapp-unattended.fr.flow.json",
         _fixture_doc(_ai_step("book", "auto", [BOOKING_COMMAND], f"Réserve. {HOUR_RULE['en']}")),
+        1,
+    ),
+    (
+        "the shape the unattended TABLE family ships (whatsapp_inbox#60): booking a table is the "
+        "same bet as booking a chair, so the step that can book carries its own wording of the "
+        "rule",
+        TABLE_UNATTENDED,
+        _fixture_doc(
+            _ai_step("book", "auto", [TABLE_BOOKING_COMMAND], f"Book it. {TABLE_RULE['en']} Go.")
+        ),
+        0,
+    ),
+    (
+        "the SAME regression on the table family, and the reason this rule is a table and not one "
+        "command: a bot that picks the hour — or the number of diners — with nobody in the "
+        "restaurant seats four people at a table for two, and the document saves, the trigger arms "
+        "and nothing anywhere says so",
+        TABLE_UNATTENDED,
+        _fixture_doc(
+            _ai_step("book", "auto", [TABLE_BOOKING_COMMAND], "Book whatever fits best.")
+        ),
+        1,
+    ),
+    (
+        "the Spanish table document carries the Spanish wording",
+        TABLE_UNATTENDED_ES,
+        _fixture_doc(
+            _ai_step("book", "auto", [TABLE_BOOKING_COMMAND], f"Resérvala. {TABLE_RULE['es']}")
+        ),
+        0,
+    ),
+    (
+        "a table translation that kept the English sentence dropped the rule for the reader it has",
+        TABLE_UNATTENDED_ES,
+        _fixture_doc(
+            _ai_step("book", "auto", [TABLE_BOOKING_COMMAND], f"Resérvala. {TABLE_RULE['en']}")
+        ),
+        1,
+    ),
+    (
+        "silent on the attended table family: there a person reads the proposal before it books",
+        TABLE_ATTENDED,
+        _fixture_doc(
+            _ai_step("book", "manual", [TABLE_BOOKING_COMMAND], "Book whatever fits best.")
+        ),
+        0,
+    ),
+    (
+        "the appointment wording is NOT the table wording: a table document that carries the "
+        "chair sentence is a document whose rule never mentions how many people are coming",
+        TABLE_UNATTENDED,
+        _fixture_doc(
+            _ai_step("book", "auto", [TABLE_BOOKING_COMMAND], f"Book it. {HOUR_RULE['en']}")
+        ),
         1,
     ),
 ]
