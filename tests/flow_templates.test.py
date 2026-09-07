@@ -1057,15 +1057,40 @@ CANNOT_MOVE = {
 
 
 def moving_problems(name, doc):
-    """The step that can BOOK an appointment can also MOVE one, and says how — whatsapp_inbox#74.
+    """Who may MOVE an appointment depends on who approves the write — whatsapp_inbox#74, #103.
 
     Judged on the step that hands `BOOKING_COMMAND`, which is the appointment writer of both
-    families: what a customer can ask this channel for is decided there, in one place, and a
-    channel that books and cancels but cannot move pushes «change it to Thursday» into the one
-    answer it exists to avoid. Silent on every other step and on any future template that does not
-    book appointments at all (table reservations, whatsapp_inbox#60): they owe nothing here.
+    families: what a customer can ask this channel for is decided there, in one place. Silent on
+    every other step and on any future template that does not book appointments at all (table
+    reservations, whatsapp_inbox#60): they owe nothing here.
 
-    Four marks, and each of them is one edit away from being lost:
+    🔴 **And the answer is not the same for the two families, because moving CANNOT BE SCOPED.**
+    `appointments.appointments.cancel` binds its customer channel — handed `channel: "customer"`,
+    the handler refuses an appointment whose `customer_id` is not the one asking
+    (`cancel_appointment_pure`). `appointments.appointments.reschedule` has no such field to bind:
+    its schema is `additionalProperties: false` over `appointment_id`, `start_datetime` and
+    `duration_minutes`, and the handler checks state, notice, hours, blocks and overlap — never
+    WHOSE appointment it is. So the whole chain `customers.list` (searchable by name) →
+    `list_for_customer` (takes any `customer_id`) → `reschedule` sits inside the grants this
+    template asks for, and the only thing between a customer and a stranger's hour is a paragraph
+    of prompt. That is precisely what hub#1623 and whatsapp_inbox#100 declare is NOT a control —
+    and the fix that closes it for cancelling (pinning `payload` in the grant, hub#1632) has
+    nothing to pin here, so the hole would survive its own fix.
+
+    Hence the split:
+
+    * where a PERSON approves the write (`policy: "manual"` → `_flow_approvals`, and at the yes it
+      runs exactly as proposed) the channel moves appointments, with the four marks below;
+    * where NOBODY is watching (`policy: "auto"`, the family whatsapp_inbox#58 ships for the
+      one-chair salon) the channel must NOT be able to move at all, and must say so in its prompt
+      so the customer is told a person will answer instead of being ignored. Reopening that case
+      is appointments#142 (give `reschedule` its `channel` + `customer_id`, the twin of
+      appointments#140) and then whatsapp_inbox#103 — in that order, never the other way.
+
+    A missing `policy` counts as «nobody is watching»: this fails CLOSED, because the family that
+    gets the write wrong is the one where nothing downstream notices.
+
+    Four marks for the attended family, and each of them is one edit away from being lost:
 
     * **it can move** — `MOVE_COMMAND` in `tools.commands`. This is the red the issue itself is;
     * **it can look up WHAT it is moving** — `OWNED_APPOINTMENTS_QUERY` in `tools.queries`. This
@@ -1095,7 +1120,42 @@ def moving_problems(name, doc):
         if BOOKING_COMMAND not in (tools.get("commands") or []):
             continue
         sid = step.get("id")
-        if MOVE_COMMAND not in (tools.get("commands") or []):
+        prompt = prompt_of(step)
+        can_move = MOVE_COMMAND in (tools.get("commands") or [])
+        # `manual` is the ONLY policy with a person in front of the write: it parks the proposal in
+        # `_flow_approvals` and ends the turn. Anything else — `auto`, or a step that forgot to say
+        # — writes inside the turn with nobody reading.
+        if step.get("policy") != "manual":
+            if can_move:
+                problems.append(
+                    f"{name} step `{sid}` runs with nobody watching "
+                    f"(`policy: {step.get('policy')!r}`) and was handed `{MOVE_COMMAND}`: that "
+                    f"command takes no `channel` and no `customer_id`, and its handler never "
+                    f"checks whose appointment it is, so `customers.list` → "
+                    f"`{OWNED_APPOINTMENTS_QUERY}` → move is a stranger's hour changed with no "
+                    f"person in the loop and nothing downstream to refuse it. Pinning the payload "
+                    f"in the grant (hub#1632) cannot help: there is no field to pin. It reopens "
+                    f"with appointments#142 first, then whatsapp_inbox#103"
+                )
+                continue
+            stale = CANNOT_MOVE.get(lang)
+            if stale is None:
+                problems.append(
+                    f"{name} step `{sid}` cannot move an appointment and this battery has no "
+                    f"wording of the «not yet» sentence for language `{lang}`: add the "
+                    f"translation to CANNOT_MOVE in the same commit, or the customer who asks to "
+                    f"change her hour is answered by whatever the model improvises"
+                )
+            elif stale not in prompt:
+                problems.append(
+                    f"{name} step `{sid}` cannot move an appointment and its prompt no longer "
+                    f"says so («{stale}»): «can you change it to Thursday?» then falls to "
+                    f"whatever the model decides — silence, or a SECOND appointment booked on top "
+                    f"of the one she was trying to keep. Until appointments#142 lands, that "
+                    f"sentence is what this family answers with"
+                )
+            continue
+        if not can_move:
             problems.append(
                 f"{name} step `{sid}` can book and cancel an appointment and cannot MOVE one "
                 f"(`{MOVE_COMMAND}` is not in its `tools.commands`): «can you change it to "
@@ -1104,7 +1164,6 @@ def moving_problems(name, doc):
                 f"automation exists to remove"
             )
             continue
-        prompt = prompt_of(step)
         if OWNED_APPOINTMENTS_QUERY not in (tools.get("queries") or []):
             problems.append(
                 f"{name} step `{sid}` can move an appointment and was never handed "
@@ -1871,7 +1930,56 @@ MOVE_CASES = [
         1,
     ),
     (
-        "the unattended family owes the same: nobody is watching there either",
+        "the unattended family owes the OPPOSITE, and this is the shape it ships: it cannot move, "
+        "and its prompt says so, so «change it to Thursday» is answered by a person",
+        UNATTENDED,
+        _fixture_doc(
+            _ai_step(
+                "book",
+                "auto",
+                (BOOKING_COMMAND, CANCEL_COMMAND),
+                f"Book or cancel. Moving is something {CANNOT_MOVE['en']}.",
+                queries=_MOVE_QUERIES,
+            )
+        ),
+        0,
+    ),
+    (
+        "🔴 the regression this rule exists to stop: with nobody watching, moving is a write "
+        "nothing can scope — `reschedule` takes no `customer_id` and its handler never checks "
+        "whose appointment it is, so the id can be anybody's",
+        UNATTENDED,
+        _fixture_doc(
+            _ai_step(
+                "book",
+                "auto",
+                _MOVE_TOOLS,
+                f"Move it. {MOVE_RULE['en']}",
+                queries=_MOVE_QUERIES,
+            )
+        ),
+        1,
+    ),
+    (
+        "and it is the POLICY that decides, not the file name: a writer that forgot to say who "
+        "approves it is treated as nobody watching, because that is the side that fails silently",
+        ATTENDED,
+        _fixture_doc(
+            {
+                "id": "propose",
+                "kind": "ai",
+                "prompt": f"Move it. {MOVE_RULE['en']}",
+                "tools": {
+                    "commands": list(_MOVE_TOOLS),
+                    "queries": list(_MOVE_QUERIES),
+                },
+            }
+        ),
+        1,
+    ),
+    (
+        "the sentence that sends her to a person, reworded away: she asks to move her hour and "
+        "the model improvises — silence, or a SECOND appointment on top of the one she wanted",
         UNATTENDED,
         _fixture_doc(
             _ai_step(
@@ -1879,6 +1987,21 @@ MOVE_CASES = [
                 "auto",
                 (BOOKING_COMMAND, CANCEL_COMMAND),
                 "Book or cancel.",
+                queries=_MOVE_QUERIES,
+            )
+        ),
+        1,
+    ),
+    (
+        "a language this battery has no «not yet» wording for is a document it cannot vouch for "
+        "on that side either",
+        "appointment-from-whatsapp-unattended.fr.flow.json",
+        _fixture_doc(
+            _ai_step(
+                "book",
+                "auto",
+                (BOOKING_COMMAND, CANCEL_COMMAND),
+                "Réserve ou annule.",
                 queries=_MOVE_QUERIES,
             )
         ),

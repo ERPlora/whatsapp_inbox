@@ -52,7 +52,9 @@ más deja de ser una traducción.
 
 ## `appointment-from-whatsapp-unattended` — la misma automatización, sin nadie delante
 
-Mismos cuatro steps, mismas tools, mismos grants. Cambian **dos cosas**: los dos steps `ai` llevan
+Mismos cuatro steps y casi las mismas tools —**menos una**: esta familia NO puede mover una cita
+(13 grants contra los 14 de la atendida; el porqué, abajo)—. Cambian **dos cosas** más: los dos
+steps `ai` llevan
 `policy: "auto"`, así que lo que el modelo llama **ocurre en el turno** (ADR-0283 D3, por la puerta
 de `Origin::Automation`); y los prompts están escritos para eso — no dicen «lo revisa una persona»,
 porque no la hay.
@@ -124,7 +126,7 @@ desconectado. Por eso el prompt pide la hora en palabras. Sale aparte, en whatsa
 Mover una cita **ya no depende de eso**: se mueve la que la clienta ya tiene, no una que elija de
 una lista.
 
-### Por qué reservar, anular y mover caben en el MISMO paso
+### Por qué reservar y anular caben en el MISMO paso — y mover, solo con alguien delante
 
 «Cancela mi cita» era la mitad de los mensajes que recibe un salón y la automatización solo sabía
 reservar: contestaba proponiendo OTRA cita (whatsapp_inbox#61). Lo arregla el mismo paso, no uno
@@ -139,8 +141,8 @@ nuevo, y la razón es que las alternativas no salen:
 
 El modelo ya está leyendo el mensaje: distinguir «quiero hora» de «no puedo ir» es exactamente lo
 que sabe hacer, y hacerlo ahí cuesta **cero** turnos extra. Las ramas se excluyen entre sí, así que
-el presupuesto de `max_iters` no se toca: reservar gasta hasta 9 llamadas, mover gasta 6 y anular
-gasta 3.
+el presupuesto de `max_iters` no se toca: reservar gasta hasta 9 llamadas, mover gasta 6 (solo en
+la familia atendida) y anular gasta 3.
 
 **Anular respeta las reglas del salón sin re-derivarlas.** La propuesta lleva `channel: "customer"`,
 y eso hace que `appointments` aplique sus propios `allow_customer_cancellation` y
@@ -162,6 +164,19 @@ de mover **no lleva `channel` ni `customer_id`** (`additionalProperties: false` 
 `{appointment_id, start_datetime, duration_minutes?}`, appointments 1.1.72), así que Citas no puede
 saber de quién es la cita que le pasan — un id adivinado movería la hora de otra persona y no hay
 nada más abajo que lo pare.
+
+🔴 **Y por eso mover vive SOLO en la familia atendida.** Anular sí se puede acotar: con
+`channel: "customer"` el handler compara el `customer_id` que se le pasa con el de la cita y
+rechaza la ajena, y por eso whatsapp_inbox#100 puede clavar ese campo en el propio grant cuando
+llegue hub#1632. Mover **no tiene campo que clavar**, y su handler no mira de quién es la cita: la
+cadena `customers.list` (busca por nombre) → `list_for_customer` (acepta cualquier `customer_id`) →
+`reschedule` cabe entera dentro de los grants de la plantilla, y lo único que se interpone es el
+párrafo del prompt — que es justo lo que hub#1623 dice que **no** es un control. Con `policy:
+"manual"` hay una persona que ve la propuesta antes de que ocurra; con `policy: "auto"` no hay
+nadie. Así que la desatendida contesta «alguien del salón te responde» y se queda en 13 grants.
+El arreglo de verdad es **appointments#142** (dar a `reschedule` su `channel` + `customer_id`, el
+gemelo de appointments#140) y, solo después, **whatsapp_inbox#103** reabre el caso desatendido —
+en ese orden, nunca al revés.
 
 ### Por qué la confirmación va DESPUÉS del paso que propone
 
