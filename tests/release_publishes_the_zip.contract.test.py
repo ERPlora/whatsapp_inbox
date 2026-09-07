@@ -23,6 +23,20 @@ WHAT THIS PINS:
      here: a folder that starts shipping tomorrow shows up as red in this module the same day,
      which is the half of the failure a hardcoded list cannot see.
 
+WHERE THE TOOLKIT IS READ FROM, in the order a run can actually reach one:
+
+  a. `ERPLORA_TOOLKIT` — the checkout the gate runs `erplora` from (module-toolkit's
+     `validate-module` action exports it, and every battery inherits the environment). Read as a
+     plain file: an action checkout carries no git refs, and it IS the code running this battery,
+     at the toolkit's `main` of the very same minute.
+  b. the sibling checkout of the monorepo (`../../../module-toolkit`), at its fetched `origin/main`.
+  c. neither → FAIL, never skip. Measured on the runner (2026-09-07): the module is checked out at
+     `…/_work/whatsapp_inbox/whatsapp_inbox`, so (b) is never there, while (a) sits right next to it
+     at `…/_work/_actions/ERPlora/module-toolkit/main`. A version of this battery that skipped the
+     re-read when (b) was missing went GREEN on those exact conditions with a folder that had started
+     shipping and was not in `paths:` — the one failure it exists to catch. The runner is where the
+     re-read matters, so a run that cannot reach any toolkit is red, with the remedy in the message.
+
 THE EXEMPTION, MEASURED (2026-09-07, `saas`, `.../modules/repository/services.py:1730`):
 
     # Refresh README/CHANGELOG on EVERY sync, before deciding whether to upload.
@@ -32,9 +46,11 @@ before the create-only branch, precisely so that fixing a README reaches the fic
 The hub never reads either file. Adding them to `paths:` would bump the version for a typo and
 publish nothing new — so they are exempt ON PURPOSE, and the reason travels with the exemption.
 
-Usage: tests/release_publishes_the_zip.contract.test.py   (exit 0 = green). No Postgres, no Docker.
+Usage: tests/release_publishes_the_zip.contract.test.py   (exit 0 = green). No Postgres, no Docker;
+it needs a module-toolkit to re-read from — `ERPLORA_TOOLKIT` or the sibling checkout.
 """
 
+import os
 import pathlib
 import re
 import subprocess
@@ -44,8 +60,8 @@ MODULE_DIR = pathlib.Path(__file__).resolve().parent.parent
 WORKFLOW = MODULE_DIR / ".github" / "workflows" / "release.yml"
 
 # What `erplora pack` puts in the zip — `INCLUDE` in module-toolkit `src/pack.mjs`. Copied here so
-# the check runs with no neighbours (the gate unpacks the module alone); check 3 re-reads the real
-# one and fails when the two drift.
+# checks 1-2 need nothing but this repo; check 3 re-reads the real one (`packed_in_toolkit`) and
+# fails when the two drift.
 PACKED = (
     "module.json",
     "README.md",
@@ -63,7 +79,10 @@ PACKED = (
 # sync, so they reach the marketplace ficha without a version and the hub never opens them.
 REFRESHED_EVERY_SYNC = {"README.md", "CHANGELOG.md"}
 
-# Sibling checkout of ERPlora/module-toolkit in the monorepo (`modules-workspace/modules/<id>` → root).
+# Where `INCLUDE` is re-read from — see the docstring. `ERPLORA_TOOLKIT` is what the gate exports
+# (module-toolkit `.github/actions/validate-module/action.yml`); the sibling checkout is the monorepo
+# layout (`modules-workspace/modules/<id>` → root).
+TOOLKIT_ENV = "ERPLORA_TOOLKIT"
 TOOLKIT_CHECKOUT = MODULE_DIR.parent.parent.parent / "module-toolkit"
 TOOLKIT_PACK = "src/pack.mjs"
 
@@ -112,40 +131,71 @@ def git(*args: str) -> subprocess.CompletedProcess | None:
         return None
 
 
-def packed_in_toolkit() -> tuple[list[str] | None, str | None]:
-    """`INCLUDE` at the toolkit's trunk, as `(paths, reason_it_could_not_be_read)`.
-
-    The two ways of not reading it are NOT the same and must not both go quiet. No checkout (or no
-    fetched `origin/main`) is the gate unpacking this module on its own: nothing the author can act
-    on, so it skips out loud. But a checkout that DOES resolve `origin/main` and still has no
-    `src/pack.mjs` means the file moved — and a re-read pointed at a file that is not there is a
-    check that passes for the rest of time without looking at anything. That one is a failure.
-    """
-    blob = git("show", f"origin/main:{TOOLKIT_PACK}")
-    if blob is None:
-        return None, "git could not be run"
-    if blob.returncode != 0:
-        if not TOOLKIT_CHECKOUT.is_dir():
-            return None, f"there is no checkout at {TOOLKIT_CHECKOUT}"
-        head = git("rev-parse", "--verify", "--quiet", "origin/main")
-        if head is None or head.returncode != 0:
-            return None, f"{TOOLKIT_CHECKOUT} has no fetched `origin/main`"
-        failures.append(
-            f"`{TOOLKIT_PACK}` is not at origin/main of {TOOLKIT_CHECKOUT} "
-            f"({(head.stdout or '').strip()[:7]}), but the checkout is right there: the file that "
-            "decides what goes in the zip moved, so the re-read below has been judging nothing. "
-            "Point `TOOLKIT_PACK` at where `INCLUDE` lives now"
-        )
-        return None, None
-    block = re.search(r"export const INCLUDE = \[(.*?)\]", blob.stdout, re.S)
+def include_in(text: str, where: str) -> list[str] | None:
+    """The entries of `export const INCLUDE = [...]` in `pack.mjs`; `None` (reported) when gone."""
+    block = re.search(r"export const INCLUDE = \[(.*?)\]", text, re.S)
     if block is None:
         failures.append(
-            f"no `export const INCLUDE = [...]` in `{TOOLKIT_PACK}` at origin/main of "
-            f"{TOOLKIT_CHECKOUT}: the packed list is declared some other way now and this re-read "
-            "cannot see it any more"
+            f"no `export const INCLUDE = [...]` in `{TOOLKIT_PACK}` at {where}: the packed list is "
+            "declared some other way now and this re-read cannot see it any more"
         )
-        return None, None
-    return re.findall(r"['\"]([^'\"]+)['\"]", block[1]), None
+        return None
+    return re.findall(r"['\"]([^'\"]+)['\"]", block[1])
+
+
+def packed_in_toolkit() -> tuple[list[str] | None, str]:
+    """`INCLUDE` from the toolkit this run can reach, as `(paths, where_it_was_read)`.
+
+    `(None, where)` means the failure is already reported. There is no third outcome: a run that
+    cannot reach any toolkit FAILS instead of skipping, because the runner is precisely the place
+    with no sibling checkout, and a re-read that skips there is a re-read that never happens.
+    """
+    running = os.environ.get(TOOLKIT_ENV, "").strip()
+    if running:
+        pack = pathlib.Path(running) / TOOLKIT_PACK
+        where = f"`{TOOLKIT_ENV}` ({pack})"
+        if not pack.is_file():
+            failures.append(
+                f"`{TOOLKIT_ENV}={running}` but there is no `{TOOLKIT_PACK}` under it: the file that "
+                "decides what goes in the zip moved, so this re-read would be judging nothing. Point "
+                "`TOOLKIT_PACK` at where `INCLUDE` lives now"
+            )
+            return None, where
+        return include_in(pack.read_text(), where), where
+
+    where = f"origin/main of {TOOLKIT_CHECKOUT}"
+    blob = git("show", f"origin/main:{TOOLKIT_PACK}")
+    if blob is not None and blob.returncode == 0:
+        return include_in(blob.stdout, where), where
+    if blob is None:
+        failures.append(
+            f"git could not be run to read `{TOOLKIT_PACK}` at {where}; export "
+            f"`{TOOLKIT_ENV}=<a module-toolkit checkout>` and it is read as a plain file instead"
+        )
+        return None, where
+    if TOOLKIT_CHECKOUT.is_dir():
+        head = git("rev-parse", "--verify", "--quiet", "origin/main")
+        if head is not None and head.returncode == 0:
+            failures.append(
+                f"`{TOOLKIT_PACK}` is not at origin/main of {TOOLKIT_CHECKOUT} "
+                f"({(head.stdout or '').strip()[:7]}), but the checkout is right there: the file that "
+                "decides what goes in the zip moved, so this re-read would be judging nothing. "
+                "Point `TOOLKIT_PACK` at where `INCLUDE` lives now"
+            )
+        else:
+            failures.append(
+                f"{TOOLKIT_CHECKOUT} has no fetched `origin/main`, so the packed list cannot be "
+                f"re-read: `git -C {TOOLKIT_CHECKOUT} fetch origin`, or export "
+                f"`{TOOLKIT_ENV}=<a module-toolkit checkout>`"
+            )
+        return None, where
+    failures.append(
+        f"no toolkit to re-read `INCLUDE` from: `{TOOLKIT_ENV}` is not set and there is no checkout "
+        f"at {TOOLKIT_CHECKOUT}. The gate exports `{TOOLKIT_ENV}`; locally keep the sibling checkout "
+        f"or export `{TOOLKIT_ENV}=<a module-toolkit checkout>`. Passing without this re-read is how "
+        "a folder that starts shipping tomorrow stays out of `paths:` for good"
+    )
+    return None, where
 
 
 def covers(entry: str, listed: set[str]) -> bool:
@@ -192,15 +242,10 @@ def main() -> int:
             f"({', '.join(shipped)}); exempt: {', '.join(exempt) or 'none'}"
         )
 
-    # 3 · re-read the packed list from the toolkit that builds the zip.
-    upstream, skipped = packed_in_toolkit()
-    if skipped:
-        print(
-            f"  ⚠ SKIPPED the re-read of `{TOOLKIT_PACK}`: {skipped}. The checks above still ran "
-            "against the copy in this file."
-        )
-    elif upstream is None:
-        pass  # already reported: the file moved, or `INCLUDE` is gone
+    # 3 · re-read the packed list from the toolkit that builds the zip — never skipped.
+    upstream, where = packed_in_toolkit()
+    if upstream is None:
+        pass  # already reported: no toolkit reachable, the file moved, or `INCLUDE` is gone
     elif set(upstream) != set(PACKED):
         gained, lost = (
             sorted(set(upstream) - set(PACKED)),
@@ -214,9 +259,7 @@ def main() -> int:
             "starts shipping today reaches no hub tomorrow"
         )
     else:
-        print(
-            f"  ok: re-read — `INCLUDE` at the toolkit's origin/main is the same {len(upstream)} paths"
-        )
+        print(f"  ok: re-read — `INCLUDE` at {where} is the same {len(upstream)} paths")
 
     return report()
 
