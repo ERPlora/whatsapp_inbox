@@ -407,6 +407,23 @@ def check_echo_lands_in_the_customers_thread(db, command):
             f"the thread reads [{landed}], expected [{want}] — the owner's reply is stored as the "
             "customer's, so the inbox shows the business talking to itself"
         )
+
+    # The badge is only half of what the third statement does: the other half is `last_message_at`,
+    # which is how `queries/conversations_list.sql` sorts the inbox. If the reply does not move it,
+    # a thread the owner has just answered sinks under threads nothing happened in — and no
+    # assertion about `unread_count` can see it, because 0 + 0 and «no row matched» look the same.
+    last = scalar(
+        db,
+        "SELECT COALESCE(max(last_message_at), '')"
+        f" FROM whatsapp_inbox_conversation WHERE hub_id = {sql_literal(hub)}"
+        f" AND wa_contact_id = {sql_literal(CONTACT_WA_ID)} AND is_deleted = 0;",
+    )
+    if last != "2026-08-11T09:05:00+00:00":
+        problems.append(
+            f"after the owner's reply the thread's `last_message_at` is [{last}], expected the time "
+            "of that reply — the conversation has to rise to the top of the inbox when the business "
+            "answers, and it only does if the third statement finds it by `contact` too"
+        )
     return problems
 
 
