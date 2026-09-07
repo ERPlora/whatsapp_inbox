@@ -50,7 +50,10 @@
     },
     {
       "kind": "command",
-      "value": "appointments.appointments.cancel"
+      "value": "appointments.appointments.cancel",
+      "payload": {
+        "channel": "customer"
+      }
     },
     {
       "kind": "command",

@@ -1303,15 +1303,6 @@ PINNED_COMMAND_PAYLOAD = {
 }
 
 
-# `"manual"` is the only policy that asks anybody (`def.rs::AiPolicy`), so anything else — `auto`,
-# a typo the kernel would refuse, or nothing at all — is a step that writes with NOBODY watching.
-# Read that way round on purpose: a rule about the absence of a human has to treat «I could not
-# tell» as «there is no human», or the one document that forgets to declare its policy is the one
-# it waves through.
-def writes_unwatched(step):
-    return step.get("policy") != "manual"
-
-
 def unpinned_command_problems(name, doc, pins):
     """A command handed to a step NOBODY watches carries its narrow value in the GRANT, not in the
     prompt.
@@ -1332,13 +1323,29 @@ def unpinned_command_problems(name, doc, pins):
     stays green: the grant still covers the tool, the prompt still says `customer`, the document
     still parses.
 
-    🔴 **Judged per STEP and not per document**, and that is the rule rather than a detail. A
-    template may hand the same command to a step a person approves and to a step that runs at 3 AM;
-    what decides whether prose is enough is which of the two is holding it. Today only the
-    `-unattended` family has the second kind — the attended twin parks every write in the approval
-    tray — and whether the pin is owed THERE too is a separate question about how much a review
-    really controls (whatsapp_inbox#107), not something to smuggle in by writing the loop wider
-    than the reason for it.
+    🔴 **Every `ai` step that is handed the command owes the pin, whoever is watching**
+    (whatsapp_inbox#107). The rule used to skip steps under `policy: "manual"`, on the grounds that
+    a person approves the write in the tray before it happens. The market says that is the wrong
+    frontier and nine references say it the same way — Mindbody bills «cancel» and «override the
+    cancellation policy» as SEPARATE permissions, WooCommerce Bookings gives the admin a different
+    door from the customer's, and Business Central states it outright: permissions decide what may
+    be done, workflows decide whether a permitted action needs review. They are different controls,
+    and one does not stand in for the other.
+
+    It matters here for a reason anyone can check: what the salon approves in the tray is a DRAFT
+    FOR THE CUSTOMER, not a payload. Nothing in that screen says which `channel` the cancellation
+    will carry, so the review cannot be the thing that keeps it narrow. And the pin loses nothing
+    the attended recipe actually does — its own document only ever cancels for the customer who
+    wrote in, and the salon's legitimate way to cancel on its own account is the Appointments
+    screen with its own role, not a stranger's WhatsApp thread.
+
+    The hub agrees with reading it per step rather than per policy: `check_command_grant` runs at
+    the approval door too (`flows_api.rs`) and not only in the dispatcher (`commands.rs`), so a pin
+    survives the tray instead of being redundant with it.
+
+    Deterministic `kind: command` steps stay out: there the payload is mapped by the DOCUMENT, so
+    no model chooses the channel and pinning would break a template that legitimately cancels for
+    the salon.
 
     Silent when the grant is missing altogether: `main()` already compares needed against declared
     and says so in its own words, and a second complaint about the same absent line would send
@@ -1346,7 +1353,7 @@ def unpinned_command_problems(name, doc, pins):
     """
     problems = []
     for step in doc.get("steps", []):
-        if step.get("kind") != "ai" or not writes_unwatched(step):
+        if step.get("kind") != "ai":
             continue
         handed = ((step.get("tools") or {}).get("commands")) or []
         for cname in handed:
@@ -1365,12 +1372,13 @@ def unpinned_command_problems(name, doc, pins):
                     else "fixes nothing"
                 )
                 problems.append(
-                    f"{name} hands `{cname}` to `{step.get('id')}`, which runs with nobody "
-                    f"watching, and its grant {sent}: the payload is written by a model reading a "
-                    f"stranger's message, so `{field}` = `{value}` has to be pinned in "
+                    f"{name} hands `{cname}` to the model in `{step.get('id')}`, and its grant "
+                    f"{sent}: the payload is written by a model reading a stranger's message, so "
+                    f"`{field}` = `{value}` has to be pinned in "
                     f"`{name.split('.')[0]}.grants.json` (`payload`, hub#1623). Left open, "
                     f"omitting the field is enough to cancel AS THE SALON — no notice window, no "
-                    f"«may customers cancel», no check of whose appointment it is"
+                    f"«may customers cancel», no check of whose appointment it is. A review does "
+                    f"not close it: whoever approves reads a draft for the customer, not a payload"
                 )
     return problems
 
@@ -4150,18 +4158,28 @@ PIN_CASES = [
         1,
     ),
     (
-        "the attended twin is OUT of this rule on purpose: its writer parks in the approval tray, "
-        "so a person sees the cancellation before it happens (whatsapp_inbox#107 is where that is "
-        "decided, and this row is what stops it being decided by widening a loop)",
+        "the ATTENDED twin owes the pin too (whatsapp_inbox#107): a person approving in the tray is "
+        "reading a draft written FOR THE CUSTOMER, not a payload, so the review never shows her "
+        "which `channel` the cancellation carries — a review is a workflow control, never a "
+        "permission boundary",
         ATTENDED,
         _fixture_doc(_ai_step("propose_appointment", "manual", (BOOKING_COMMAND, CANCEL_COMMAND))),
         _PIN_NONE,
+        1,
+    ),
+    (
+        "what this module ships after whatsapp_inbox#107: the same attended writer, and its grant "
+        "says AS THE CUSTOMER — the hub checks the pin at the approval door too "
+        "(`flows_api.rs::check_command_grant`), so the limit survives the tray",
+        ATTENDED,
+        _fixture_doc(_ai_step("propose_appointment", "manual", (BOOKING_COMMAND, CANCEL_COMMAND))),
+        _PIN_OK,
         0,
     ),
     (
-        "a step with NO policy at all counts as nobody watching: the kernel would refuse the "
-        "document, but a rule about the absence of a human that reads a missing declaration as «a "
-        "human, probably» is the wrong way round",
+        "a step with NO policy at all is owed the pin like any other: since whatsapp_inbox#107 the "
+        "verdict does not depend on who is watching, so a document that forgets to declare its "
+        "policy cannot fall through the one hole that reading it would open",
         UNATTENDED,
         _fixture_doc(
             {"id": "book", "kind": "ai", "prompt": "", "tools": {"commands": [CANCEL_COMMAND]}}
