@@ -1,5 +1,5 @@
 {
-  "_why": "El suelo de version de los modulos cuyas operaciones pide esta plantilla. Existe por lo mismo que el de la familia de citas: tests/flow_templates.test.py resuelve los nombres contra los checkouts VECINOS del workspace, y un checkout viejo convierte un rojo en un verde (whatsapp_inbox#52). NO viaja al hub.",
+  "_why": "El suelo de version de los modulos cuyas operaciones pide esta plantilla. Existe por lo mismo que el de la familia de citas: tests/flow_templates.test.py resuelve los nombres contra los checkouts VECINOS del workspace, y un checkout viejo convierte un rojo en un verde (whatsapp_inbox#52). Viaja ademas al hub desde hub#1611: `flow_template_floor_is_met` decide con el si la receta se OFRECE.",
   "modules": {
     "reservations": "3.0.19"
   },
