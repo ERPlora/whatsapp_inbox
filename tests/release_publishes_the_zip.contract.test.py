@@ -76,9 +76,8 @@ def trigger_paths(text: str) -> list[str] | None:
     Hand-parsed on purpose: `pyyaml` is not in the gate's image, and a regex over the whole file
     would happily match the `paths` names quoted in the comment header above `on:`.
     """
-    lines = text.splitlines()
     inside, indent, found = False, None, None
-    for raw in lines:
+    for raw in text.splitlines():
         line = raw.split("#", 1)[0].rstrip()
         if not line.strip():
             continue
@@ -90,6 +89,11 @@ def trigger_paths(text: str) -> list[str] | None:
             if item.startswith("- "):
                 found.append(item[2:].strip().strip("'\""))
             continue
+        # `paths: [a, b]` is the same declaration as the block form, and reading only one of the
+        # two would turn a rewrite of this file into a green "there is no block" instead of a check.
+        inline = re.fullmatch(r"\s*paths:\s*\[(.*)\]\s*", line)
+        if inline:
+            return [p.strip().strip("'\"") for p in inline[1].split(",") if p.strip()]
         if re.fullmatch(r"\s*paths:\s*", line):
             inside, indent, found = True, depth, []
     return found
