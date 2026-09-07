@@ -19,6 +19,9 @@
   "depends_on": [
     "customers"
   ],
+  "compatibility": {
+    "min_erplora_version": "1.1.15"
+  },
   "permissions": [
     "whatsapp_inbox.view_conversation",
     "whatsapp_inbox.view_request",
