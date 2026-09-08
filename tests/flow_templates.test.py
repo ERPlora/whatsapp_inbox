@@ -2022,37 +2022,11 @@ def unpinned_query_problems(name, doc, pins):
 # sentences, reorders them and moves them between steps — all three happen in these files. Only the
 # sentence that carries the RULE is pinned, and it is looked for anywhere in the document.
 PINNED_INSTRUCTIONS = {
+    # whatsapp_inbox#124: the rows that guarded the attended halves went with the documents
+    # themselves. `missing_instruction_problems` is anchored against what really ships in BOTH
+    # directions, so a row outliving its recipe is a red here — which is the whole point: the
+    # table cannot quietly keep guarding a file nobody installs any more.
     "appointment-from-whatsapp": (
-        (
-            "why `channel` is `customer`",
-            {
-                "en": "That `channel` is not decoration: it is what makes the salon's OWN rules apply",
-                "es": "Ese `channel` no es un adorno: es lo que hace que se apliquen las reglas PROPIAS del salón",
-            },
-        ),
-        (
-            "who is asking when MOVING, not only when cancelling",
-            {
-                "en": "Moving says who is asking too: `channel` set to `customer` and the `customer_id` you looked up from THEIR phone number",
-                "es": "Mover también dice quién lo pide: `channel` puesto a `customer` y el `customer_id` que buscaste por SU teléfono",
-            },
-        ),
-        (
-            "the reason a booking BROKE is for the salon, never for her (whatsapp_inbox#70)",
-            {
-                "en": "use it to understand what happened, and never send it, or any part of it, to her",
-                "es": "úsalo para entender qué pasó, y no se lo mandes nunca, ni entero ni en trozos",
-            },
-        ),
-        (
-            "an expired proposal is never explained as nobody having looked (whatsapp_inbox#70)",
-            {
-                "en": "Never tell her nobody looked at it, and never name how long it waited",
-                "es": "Nunca le digas que nadie lo miró, ni nombres cuánto tiempo estuvo esperando",
-            },
-        ),
-    ),
-    "appointment-from-whatsapp-unattended": (
         (
             "why `channel` is `customer`",
             {
@@ -2069,36 +2043,6 @@ PINNED_INSTRUCTIONS = {
         ),
     ),
     "reservation-from-whatsapp": (
-        (
-            "never a blocked day, never a window without room",
-            {
-                "en": "Never offer a time on a blocked day, and never offer a window with less room than they need.",
-                "es": "No ofrezcas nunca una hora de un día bloqueado, ni una franja con menos sitio del que necesitan.",
-            },
-        ),
-        (
-            "never a day outside the restaurant's advance window",
-            {
-                "en": "never offer a day the step before you already said this restaurant does not book",
-                "es": "no ofrezcas nunca un día que el paso anterior ya haya dicho que este restaurante no reserva",
-            },
-        ),
-        (
-            "the reason a booking BROKE is for the restaurant, never for them (whatsapp_inbox#70)",
-            {
-                "en": "use it to understand what happened, and never send it, or any part of it, to them",
-                "es": "úsalo para entender qué pasó, y no se lo mandes nunca, ni entero ni en trozos",
-            },
-        ),
-        (
-            "an expired proposal is never explained as nobody having looked (whatsapp_inbox#70)",
-            {
-                "en": "Never tell them nobody looked at it, and never name how long it waited",
-                "es": "Nunca le digas que nadie lo miró, ni nombres cuánto tiempo estuvo esperando",
-            },
-        ),
-    ),
-    "reservation-from-whatsapp-unattended": (
         (
             "never a blocked day, never a window without room",
             {
@@ -2260,7 +2204,7 @@ def moving_problems(name, doc):
       tool list, so the branch stays dead, the owner was asked for a permission nothing spends,
       and the customer still waits for a person;
     * **and the old «it cannot say who is asking» order is gone too** — `MOVE_BLIND`. Same failure
-      one layer down, and the one this issue found in the ATTENDED family, which has moved
+      one layer down, and the one this issue found in the UNNAMED_FAMILY family, which has moved
       appointments since whatsapp_inbox#74: its MOVING section still ordered that `appointments`
       cannot tell whose appointment it is. A model told the field does not exist does not send it,
       and a move with no `channel` is a move on the salon's own account — no minimum notice, no
@@ -3483,8 +3427,18 @@ def _fixture_doc(*steps):
 
 # The name a mutant document is judged UNDER: the family is what buys the unattended exception, so
 # every row carries one. `(label, file name, document, problems expected)`.
-ATTENDED = "appointment-from-whatsapp.en.flow.json"
-UNATTENDED = "appointment-from-whatsapp-unattended.en.flow.json"
+#
+# There is no attended sibling any more (whatsapp_inbox#124): one use gets ONE recipe, and the
+# family that ships IS the one that runs with nobody watching, under the plain name. What the
+# negative rows still need is real — a family `flows/` could grow that `UNATTENDED_FAMILIES` does
+# not name — and that is what `UNNAMED_FAMILY` stands for. Keeping those rows is not nostalgia for
+# the deleted recipe: it is what proves these rules key off the LEDGER and not off «every document
+# in this repo», which is the difference between a rule and a coincidence. Their silence is only
+# safe because `unattended_ledger_problems` refuses to let such a family ship at all, and that
+# division of labour is deliberate: a rule that also policed the ledger would report the same hole
+# twice and neither report would be the one to fix.
+UNATTENDED = "appointment-from-whatsapp.en.flow.json"
+UNNAMED_FAMILY = "order-from-whatsapp.en.flow.json"
 
 def _sends(step_id, text):
     """A `notify` that SENDS what an earlier step wrote — the delivery, not a handoff of findings."""
@@ -3494,13 +3448,13 @@ def _sends(step_id, text):
 POLICY_CASES = [
     (
         "a read inside a `manual` step is what hub#1595 made legal",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _fixture_doc(_ai_step("s", "manual", ["appointments.availability.slots"])),
         0,
     ),
     (
         "a write inside an `auto` step is still the dangerous direction",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _fixture_doc(_ai_step("s", "auto", ["appointments.appointments.create"])),
         1,
     ),
@@ -3515,19 +3469,19 @@ POLICY_CASES = [
     (
         "and the exception is scoped to that family and no other: a name that merely CONTAINS the "
         "word buys nothing, or the guard would be one rename away from being off everywhere",
-        "appointment-from-whatsapp-unattended-draft.en.flow.json",
+        "appointment-from-whatsapp-draft.en.flow.json",
         _fixture_doc(_ai_step("s", "auto", ["appointments.appointments.create"])),
         1,
     ),
     (
         "a write inside a `manual` step is the default, and the point of it",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _fixture_doc(_ai_step("s", "manual", ["appointments.appointments.create"])),
         0,
     ),
     (
         "a read inside an `auto` step is fine",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _fixture_doc(_ai_step("s", "auto", ["appointments.availability.slots"])),
         0,
     ),
@@ -3536,7 +3490,7 @@ POLICY_CASES = [
         "reads its prose to work from it — it goes to the customer, which is what that step is "
         "for. It is also the only step of the attended family that can look the slots up and "
         "publish them, because the one that books can never declare `output` (whatsapp_inbox#109)",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _fixture_doc(
             _ai_step("reply", "manual", ["appointments.availability.slots"]),
             _sends("send", "{{steps.reply.text}}"),
@@ -3546,7 +3500,7 @@ POLICY_CASES = [
     (
         "…and the split is still the split when the reader feeds a step that ACTS, even if a "
         "notify quotes it too: one reader, two mouths, and the ids still travel as words",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _fixture_doc(
             _ai_step("look", "auto", ["appointments.availability.slots"]),
             _ai_step("act", "manual", ["appointments.appointments.create"], "{{steps.look.text}}"),
@@ -3556,7 +3510,7 @@ POLICY_CASES = [
     ),
     (
         "a step that only asks, feeding a step that acts, is the split whatsapp_inbox#55 removed",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _fixture_doc(
             _ai_step("look", "auto", ["appointments.availability.slots"]),
             _ai_step("act", "manual", ["appointments.appointments.create"], "{{steps.look.text}}"),
@@ -3577,7 +3531,7 @@ POLICY_CASES = [
         "the same split quoted with spaces inside the braces — `{{ steps.look.text }}` — is still "
         "the split: the hub trims the path before resolving it (`render_template`), so the "
         "guard has to read it the way the hub does",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _fixture_doc(
             _ai_step("look", "auto", ["appointments.availability.slots"]),
             _ai_step("act", "manual", ["appointments.appointments.create"], "{{ steps.look.text }}"),
@@ -3586,7 +3540,7 @@ POLICY_CASES = [
     ),
     (
         "a step that only asks and that nobody quotes is not the split",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _fixture_doc(
             _ai_step("look", "auto", ["appointments.availability.slots"]),
             _ai_step("act", "manual", ["appointments.appointments.create"]),
@@ -3595,7 +3549,7 @@ POLICY_CASES = [
     ),
     (
         "asking and proposing in ONE step is the shape this repo now ships",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _fixture_doc(
             _ai_step(
                 "act",
@@ -3682,7 +3636,7 @@ UNATTENDED_CASES = [
     (
         "and the rule is silent on every other family: parking at a person is what the attended "
         "sibling is FOR, and an `approval` step there is a feature",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _fixture_doc(
             _ai_step("book", "manual", ["appointments.appointments.create"]),
             _approval_step(),
@@ -3693,12 +3647,13 @@ UNATTENDED_CASES = [
 ]
 
 
-UNATTENDED_ES = "appointment-from-whatsapp-unattended.es.flow.json"
-# The table families (whatsapp_inbox#60). A restaurant runs the same automation against
-# `reservations`, so it inherits the same rules — including this one, under its own wording.
-TABLE_ATTENDED = "reservation-from-whatsapp.en.flow.json"
-TABLE_UNATTENDED = "reservation-from-whatsapp-unattended.en.flow.json"
-TABLE_UNATTENDED_ES = "reservation-from-whatsapp-unattended.es.flow.json"
+UNATTENDED_ES = "appointment-from-whatsapp.es.flow.json"
+# The table family (whatsapp_inbox#60). A restaurant runs the same automation against
+# `reservations`, so it inherits the same rules — including this one, under its own wording — and
+# since whatsapp_inbox#124 it is ONE family, like the chair.
+TABLE_UNATTENDED = "reservation-from-whatsapp.en.flow.json"
+TABLE_UNATTENDED_ES = "reservation-from-whatsapp.es.flow.json"
+TABLE_UNNAMED_FAMILY = "order-from-whatsapp.en.flow.json"
 
 HOUR_CASES = [
     (
@@ -3738,14 +3693,14 @@ HOUR_CASES = [
     ),
     (
         "silent on the attended family: there a person reads the proposal before it books",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _fixture_doc(_ai_step("book", "manual", [BOOKING_COMMAND], "Book whatever fits best.")),
         0,
     ),
     (
         "a language this battery has no wording for is a document it cannot vouch for — a third "
         "translation adds its sentence to HOUR_RULE in the same commit, or it does not ship",
-        "appointment-from-whatsapp-unattended.fr.flow.json",
+        "appointment-from-whatsapp.fr.flow.json",
         _fixture_doc(_ai_step("book", "auto", [BOOKING_COMMAND], f"Réserve. {HOUR_RULE['en']}")),
         1,
     ),
@@ -3788,7 +3743,7 @@ HOUR_CASES = [
     ),
     (
         "silent on the attended table family: there a person reads the proposal before it books",
-        TABLE_ATTENDED,
+        TABLE_UNNAMED_FAMILY,
         _fixture_doc(
             _ai_step("book", "manual", [TABLE_BOOKING_COMMAND], "Book whatever fits best.")
         ),
@@ -3811,54 +3766,282 @@ HOUR_CASES = [
 _MOVE_TOOLS = (BOOKING_COMMAND, CANCEL_COMMAND, MOVE_COMMAND)
 _MOVE_QUERIES = (OWNED_APPOINTMENTS_QUERY,)
 
+# `(label, file name, document, problems expected)` — the unit tests of `birth_status_problems`,
+# the rule whatsapp_inbox#124 is about. Both halves of it are proved here: the deterministic READ
+# that is the only thing in the run that knows how the booking will be born, and the two SENTENCES
+# it leads to, per language.
+_APPT_SETTINGS = BIRTH_STATUS_SOURCE[BOOKING_COMMAND]
+_TABLE_SETTINGS = BIRTH_STATUS_SOURCE[TABLE_BOOKING_COMMAND]
+_BIRTH_EN = BIRTH_STATUS_RULES[BOOKING_COMMAND]["en"]
+_BIRTH_ES = BIRTH_STATUS_RULES[BOOKING_COMMAND]["es"]
+_TABLE_BIRTH_EN = BIRTH_STATUS_RULES[TABLE_BOOKING_COMMAND]["en"]
+_TABLE_BIRTH_ES = BIRTH_STATUS_RULES[TABLE_BOOKING_COMMAND]["es"]
+
+
+def _books(prompt, query=_APPT_SETTINGS, command=BOOKING_COMMAND, step_id="book_appointment"):
+    """A document that reads the setting and then books, which is the shape #124 leaves."""
+    steps = [_ai_step(step_id, "auto", (command,), prompt)]
+    if query is not None:
+        steps.insert(0, _query_step("booking_policy", query))
+    return _fixture_doc(*steps)
+
+
+BIRTH_STATUS_CASES = [
+    (
+        "the shape whatsapp_inbox#124 ships: the document reads the setting that decides the birth "
+        "status, and the prompt carries both endings that read leads to",
+        UNATTENDED,
+        _books(f"Book it. {_BIRTH_EN['pending']} {_BIRTH_EN['confirmed']}"),
+        0,
+    ),
+    (
+        "🔴 the red this issue IS, with `auto_confirm_online = 0`: the salon reviews, the "
+        "appointment is born `pending`, and the only sentence the recipe knows says «booked». The "
+        "customer is sent to a slot nobody has accepted, the document parses, the grants match and "
+        "nothing anywhere says so",
+        UNATTENDED,
+        _books(f"Book it. {_BIRTH_EN['confirmed']}"),
+        1,
+    ),
+    (
+        "…and the mirror, which is the same bug wearing the other face: the salon that switched "
+        "«confirm automatically» ON has its bookings in the diary already, and the customer is "
+        "left waiting for a confirmation message that is never coming",
+        UNATTENDED,
+        _books(f"Book it. {_BIRTH_EN['pending']}"),
+        1,
+    ),
+    (
+        "neither ending: the prompt was rewritten and both sentences went with it",
+        UNATTENDED,
+        _books("Book whatever fits best and tell her."),
+        2,
+    ),
+    (
+        "🔴 the READ deleted, both sentences intact: this is the half that looks harmless, because "
+        "the prompt still reads perfectly. Without it the model has nothing in the run that says "
+        "which ending applies — `appointments.appointments.create` answers `{ok, operations, "
+        "new_ids}` with no status in it — so it picks one, and half the businesses are told the "
+        "opposite of what their diary holds",
+        UNATTENDED,
+        _books(f"Book it. {_BIRTH_EN['pending']} {_BIRTH_EN['confirmed']}", query=None),
+        1,
+    ),
+    (
+        "a read of SOMEBODY ELSE's settings is not the read: the restaurant's `auto_confirm` says "
+        "nothing about how a chair is born",
+        UNATTENDED,
+        _books(f"Book it. {_BIRTH_EN['pending']} {_BIRTH_EN['confirmed']}", query=_TABLE_SETTINGS),
+        1,
+    ),
+    (
+        "the setting read by the MODEL instead of by the document is not the read either: "
+        "`book_appointment` runs at `max_iters` 10 = `MAX_ITERS_CAP`, so a lookup the model has to "
+        "remember is a lookup it will sometimes not do — and the run where it forgets is the run "
+        "where the customer is told the wrong thing",
+        UNATTENDED,
+        _fixture_doc(
+            _ai_step(
+                "book_appointment",
+                "auto",
+                (BOOKING_COMMAND,),
+                f"Book it. {_BIRTH_EN['pending']} {_BIRTH_EN['confirmed']}",
+                queries=(_APPT_SETTINGS,),
+            )
+        ),
+        1,
+    ),
+    (
+        "the Spanish document carries the Spanish endings",
+        UNATTENDED_ES,
+        _books(f"Resérvala. {_BIRTH_ES['pending']} {_BIRTH_ES['confirmed']}"),
+        0,
+    ),
+    (
+        "a translation that kept the English sentences dropped both endings for the reader it has: "
+        "the model reads the prompt in the language it is written in, and so does the salon",
+        UNATTENDED_ES,
+        _books(f"Resérvala. {_BIRTH_EN['pending']} {_BIRTH_EN['confirmed']}"),
+        2,
+    ),
+    (
+        "one ending translated and one left in English, which is how it really happens: a "
+        "translator keeps the paragraph and drops the sentence at the end of it",
+        UNATTENDED_ES,
+        _books(f"Resérvala. {_BIRTH_ES['pending']} {_BIRTH_EN['confirmed']}"),
+        1,
+    ),
+    (
+        "a language this battery has no wording for is a document it cannot vouch for — a third "
+        "translation adds its two sentences in the same commit, or it does not ship",
+        "appointment-from-whatsapp.fr.flow.json",
+        _books(f"Réserve. {_BIRTH_EN['pending']} {_BIRTH_EN['confirmed']}"),
+        1,
+    ),
+    (
+        "a step that cannot book owes no ending: the customer-record step writes, but not into the "
+        "diary",
+        UNATTENDED,
+        _books("Find or create them.", command="customers.create", step_id="know_the_customer"),
+        0,
+    ),
+    (
+        "the table family owes the same two endings, under its own wording and its own setting "
+        "(`reservations`' `auto_confirm` defaults to 0, so the ordinary restaurant REVIEWS)",
+        TABLE_UNATTENDED,
+        _books(
+            f"Book it. {_TABLE_BIRTH_EN['pending']} {_TABLE_BIRTH_EN['confirmed']}",
+            query=_TABLE_SETTINGS,
+            command=TABLE_BOOKING_COMMAND,
+            step_id="book_table",
+        ),
+        0,
+    ),
+    (
+        "🔴 and the same red on the table side, which is the one that bites by default: with "
+        "`auto_confirm` 0 the table is born pending for every restaurant that never touched the "
+        "setting, and a recipe that only knows «booked» seats nobody",
+        TABLE_UNATTENDED,
+        _books(
+            f"Book it. {_TABLE_BIRTH_EN['confirmed']}",
+            query=_TABLE_SETTINGS,
+            command=TABLE_BOOKING_COMMAND,
+            step_id="book_table",
+        ),
+        1,
+    ),
+    (
+        "the Spanish table document carries the Spanish endings",
+        TABLE_UNATTENDED_ES,
+        _books(
+            f"Resérvala. {_TABLE_BIRTH_ES['pending']} {_TABLE_BIRTH_ES['confirmed']}",
+            query=_TABLE_SETTINGS,
+            command=TABLE_BOOKING_COMMAND,
+            step_id="book_table",
+        ),
+        0,
+    ),
+    (
+        "the appointment wording is NOT the table wording: a table document carrying the chair "
+        "sentences tells a party of four about a salon",
+        TABLE_UNATTENDED,
+        _books(
+            f"Book it. {_BIRTH_EN['pending']} {_BIRTH_EN['confirmed']}",
+            query=_TABLE_SETTINGS,
+            command=TABLE_BOOKING_COMMAND,
+            step_id="book_table",
+        ),
+        2,
+    ),
+]
+
+
+# `(label, the families that really ship, problems expected)` — the unit tests of
+# `unattended_ledger_problems`. It takes no document on purpose: what it judges is the agreement
+# between a table in this file and a folder on disk, so both halves are handed in.
+LEDGER_CASES = [
+    (
+        "table and `flows/` say the same thing, which is the healthy tree",
+        set(UNATTENDED_FAMILIES),
+        0,
+    ),
+    (
+        "🔴 a family SHIPS and the table does not name it: every rule that asks «is anybody "
+        "watching?» reads this table, so that recipe books with nobody watching while "
+        "`unattended_problems` and `hour_choice_problems` stay silent over it — and "
+        "`policy_problems` reports its writes as a defect instead. This is the shape "
+        "whatsapp_inbox#124 creates the day somebody adds a third recipe",
+        set(UNATTENDED_FAMILIES) | {"order-from-whatsapp"},
+        1,
+    ),
+    (
+        "🔴 and the mirror, which is the one a rename leaves behind: the table names a family and "
+        "no document belongs to it. Every rule keyed off that row goes vacuously green, and the "
+        "business the row was written for has nothing to install",
+        set(UNATTENDED_FAMILIES) - {"reservation-from-whatsapp"},
+        1,
+    ),
+    (
+        "a rename done in `flows/` and not here is BOTH halves at once, and it is exactly what "
+        "whatsapp_inbox#124 did: the old name orphaned, the new one unnamed",
+        (set(UNATTENDED_FAMILIES) - {"appointment-from-whatsapp"})
+        | {"appointment-from-whatsapp-unattended"},
+        2,
+    ),
+    (
+        "nothing ships: every row is a promise nothing keeps",
+        set(),
+        len(UNATTENDED_FAMILIES),
+    ),
+]
+
+
+# One family per booking, which is what whatsapp_inbox#124 leaves: `booked` maps a family to every
+# command its `ai` steps can call, and the rule wants exactly one name per booking — no more (the
+# owner would have to guess) and no less (the business has nothing to install).
+_CHAIR = {"appointment-from-whatsapp": {BOOKING_COMMAND}}
+_TABLE = {"reservation-from-whatsapp": {TABLE_BOOKING_COMMAND}}
 _CHAIR_PAIR = {
     "appointment-from-whatsapp": {BOOKING_COMMAND},
     "appointment-from-whatsapp-unattended": {BOOKING_COMMAND},
 }
-_TABLE_ATTENDED = {"reservation-from-whatsapp": {TABLE_BOOKING_COMMAND}}
-_TABLE_UNATTENDED = {"reservation-from-whatsapp-unattended": {TABLE_BOOKING_COMMAND}}
+_TABLE_PAIR = {
+    "reservation-from-whatsapp": {TABLE_BOOKING_COMMAND},
+    "reservation-from-whatsapp-unattended": {TABLE_BOOKING_COMMAND},
+}
 
 RECIPE_CASES = [
     (
-        "what this module ships once whatsapp_inbox#60 lands: a pair of families for every "
-        "booking the battery has a wording for",
-        {**_CHAIR_PAIR, **_TABLE_ATTENDED, **_TABLE_UNATTENDED},
+        "what this module ships after whatsapp_inbox#124: exactly ONE family for every booking "
+        "the battery has a wording for",
+        {**_CHAIR, **_TABLE},
         0,
     ),
     (
         "the red whatsapp_inbox#60 IS: the table wording is pinned and no document anywhere books "
         "a table, so the restaurant that connects its WhatsApp is offered a hairdresser's recipes "
         "and nothing else",
-        _CHAIR_PAIR,
+        _CHAIR,
+        1,
+    ),
+    (
+        "🔴 the red whatsapp_inbox#124 IS, and the half this rule grew for: the chair booking is "
+        "handed by TWO families. Nothing downstream refuses it — both documents parse, both sets "
+        "of grants match, every other rule here is green — and the owner opening the WhatsApp card "
+        "has to guess which of the two is hers for a decision she already took in Citas",
+        {**_CHAIR_PAIR, **_TABLE},
+        1,
+    ),
+    (
+        "…and the same on the table side, so the rule cannot be one that only ever fires for "
+        "chairs",
+        {**_CHAIR, **_TABLE_PAIR},
+        1,
+    ),
+    (
+        "both bookings doubled: two complaints, one per booking, because the owner of a salon and "
+        "the owner of a restaurant each have their own guess to make",
+        {**_CHAIR_PAIR, **_TABLE_PAIR},
         2,
-    ),
-    (
-        "half the delivery: the restaurant that runs its WhatsApp with nobody watching can install "
-        "the recipe, and the one that wants to read its bookings first has nothing",
-        {**_CHAIR_PAIR, **_TABLE_UNATTENDED},
-        1,
-    ),
-    (
-        "the other half: the recipe exists and parks every table at 3 AM in an approval tray the "
-        "restaurant that bought the unattended one does not open",
-        {**_CHAIR_PAIR, **_TABLE_ATTENDED},
-        1,
     ),
     (
         "a family that books something else does not cover the row: `customers.create` writes, and "
         "no customer ever sat at it",
-        {**_CHAIR_PAIR, "reservation-from-whatsapp": {"customers.create"},
-         "reservation-from-whatsapp-unattended": {"customers.create"}},
-        2,
+        {**_CHAIR, "reservation-from-whatsapp": {"customers.create"}},
+        1,
     ),
     (
-        "and the row that started it all is judged the same way: delete the chair recipes and this "
+        "and the row that started it all is judged the same way: delete the chair recipe and this "
         "rule says so, so it cannot be one that only ever fires for tables",
-        {**_TABLE_ATTENDED, **_TABLE_UNATTENDED},
+        _TABLE,
+        1,
+    ),
+    (
+        "nothing ships at all: both rows are promises nothing keeps",
+        {},
         2,
     ),
 ]
-
 
 
 # `(label, file name, document, problems expected)` — the unit tests of `unowned_table_problems`,
@@ -3896,7 +4079,7 @@ TABLE_SCOPE_CASES = [
     (
         "a person approves every write there, so the attended family may grow into changing and "
         "cancelling: this rule owes it nothing",
-        TABLE_ATTENDED,
+        TABLE_UNNAMED_FAMILY,
         _fixture_doc(
             _ai_step(
                 "propose",
@@ -3939,7 +4122,7 @@ MOVE_CASES = [
     (
         "the shape whatsapp_inbox#74 ships: the appointment writer can book, cancel AND move, it "
         "can list what the customer already has, and it says how moving is done",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _fixture_doc(
             _ai_step(
                 "propose",
@@ -3954,7 +4137,7 @@ MOVE_CASES = [
     (
         "the issue itself: the writer books and cancels and has no way to move, so «can you "
         "change it to Thursday?» is answered with «somebody will get back to you»",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _fixture_doc(
             _ai_step(
                 "propose",
@@ -3970,7 +4153,7 @@ MOVE_CASES = [
         "it can move and cannot look up what it is moving: the `appointment_id` and the "
         "`customer_id` have to come out of HER diary, so without that query the id is one the "
         "model picked out of the message and `appointments` answers her with a refusal",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _fixture_doc(
             _ai_step("propose", "manual", _MOVE_TOOLS, f"Move it. {MOVE_RULE['en']}")
         ),
@@ -3979,7 +4162,7 @@ MOVE_CASES = [
     (
         "the sentence reworded away: cancelling and re-booking is still in the same hands, and it "
         "leaves the customer who asked to KEEP her hour with nothing when the second call fails",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _fixture_doc(
             _ai_step(
                 "propose",
@@ -4022,7 +4205,7 @@ MOVE_CASES = [
     (
         "the half-fix: the tool is handed over and the old «it cannot» order is still there, so "
         "the model keeps refusing and the granted permission is spent on nothing",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _fixture_doc(
             _ai_step(
                 "propose",
@@ -4070,7 +4253,7 @@ MOVE_CASES = [
         "and the POLICY no longer decides anything here: a writer that never declared one is held "
         "to exactly the same five marks, so no reading of this file makes a missing line the way "
         "to a weaker rule",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _fixture_doc(
             {
                 "id": "propose",
@@ -4103,7 +4286,7 @@ MOVE_CASES = [
     (
         "and a language this battery has no wording for does not buy the unattended family a way "
         "out of moving either: the tool is missing whatever the document is written in",
-        "appointment-from-whatsapp-unattended.fr.flow.json",
+        "appointment-from-whatsapp.fr.flow.json",
         _fixture_doc(
             _ai_step(
                 "book",
@@ -4116,11 +4299,11 @@ MOVE_CASES = [
         1,
     ),
     (
-        "🔴 the defect whatsapp_inbox#105 found in the ATTENDED family, which has moved since "
+        "🔴 the defect whatsapp_inbox#105 found in the UNNAMED_FAMILY family, which has moved since "
         "whatsapp_inbox#74: the tool is there, the rule is there, and the prompt still orders "
         "that the command says nothing about who is asking — so the model omits the field and "
         "`channel` falls back to `staff`, which is the move on the salon's own account",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _fixture_doc(
             _ai_step(
                 "propose",
@@ -4165,7 +4348,7 @@ MOVE_CASES = [
     (
         "a step that cannot book owes nothing: the customer-record step writes, but not into the "
         "diary",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _fixture_doc(_ai_step("know", "manual", ["customers.create"], "Find or create them.")),
         0,
     ),
@@ -4317,7 +4500,7 @@ OWN_CUSTOMER_CASES = [
     ),
     (
         "silent where nothing is owed: a step that reads no diary and holds no address book",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _fixture_doc(_ai_step("reply", "manual", [], "Say hello back.")),
         0,
     ),
@@ -4387,26 +4570,26 @@ ONLY_CUSTOMER_CASES = [
     (
         "the shape whatsapp_inbox#90 ships: the owner's echo and the backlog are both refused, "
         "and a core at the floor still wakes up",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _wa_doc(LIVE_INBOUND),
         0,
     ),
     (
         "the filter as it was: «anything with words in it» answers the owner's own reply AND "
         "every message of the 180-day backlog",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _wa_doc(TEXT_ONLY),
         2,
     ),
     (
         "who spoke, without when: the backlog still arrives",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _wa_doc({**TEXT_ONLY, "event.direction": {"neq": "outbound"}}),
         1,
     ),
     (
         "when, without who: the owner is still answered by her own automation",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _wa_doc({**TEXT_ONLY, "event.source": {"neq": "history"}}),
         1,
     ),
@@ -4414,7 +4597,7 @@ ONLY_CUSTOMER_CASES = [
         "🔴 `eq` reads right and is the regression: on a core at this module's declared floor the "
         "path is absent, `json_eq(Null, \"inbound\")` is false, and the automation is off with "
         "nothing said",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _wa_doc(
             {
                 **TEXT_ONLY,
@@ -4426,7 +4609,7 @@ ONLY_CUSTOMER_CASES = [
     ),
     (
         "…and `in` is the same trap with a list around it",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _wa_doc(
             {
                 **TEXT_ONLY,
@@ -4439,7 +4622,7 @@ ONLY_CUSTOMER_CASES = [
     (
         "…and asking whether the field is THERE is worse than either: it blocks the floor-level "
         "core and lets the echo through, because `outbound` exists just as much as `inbound` does",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _wa_doc(
             {
                 **TEXT_ONLY,
@@ -4451,7 +4634,7 @@ ONLY_CUSTOMER_CASES = [
     ),
     (
         "…and `eq` on `source` fails the same way, one field over",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _wa_doc(
             {
                 **TEXT_ONLY,
@@ -4464,7 +4647,7 @@ ONLY_CUSTOMER_CASES = [
     (
         "the filter written inside out answers the salon and ignores the customer — two harms, "
         "and the floor-level core is the one thing it still gets right",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _wa_doc(
             {
                 **TEXT_ONLY,
@@ -4477,14 +4660,14 @@ ONLY_CUSTOMER_CASES = [
     (
         "an operator this battery cannot copy is refused, not waved through: a filter it judges "
         "with a guess is worse than one it does not judge",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _wa_doc({**LIVE_INBOUND, "event.direction": {"contains": "in"}}),
         1,
     ),
     (
         "🔴 the reply addressed by `event.contact` — the field that is RIGHT in an echo, and "
         "absent on a core at the floor, where it hands the query a `null`",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _wa_doc(
             LIVE_INBOUND,
             mapping={"from": "event.from", "text": "event.text", "contact": "event.contact"},
@@ -4495,14 +4678,14 @@ ONLY_CUSTOMER_CASES = [
     (
         "…and addressing the reply by an input key the trigger never maps is the same `null` "
         "arriving by a shorter road",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _wa_doc(LIVE_INBOUND, steps=[_contact_notify()]),
         1,
     ),
     (
         "every notify step is judged, not the first: two replies wrongly addressed are two "
         "customers who get somebody else's message",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _wa_doc(LIVE_INBOUND, steps=[_contact_notify("acknowledge"), _contact_notify("confirm")]),
         2,
     ),
@@ -4514,7 +4697,7 @@ ONLY_CUSTOMER_CASES = [
     ),
     (
         "a template that waits on some other event is not this rule's business",
-        ATTENDED,
+        UNNAMED_FAMILY,
         {
             "schema_version": 1,
             "triggers": [{"kind": "event", "event": "sale.completed", "filter": {}}],
@@ -4525,7 +4708,7 @@ ONLY_CUSTOMER_CASES = [
     (
         "the pair this issue ships: one trigger waits for words, the other for a tap, and no "
         "message satisfies both — disjoint by construction, not by luck",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _two(_TAP_FILTER),
         0,
     ),
@@ -4533,14 +4716,14 @@ ONLY_CUSTOMER_CASES = [
         "🔴 the worst failure this channel has: two triggers that both match ONE message, so the "
         "hub starts two runs of a booking recipe over it and the customer ends with two "
         "appointments — both runs `done`, nothing reported",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _two(LIVE_INBOUND),
         2,
     ),
     (
         "🔴 the overlap that reads as disjoint: the tap trigger forgets to demand the ABSENCE of "
         "text, so every word the customer writes matches it too",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _two({k: v for k, v in _TAP_FILTER.items() if k != "event.text"}),
         2,
     ),
@@ -5220,11 +5403,11 @@ PIN_CASES = [
         1,
     ),
     (
-        "the ATTENDED twin owes the pin too (whatsapp_inbox#107): a person approving in the tray is "
+        "the UNNAMED_FAMILY twin owes the pin too (whatsapp_inbox#107): a person approving in the tray is "
         "reading a draft written FOR THE CUSTOMER, not a payload, so the review never shows her "
         "which `channel` the cancellation carries — a review is a workflow control, never a "
         "permission boundary",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _fixture_doc(_ai_step("propose_appointment", "manual", (BOOKING_COMMAND, CANCEL_COMMAND))),
         _PIN_NONE,
         1,
@@ -5233,7 +5416,7 @@ PIN_CASES = [
         "what this module ships after whatsapp_inbox#107: the same attended writer, and its grant "
         "says AS THE CUSTOMER — which is the declaration this battery can hold it to, not proof "
         "that a hub enforces it (hub#1654) nor that the gallery card copies it (ERPlora/flows#99)",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _fixture_doc(_ai_step("propose_appointment", "manual", (BOOKING_COMMAND, CANCEL_COMMAND))),
         _PIN_OK,
         0,
@@ -5251,11 +5434,39 @@ PIN_CASES = [
     ),
     (
         "a command the table does not name is not owed a pin: this is a list of the values that "
-        "must be narrowed, not a demand that every permission carry one",
+        "must be narrowed, not a demand that every permission carry one. `customers.create` "
+        "carries no argument that widens anything — there is no `channel` on it and no diary it "
+        "can reach",
+        UNATTENDED,
+        _fixture_doc(_ai_step("know_the_customer", "auto", ("customers.create",))),
+        {"customers.create": {}},
+        0,
+    ),
+    (
+        "🔴 and BOOKING is in the table since whatsapp_inbox#124, with a grant that fixes nothing: "
+        "`booked_online` left out makes `born_confirmed` false on EVERY hub, so the salon that "
+        "switched «confirm automatically» on still confirms one by one and the recipe tells the "
+        "customer she is booked",
         UNATTENDED,
         _fixture_doc(_ai_step("book_appointment", "auto", (BOOKING_COMMAND,))),
         {BOOKING_COMMAND: {}},
+        1,
+    ),
+    (
+        "…and the pin really in the grant is the green: the same document, the same command, one "
+        "JSON key deep in the sidecar",
+        UNATTENDED,
+        _fixture_doc(_ai_step("book_appointment", "auto", (BOOKING_COMMAND,))),
+        {BOOKING_COMMAND: {"booked_online": True}},
         0,
+    ),
+    (
+        "a pin that CONTRADICTS the table is the same hole wearing the opposite face: `false` is "
+        "the schema default, so pinning it is pinning the bug in place",
+        UNATTENDED,
+        _fixture_doc(_ai_step("book_appointment", "auto", (BOOKING_COMMAND,))),
+        {BOOKING_COMMAND: {"booked_online": False}},
+        1,
     ),
     (
         "no grant for the command at all: `main()` is already saying that in its own words, and a "
@@ -5301,10 +5512,10 @@ PIN_CASES = [
         1,
     ),
     (
-        "and the ATTENDED twin owes the move pin on the same grounds as its cancellation one "
+        "and the UNNAMED_FAMILY twin owes the move pin on the same grounds as its cancellation one "
         "(whatsapp_inbox#107): what the salon reads in the tray is a draft for the customer, and "
         "no screen there says which `channel` the move will carry",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _fixture_doc(_mover("manual", "propose_appointment")),
         _PIN_MOVE_WIDE,
         1,
@@ -5376,9 +5587,9 @@ QUERY_PIN_CASES = [
         1,
     ),
     (
-        "the ATTENDED twin owes it too: what the salon approves in the tray is a draft for the "
+        "the UNNAMED_FAMILY twin owes it too: what the salon approves in the tray is a draft for the "
         "customer, and a read never reaches the tray at all — by then the diary has been read",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _fixture_doc(_RESOLVER, _diary_reader("manual", "propose_appointment")),
         _QPIN_NONE,
         1,
@@ -5460,12 +5671,11 @@ QUERY_PIN_CASES = [
 # to describe a `flows/` folder that does not exist here.
 _SHIPPED_FAMILIES = {
     "appointment-from-whatsapp",
-    "appointment-from-whatsapp-unattended",
     "reservation-from-whatsapp",
-    "reservation-from-whatsapp-unattended",
 }
 _RESERVATION_EN = "reservation-from-whatsapp.en.flow.json"
 _RESERVATION_ES = "reservation-from-whatsapp.es.flow.json"
+_APPOINTMENT_ES = "appointment-from-whatsapp.es.flow.json"
 
 
 def _saying(*sentences):
@@ -5473,36 +5683,35 @@ def _saying(*sentences):
     return _fixture_doc(_ai_step("s", "manual", (), "\n".join(sentences)))
 
 
+# Read out of the table rather than typed here, and that is the point: delete a row and these rows
+# stop naming anything, so the table cannot be switched off quietly.
+#
+# 🪦 The two whatsapp_inbox#70 sentences — the technical reason a booking broke stays with the
+# business, and an expired proposal is never explained as nobody having looked — went with the
+# attended recipes in whatsapp_inbox#124. They are not lost guards: both endings exist only where a
+# write PARKS at a person (`unanswered_ending_problems` gates on the last writing step being
+# `policy: manual`), and no document ships that shape any more. If an attended recipe ever comes
+# back, its rows come back with it.
 _ES_CHANNEL = PINNED_INSTRUCTIONS["appointment-from-whatsapp"][0][1]["es"]
-_ES_CHANNEL_UNATTENDED = PINNED_INSTRUCTIONS["appointment-from-whatsapp-unattended"][0][1]["es"]
 _ES_MOVE_WHO = PINNED_INSTRUCTIONS["appointment-from-whatsapp"][1][1]["es"]
-_ES_MOVE_WHO_UNATTENDED = PINNED_INSTRUCTIONS["appointment-from-whatsapp-unattended"][1][1]["es"]
 _EN_BLOCKED = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][0][1]["en"]
 _EN_ADVANCE = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][1][1]["en"]
 _ES_BLOCKED = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][0][1]["es"]
 _ES_ADVANCE = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][1][1]["es"]
-# The two whatsapp_inbox#70 adds, per family: the technical reason a booking broke stays with the
-# business, and an expired proposal is never explained to the customer as nobody having looked.
-_EN_REASON = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][2][1]["en"]
-_EN_NOBODY_LOOKED = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][3][1]["en"]
-_ES_REASON = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][2][1]["es"]
-_ES_NOBODY_LOOKED = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][3][1]["es"]
-_ES_REASON_SALON = PINNED_INSTRUCTIONS["appointment-from-whatsapp"][2][1]["es"]
-_ES_NOBODY_LOOKED_SALON = PINNED_INSTRUCTIONS["appointment-from-whatsapp"][3][1]["es"]
 
 
 INSTRUCTION_CASES = [
     (
         "the English document says every pinned instruction",
         _RESERVATION_EN,
-        _saying(_EN_BLOCKED, _EN_ADVANCE, _EN_REASON, _EN_NOBODY_LOOKED),
+        _saying(_EN_BLOCKED, _EN_ADVANCE),
         _SHIPPED_FAMILIES,
         0,
     ),
     (
         "and so does the Spanish one, in Spanish",
         _RESERVATION_ES,
-        _saying(_ES_BLOCKED, _ES_ADVANCE, _ES_REASON, _ES_NOBODY_LOOKED),
+        _saying(_ES_BLOCKED, _ES_ADVANCE),
         _SHIPPED_FAMILIES,
         0,
     ),
@@ -5511,7 +5720,7 @@ INSTRUCTION_CASES = [
         "English ones instead — every other rule here stays green, because they judge what the "
         "document DOES and this is what it SAYS",
         _RESERVATION_ES,
-        _saying(_EN_BLOCKED, _EN_ADVANCE, _ES_REASON, _ES_NOBODY_LOOKED),
+        _saying(_EN_BLOCKED, _EN_ADVANCE),
         _SHIPPED_FAMILIES,
         2,
     ),
@@ -5519,22 +5728,18 @@ INSTRUCTION_CASES = [
         "one of the two lost, which is how it really happens: a translator keeps the paragraph and "
         "drops the sentence at the end of it",
         _RESERVATION_ES,
-        _saying(_ES_BLOCKED, _ES_REASON, _ES_NOBODY_LOOKED),
+        _saying(_ES_BLOCKED),
         _SHIPPED_FAMILIES,
         1,
     ),
     (
-        "the sentence may live in ANY step of the document: the attended family says it where it "
-        "writes the reply and the unattended one where it books, and both are the same promise",
+        "the sentence may live in ANY step of the document: which step holds it is exactly what an "
+        "honest rewrite moves around, and a rule that also pinned the step would turn every "
+        "rewrite into a red",
         _RESERVATION_EN,
         _fixture_doc(
             _ai_step("first", "manual", (), "nothing to see here"),
-            _ai_step(
-                "second",
-                "manual",
-                (),
-                "\n".join((_EN_BLOCKED, _EN_ADVANCE, _EN_REASON, _EN_NOBODY_LOOKED)),
-            ),
+            _ai_step("second", "manual", (), "\n".join((_EN_BLOCKED, _EN_ADVANCE))),
         ),
         _SHIPPED_FAMILIES,
         0,
@@ -5543,71 +5748,43 @@ INSTRUCTION_CASES = [
         "a language this battery has no wording for is a document nobody can be held to: the "
         "translation goes in the table in the same commit that ships the document",
         "reservation-from-whatsapp.fr.flow.json",
-        _saying(_EN_BLOCKED, _EN_ADVANCE, _EN_REASON, _EN_NOBODY_LOOKED),
+        _saying(_EN_BLOCKED, _EN_ADVANCE),
         _SHIPPED_FAMILIES,
-        4,
+        2,
     ),
     (
         "a recipe that SHIPS and lost its row: the other half of the anchoring, and the one that "
         "matters, because a guard you can switch off by deleting a row is not a guard. Measured "
-        "in review of whatsapp_inbox#112: dropping `reservation-from-whatsapp-unattended` from "
-        "the table and THEN losing the advance-window sentence from its Spanish document — which "
-        "is whatsapp_inbox#108 again, in the half nobody is watching — left this battery green",
+        "in review of whatsapp_inbox#112: dropping the table family from the table and THEN losing "
+        "the advance-window sentence from its Spanish document — which is whatsapp_inbox#108 "
+        "again, in the half nobody is watching — left this battery green",
         "task-from-whatsapp.en.flow.json",
         _saying("whatever this recipe wants to say"),
         _SHIPPED_FAMILIES | {"task-from-whatsapp"},
         1,
     ),
     (
-        "the four recipes that really ship are all in the table, so the rule above costs nothing "
+        "the two recipes that really ship are both in the table, so the rule above costs nothing "
         "on a healthy tree: a red here means a row went missing, never that a recipe is new",
         _RESERVATION_EN,
-        _saying(_EN_BLOCKED, _EN_ADVANCE, _EN_REASON, _EN_NOBODY_LOOKED),
+        _saying(_EN_BLOCKED, _EN_ADVANCE),
         _SHIPPED_FAMILIES,
         0,
     ),
     (
-        "the salon families are pinned to the same sentence, and reading it out of the table here "
+        "the salon family is pinned to its own sentences, and reading them out of the table here "
         "is what makes the table itself tamper-evident: delete the row and this row stops naming "
         "anything",
-        "appointment-from-whatsapp.es.flow.json",
-        _saying(_ES_CHANNEL, _ES_MOVE_WHO, _ES_REASON_SALON, _ES_NOBODY_LOOKED_SALON),
+        _APPOINTMENT_ES,
+        _saying(_ES_CHANNEL, _ES_MOVE_WHO),
         _SHIPPED_FAMILIES,
         0,
     ),
     (
-        "🔴 the rows whatsapp_inbox#70 adds, losable on their own — measured in review, not "
-        "feared: dropping the Spanish sentence that keeps the technical reason away from her left "
-        "this battery at `EXIT=0`, because `unanswered_ending_problems` only asks the prompt to NAME "
-        "`expired`/`failed`, and the safety instruction around them is free prose. The Spanish "
-        "salon document keeps every other instruction and loses that one",
-        "appointment-from-whatsapp.es.flow.json",
-        _saying(_ES_CHANNEL, _ES_MOVE_WHO, _ES_NOBODY_LOOKED_SALON),
-        _SHIPPED_FAMILIES,
-        1,
-    ),
-    (
-        "…and the restaurant twin that stops saying nobody looked: the same `EXIT=0` measured on "
-        "the reservation family, in the half nobody reads",
-        _RESERVATION_ES,
-        _saying(_ES_BLOCKED, _ES_ADVANCE, _ES_REASON),
-        _SHIPPED_FAMILIES,
-        1,
-    ),
-    (
-        "and the unattended salon twin says it too, read out of ITS OWN entry: the two families "
-        "are pinned separately on purpose, so this row stops naming anything the day that entry "
-        "goes",
-        "appointment-from-whatsapp-unattended.es.flow.json",
-        _saying(_ES_CHANNEL_UNATTENDED, _ES_MOVE_WHO_UNATTENDED),
-        _SHIPPED_FAMILIES,
-        0,
-    ),
-    (
-        "and the unattended twin that lost them both, which is the one that writes with nobody "
+        "and the salon document that lost them both, which is the one that writes with nobody "
         "watching: a model with no sentence telling it why `channel` is `customer` decides on its "
         "own what it means",
-        "appointment-from-whatsapp-unattended.es.flow.json",
+        _APPOINTMENT_ES,
         _saying("aquí no se dice nada del `channel`"),
         _SHIPPED_FAMILIES,
         2,
@@ -5617,18 +5794,20 @@ INSTRUCTION_CASES = [
         "explains the channel it CANCELS with and never says that moving carries it too — which "
         "is exactly the shape whatsapp_inbox#108 had, a paragraph kept and the sentence at the "
         "end of it dropped, in the half nobody reads",
-        "appointment-from-whatsapp-unattended.es.flow.json",
-        _saying(_ES_CHANNEL_UNATTENDED),
+        _APPOINTMENT_ES,
+        _saying(_ES_CHANNEL),
         _SHIPPED_FAMILIES,
         1,
     ),
     (
         "a family that is pinned and no longer SHIPS: renaming a recipe leaves the row guarding a "
         "document that does not exist, and every rule here stays green because they only judge the "
-        "documents that are there (the hole `shipped_recipe_problems` closes for BOOKING_RULES)",
+        "documents that are there (the hole `shipped_recipe_problems` closes for BOOKING_RULES). "
+        "This is not hypothetical here: whatsapp_inbox#124 renamed both families, and this row is "
+        "what would have caught the table being left behind",
         _RESERVATION_EN,
-        _saying(_EN_BLOCKED, _EN_ADVANCE, _EN_REASON, _EN_NOBODY_LOOKED),
-        _SHIPPED_FAMILIES - {"appointment-from-whatsapp-unattended"},
+        _saying(_EN_BLOCKED, _EN_ADVANCE),
+        _SHIPPED_FAMILIES - {"appointment-from-whatsapp"},
         1,
     ),
 ]
@@ -5647,6 +5826,9 @@ _FLOOR_BOOKER = {
             "tools": {"commands": ["appointments.appointments.create"]},
         }
     ]
+}
+_FLOOR_CUSTOMER = {
+    "steps": [{"id": "know_the_customer", "kind": "ai", "tools": {"commands": ["customers.create"]}}]
 }
 _FLOOR_TAKES_BOTH = {
     MOVE_COMMAND: {"appointment_id", "start_datetime", "channel", "customer_id"}
@@ -5683,8 +5865,23 @@ FLOOR_CASES = [
     (
         "a command handed over whose payload no table here fills: nothing is promised, so nothing "
         "is demanded of the floor",
+        _FLOOR_CUSTOMER,
+        {"customers.create": set()},
+        0,
+    ),
+    (
+        "🔴 whatsapp_inbox#124 owes the floor the same thing whatsapp_inbox#105 did: `booked_online` "
+        "is now SENT with every booking, so a floor that predates the field is a recipe the hub "
+        "offers to a copy that answers `invalid_payload` to every booking a customer asks for",
         _FLOOR_BOOKER,
-        {"appointments.appointments.create": set()},
+        {"appointments.appointments.create": {"customer_id", "start_datetime"}},
+        1,
+    ),
+    (
+        "…and the floor that already takes it is the green, so the row above cannot be one that "
+        "fires whatever the floor says",
+        _FLOOR_BOOKER,
+        {"appointments.appointments.create": {"customer_id", "start_datetime", "booked_online"}},
         0,
     ),
 ]
@@ -6011,7 +6208,7 @@ TAPPABLE_CASES = [
         "\U0001f534 the tap trigger written with `exists`, which reads right and is not: the core "
         "serves `reply_id` EMPTY and never absent, so it is true for a photo with no caption too "
         "and the booking recipe runs over an empty message",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _tap_doc(
             tap_filter={
                 "event.text": {"eq": ""},
@@ -6025,14 +6222,14 @@ TAPPABLE_CASES = [
     (
         "the trigger as it ships tells the two apart: `neq \"\"` wakes up for the tap and leaves "
         "the photo alone",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _tap_doc(),
         0,
     ),
     (
         "the shape this issue ships: the slots the turn found become the rows she taps, guarded "
         "against the empty list, with a trigger that wakes up for the tap",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _tap_doc(),
         0,
     ),
@@ -6065,26 +6262,26 @@ TAPPABLE_CASES = [
     ),
     (
         "🔴 rows from a step that never declared them: `null` reaches Meta as the rows of the list",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _tap_doc(output=()),
         1,
     ),
     (
         "🔴 declared, but as text: `options` is Meta's row shape and nothing else fits in a list",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _tap_doc(output=("text",)),
         1,
     ),
     (
         "🔴 nothing refuses the empty list: the turn booked, `slots` is `[]`, and the send fails "
         "after she was already answered",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _tap_doc(guard=False),
         1,
     ),
     (
         "🔴 the guard is `exists`, which is true for `[]` — the mutant that reads right",
-        ATTENDED,
+        UNNAMED_FAMILY,
         {
             **_tap_doc(guard=False),
             "steps": [
@@ -6097,36 +6294,36 @@ TAPPABLE_CASES = [
     ),
     (
         "🔴 no trigger wakes up for the tap: she taps, and nothing happens ever",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _tap_doc(triggers=("words",)),
         1,
     ),
     (
         "🔴 the tap wakes something up but `reply_id` never reaches the run: it knows somebody "
         "tapped and not which row — the ambiguity this change exists to remove",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _tap_doc(tap_input=("from", "text")),
         1,
     ),
     (
         "🔴 the prompt stopped promising the words: a turn that ends on a tool call can carry "
         "none, and the confirmation goes out empty",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _tap_doc(prompt="find the free slots."),
         1,
     ),
     (
         "🔴 `interactive` next to copy of its own: one message, two types — the hub refuses it",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _tap_doc(extra_copy={"text": "and this"}),
         1,
     ),
     (
-        "🔴 the ATTENDED family books too and owes her the same list: the salon that chose to "
+        "🔴 the UNNAMED_FAMILY family books too and owes her the same list: the salon that chose to "
         "review before confirming used to get the WORSE experience, which is backwards "
         "(whatsapp_inbox#109). Its slots come from the step that writes the message, never from "
         "the one that proposes — that one can never declare `output`",
-        ATTENDED,
+        UNNAMED_FAMILY,
         {
             "schema_version": 1,
             "triggers": [
@@ -6152,7 +6349,7 @@ TAPPABLE_CASES = [
     ),
     (
         "a family that offers nothing and books nothing is not this rule's business",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _wa_doc(LIVE_INBOUND),
         0,
     ),
@@ -6165,26 +6362,26 @@ PARKING_CASES = [
     (
         "🔴 the producer may propose a WRITE: the kernel refuses it, `flow_answer` is never called "
         "and the rows leave for Meta as `null`",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _tap_doc(policy="manual"),
         1,
     ),
     (
         "a `manual` producer whose commands only ANSWER can always finish (hub#1595), which is the "
         "only shape the attended family has: the step that books can never publish the slots",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _tap_doc(policy="manual", commands=("appointments.availability.slots",)),
         0,
     ),
     (
         "a `manual` producer with no commands at all has nothing to park either",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _tap_doc(policy="manual", commands=()),
         0,
     ),
     (
         "…and `auto` never parks, whatever it declares: it runs the write in the turn",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _tap_doc(policy="auto"),
         0,
     ),
@@ -6193,7 +6390,7 @@ PARKING_CASES = [
         "cannot park its write and cannot run it either, so the booking never happens at all. "
         "Declaring `output` is exactly what takes it out of `writing_ai_steps`, so no rule above "
         "looks at it any more and the only thing left is this one (whatsapp_inbox#109)",
-        ATTENDED,
+        UNNAMED_FAMILY,
         _fixture_doc(
             {
                 "id": "book",
@@ -6266,6 +6463,20 @@ def self_check():
         if len(got) != expected:
             problems.append(
                 f"the battery's own «the model never picks the hour» rule is wrong — {label}: "
+                f"expected {expected} problem(s), got {len(got)}: {got}"
+            )
+    for label, name, doc, expected in BIRTH_STATUS_CASES:
+        got = birth_status_problems(name, doc)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «tell her what really happened» rule is wrong — {label}: "
+                f"expected {expected} problem(s), got {len(got)}: {got}"
+            )
+    for label, families, expected in LEDGER_CASES:
+        got = unattended_ledger_problems("(self-check)", {}, families)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «the ledger and `flows/` agree» rule is wrong — {label}: "
                 f"expected {expected} problem(s), got {len(got)}: {got}"
             )
     for label, booked, expected in RECIPE_CASES:
