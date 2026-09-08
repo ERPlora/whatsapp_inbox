@@ -214,6 +214,54 @@ PIN_ROOTS = ("input", "steps")
 # every template still rides on it, so it is asked of the whole family.
 ALWAYS = (NEED_ANSWERS_ONLY,)
 
+# Every predicate above, proved against SYNTHETIC steps in both directions — the step that must
+# demand the floor and the step that must NOT. The documents are the one input this battery does
+# not get to choose (it reads whatever `flows/` ships that day), so a predicate that silently
+# stopped discriminating would keep deriving the right answer from today's files and go on
+# deriving it after the regression it exists to catch.
+#
+# The NEGATIVE half is the load-bearing one, and `on_expire` is why this table exists: the APPROVAL
+# step has carried that key since hub#950, so a predicate that took any step would read «v1.1.16
+# demanded» off a document that needs nothing newer than v1.1.14 — and would go on reading it after
+# somebody deleted the `ai` step's key, which is the whole regression the floor guards
+# (whatsapp_inbox#70). Measured: dropping the `kind == "ai"` filter left this battery GREEN before
+# this table existed.
+PREDICATE_CASES = (
+    (
+        NEED_INTERACTIVE,
+        "a `notify` step that sends rows to tap",
+        {"kind": "notify", "interactive": {"type": "list"}},
+        True,
+    ),
+    (NEED_INTERACTIVE, "a step that sends plain words", {"kind": "notify"}, False),
+    (
+        NEED_DECLARED_OUTPUT,
+        "an `ai` step that declares the shape it returns",
+        {"kind": "ai", "output": {"slots": {"type": "options"}}},
+        True,
+    ),
+    (NEED_DECLARED_OUTPUT, "an `ai` step that only writes words", {"kind": "ai"}, False),
+    (
+        NEED_AI_EXPIRY,
+        "an `ai` step that declares what a SILENCE costs the run",
+        {"kind": "ai", "on_expire": "continue"},
+        True,
+    ),
+    (
+        NEED_AI_EXPIRY,
+        "the APPROVAL step's own `on_expire`, a key of that kind since hub#950",
+        {"kind": "approval", "on_expire": "reject"},
+        False,
+    ),
+    (
+        NEED_STEP_ERROR_POLICY,
+        "an `ai` step that declares what a BROKEN WRITE costs the run",
+        {"kind": "ai", "on_error": "continue"},
+        True,
+    ),
+    (NEED_STEP_ERROR_POLICY, "a step that says nothing about failure", {"kind": "ai"}, False),
+)
+
 failures: list[str] = []
 
 
@@ -266,8 +314,58 @@ def needs_of_templates() -> list[tuple[KernelNeed, str]]:
     return demanded
 
 
+def predicate_self_check() -> None:
+    """Prove each `FEATURES` predicate discriminates, instead of trusting today's documents.
+
+    Two halves, and the second is the one that keeps the first honest:
+
+    * every case in `PREDICATE_CASES` gets the verdict it claims;
+    * and every predicate in `FEATURES` is named by at least one case in EACH direction. Without
+      that, deleting the two rows of a predicate is a silent green — the table shrinks, nothing
+      says a predicate went unproved, and the derivation is back to being justified by nothing
+      (`table-driven-guards-need-anchoring-in-both-directions`).
+    """
+    predicates: dict[KernelNeed, list] = {}
+    for need, _label, present in FEATURES:
+        predicates.setdefault(need, []).append(present)
+
+    proved: set[tuple[str, bool]] = set()
+    for need, what, step, expected in PREDICATE_CASES:
+        if need not in predicates:
+            failures.append(
+                f"`PREDICATE_CASES` proves {need.issue} but no `FEATURES` predicate derives it any "
+                f"more, so the case is measuring nothing: drop the case, or restore the predicate"
+            )
+            continue
+        matched = any(present(step) for present in predicates[need])
+        if matched != expected:
+            owed = "demand" if expected else "NOT demand"
+            failures.append(
+                f"the {need.issue} predicate reads {what} as "
+                f"{'demanding' if matched else 'not demanding'} the {dotted(need.floor)} floor, and "
+                f"it must {owed} it. {need.why}"
+            )
+        proved.add((need.issue, expected))
+
+    for need, _label, _present in FEATURES:
+        for expected in (True, False):
+            if (need.issue, expected) not in proved:
+                half = "a step that DEMANDS it" if expected else "a step that must NOT demand it"
+                failures.append(
+                    f"no `PREDICATE_CASES` row proves the {need.issue} predicate against {half}, so "
+                    f"nothing here would notice it going blind: the floor it derives would keep "
+                    f"coming out right off today's documents and stay right after the regression"
+                )
+    if not failures:
+        print(
+            f"  ok: {len(FEATURES)} floor derivation(s) proved to discriminate, in both directions"
+        )
+
+
 def main() -> int:
     print("· the manifest declares which hub this module needs (whatsapp_inbox#62)")
+
+    predicate_self_check()
 
     templates = sorted(p.name for p in (MODULE_DIR / "flows").glob("*.flow.json"))
     if not templates:
