@@ -280,6 +280,29 @@ def dotted(version: tuple[int, int, int]) -> str:
     return ".".join(str(part) for part in version)
 
 
+def newest_tag_below(floor: tuple[int, int, int]) -> str | None:
+    """The newest hub release tag strictly below `floor`, as the local checkout knows them.
+
+    `None` = cannot look (no hub checkout). A tag the checkout has not fetched cannot make this
+    read WRONG, only older: a tag it does know that sits between a need's `last_without` and its
+    `floor` really was published, so the need skipped a release it never measured.
+    """
+    try:
+        tags = subprocess.run(
+            ["git", "-C", str(HUB_CHECKOUT), "tag", "--list", "v*"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    if tags.returncode != 0:
+        return None
+    known = [(tag, triple(tag[1:])) for tag in tags.stdout.split()]
+    below = [(tag, version) for tag, version in known if version is not None and version < floor]
+    return max(below, key=lambda pair: pair[1])[0] if below else None
+
+
 def marker_count(ref: str, path: str, marker: str) -> int | None:
     """How many times `marker` appears in `path` at `ref`. `None` = cannot look."""
     try:
@@ -459,11 +482,25 @@ def main() -> int:
                 "origin/develop",
             )
         before = marker_count(need.last_without, need.path, need.marker)
+        # `last_without` has to be the release RIGHT BEFORE the floor, or the pair proves nothing
+        # about the releases in between. Measured in review of whatsapp_inbox#70: a need's floor
+        # raised one release above where its marker first appears stayed green — the marker IS at
+        # the higher release, and 0x at a `last_without` two releases back — because the module's
+        # own floor was already justified by another need, so nothing said this one lied.
+        predecessor = newest_tag_below(need.floor)
         if at_floor is None or before is None:
             print(
                 f"  ⚠ SKIPPED the re-measure of {need.issue}: cannot read `{need.path}` at "
                 f"{measured}/{need.last_without} from {HUB_CHECKOUT} (no hub checkout, or its tags "
                 "are not fetched). The checks above still ran."
+            )
+        elif predecessor is not None and predecessor != need.last_without:
+            failures.append(
+                f"{need.issue} puts its floor at {dotted(need.floor)} and names {need.last_without} "
+                f"as the last release without `{need.marker}`, but {predecessor} is the release "
+                f"right before that floor and this pair never measures it: either the floor is a "
+                f"release too high — the marker may already be there — or `last_without` is "
+                f"stale. Re-derive both against `git tag --list` of the hub"
             )
         elif before:
             failures.append(

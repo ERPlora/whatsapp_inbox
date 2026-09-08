@@ -1796,6 +1796,20 @@ PINNED_INSTRUCTIONS = {
                 "es": "Mover también dice quién lo pide: `channel` puesto a `customer` y el `customer_id` que buscaste por SU teléfono",
             },
         ),
+        (
+            "the reason a booking BROKE is for the salon, never for her (whatsapp_inbox#70)",
+            {
+                "en": "use it to understand what happened, and never send it, or any part of it, to her",
+                "es": "úsalo para entender qué pasó, y no se lo mandes nunca, ni entero ni en trozos",
+            },
+        ),
+        (
+            "an expired proposal is never explained as nobody having looked (whatsapp_inbox#70)",
+            {
+                "en": "Never tell her nobody looked at it, and never name how long it waited",
+                "es": "Nunca le digas que nadie lo miró, ni nombres cuánto tiempo estuvo esperando",
+            },
+        ),
     ),
     "appointment-from-whatsapp-unattended": (
         (
@@ -1826,6 +1840,20 @@ PINNED_INSTRUCTIONS = {
             {
                 "en": "never offer a day the step before you already said this restaurant does not book",
                 "es": "no ofrezcas nunca un día que el paso anterior ya haya dicho que este restaurante no reserva",
+            },
+        ),
+        (
+            "the reason a booking BROKE is for the restaurant, never for them (whatsapp_inbox#70)",
+            {
+                "en": "use it to understand what happened, and never send it, or any part of it, to them",
+                "es": "úsalo para entender qué pasó, y no se lo mandes nunca, ni entero ni en trozos",
+            },
+        ),
+        (
+            "an expired proposal is never explained as nobody having looked (whatsapp_inbox#70)",
+            {
+                "en": "Never tell them nobody looked at it, and never name how long it waited",
+                "es": "Nunca le digas que nadie lo miró, ni nombres cuánto tiempo estuvo esperando",
             },
         ),
     ),
@@ -5208,20 +5236,28 @@ _EN_BLOCKED = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][0][1]["en"]
 _EN_ADVANCE = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][1][1]["en"]
 _ES_BLOCKED = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][0][1]["es"]
 _ES_ADVANCE = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][1][1]["es"]
+# The two whatsapp_inbox#70 adds, per family: the technical reason a booking broke stays with the
+# business, and an expired proposal is never explained to the customer as nobody having looked.
+_EN_REASON = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][2][1]["en"]
+_EN_NOBODY_LOOKED = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][3][1]["en"]
+_ES_REASON = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][2][1]["es"]
+_ES_NOBODY_LOOKED = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][3][1]["es"]
+_ES_REASON_SALON = PINNED_INSTRUCTIONS["appointment-from-whatsapp"][2][1]["es"]
+_ES_NOBODY_LOOKED_SALON = PINNED_INSTRUCTIONS["appointment-from-whatsapp"][3][1]["es"]
 
 
 INSTRUCTION_CASES = [
     (
-        "the English document says both pinned instructions",
+        "the English document says every pinned instruction",
         _RESERVATION_EN,
-        _saying(_EN_BLOCKED, _EN_ADVANCE),
+        _saying(_EN_BLOCKED, _EN_ADVANCE, _EN_REASON, _EN_NOBODY_LOOKED),
         _SHIPPED_FAMILIES,
         0,
     ),
     (
         "and so does the Spanish one, in Spanish",
         _RESERVATION_ES,
-        _saying(_ES_BLOCKED, _ES_ADVANCE),
+        _saying(_ES_BLOCKED, _ES_ADVANCE, _ES_REASON, _ES_NOBODY_LOOKED),
         _SHIPPED_FAMILIES,
         0,
     ),
@@ -5230,7 +5266,7 @@ INSTRUCTION_CASES = [
         "English ones instead — every other rule here stays green, because they judge what the "
         "document DOES and this is what it SAYS",
         _RESERVATION_ES,
-        _saying(_EN_BLOCKED, _EN_ADVANCE),
+        _saying(_EN_BLOCKED, _EN_ADVANCE, _ES_REASON, _ES_NOBODY_LOOKED),
         _SHIPPED_FAMILIES,
         2,
     ),
@@ -5238,7 +5274,7 @@ INSTRUCTION_CASES = [
         "one of the two lost, which is how it really happens: a translator keeps the paragraph and "
         "drops the sentence at the end of it",
         _RESERVATION_ES,
-        _saying(_ES_BLOCKED),
+        _saying(_ES_BLOCKED, _ES_REASON, _ES_NOBODY_LOOKED),
         _SHIPPED_FAMILIES,
         1,
     ),
@@ -5248,7 +5284,12 @@ INSTRUCTION_CASES = [
         _RESERVATION_EN,
         _fixture_doc(
             _ai_step("first", "manual", (), "nothing to see here"),
-            _ai_step("second", "manual", (), _EN_BLOCKED + "\n" + _EN_ADVANCE),
+            _ai_step(
+                "second",
+                "manual",
+                (),
+                "\n".join((_EN_BLOCKED, _EN_ADVANCE, _EN_REASON, _EN_NOBODY_LOOKED)),
+            ),
         ),
         _SHIPPED_FAMILIES,
         0,
@@ -5257,9 +5298,9 @@ INSTRUCTION_CASES = [
         "a language this battery has no wording for is a document nobody can be held to: the "
         "translation goes in the table in the same commit that ships the document",
         "reservation-from-whatsapp.fr.flow.json",
-        _saying(_EN_BLOCKED, _EN_ADVANCE),
+        _saying(_EN_BLOCKED, _EN_ADVANCE, _EN_REASON, _EN_NOBODY_LOOKED),
         _SHIPPED_FAMILIES,
-        2,
+        4,
     ),
     (
         "a recipe that SHIPS and lost its row: the other half of the anchoring, and the one that "
@@ -5276,7 +5317,7 @@ INSTRUCTION_CASES = [
         "the four recipes that really ship are all in the table, so the rule above costs nothing "
         "on a healthy tree: a red here means a row went missing, never that a recipe is new",
         _RESERVATION_EN,
-        _saying(_EN_BLOCKED, _EN_ADVANCE),
+        _saying(_EN_BLOCKED, _EN_ADVANCE, _EN_REASON, _EN_NOBODY_LOOKED),
         _SHIPPED_FAMILIES,
         0,
     ),
@@ -5285,9 +5326,28 @@ INSTRUCTION_CASES = [
         "is what makes the table itself tamper-evident: delete the row and this row stops naming "
         "anything",
         "appointment-from-whatsapp.es.flow.json",
-        _saying(_ES_CHANNEL, _ES_MOVE_WHO),
+        _saying(_ES_CHANNEL, _ES_MOVE_WHO, _ES_REASON_SALON, _ES_NOBODY_LOOKED_SALON),
         _SHIPPED_FAMILIES,
         0,
+    ),
+    (
+        "🔴 the rows whatsapp_inbox#70 adds, losable on their own — measured in review, not "
+        "feared: dropping the Spanish sentence that keeps the technical reason away from her left "
+        "this battery at `EXIT=0`, because `unanswered_ending_problems` only asks the prompt to NAME "
+        "`expired`/`failed`, and the safety instruction around them is free prose. The Spanish "
+        "salon document keeps every other instruction and loses that one",
+        "appointment-from-whatsapp.es.flow.json",
+        _saying(_ES_CHANNEL, _ES_MOVE_WHO, _ES_NOBODY_LOOKED_SALON),
+        _SHIPPED_FAMILIES,
+        1,
+    ),
+    (
+        "…and the restaurant twin that stops saying nobody looked: the same `EXIT=0` measured on "
+        "the reservation family, in the half nobody reads",
+        _RESERVATION_ES,
+        _saying(_ES_BLOCKED, _ES_ADVANCE, _ES_REASON),
+        _SHIPPED_FAMILIES,
+        1,
     ),
     (
         "and the unattended salon twin says it too, read out of ITS OWN entry: the two families "
@@ -5322,7 +5382,7 @@ INSTRUCTION_CASES = [
         "document that does not exist, and every rule here stays green because they only judge the "
         "documents that are there (the hole `shipped_recipe_problems` closes for BOOKING_RULES)",
         _RESERVATION_EN,
-        _saying(_EN_BLOCKED, _EN_ADVANCE),
+        _saying(_EN_BLOCKED, _EN_ADVANCE, _EN_REASON, _EN_NOBODY_LOOKED),
         _SHIPPED_FAMILIES - {"appointment-from-whatsapp-unattended"},
         1,
     ),
