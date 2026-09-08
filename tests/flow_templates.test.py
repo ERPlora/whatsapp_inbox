@@ -2041,6 +2041,19 @@ PINNED_INSTRUCTIONS = {
                 "es": "Mover también dice quién lo pide: `channel` puesto a `customer` y el `customer_id` que buscaste por SU teléfono",
             },
         ),
+        # whatsapp_inbox#124. The pin in `appointment-from-whatsapp.grants.json` REFUSES the call
+        # that omits `booked_online` (`check_payload_pin`), so the prompt has to ORDER it or every
+        # booking this channel makes dies at the door with the customer told nothing. Pinned here
+        # rather than left to the prose because it is one clause inside a numbered instruction, and
+        # that is exactly what a translation drops: with it gone from the Spanish document only the
+        # Spanish half stops booking, and every other rule here stays green over it.
+        (
+            "the booking says the customer made it herself",
+            {
+                "en": "`booked_online` set to `true`",
+                "es": "`booked_online` puesto a `true`",
+            },
+        ),
     ),
     "reservation-from-whatsapp": (
         (
@@ -5694,6 +5707,7 @@ def _saying(*sentences):
 # back, its rows come back with it.
 _ES_CHANNEL = PINNED_INSTRUCTIONS["appointment-from-whatsapp"][0][1]["es"]
 _ES_MOVE_WHO = PINNED_INSTRUCTIONS["appointment-from-whatsapp"][1][1]["es"]
+_ES_BOOKED_ONLINE = PINNED_INSTRUCTIONS["appointment-from-whatsapp"][2][1]["es"]
 _EN_BLOCKED = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][0][1]["en"]
 _EN_ADVANCE = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][1][1]["en"]
 _ES_BLOCKED = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][0][1]["es"]
@@ -5776,7 +5790,7 @@ INSTRUCTION_CASES = [
         "is what makes the table itself tamper-evident: delete the row and this row stops naming "
         "anything",
         _APPOINTMENT_ES,
-        _saying(_ES_CHANNEL, _ES_MOVE_WHO),
+        _saying(_ES_CHANNEL, _ES_MOVE_WHO, _ES_BOOKED_ONLINE),
         _SHIPPED_FAMILIES,
         0,
     ),
@@ -5785,7 +5799,7 @@ INSTRUCTION_CASES = [
         "watching: a model with no sentence telling it why `channel` is `customer` decides on its "
         "own what it means",
         _APPOINTMENT_ES,
-        _saying("aquí no se dice nada del `channel`"),
+        _saying("aquí no se dice nada del `channel`", _ES_BOOKED_ONLINE),
         _SHIPPED_FAMILIES,
         2,
     ),
@@ -5795,7 +5809,19 @@ INSTRUCTION_CASES = [
         "is exactly the shape whatsapp_inbox#108 had, a paragraph kept and the sentence at the "
         "end of it dropped, in the half nobody reads",
         _APPOINTMENT_ES,
-        _saying(_ES_CHANNEL),
+        _saying(_ES_CHANNEL, _ES_BOOKED_ONLINE),
+        _SHIPPED_FAMILIES,
+        1,
+    ),
+    (
+        "🔴 and the row whatsapp_inbox#124 adds, losable on its own: the Spanish document still "
+        "explains both channels and never orders `booked_online`. It is the most losable clause "
+        "of the three — it is four words inside a numbered instruction, not a paragraph — and it "
+        "is the one whose loss the customer pays for twice: the grant pins the field, so the hub "
+        "refuses the call that omits it, and the Spanish half books nothing at all while the "
+        "English half keeps working",
+        _APPOINTMENT_ES,
+        _saying(_ES_CHANNEL, _ES_MOVE_WHO),
         _SHIPPED_FAMILIES,
         1,
     ),
