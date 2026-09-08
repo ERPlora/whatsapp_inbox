@@ -28,6 +28,11 @@ tonight» and «nobody receives it».
    wraps the base SELECT as `sub`), so a `select` option the projection cannot produce is a filter
    that answers «no rows» with total credibility.
 4. **The projection did not open a hole in tenancy.** Another hub's templates stay invisible.
+6. **A save that changed NOTHING keeps Meta's approval** (whatsapp_inbox#87). The panel resends
+   every field, so «open it, read it, press Guardar» arrives as a full update whose values are the
+   ones already stored — and until now that dropped the id Meta gave the template. Asserted in both
+   directions and field by field: nothing changed (and `is_active` alone changed) keeps the id;
+   each of the seven fields Meta reviews, changed on its own, drops it.
 5. **An EDIT does not claim a review Meta is not doing, and walks in through the `hub_id`
    gate** (whatsapp_inbox#87). Nothing in this
    module sends a template to Meta — the runtime door landed with ERPlora/hub#1610 (v1.1.18)
@@ -59,6 +64,22 @@ UPDATE_COMMAND = "whatsapp_inbox.templates.update"
 
 HUB = "h1"
 OTHER_HUB = "h2"
+
+# The text the seed writes. Shared so an «open and save» can resend EXACTLY what is stored: a
+# no-change save is only a no-change save if the bytes match the row.
+SEEDED_BODY = "Hola {{1}}, tu mesa esta lista."
+
+# The seeded template as the row holds it — the baseline every «did anything change?» case starts
+# from. `name` is overwritten per row by `create_binds`; the rest is the same for all of them.
+SEEDED_TEMPLATE = {
+    "name": "recordatorio_cita",
+    "language": "es",
+    "category": "UTILITY",
+    "header": "",
+    "body": SEEDED_BODY,
+    "footer": "",
+    "variables": "[]",
+}
 
 
 def load_sibling_helpers():
@@ -117,13 +138,15 @@ def create_binds(new_id, name, hub=HUB):
         "language": "es",
         "category": "UTILITY",
         "header": "",
-        "body": "Hola {{1}}, tu mesa esta lista.",
+        "body": SEEDED_BODY,
         "footer": "",
         "variables": "[]",
     }
 
 
-def update_binds(template_id, name, hub=HUB, body="Hola {{1}}, cambiamos la hora."):
+def update_binds(
+    template_id, name, hub=HUB, body="Hola {{1}}, cambiamos la hora.", is_active=1
+):
     """The payload of `whatsapp_inbox.templates.update` (`schemas/template_update.json`) + system."""
     return {
         "hub_id": hub,
@@ -137,7 +160,7 @@ def update_binds(template_id, name, hub=HUB, body="Hola {{1}}, cambiamos la hora
         "body": body,
         "footer": "",
         "variables": "[]",
-        "is_active": 1,
+        "is_active": is_active,
     }
 
 
@@ -236,6 +259,150 @@ def check_tenancy(db, base):
             f"projection must not have loosened the `hub_id` filter."
         ]
     return []
+
+
+# What the seed leaves on `t-meta`: Meta looked at this text and said yes.
+META_ID = "1122334455"
+
+# The seven fields Meta re-reviews, each with a value that differs from the seed. `is_active` is
+# NOT here on purpose: it is this hub's own switch (whether the module uses the template) and Meta
+# has never seen it, so flipping it must not cost the approval.
+REVIEWED_FIELDS = {
+    "name": "recordatorio_cita_v2",
+    "language": "en",
+    "category": "MARKETING",
+    "header": "Peluqueria Lola",
+    "body": "Hola {{1}}, cambiamos la hora.",
+    "footer": "Responde BAJA para no recibir mas",
+    "variables": '["nombre"]',
+}
+
+
+def restore_approved_seed(db):
+    """Puts `t-meta` back to the text Meta approved, with Meta's id and verdict on it."""
+    sets = ", ".join(f"{col} = {sql_literal(val)}" for col, val in SEEDED_TEMPLATE.items())
+    r = psql(
+        db,
+        f"UPDATE whatsapp_inbox_template SET {sets}, is_active = 1, "
+        f"meta_template_id = {sql_literal(META_ID)}, meta_status = 'APPROVED' "
+        f"WHERE id = 't-meta' AND hub_id = {sql_literal(HUB)};\n",
+    )
+    return [] if r.returncode == 0 else [f"could not restore the seed: {r.stderr.strip()}"]
+
+
+def meta_answer_on_seed(db):
+    """What the row itself says Meta answered: `(id, status)`, read RAW, not through the projection.
+
+    The status is read from the column and not from `templates_list.sql` on purpose. Once the id is
+    gone the projection answers `not_sent` whatever the column holds, so a stale `APPROVED` left
+    behind by an edit is invisible from the outside — and a column that still claims an approval
+    the text no longer has is exactly the kind of lie that surfaces the day something reads it.
+    """
+    got, error = rows(
+        db,
+        "PREPARE k AS SELECT COALESCE(meta_template_id, '') || '|' || meta_status "
+        "FROM whatsapp_inbox_template WHERE id = 't-meta' AND hub_id = $1;\n"
+        f"EXECUTE k({sql_literal(HUB)});\nDEALLOCATE k;",
+    )
+    if got is None:
+        return None, error
+    return (got[0] if got else "|"), ""
+
+
+def check_a_save_with_no_changes_keeps_metas_verdict(db, base):
+    """(6) «open and save» on an APPROVED template must not throw Meta's approval away (#87).
+
+    The panel is ONE form for the add and the edit, and it resends EVERY field on save — the ones
+    it shows and the ones it carries untouched (`editingRest`: header, footer, variables,
+    is_active). So the most ordinary gesture in the tab, opening a template to read it and pressing
+    «Guardar», arrives here as a full update whose values are the ones already stored.
+
+    Until now every update dropped `meta_template_id` and put the state back to `pending` without
+    looking at whether anything had changed. That was invisible only while nothing wrote an id:
+    with the door open (the piece this issue is still waiting on), an approved template that
+    somebody opened and saved would lose the id Meta gave it and come back as «Sin enviar» — the
+    business told its reminder is not registered when it is, and re-sending it would put a working
+    template back at the end of Meta's review queue for nothing.
+
+    ## Both directions, field by field
+
+    A rule that ALWAYS keeps the id and a rule that ALWAYS drops it each satisfy half of this, so
+    both halves are asserted here:
+
+      · nothing changed, and `is_active` alone changed  → the id and the verdict SURVIVE;
+      · each of the seven fields Meta reviews, changed ON ITS OWN → the id is dropped.
+
+    The per-field half is what stops the comparison from quietly losing a field: dropping `footer`
+    from it would leave a save that rewrites the footer looking, to Meta, like a template that was
+    never edited — and the tab would keep offering an approval that no longer matches the text.
+
+    Runs BEFORE the destructive check on purpose: it needs `t-meta` carrying Meta's verdict, and it
+    puts it back that way before returning.
+    """
+    for label, binds in (
+        (
+            "an «open and save» that changed nothing",
+            update_binds("t-meta", SEEDED_TEMPLATE["name"], body=SEEDED_BODY),
+        ),
+        (
+            "a save that only flipped `is_active`, which Meta has never seen",
+            update_binds("t-meta", SEEDED_TEMPLATE["name"], body=SEEDED_BODY, is_active=0),
+        ),
+    ):
+        problems = run_command(db, UPDATE_COMMAND, binds)
+        if problems:
+            return problems
+
+        kept, error = meta_answer_on_seed(db)
+        if kept is None:
+            return [f"could not read the row back after {label}: {error}"]
+        if kept != f"{META_ID}|APPROVED":
+            return [
+                f"after {label}, the row carries {kept!r} instead of Meta's answer "
+                f"({META_ID + '|APPROVED'!r}). "
+                f"Meta re-reviews a template when its TEXT changes; dropping the id on a save that "
+                f"changed nothing tells the business its approved template is «Sin enviar», and "
+                f"sending it again puts a working template back in Meta's queue."
+            ]
+
+        got, error = rows(
+            db,
+            f"PREPARE p AS SELECT sub.name || '|' || sub.meta_status FROM ({base}) sub "
+            "ORDER BY sub.name;\n"
+            f"EXECUTE p({sql_literal(HUB)});\nDEALLOCATE p;",
+        )
+        if got is None:
+            return [f"`{LIST_QUERY}` did not run after {label}: {error}"]
+        want = ["mesa_lista|not_sent", "recordatorio_cita|approved"]
+        if got != want:
+            return [
+                f"after {label}, the list projected {got!r}, not {want!r}: the tab would stop "
+                f"offering a template Meta had already approved."
+            ]
+
+    # The other direction, one field at a time. Each case starts from the approved seed, so what is
+    # measured is THAT field and nothing carried over from the case before it.
+    for field, changed in REVIEWED_FIELDS.items():
+        problems = restore_approved_seed(db)
+        if problems:
+            return problems
+        binds = update_binds("t-meta", SEEDED_TEMPLATE["name"], body=SEEDED_BODY)
+        binds[field] = changed
+        problems = run_command(db, UPDATE_COMMAND, binds)
+        if problems:
+            return problems
+        kept, error = meta_answer_on_seed(db)
+        if kept is None:
+            return [f"could not read the row back after editing `{field}`: {error}"]
+        if kept != "|pending":
+            return [
+                f"editing `{field}` left {kept!r} on the row, not `'|pending'`. Meta re-reviews a "
+                f"template whenever its text changes, and `{field}` is part of that text: while "
+                f"Meta's id is there the tab reports a verdict on a text Meta never received, and "
+                f"a column still reading `APPROVED` claims an approval this text does not have."
+            ]
+
+    return restore_approved_seed(db)
 
 
 def check_an_edit_does_not_claim_a_review_meta_is_not_doing(db, base):
@@ -382,6 +549,8 @@ def main():
         if not problems:
             problems += check_tenancy(db, base)
         if not problems:
+            problems += check_a_save_with_no_changes_keeps_metas_verdict(db, base)
+        if not problems:
             problems += check_an_edit_does_not_claim_a_review_meta_is_not_doing(db, base)
 
         for problem in problems:
@@ -393,7 +562,9 @@ def main():
             "OK: the templates list projects Meta's verdict instead of the column — a template "
             "Meta never received arrives as `not_sent`, Meta's own UPPERCASE arrives lowercased, "
             "both are filterable server-side, an edit goes back to `not_sent` instead of claiming a "
-            "review Meta is not doing, and no hub sees or edits another hub's templates"
+            "review Meta is not doing, a save that changed nothing keeps Meta's approval (each of "
+            "the seven reviewed fields drops it on its own), and no hub sees or edits another "
+            "hub's templates"
         )
         return 0
     finally:
