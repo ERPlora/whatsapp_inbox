@@ -4883,8 +4883,10 @@ var ErpWhatsappInboxSettings = class extends i3 {
     details { margin-top: 24px; }
     summary { cursor: pointer; padding: 8px 0; }
     .advanced { margin-top: 16px; }
-    /* Three viewports: the cards go full width on a phone and cap their line length on a desk. */
-    @media (min-width: 768px) { .card { max-width: 640px; } }
+    /* Three viewports, and the same rule at all three: nothing here caps its width. The
+       ion-content around this screen already sets the only horizontal limit -- its responsive
+       gutter -- and a card that stops at 640px reads on a desk as a narrow island in a fluid page
+       (Ioan, 2026-09-06). Pinned by «the screen stays fluid at every width» in the test. */
   `;
   }
   connectedCallback() {
