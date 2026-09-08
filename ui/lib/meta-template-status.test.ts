@@ -129,6 +129,13 @@ describe('no sentence promises a trip to Meta that saving here does not make (#8
   const sentence = (lang: string, raw: string): string =>
     String(lookup(lang, metaTemplateView(raw).actionKey) ?? '');
 
+  it('every out-of-reach state is one the tab can actually show', () => {
+    // A misspelt entry would quietly test `unknown` instead — which points at WhatsApp Manager and
+    // would pass — so the table is anchored to the list the projection can produce.
+    const notAState = OUT_OF_REACH.filter((raw) => !(META_TEMPLATE_STATES as readonly string[]).includes(raw));
+    expect(notAState, `these are not states the tab shows: ${notAState.join(', ')}`).toEqual([]);
+  });
+
   for (const lang of ['en', 'es']) {
     it(`\`${lang}\`: a state this tab cannot fix points at ${MANAGER}`, () => {
       for (const raw of OUT_OF_REACH) {
