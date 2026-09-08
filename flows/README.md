@@ -224,11 +224,16 @@ El **rechazo** ya está cubierto desde whatsapp_inbox#67: el paso lleva `on_reje
 que el run no muere en la tarjeta rechazada y el paso `reply_to_customer` de detrás le escribe a la
 clienta lo que de verdad pasó, en vez de mandarle un texto que habla de una cita que no tiene.
 
-⚠️ **Lo que todavía NO cubre:** las otras dos salidas de la bandeja —que la propuesta **caduque**
-sin que nadie la decida, y que **falle al ejecutarse** después de aprobada—. En ambas el run muere
-donde estaba y la clienta se queda esperando (whatsapp_inbox#70). No se arregla desde el documento:
-el kernel no tiene todavía dónde engancharlo, y esas dos mitades son **hub#1634** (avisar cuando una
-aprobación caduca) y **hub#1635** (avisar cuando un paso falla).
+Y las otras dos salidas de la bandeja están cubiertas desde whatsapp_inbox#70: que la propuesta
+**caduque** sin que nadie la decida (`on_expire: "continue"`, hub#1634 — el barrido reanuda el run
+con `status: "expired"`) y que **falle al ejecutarse** después de aprobada (`on_error: "continue"`,
+hub#1635 — el run sigue con `status: "failed"` y el motivo en `error`). Las dos claves van en el paso
+que propone (`propose_appointment` / `book_table`) y el prompt de `reply_to_customer` conoce los dos
+desenlaces: nunca reenvía el texto aparcado (habla de una cita que no existe), no le cuenta a la
+clienta el motivo técnico y le ofrece huecos. Son claves de v1.1.16, por debajo del suelo `1.1.17`
+que ya declara `module.json`; `tests/flow_templates.test.py` (`unanswered_ending_problems`) exige
+las dos en cada documento con bandeja y `tests/core_floor.contract.test.py` deriva el suelo de
+ellas. Las familias `-unattended` no las llevan a propósito: `policy: auto` no aparca nada.
 
 ### Por qué preguntar y proponer caben en UN paso
 

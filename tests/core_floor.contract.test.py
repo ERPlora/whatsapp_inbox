@@ -44,16 +44,18 @@ WHAT THIS PINS:
 
 THE KERNEL FLOORS, MEASURED (2026-09-08, `git show <ref>:<path> | grep -c <marker>`):
 
-  | ref            | `answers_only`  | `AiOutputKind` | `interactive` | `fn can_pin`   | `PIN_ROOTS`    |
-  |                | agent_runner.rs | def.rs         | def.rs        | flows/grants.rs| flows/grants.rs|
-  |----------------|-----------------|----------------|---------------|----------------|----------------|
-  | v1.1.14        | absent          | absent         | absent        | absent         | absent         |
-  | v1.1.15        | present (x5)    | absent         | absent        | absent         | absent         |
-  | v1.1.16        | present (x5)    | present (x17)  | present (x33) | absent         | absent         |
-  | origin/develop | present (x5)    | present (x17)  | present (x33) | present (x1)   | present (x3)   |
+  | ref            | `answers_only`  | `AiOutputKind` | `interactive` | `ApprovalStep::` | `ON_ERROR_`    | `fn can_pin`   | `PIN_ROOTS`    |
+  |                | agent_runner.rs | def.rs         | def.rs        | `on_expire`      | `CONTINUE`     | flows/grants.rs| flows/grants.rs|
+  |                |                 |                |               | def.rs           | def.rs         |                |                |
+  |----------------|-----------------|----------------|---------------|------------------|----------------|----------------|----------------|
+  | v1.1.14        | absent          | absent         | absent        | absent           | absent         | absent         | absent         |
+  | v1.1.15        | present (x5)    | absent         | absent        | absent           | absent         | absent         | absent         |
+  | v1.1.16        | present (x5)    | present (x17)  | present (x33) | present (x1)     | present (x3)   | absent         | absent         |
+  | v1.1.17        | present (x5)    | present (x17)  | present (x33) | present (x1)     | present (x3)   | present (x1)   | present (x3)   |
+  | origin/develop | present (x5)    | present (x17)  | present (x33) | present (x1)     | present (x3)   | present (x1)   | present (x3)   |
 
-So `v1.1.15` is the first release carrying hub#1595, `v1.1.16` the first carrying
-hub#1633/hub#1639, and NO release yet carries hub#1662 — `git tag --contains 17fe65ce` is empty.
+So `v1.1.15` is the first release carrying hub#1595 and `v1.1.16` the first carrying
+hub#1633/hub#1639 and hub#1634/hub#1635; hub#1662 arrived in `v1.1.17`.
 `1.1.17` is therefore a floor pointing at a release that does not exist yet, which is the CORRECT
 way to ship something the fleet cannot run: the hub refuses the install with `core_version_too_old`
 instead of taking a template that explodes at save time. The positive half of the re-measure falls
@@ -126,6 +128,31 @@ NEED_INTERACTIVE = KernelNeed(
     "`flow.invalid_definition`",
 )
 
+NEED_AI_EXPIRY = KernelNeed(
+    issue="hub#1634",
+    floor=(1, 1, 16),
+    path="crates/runtime/src/flows/def.rs",
+    marker="ApprovalStep::on_expire",
+    last_without="v1.1.15",
+    why="an `ai` step declares what a SILENCE costs the run, so a proposal nobody ever answered "
+    "carries on to the step that tells the customer instead of cancelling the run at 72 h. Below "
+    "it `on_expire` is an unknown key on that kind and the parser refuses the WHOLE document "
+    "with `flow.invalid_definition`. Measured through the doc-link the key's own field carries "
+    "(`[`ApprovalStep::on_expire`]`) rather than through `on_expire` itself, which the APPROVAL "
+    "step has had since hub#950 and would therefore read «present» at every release",
+)
+NEED_STEP_ERROR_POLICY = KernelNeed(
+    issue="hub#1635",
+    floor=(1, 1, 16),
+    path="crates/runtime/src/flows/def.rs",
+    marker="ON_ERROR_CONTINUE",
+    last_without="v1.1.15",
+    why="a step declares what a FAILURE costs the run, so an approved booking that breaks — the "
+    "slot taken in between, the professional gone — still reaches the step that tells the "
+    "customer instead of ending the run as `failed`. Below it `on_error` is an unknown key on "
+    "every kind and the parser refuses the WHOLE document with `flow.invalid_definition`",
+)
+
 NEED_PINNED_READ = KernelNeed(
     issue="hub#1662",
     floor=(1, 1, 17),
@@ -155,6 +182,11 @@ NEED_PIN_REFERENCE = KernelNeed(
 FEATURES = (
     (NEED_INTERACTIVE, "interactive", lambda step: bool(step.get("interactive"))),
     (NEED_DECLARED_OUTPUT, "output", lambda step: bool(step.get("output"))),
+    # `on_expire` is asked of the `ai` kind ALONE and that is the whole measurement: the APPROVAL
+    # step has carried the same key since hub#950, so a predicate that took any step would derive
+    # this floor from a document that needs nothing newer than v1.1.14.
+    (NEED_AI_EXPIRY, "on_expire", lambda step: step.get("kind") == "ai" and "on_expire" in step),
+    (NEED_STEP_ERROR_POLICY, "on_error", lambda step: "on_error" in step),
 )
 # …and the same, one file over. A kernel need does not only come from the DOCUMENT: since hub#1654
 # the `<family>.grants.json` travels to the hub too, and what it declares there is refused by an
@@ -182,7 +214,60 @@ PIN_ROOTS = ("input", "steps")
 # every template still rides on it, so it is asked of the whole family.
 ALWAYS = (NEED_ANSWERS_ONLY,)
 
+# Every predicate above, proved against SYNTHETIC steps in both directions — the step that must
+# demand the floor and the step that must NOT. The documents are the one input this battery does
+# not get to choose (it reads whatever `flows/` ships that day), so a predicate that silently
+# stopped discriminating would keep deriving the right answer from today's files and go on
+# deriving it after the regression it exists to catch.
+#
+# The NEGATIVE half is the load-bearing one, and `on_expire` is why this table exists: the APPROVAL
+# step has carried that key since hub#950, so a predicate that took any step would read «v1.1.16
+# demanded» off a document that needs nothing newer than v1.1.14 — and would go on reading it after
+# somebody deleted the `ai` step's key, which is the whole regression the floor guards
+# (whatsapp_inbox#70). Measured: dropping the `kind == "ai"` filter left this battery GREEN before
+# this table existed.
+PREDICATE_CASES = (
+    (
+        NEED_INTERACTIVE,
+        "a `notify` step that sends rows to tap",
+        {"kind": "notify", "interactive": {"type": "list"}},
+        True,
+    ),
+    (NEED_INTERACTIVE, "a step that sends plain words", {"kind": "notify"}, False),
+    (
+        NEED_DECLARED_OUTPUT,
+        "an `ai` step that declares the shape it returns",
+        {"kind": "ai", "output": {"slots": {"type": "options"}}},
+        True,
+    ),
+    (NEED_DECLARED_OUTPUT, "an `ai` step that only writes words", {"kind": "ai"}, False),
+    (
+        NEED_AI_EXPIRY,
+        "an `ai` step that declares what a SILENCE costs the run",
+        {"kind": "ai", "on_expire": "continue"},
+        True,
+    ),
+    (
+        NEED_AI_EXPIRY,
+        "the APPROVAL step's own `on_expire`, a key of that kind since hub#950",
+        {"kind": "approval", "on_expire": "reject"},
+        False,
+    ),
+    (
+        NEED_STEP_ERROR_POLICY,
+        "an `ai` step that declares what a BROKEN WRITE costs the run",
+        {"kind": "ai", "on_error": "continue"},
+        True,
+    ),
+    (NEED_STEP_ERROR_POLICY, "a step that says nothing about failure", {"kind": "ai"}, False),
+)
+
 failures: list[str] = []
+# Raised by `predicate_self_check()`, and `report()` refuses to print a green without it. Deleting
+# the ONE line that calls the self-check is otherwise a silent pass: the cases still hold, and
+# nothing says the derivations were never put in front of them. It is the same hole `applied()`
+# closes for the document rules one battery over (whatsapp_inbox#69, mutant N5).
+predicates_proved = False
 
 
 def triple(value: str) -> tuple[int, int, int] | None:
@@ -193,6 +278,29 @@ def triple(value: str) -> tuple[int, int, int] | None:
 
 def dotted(version: tuple[int, int, int]) -> str:
     return ".".join(str(part) for part in version)
+
+
+def newest_tag_below(floor: tuple[int, int, int]) -> str | None:
+    """The newest hub release tag strictly below `floor`, as the local checkout knows them.
+
+    `None` = cannot look (no hub checkout). A tag the checkout has not fetched cannot make this
+    read WRONG, only older: a tag it does know that sits between a need's `last_without` and its
+    `floor` really was published, so the need skipped a release it never measured.
+    """
+    try:
+        tags = subprocess.run(
+            ["git", "-C", str(HUB_CHECKOUT), "tag", "--list", "v*"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    if tags.returncode != 0:
+        return None
+    known = [(tag, triple(tag[1:])) for tag in tags.stdout.split()]
+    below = [(tag, version) for tag, version in known if version is not None and version < floor]
+    return max(below, key=lambda pair: pair[1])[0] if below else None
 
 
 def marker_count(ref: str, path: str, marker: str) -> int | None:
@@ -234,8 +342,61 @@ def needs_of_templates() -> list[tuple[KernelNeed, str]]:
     return demanded
 
 
+def predicate_self_check() -> None:
+    """Prove each `FEATURES` predicate discriminates, instead of trusting today's documents.
+
+    Two halves, and the second is the one that keeps the first honest:
+
+    * every case in `PREDICATE_CASES` gets the verdict it claims;
+    * and every predicate in `FEATURES` is named by at least one case in EACH direction. Without
+      that, deleting the two rows of a predicate is a silent green — the table shrinks, nothing
+      says a predicate went unproved, and the derivation is back to being justified by nothing
+      (`table-driven-guards-need-anchoring-in-both-directions`).
+    """
+    global predicates_proved
+    predicates_proved = True
+
+    predicates: dict[KernelNeed, list] = {}
+    for need, _label, present in FEATURES:
+        predicates.setdefault(need, []).append(present)
+
+    proved: set[tuple[str, bool]] = set()
+    for need, what, step, expected in PREDICATE_CASES:
+        if need not in predicates:
+            failures.append(
+                f"`PREDICATE_CASES` proves {need.issue} but no `FEATURES` predicate derives it any "
+                f"more, so the case is measuring nothing: drop the case, or restore the predicate"
+            )
+            continue
+        matched = any(present(step) for present in predicates[need])
+        if matched != expected:
+            owed = "demand" if expected else "NOT demand"
+            failures.append(
+                f"the {need.issue} predicate reads {what} as "
+                f"{'demanding' if matched else 'not demanding'} the {dotted(need.floor)} floor, and "
+                f"it must {owed} it. {need.why}"
+            )
+        proved.add((need.issue, expected))
+
+    for need, _label, _present in FEATURES:
+        for expected in (True, False):
+            if (need.issue, expected) not in proved:
+                half = "a step that DEMANDS it" if expected else "a step that must NOT demand it"
+                failures.append(
+                    f"no `PREDICATE_CASES` row proves the {need.issue} predicate against {half}, so "
+                    f"nothing here would notice it going blind: the floor it derives would keep "
+                    f"coming out right off today's documents and stay right after the regression"
+                )
+    if not failures:
+        print(
+            f"  ok: {len(FEATURES)} floor derivation(s) proved to discriminate, in both directions"
+        )
+
+
 def main() -> int:
     print("· the manifest declares which hub this module needs (whatsapp_inbox#62)")
+
+    predicate_self_check()
 
     templates = sorted(p.name for p in (MODULE_DIR / "flows").glob("*.flow.json"))
     if not templates:
@@ -321,11 +482,25 @@ def main() -> int:
                 "origin/develop",
             )
         before = marker_count(need.last_without, need.path, need.marker)
+        # `last_without` has to be the release RIGHT BEFORE the floor, or the pair proves nothing
+        # about the releases in between. Measured in review of whatsapp_inbox#70: a need's floor
+        # raised one release above where its marker first appears stayed green — the marker IS at
+        # the higher release, and 0x at a `last_without` two releases back — because the module's
+        # own floor was already justified by another need, so nothing said this one lied.
+        predecessor = newest_tag_below(need.floor)
         if at_floor is None or before is None:
             print(
                 f"  ⚠ SKIPPED the re-measure of {need.issue}: cannot read `{need.path}` at "
                 f"{measured}/{need.last_without} from {HUB_CHECKOUT} (no hub checkout, or its tags "
                 "are not fetched). The checks above still ran."
+            )
+        elif predecessor is not None and predecessor != need.last_without:
+            failures.append(
+                f"{need.issue} puts its floor at {dotted(need.floor)} and names {need.last_without} "
+                f"as the last release without `{need.marker}`, but {predecessor} is the release "
+                f"right before that floor and this pair never measures it: either the floor is a "
+                f"release too high — the marker may already be there — or `last_without` is "
+                f"stale. Re-derive both against `git tag --list` of the hub"
             )
         elif before:
             failures.append(
@@ -350,6 +525,12 @@ def main() -> int:
 
 
 def report() -> int:
+    if not predicates_proved:
+        failures.append(
+            "the floor derivations were never proved to discriminate: nothing called "
+            "`predicate_self_check()`, so `PREDICATE_CASES` is a table nobody reads and every "
+            "`FEATURES` predicate is back to being justified by today's documents alone"
+        )
     if failures:
         print(f"\nFAIL ({len(failures)}):")
         for failure in failures:
