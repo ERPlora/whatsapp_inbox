@@ -5694,6 +5694,33 @@ def self_check():
                 f"the battery's own «a diary is somebody's» rule is wrong — {label}: "
                 f"expected {expected} problem(s), got {len(got)}: {got}"
             )
+    # The sidecar READERS are anchored on a fixture, because a blind reader is invisible to the
+    # tables above: `unpinned_query_problems` is silent when handed no pin at all (that red belongs
+    # to `main()`, by design), so a `declared_query_pins` that stopped seeing `query` grants — a
+    # one-word slip, measured in review — leaves every real document green while every case above
+    # keeps passing, since those are handed their pins directly. The positive has to be seen by the
+    # reader itself, in both shapes a sidecar may take, and its twin is held to the same standard.
+    with tempfile.TemporaryDirectory() as tmp:
+        grants = [
+            {"kind": "command", "value": "x.write", "payload": {"channel": "customer"}},
+            {"kind": "query", "value": "x.read", "payload": {"customer_id": "steps.r.id"}},
+            {"kind": "query", "value": "x.wide"},
+        ]
+        for shape, body in (("an object with `grants`", {"grants": grants}), ("a bare list", grants)):
+            path = pathlib.Path(tmp) / "fixture.grants.json"
+            path.write_text(json.dumps(body))
+            for reader, expected in (
+                (declared_query_pins, {"x.read": {"customer_id": "steps.r.id"}, "x.wide": {}}),
+                (declared_command_pins, {"x.write": {"channel": "customer"}}),
+            ):
+                got = reader(path)
+                if got != expected:
+                    problems.append(
+                        f"the battery's own sidecar reader `{reader.__name__}` is blind on {shape}: "
+                        f"expected {expected}, got {got} — a reader that misses a pin leaves the "
+                        f"«the narrow value lives in the grant» rules silent on every real "
+                        f"document, and nothing else here would notice"
+                    )
     for label, name, doc, families, expected in INSTRUCTION_CASES:
         got = missing_instruction_problems(name, doc, families)
         if len(got) != expected:
