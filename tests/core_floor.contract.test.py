@@ -621,8 +621,9 @@ def main() -> int:
         failures.append(
             f"the manifest declares `{declared}` but the shipped files only demand up to "
             f"{dotted(highest)}, so nothing derives that number any more: either a derivation went "
-            f"blind (a FEATURES/GRANT_FEATURES predicate, a key renamed in `flows/`, a glob that "
-            f"stopped matching) or the requirement really is gone. Re-derive it — and if the floor "
+            f"blind (a FEATURES/GRANT_FEATURES/UI_FEATURES predicate, a key renamed in `flows/`, a "
+            f"call dropped from `ui/`, a glob that stopped matching) or the requirement really is "
+            f"gone. Re-derive it — and if the floor "
             f"is meant to stand on something no shipped file can show, it belongs in `ALWAYS` as a "
             f"KernelNeed, not as a bare number here"
         )
