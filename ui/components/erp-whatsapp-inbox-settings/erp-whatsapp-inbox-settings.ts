@@ -326,9 +326,14 @@ class ErpWhatsappInboxSettings extends LitElement {
   /** Step 2 — what the number is for. One card per use this hub can actually offer. */
   private renderUses() {
     const heading = html`<h3>${this.t('ui.stepUses')}</h3>`;
-    // Silence until the answers are in: «install a booking module» shown to a salon that HAS one,
-    // for the half second before the probe lands, is the screen lying about her own hub.
-    if (!this.loaded) return heading;
+    // Nothing is decided until the answers are in: «install a booking module» shown to a salon
+    // that HAS one, for the half second before the probe lands, is the screen lying about her own
+    // hub. What it does say is that it is still finding out — the shell's own spinner, the one
+    // every panel of the hub paints while it loads. A blank card under the heading reads as
+    // «nothing here», which is the empty state one paint too early.
+    if (!this.loaded) {
+      return html`${heading}<ion-spinner name="crescent" data-testid="uses-loading"></ion-spinner>`;
+    }
 
     if (this.hubTooOld) {
       return html`${heading}

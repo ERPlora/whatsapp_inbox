@@ -232,6 +232,7 @@ describe('step 2 · one tap turns the recipe on, through the kernel and under th
   it('offers «Activar» when nothing has been built from the family yet', async () => {
     mountWith();
     const el = await mount();
+    expect(pick(el, 'uses-loading'), 'still says it is finding out after the kernel answered').toBeNull();
     expect(pick(el, `activate-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.activate);
     expect(pick(el, `deactivate-${APPOINTMENTS.family}`), 'offered «Desactivar» on a recipe that does not exist').toBeNull();
   });
@@ -415,11 +416,20 @@ describe('a failure is read on the card, never swallowed', () => {
       pick(el, `activate-${APPOINTMENTS.family}`),
       'offered «Activar» before knowing whether the module behind it is even installed',
     ).toBeNull();
+    // …and it SAYS it is still asking. Silence under the heading is the empty state one paint too
+    // early: a blank card reads as «nothing here». The spinner is what the shell paints while a
+    // panel loads (`ModuleSettingsForm.vue`, `ModulePlanPanel.vue`) and what `sales` paints in its
+    // own Web Component — the house pattern, not a new one.
+    expect(
+      pick(el, 'uses-loading'),
+      'nothing tells the owner the screen is still finding out: a blank card reads as «nothing here»',
+    ).not.toBeNull();
 
     // The positive: the same mount, once the probes answered. If this half ever stops passing, the
     // half above is measuring an empty screen instead of a screen that is waiting.
     await settle(el);
     expect(text(el)).toContain(esLocale.ui.usesNeedBookingModule);
+    expect(pick(el, 'uses-loading'), 'the loading mark outlived the answer').toBeNull();
   });
 });
 

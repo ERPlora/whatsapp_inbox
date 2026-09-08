@@ -5027,7 +5027,9 @@ var ErpWhatsappInboxSettings = class extends i3 {
   /** Step 2 — what the number is for. One card per use this hub can actually offer. */
   renderUses() {
     const heading = b2`<h3>${this.t("ui.stepUses")}</h3>`;
-    if (!this.loaded) return heading;
+    if (!this.loaded) {
+      return b2`${heading}<ion-spinner name="crescent" data-testid="uses-loading"></ion-spinner>`;
+    }
     if (this.hubTooOld) {
       return b2`${heading}
         <ok-inline-feedback tone="warning">${this.t("ui.usesNeedsNewerHub")}</ok-inline-feedback>`;
