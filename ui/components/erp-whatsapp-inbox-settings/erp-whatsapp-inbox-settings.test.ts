@@ -652,3 +652,37 @@ describe('every sentence of this screen ships in both languages, translated', ()
     }
   });
 });
+
+// ── Ioan's layout rule, as a guard rather than as a review comment ──────────────────────────────
+// «Nada debería tener un ancho máximo, todo debería ser responsive y adaptativo» (2026-09-06, said
+// in front of `.plan-panel { max-width: 960px }`). The `ion-content` around this screen already
+// puts the only horizontal limit there is — the responsive gutter — so a card that caps itself at
+// 640px reads on a desk as a narrow island inside a fluid page, which is the layout bug the rule
+// exists to stop. Intrinsic sizes (a chip, a select, a skeleton) are fine; what is banned is a
+// CONTAINER cap, so the guard only looks at values big enough to be one (>= 480px / 30rem) and it
+// reads the real stylesheet, not a copy of it.
+describe('the screen stays fluid at every width', () => {
+  // Read through the registry, so this is the stylesheet that actually ships, not a copy of it.
+  const stylesheet = () => {
+    const ctor = customElements.get('erp-whatsapp-inbox-settings') as unknown as {
+      styles: { cssText: string } | { cssText: string }[];
+    };
+    const styles = ctor.styles;
+    return (Array.isArray(styles) ? styles : [styles]).map((s) => s.cssText).join('\n');
+  };
+
+  it('caps the width of no container, on any viewport', () => {
+    const caps: string[] = [];
+    for (const m of stylesheet().matchAll(/max-width\s*:\s*(\d+(?:\.\d+)?)(px|rem|em|ch)/g)) {
+      const px = m[2] === 'px' ? Number(m[1]) : Number(m[1]) * 16;
+      if (px >= 480) caps.push(m[0]);
+    }
+    expect(caps).toEqual([]);
+  });
+
+  it('reads the stylesheet it claims to read', () => {
+    // Without this, the guard above passes just as happily against an empty string — which is what
+    // it would get the day `styles` stops being a plain `css` tagged template.
+    expect(stylesheet()).toContain('.card');
+  });
+});
