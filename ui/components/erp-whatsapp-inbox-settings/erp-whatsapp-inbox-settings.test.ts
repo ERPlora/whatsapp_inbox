@@ -395,8 +395,14 @@ describe('a failure is read on the card, never swallowed', () => {
     expect(push).toHaveBeenCalledWith({}, '', APPS_PATH);
   });
 
-  it('while it is still finding out it stays silent, instead of saying «nothing to offer»', async () => {
-    mountWith();
+  // Anchored in BOTH directions on purpose. Asserting only «the empty state is not on screen yet»
+  // is a sentence that cannot fail: at the first paint nothing has answered, so the screen does not
+  // know the module is missing either way. What proves the wait is real is that it commits to
+  // NOTHING — no empty state and no «Activar» — and that the same hub, once the answers land, does
+  // say the empty state. Without the second half the first half passes over a screen that offers a
+  // button for a module this hub does not have.
+  it('while it is still finding out it commits to nothing, and then it does answer', async () => {
+    mountWith({ absent: ['appointments', 'flows'] });
     await import('./erp-whatsapp-inbox-settings');
     const el = document.createElement('erp-whatsapp-inbox-settings') as HTMLElement & { shadowRoot: ShadowRoot };
     document.body.appendChild(el);
@@ -405,6 +411,15 @@ describe('a failure is read on the card, never swallowed', () => {
       text(el),
       'told the owner her channel is useless before the answers even arrived',
     ).not.toContain(esLocale.ui.usesNeedBookingModule);
+    expect(
+      pick(el, `activate-${APPOINTMENTS.family}`),
+      'offered «Activar» before knowing whether the module behind it is even installed',
+    ).toBeNull();
+
+    // The positive: the same mount, once the probes answered. If this half ever stops passing, the
+    // half above is measuring an empty screen instead of a screen that is waiting.
+    await settle(el);
+    expect(text(el)).toContain(esLocale.ui.usesNeedBookingModule);
   });
 });
 
