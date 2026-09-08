@@ -10,6 +10,7 @@ import {
   AUTOMATIONS_WITNESS,
   MODULE_ID,
   WHATSAPP_USES,
+  bookingPolicyOn,
   probeAutomations,
   readBookingPolicy,
   templateState,
@@ -138,6 +139,102 @@ describe('the booking policy door', () => {
 });
 
 /**
+ * **What the switch reads out of the answer, and the one reading that would lie in silence.**
+ *
+ * The dangerous case is not a malformed row: it is the EMPTY answer. A hub that never opened the
+ * booking module's own settings screen has no settings row at all, and «no row» is NOT «I review
+ * every booking» — the column is born ON next door. Read the other way, the very first visit of
+ * every fresh hub paints «Las reviso yo antes» while the recipe is in fact confirming bookings by
+ * itself, and nobody finds out until a customer walks in with an appointment the salon never saw.
+ *
+ * That is why the default is not a taste: it is a fact of the neighbour's migration, and the last
+ * test here reads it off `origin/main` so this file goes red the day Appointments changes its mind
+ * instead of quietly disagreeing with it.
+ */
+describe('what the switch reads out of the answer', () => {
+  const use = WHATSAPP_USES[0];
+
+  it('an answer that never came back reads as the owning module default, not as off', () => {
+    expect(bookingPolicyOn(undefined, use)).toBe(use.policy.defaultOn);
+  });
+
+  it('no settings row yet reads as the owning module default, not as off', () => {
+    expect(bookingPolicyOn([], use)).toBe(use.policy.defaultOn);
+    expect(bookingPolicyOn(null, use)).toBe(use.policy.defaultOn);
+  });
+
+  it('a row that does not carry the field at all reads as the default, not as off', () => {
+    expect(bookingPolicyOn({ id: 1, default_duration: 30 }, use)).toBe(use.policy.defaultOn);
+  });
+
+  it('reads the saved decision when the row carries it, both ways', () => {
+    expect(bookingPolicyOn({ [use.policy.field]: false }, use)).toBe(false);
+    expect(bookingPolicyOn({ [use.policy.field]: true }, use)).toBe(true);
+  });
+
+  it('reads the first row of a list answer, which is how the query comes back', () => {
+    expect(bookingPolicyOn([{ [use.policy.field]: false }], use)).toBe(false);
+    expect(bookingPolicyOn([{ [use.policy.field]: true }], use)).toBe(true);
+  });
+
+  // The query serves a real boolean (`auto_confirm_online <> 0`), but the row contract keeps the
+  // column as INTEGER 0/1 at rest: a driver that ever handed the raw column through must not read
+  // as «off», because off is the answer that silently disagrees with what is running.
+  it('a driver that hands 0/1 or t/f through still reads the decision, never a blanket off', () => {
+    expect(bookingPolicyOn({ [use.policy.field]: 0 }, use)).toBe(false);
+    expect(bookingPolicyOn({ [use.policy.field]: 1 }, use)).toBe(true);
+    expect(bookingPolicyOn({ [use.policy.field]: 'f' }, use)).toBe(false);
+    expect(bookingPolicyOn({ [use.policy.field]: 't' }, use)).toBe(true);
+  });
+
+  it('an empty string is not a decision: it reads as the default', () => {
+    expect(bookingPolicyOn({ [use.policy.field]: '' }, use)).toBe(use.policy.defaultOn);
+  });
+
+  /**
+   * The anchor, and it bites in BOTH directions on purpose: flipping `defaultOn` here goes red, and
+   * so does Appointments changing the `DEFAULT` of the column next door. Either one alone is the
+   * bug — two modules disagreeing about what an unconfigured hub is doing.
+   */
+  it.each(WHATSAPP_USES.map((u) => [u.module, u.policy.field, u.policy.defaultOn] as const))(
+    'the default it falls back to is the DEFAULT %s gives %s in its own migration',
+    (moduleId, field, defaultOn) => {
+      const declaring = filesOnOriginMain(moduleId, field, 'migrations/postgres');
+      if (declaring === null) {
+        console.warn(`SKIPPED: no ${moduleId} checkout next door (module-toolkit#211)`);
+        return;
+      }
+      expect(
+        declaring.length,
+        `no migration of ${moduleId} on origin/main mentions \`${field}\`: the column this screen ` +
+          'writes does not exist there, so every change would be rejected',
+      ).toBeGreaterThan(0);
+
+      const declared = declaring
+        .map((path) => fromOriginMain(moduleId, path) ?? '')
+        .map((sql) => sql.replace(/--[^\n]*/g, ''))
+        .flatMap((sql) => [...sql.matchAll(new RegExp(`\\b${field}\\b[^;]*?\\bdefault\\s+(\\S+)`, 'gi'))])
+        .map((m) => m[1].replace(/[^\w]/g, '').toLowerCase());
+
+      expect(
+        declared.length,
+        `${moduleId} declares \`${field}\` without a DEFAULT on origin/main, so what an ` +
+          'unconfigured hub is running is anybody\'s guess — and this screen has to guess it',
+      ).toBeGreaterThan(0);
+      expect(new Set(declared).size, `${moduleId} declares two different DEFAULTs for \`${field}\``).toBe(1);
+
+      const onNextDoor = !['0', 'false', 'f'].includes(declared[0]);
+      expect(
+        defaultOn,
+        `this screen falls back to ${defaultOn} for \`${field}\` but ${moduleId} creates the column ` +
+          `DEFAULT ${declared[0]}: the switch would paint the opposite of what the hub is really doing ` +
+          'on the first visit, before anybody has configured anything',
+      ).toBe(onNextDoor);
+    },
+  );
+});
+
+/**
  * **What the card knows about the recipe, read off the ONE field the kernel serves.**
  *
  * `installed` replaces the heuristic of wi#79 (guess by trigger event + command), which could not
@@ -210,6 +307,32 @@ function fromOriginMain(moduleId: string, path: string): string | null {
     });
   } catch {
     return null;
+  }
+}
+
+/**
+ * Which files of a neighbour mention something, on `origin/main`. Same «never the working tree»
+ * rule as {@link fromOriginMain}.
+ *
+ * `null` means there is no checkout next door and the caller has to skip out loud. An EMPTY LIST is
+ * a different answer and must never be confused with it: the checkout is there and the thing is not
+ * in it, which is a real red. `git grep` exits 1 when nothing matched, so that branch is the one
+ * that returns `[]`.
+ */
+function filesOnOriginMain(moduleId: string, pattern: string, pathspec: string): string[] | null {
+  const neighbour = join(MODULE_ROOT, '..', moduleId);
+  if (!existsSync(join(neighbour, '.git'))) return null;
+  try {
+    return execFileSync('git', ['-C', neighbour, 'grep', '-l', pattern, 'origin/main', '--', pathspec], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => line.replace(/^origin\/main:/, ''));
+  } catch {
+    return [];
   }
 }
 
