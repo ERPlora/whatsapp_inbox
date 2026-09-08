@@ -6432,9 +6432,54 @@ PARKING_CASES = [
 ]
 
 
+def booking_tables_disagreement_problems():
+    """`BOOKING_RULES`, `BIRTH_STATUS_SOURCE` and `BIRTH_STATUS_RULES` name the SAME bookings.
+
+    whatsapp_inbox#124, measured in review. `BOOKING_RULES` is the table `shipped_recipe_problems`
+    anchors to what really ships, both ways — a row nobody hands is a red, a booking two families
+    hand is a red. The two birth-status tables had no such anchor of their own: a row in
+    `BIRTH_STATUS_RULES` for a booking no recipe hands (`orders.orders.create`, say) left the whole
+    battery at `EXIT=0`, because `birth_status_problems` only ever judges the documents that
+    exist. And the mirror only failed by accident — dropping the table booking from
+    `BIRTH_STATUS_RULES` died on a `KeyError` in this file's own fixtures, not on a rule that says
+    what went missing. So the three tables are held to one another here, and through
+    `BOOKING_RULES` to `flows/`: every booking has its hour rule, its read and its two endings, in
+    the same languages, or none of them.
+    """
+    problems = []
+    for label, table in (
+        ("BIRTH_STATUS_SOURCE", BIRTH_STATUS_SOURCE),
+        ("BIRTH_STATUS_RULES", BIRTH_STATUS_RULES),
+    ):
+        for booking in sorted(set(table) - set(BOOKING_RULES)):
+            problems.append(
+                f"`{label}` has a row for `{booking}` and `BOOKING_RULES` does not: nothing "
+                f"anchors that row to a recipe that ships, so it guards nothing and reads as if "
+                f"it did. Give the booking its hour rule too, or take the row out"
+            )
+        for booking in sorted(set(BOOKING_RULES) - set(table)):
+            problems.append(
+                f"`BOOKING_RULES` names `{booking}` and `{label}` has no row for it: the recipe "
+                f"that books with it ships with an hour rule and no way to tell the customer "
+                f"what really happened to the booking, which is whatsapp_inbox#124 all over again"
+            )
+    for booking in sorted(set(BOOKING_RULES) & set(BIRTH_STATUS_RULES)):
+        languages, endings = (
+            set(BOOKING_RULES[booking]),
+            set(BIRTH_STATUS_RULES[booking]),
+        )
+        if languages != endings:
+            problems.append(
+                f"`{booking}` has its hour rule in {sorted(languages)} and its birth-status "
+                f"wording in {sorted(endings)}: a language with one and not the other ships a "
+                f"document this battery can only half vouch for"
+            )
+    return problems
+
+
 def self_check():
     """The mutants of the rules above, run every time, before any real document is opened."""
-    problems = []
+    problems = booking_tables_disagreement_problems()
     for rule in SELF_CHECKED_RULES:
         if rule not in DOCUMENT_RULES:
             problems.append(
