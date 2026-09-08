@@ -3,19 +3,25 @@
 El caso estrella de [ADR-0283](https://github.com/ERPlora/architecture) escrito como un documento de
 flujo real, validado contra `hub/schemas/flow.schema.json` por `tests/flow_templates.test.py`.
 
-Hay **cuatro familias, en dos pares** — el par que da HORA (peluquería, estética) y el par que da
-MESA (restaurante, bar) —, y el negocio elige **UNA**:
+Hay **dos familias, una por uso** — la que da HORA (peluquería, estética) y la que da MESA
+(restaurante, bar) —, y el negocio instala la de su sector:
 
 | Familia | Qué reserva | Quién decide que entre |
 | --- | --- | --- |
-| `appointment-from-whatsapp` | Una cita | **El salón.** La escritura espera en la bandeja de aprobación del hub hasta que una persona la revisa |
-| `appointment-from-whatsapp-unattended` | Una cita | **Nadie.** La cita entra en la agenda en el mismo turno, sin bandeja y sin que nadie del salón toque nada (whatsapp_inbox#58) |
-| `reservation-from-whatsapp` | Una mesa | **El restaurante.** La reserva espera en la misma bandeja hasta que alguien la lee |
-| `reservation-from-whatsapp-unattended` | Una mesa | **Nadie.** La mesa entra en el libro en el mismo turno, de madrugada incluida (whatsapp_inbox#60) |
+| `appointment-from-whatsapp` | Una cita | **Nadie por WhatsApp.** La cita entra en la agenda en el mismo turno, sin bandeja (whatsapp_inbox#58). Que nazca **aceptada** o **esperando** lo decide Citas, en «confirmar automáticamente» |
+| `reservation-from-whatsapp` | Una mesa | **Nadie por WhatsApp.** La mesa entra en el libro en el mismo turno, de madrugada incluida (whatsapp_inbox#60). Que nazca aceptada o esperando lo decide Reservas, en `auto_confirm` |
 
-🔴 **UNA, y no es un consejo:** las cuatro disparan con el MISMO evento
+🔴 **UNA sola instalada, y no es un consejo:** las dos disparan con el MISMO evento
 (`hub.whatsapp.message_received`), así que dos instaladas a la vez arrancan dos flujos con el mismo
 mensaje y el cliente acaba con dos reservas — o con una cita y una mesa.
+
+🪦 **Hasta whatsapp_inbox#124 eran cuatro, en dos pares:** cada uso llevaba además una receta de
+«propuesta», cuya escritura esperaba en la bandeja de aprobación del hub. Se borraron, y no por
+simplificar el catálogo: la elección «lo reviso yo / que entre sola» **nunca fue del dueño dos
+veces**. Ya la había hecho en Citas y en Reservas, y es ese ajuste el que de verdad decide con qué
+estado nace la reserva — la pareja solo se la volvía a preguntar con palabras que no podía
+comprobar. Lo que queda es una receta por uso, y es ella la que **lee el ajuste** y le cuenta al
+cliente lo que de verdad ha pasado.
 
 Cada familia son cuatro ficheros con el mismo nombre delante:
 
@@ -37,38 +43,74 @@ más deja de ser una traducción.
    factura—, que no lo haya escrito **el propio negocio** (`event.direction`) y que no venga del
    **histórico** que WhatsApp entrega al conectar el número (`event.source`). Ver «Por qué el filtro
    dice `neq` y no `eq`» más abajo.
-2. **`acknowledge`** — contesta **al instante** por WhatsApp: «te confirmamos en cuanto abramos».
-   Es la mitad que hace habitable la decisión de que la IA no agende sola: el cliente que escribe a
-   las 3 AM no se queda sin respuesta hasta las 9.
-3. **`know_the_customer`** — una cita se reserva contra un cliente REAL
-   (`appointments.appointments.create` exige `customer_id`). Si el contacto no tiene ficha, la IA
-   **propone crearla**; si ya la tiene, no propone nada y el run sigue.
-4. **`propose_appointment`** — primero decide **qué le están pidiendo** (reservar, anular, u otra
-   cosa) y luego **mira y propone en el mismo turno**. Elige el servicio, **estima
-   la duración** cuando el catálogo no la declara, pregunta la disponibilidad a las operaciones que
-   contestan con la autoridad de la propia puerta de reserva —`appointments.availability.day_opening`
-   (cuándo abre el negocio ese día, con la precedencia de Horarios ya aplicada y los descansos
-   recortados), `.slots` (los huecos libres de verdad) y `.check` (confirmar el que se elija)— y con
-   eso en la mano **propone** la cita. `policy: manual`, que es el default del kernel: lo único que
-   espera en `_flow_approvals` es la escritura, `appointments.appointments.create`, y la ejecuta
-   quien la apruebe, exactamente como se guardó.
-5. **`confirm_to_customer`** — le dice a la clienta **qué ha pasado**, por el mismo WhatsApp por el
-   que escribió. Manda lo que el paso anterior escribió (`{{steps.propose_appointment.text}}`), y
-   por eso el prompt de ese paso termina diciéndole al modelo que **lo que responda se le manda a
-   ella, palabra por palabra**: día, hora y profesional por su nombre, sin ids ni notas internas.
+2. **`acknowledge`** — contesta **al instante** por WhatsApp: «recibido, lo miro ahora». No es
+   cortesía: el turno de IA que viene detrás tarda, y quien escribe a las 3 AM tiene que ver algo
+   antes.
+3. **`find_customer`** / **`know_the_customer`** / **`resolve_customer`** — una cita se reserva
+   contra un cliente REAL (`appointments.appointments.create` exige `customer_id`). Si el contacto
+   no tiene ficha, la IA la **crea** en el turno; el `query` de detrás vuelve a leerla para que el
+   id que se use sea el de la fila que hay en la base de datos, nunca uno que el modelo recuerde.
+4. **`booking_policy`** — un `kind: query` que lee `appointments.settings.get` **antes** de que se
+   le pida nada al modelo. Es lo único del run que sabe si la cita va a nacer `pending` o
+   `confirmed`, y está aquí por eso: ver «La receta dice la verdad» más abajo.
+5. **`book_appointment`** — primero decide **qué le están pidiendo** (reservar, anular o mover) y
+   luego **mira y hace en el mismo turno**. Elige el servicio, **estima la duración** cuando el
+   catálogo no la declara, pregunta la disponibilidad a las operaciones que contestan con la
+   autoridad de la propia puerta de reserva —`appointments.availability.day_opening` (cuándo abre
+   el negocio ese día, con la precedencia de Horarios ya aplicada y los descansos recortados),
+   `.slots` (los huecos libres de verdad) y `.check` (confirmar el que se elija)— y con eso en la
+   mano **reserva**. `policy: "auto"`: lo que el modelo llama **ocurre en el turno** (ADR-0283 D3,
+   por la puerta de `Origin::Automation`). No hay bandeja y no hay nadie detrás.
+6. **`confirm_to_customer`** — le dice a la clienta **qué ha pasado**, por el mismo WhatsApp por el
+   que escribió. Manda lo que el paso anterior escribió (`{{steps.book_appointment.text}}`), y por
+   eso el prompt de ese paso termina diciéndole al modelo que **lo que responda se le manda a ella,
+   palabra por palabra**: día, hora y profesional por su nombre, sin ids ni notas internas.
+7. **`any_slot_to_offer`** + **`offer_slots`** — si no se reservó nada porque hay que elegir, los
+   huecos vuelven en `slots` y salen como una lista que la clienta **toca**. El id de cada hueco
+   lleva inicio, profesional y servicio, así que su respuesta no tiene que repetir nada.
 
-## `appointment-from-whatsapp-unattended` — la misma automatización, sin nadie delante
+Es lo que pidió Ioan el 06/09/2026: «un proceso automático con WhatsApp sin necesidad de un
+humano». Un salón de una persona no tiene a nadie mirando el hub a las 3 AM.
 
-Mismos cuatro steps y **las mismas tools**: desde whatsapp_inbox#105 esta familia también mueve
-una cita, así que son 14 grants en las dos (el porqué de que antes fueran 13, abajo). Cambian **dos
-cosas**: los dos steps `ai` llevan
-`policy: "auto"`, así que lo que el modelo llama **ocurre en el turno** (ADR-0283 D3, por la puerta
-de `Origin::Automation`); y los prompts están escritos para eso — no dicen «lo revisa una persona»,
-porque no la hay.
+## La receta dice la VERDAD: `booking_policy` y las dos frases
 
-Es lo que pidió Ioan el 06/09/2026: «un proceso automático con WhatsApp sin necesidad de un humano».
-Un salón de una persona no tiene a nadie mirando el hub a las 3 AM, y con la familia atendida la
-clienta que escribe de madrugada no tiene cita hasta que alguien abre la bandeja.
+whatsapp_inbox#124. Una cita creada por esta receta **no nace siempre igual**: en Citas,
+`born_confirmed` es «`auto_confirm_online` encendido **y** la reserva dice que la hizo la propia
+clienta». Con el interruptor apagado la cita nace `pending` y alguien del salón tiene que aceptarla
+— y la receta le decía a la clienta «reservada» de todas formas, que es mandarla a un hueco que
+nadie ha aceptado.
+
+No se arregla leyendo el resultado del command: `appointments.appointments.create` contesta
+`{ok, operations, new_ids}` y ahí **no viene el estado**. Lo que sí se puede es leer el ajuste
+ANTES, y eso es el paso `booking_policy`. Sobre él descansan dos cosas, y ninguna se sostiene sin la
+otra:
+
+- **La lectura es determinista.** Es un `kind: query`, no una tool del paso `ai`: pasa siempre, la
+  llame el modelo o no. `birth_status_problems` exige exactamente eso — un
+  `appointments.settings.get` en `tools.queries` no cuenta, porque entonces la frase que lee la
+  clienta depende de que el modelo se acuerde de preguntar.
+- **El prompt lleva las DOS frases**, en el idioma del documento: la de la cita que nace aceptada y
+  la de la que nace esperando. Una sola es el mismo bug con la otra cara — «reservada» sobre una
+  cita pendiente, o «te la confirman» sobre una que ya está en la agenda. Las dos redacciones están
+  pineadas literalmente en `BIRTH_STATUS_RULES` (`tests/flow_templates.test.py`): la redacción **es**
+  la promesa, así que cambiarla es cambiar la tabla en el mismo commit.
+
+**Y el ajuste vacío no significa lo mismo en los dos módulos**, así que cada prompt lo dice por su
+cuenta: un salón sin fila de ajustes tiene `auto_confirm_online` **encendido**
+(`auto_confirm_online_of` devuelve `true` cuando el campo falta), mientras que un restaurante sin
+ajustes guardados nace `pending` (`COALESCE(s.auto_confirm, 0) = 1` en el `INSERT` de Reservas).
+Cambian también en la forma: Citas devuelve el flag ya como **booleano** y Reservas lo devuelve
+**crudo, 0/1**.
+
+🔴 **Y el grant FIJA `booked_online` = `true`.** Es la otra mitad de `born_confirmed` y la escribe
+un modelo que está leyendo el mensaje de un desconocido, así que no se deja en el prompt: el
+`payload` del grant de `appointments.appointments.create` la clava (hub#1623/ADR-0456). Omitir el
+campo no es un detalle — `schemas/appointment_create.json` lo declara con `default: false`, así que
+sin él **toda** cita nace `pending`, en todos los hubs, y el interruptor del salón no hace nada.
+Ojo con la consecuencia en el prompt: `check_payload_pin` rechaza también la llamada que **omite**
+el campo fijado, así que el punto 9 tiene que ORDENARLO — y esa orden está pineada en
+`PINNED_INSTRUCTIONS`, porque son cuatro palabras dentro de una instrucción numerada y es
+exactamente lo que se pierde en una traducción.
 
 ### 🔴 La hora NO la elige el modelo
 
@@ -96,41 +138,54 @@ un segundo dato que no es del modelo: **«Ni la hora ni cuántos sois lo eliges 
 escribe.»** Adivinar cuántos vienen sienta a cuatro en una mesa de dos, y eso se descubre en la
 puerta.
 
-### Por qué son dos plantillas y no un ajuste
+### Por qué es UNA plantilla y el modo NO se elige aquí
 
-Parece que debería gobernarlo el ajuste **«Aprobación» (`approval_mode`)** que el módulo ya guarda.
-No puede, por dos motivos distintos, y los dos verificados contra `origin`:
+Hubo un tiempo en que eran dos por uso —una con bandeja y otra sin ella— y la razón era buena: el
+modo **no** se puede leer de un ajuste desde el documento. `flow.schema.json` declara `policy` como
+`enum: ["auto","manual"]`, un literal; no es una expresión del lenguaje de mapeo, así que ningún
+documento puede cambiar de modo en caliente. Un documento = un modo.
 
-- **`policy` es un literal del documento.** `flow.schema.json` lo declara
-  `enum: ["auto","manual"]`; no es una expresión del lenguaje de mapeo, así que ningún documento
-  puede leer un ajuste del módulo y cambiar de modo en caliente. Un documento = un modo.
-- **`approval_mode` gobierna OTRA cosa, y hoy no gobierna nada.** Decide el estado inicial de una
-  `request` (`commands/_insert_request.sql`: `auto` → `confirmed`, `manual` → `pending_review`), y
-  ese pipeline está desconectado: lo único que emite `whatsapp_inbox.request.approved` —el evento
-  que `appointments` escucha para reservar— es `requests.approve`, cuyo SQL exige
-  `status = 'pending_review'` y devuelve `whatsapp_inbox.request_not_pending` en cualquier otro
-  caso. O sea que una request nacida `confirmed` **no se puede aprobar y nadie la reserva**; y
-  `whatsapp_inbox.request.created` no lo escucha ningún módulo. Además hoy **nadie llama a
-  `requests.ingest`**, así que ese camino no se ha ejecutado nunca.
+Lo que estaba mal era la pregunta. «¿Quieres revisar las reservas?» ya la contesta el negocio en
+**Citas** («confirmar automáticamente») y en **Reservas** (`auto_confirm`), y esa respuesta es la
+que de verdad decide lo que pasa: apagada, la cita nace `pending` y espera a una persona. La pareja
+de recetas se la volvía a preguntar en la galería y no cambiaba nada de eso — solo cambiaba **dónde**
+esperaba la escritura, y en la mitad de los casos hacía que la receta dijese lo contrario de lo que
+la agenda tenía. Así que hoy la receta es una, corre en `auto`, y **lee** la decisión donde vive
+(whatsapp_inbox#124).
 
-Así que el modo se elige **al instalar**, que es como lo eligen Square («auto-confirm» / «request to
-book») y Toast: dos plantillas en la galería, una frase de diferencia, y el dueño marca una.
+⚠️ **El ajuste `approval_mode` de este módulo no gobierna nada de esto** — y hoy no gobierna nada en
+absoluto. Decide el estado inicial de una `request` (`commands/_insert_request.sql`: `auto` →
+`confirmed`, `manual` → `pending_review`), y ese pipeline está desconectado: lo único que emite
+`whatsapp_inbox.request.approved` —el evento que `appointments` escucha para reservar— es
+`requests.approve`, cuyo SQL exige `status = 'pending_review'` y devuelve
+`whatsapp_inbox.request_not_pending` en cualquier otro caso. O sea que una request nacida
+`confirmed` **no se puede aprobar y nadie la reserva**; y `whatsapp_inbox.request.created` no lo
+escucha ningún módulo. Además hoy **nadie llama a `requests.ingest`**, así que ese camino no se ha
+ejecutado nunca.
 
-### `-unattended` en el nombre del fichero es la DECLARACIÓN
+### `UNATTENDED_FAMILIES` es la DECLARACIÓN
 
-No es un adorno del nombre: es lo que le compra a esta familia la excepción de
-`tests/flow_templates.test.py`, que para todas las demás sigue dando **FAIL** si una escritura
-aparece en un paso `auto`. Está en el nombre del fichero y no dentro del documento porque el
-documento no tiene dónde ponerlo — `flow.schema.json` es `additionalProperties: false` en la raíz,
-así que un `"unattended": true` inventado lo **rechazaría** `PUT /api/hub/flows`. Y el nombre de
-familia sobrevive a la traducción, que es más de lo que hace el campo `name`.
+Que estas recetas escriban sin nadie delante es una **excepción** a la regla que
+`tests/flow_templates.test.py` le aplica a todo lo demás: una escritura en un paso `auto` es FAIL.
+La excepción se declara en `UNATTENDED_FAMILIES`, una tabla de la propia batería.
 
-La excepción se cobra: `unattended_problems` sujeta a esa familia a la promesa que hace su nombre.
-Un paso que puede escribir y vuelve a `policy: "manual"`, o un paso `approval` (la pausa explícita
-del kernel, hub#950), son **FAIL**. La razón es que esa regresión es invisible desde fuera: el
-documento sigue siendo válido, se guarda, arma su trigger y contesta a la clienta — y la escritura
-se queda esperando en `_flow_approvals` a una persona que en este negocio no existe. El único
-síntoma es una cita que nunca aparece.
+No está dentro del documento porque el documento no tiene dónde ponerlo — `flow.schema.json` es
+`additionalProperties: false` en la raíz, así que un `"unattended": true` inventado lo **rechazaría**
+`PUT /api/hub/flows`. Estuvo en el nombre del fichero (`…-unattended`) hasta whatsapp_inbox#124, y
+ese sufijo se fue con las recetas de bandeja: cuando todas las que quedan son desatendidas, un
+sufijo que llevan todas no declara nada y solo hace más largo el nombre que el dueño lee.
+
+La tabla está anclada **en los dos sentidos** por `unattended_ledger_problems`, que es lo que la
+mantiene honesta: una familia en `flows/` que la tabla no nombra es una receta a la que ninguna
+regla de «no hay nadie mirando» se aplica —y saldría verde—, y una fila de la tabla sin documento
+en `flows/` es la basura que deja un renombrado. Las dos son FAIL.
+
+Y la excepción se cobra: `unattended_problems` sujeta a esas familias a la promesa. Un paso que
+puede escribir y vuelve a `policy: "manual"`, o un paso `approval` (la pausa explícita del kernel,
+hub#950), son **FAIL**. La razón es que esa regresión es invisible desde fuera: el documento sigue
+siendo válido, se guarda, arma su trigger y contesta a la clienta — y la escritura se queda
+esperando en `_flow_approvals` a una persona que en este negocio no existe. El único síntoma es una
+cita que nunca aparece.
 
 ⚠️ **Lo que esta familia NO hace todavía:** que la clienta elija de una **lista numerada** («responde
 2») antes de que se reserve nada. Eso necesita que la oferta se **guarde** entre un mensaje y el
@@ -159,7 +214,7 @@ que sabe hacer, y hacerlo ahí cuesta **cero** turnos extra. Las ramas se excluy
 el presupuesto de `max_iters` no se toca: reservar gasta hasta 9 llamadas, mover gasta 6 y anular
 gasta 3, y el step tiene 10 en las dos familias.
 
-**Anular respeta las reglas del salón sin re-derivarlas.** La propuesta lleva `channel: "customer"`,
+**Anular respeta las reglas del salón sin re-derivarlas.** La anulación lleva `channel: "customer"`,
 y eso hace que `appointments` aplique sus propios `allow_customer_cancellation` y
 `cancellation_notice_hours` cuando la anulación se ejecuta (appointments#6, campo `channel` desde
 1.1.32). El prompt tiene prohibido calcular la antelación por su cuenta: es la misma regla que con el
@@ -184,17 +239,18 @@ clienta, Citas rechaza mover una cita que no es suya. Por eso el suelo de las do
 **1.1.73** y no 1.1.72: por debajo, la llamada no se degrada — se rechaza entera con
 `invalid_payload`.
 
-🔴 **Por qué mover vivió una temporada SOLO en la familia atendida.** Mientras `reschedule` no
+🔴 **Por qué mover llegó el último.** Mientras `reschedule` no
 tuvo campo que clavar, su handler no miraba de quién era la cita: la cadena `customers.list` (busca
 por nombre) → `list_for_customer` (acepta cualquier `customer_id`) → `reschedule` cabía entera
 dentro de los grants de la plantilla, y lo único que se interponía era el párrafo del prompt — que
 es justo lo que hub#1623 dice que **no** es un control. Con `policy: "manual"` hay una persona que
-ve la propuesta antes de que ocurra; con `policy: "auto"` no hay nadie, así que la desatendida
-contestaba «alguien del salón te responde». Lo que lo desbloqueó fue appointments#142, en ese orden
-y nunca al revés: primero el campo en el command, después el caso desatendido.
+veía la propuesta antes de que ocurriera; aquí no hay nadie, así que la receta contestaba
+«alguien del salón te responde». Lo que lo desbloqueó fue appointments#142, en ese orden y nunca al
+revés: primero el campo en el command, después la herramienta en el prompt.
 
 ⚠️ **Y el pin del grant no se da por aplicado solo por declararlo.** Los dos
-`*.grants.json` fijan `payload: {"channel": "customer"}` sobre `reschedule`, que es donde tiene que
+`*.grants.json` fijan `payload: {"channel": "customer"}` sobre `reschedule` —y el de citas fija
+además `booked_online` sobre `create`—, que es donde tiene que
 estar — pero hasta **hub#1654** el `payload` del sidecar de un módulo **se perdía al llegar a la
 puerta del hub**, y la receta acababa pidiendo el permiso ancho. Ese arreglo está entregado
 (07/09) y **todavía no en la flota**: mientras la imagen no esté desplegada, lo que aplica el
@@ -203,37 +259,27 @@ sostiene el canal en el prompt es la instrucción pineada de `PINNED_INSTRUCTION
 `channel` = `customer` y el `customer_id` en la MISMA línea. Son tres capas para lo mismo a
 propósito: la del grant es la única que no depende del modelo, y todavía no llega.
 
-### Por qué la confirmación va DESPUÉS del paso que propone
+### Por qué la confirmación va DESPUÉS del paso que reserva
 
-Porque el run **no termina** cuando una propuesta se aparca. `policy: manual` escribe la fila en
-`_flow_approvals` y corta el turno, pero cuando una persona decide, `decide_flow_approval` cierra el
-paso con `IoResult::Done` y **el run sigue por el paso siguiente**. Así que un `notify` escrito
-detrás cubre las dos salidas con un solo paso:
+Porque el acuse de recibo de arriba se manda **antes** de que pase nada, así que no puede contar lo
+que pasó. El `notify` de detrás sí, y cubre las dos salidas con un solo paso:
 
-- **se reservó** → la clienta recibe «te he reservado el martes a las 10:30 con Marta»;
-- **no había hueco** (el modelo no propuso nada y el paso terminó sin aparcar nada) → recibe el
-  porqué y una alternativa.
+- **se reservó** → la clienta recibe «te he reservado el martes a las 10:30 con Marta» — o «te la he
+  apuntado y el salón te la confirma», según lo que dijera `booking_policy`;
+- **no había hueco** (el modelo no reservó nada) → recibe el porqué y los huecos que sí hay, para
+  tocar uno.
 
 Sin él, la automatización se paraba justo antes de cumplir lo que ella misma había prometido en el
 primer mensaje: el salón veía la cita en su agenda y la clienta seguía esperando (whatsapp_inbox#58).
-`tests/flow_templates.test.py` lo exige: si un paso `ai` puede proponer una escritura y no hay ningún
-`notify` **detrás**, es un FAIL. El acuse de recibo de arriba no cuenta — se manda antes de que pase
-nada, así que no puede contar lo que pasó.
+`tests/flow_templates.test.py` lo exige: si un paso `ai` puede escribir y no hay ningún `notify`
+**detrás**, es un FAIL.
 
-El **rechazo** ya está cubierto desde whatsapp_inbox#67: el paso lleva `on_reject: "continue"`, así
-que el run no muere en la tarjeta rechazada y el paso `reply_to_customer` de detrás le escribe a la
-clienta lo que de verdad pasó, en vez de mandarle un texto que habla de una cita que no tiene.
-
-Y las otras dos salidas de la bandeja están cubiertas desde whatsapp_inbox#70: que la propuesta
-**caduque** sin que nadie la decida (`on_expire: "continue"`, hub#1634 — el barrido reanuda el run
-con `status: "expired"`) y que **falle al ejecutarse** después de aprobada (`on_error: "continue"`,
-hub#1635 — el run sigue con `status: "failed"` y el motivo en `error`). Las dos claves van en el paso
-que propone (`propose_appointment` / `book_table`) y el prompt de `reply_to_customer` conoce los dos
-desenlaces: nunca reenvía el texto aparcado (habla de una cita que no existe), no le cuenta a la
-clienta el motivo técnico y le ofrece huecos. Son claves de v1.1.16, por debajo del suelo `1.1.17`
-que ya declara `module.json`; `tests/flow_templates.test.py` (`unanswered_ending_problems`) exige
-las dos en cada documento con bandeja y `tests/core_floor.contract.test.py` deriva el suelo de
-ellas. Las familias `-unattended` no las llevan a propósito: `policy: auto` no aparca nada.
+🪦 **Lo que se fue con las recetas de bandeja** (whatsapp_inbox#124): `on_reject`, `on_expire` y
+`on_error: "continue"` (whatsapp_inbox#67/#70/#121) y el paso `reply_to_customer` que leía cómo
+había terminado la aprobación. No son guardas perdidas: los tres desenlaces solo existen cuando una
+escritura **se aparca** en una persona, y ninguna receta viva tiene esa forma —
+`unanswered_ending_problems` gatea precisamente sobre que el último paso que escribe sea
+`policy: manual`. Si algún día vuelve una receta con bandeja, vuelven con ella.
 
 ### Por qué preguntar y proponer caben en UN paso
 
@@ -257,8 +303,8 @@ como escritura. Por eso `propose_appointment` pregunta y propone en el mismo tur
 en vez de dos, y lo que averigua no tiene que caber en un párrafo.
 
 `tests/flow_templates.test.py` sigue exigiendo la dirección peligrosa —una **escritura** en un paso
-`auto` es un FAIL, porque `auto` la ejecuta sin nadie delante (ADR-0283 D3), **salvo en la familia
-`-unattended`, que es exactamente lo que compra**— y desde
+`auto` es un FAIL, porque `auto` la ejecuta sin nadie delante (ADR-0283 D3), **salvo en las
+familias de `UNATTENDED_FAMILIES`, que es exactamente lo que compra esa fila**— y desde
 whatsapp_inbox#55 exige también la contraria de antes: un paso cuyos commands **solo contestan** y
 al que otro paso cita (`{{steps.<id>.text}}`) es el apaño de dos pasos, y es un FAIL. La batería se
 comprueba a sí misma primero: `self_check()` corre esas dos reglas contra documentos sintéticos
@@ -322,19 +368,17 @@ alta; nunca calla.
 
 **La duración estimada se ve.** Va en `duration_minutes` del payload propuesto (que es lo que se
 ejecuta al aprobar, sin re-derivar) y además **en palabras en `internal_notes`**, para que se lea en
-cualquier pantalla que pinte la propuesta y se pueda corregir antes de que entre en la agenda.
+cualquier pantalla que pinte la cita y se pueda corregir antes de que llegue el día.
 `internal_notes` es solo para el personal: la clienta no lo lee.
 
 ## `reservation-from-whatsapp` — la misma receta, para una MESA
 
-whatsapp_inbox#60. Un restaurante que conectaba su WhatsApp encontraba en la galería dos recetas de
-peluquería y nada que pudiera usar: la receta existía para la silla y no para la mesa. Estas dos
-familias son **la misma automatización con el módulo de destino cambiado** — mismo evento, mismo
-filtro, mismo destinatario, mismos pasos —, no un diseño nuevo. Lo que cambia es a quién le
-escriben y qué escriben.
+whatsapp_inbox#60. Un restaurante que conectaba su WhatsApp encontraba en la galería recetas de
+peluquería y nada que pudiera usar: la receta existía para la silla y no para la mesa. Esta familia
+es **la misma automatización con el módulo de destino cambiado** — mismo evento, mismo filtro, mismo
+destinatario, mismos pasos —, no un diseño nuevo. Lo que cambia es a quién le escribe y qué escribe.
 
-**Tres pasos en la desatendida, cuatro en la atendida** (uno menos que en citas, y por una razón del
-contrato ajeno): Citas exige `customer_id` para reservar, así que su plantilla lleva un paso entero
+**Un paso menos que en citas, y por una razón del contrato ajeno:** Citas exige `customer_id` para reservar, así que su plantilla lleva un paso entero
 —`know_the_customer`— dedicado a que la ficha exista. En Reservas el cliente es **opcional**: con
 `guest_name` y `guest_phone` basta. Así que la mesa se reserva **sin dar de alta a nadie**: se busca
 la ficha con `customers.list` y, si existe, se pasa su id; si no existe, no se crea. Un turno menos,
@@ -347,15 +391,18 @@ una escritura menos y un grant menos.
    (`reservations.timeslots.list`) y cuánto queda libre en cada uno
    (`reservations.slots.count_for`), y con eso reserva con `reservations.reservations.create` o
    apunta en la lista de espera con `reservations.waitlist.create`.
-3. **`reply_to_customer`** (solo en la atendida) — lee cómo terminó la aprobación y escribe lo que
-   se manda, igual que en citas: un «no» del restaurante nunca puede salir como «tienes mesa».
-4. **`confirm_to_customer`** — se lo manda por el mismo WhatsApp por el que escribió.
+3. **`confirm_to_customer`** — se lo manda por el mismo WhatsApp por el que escribió.
+
+Y delante de `book_table` va su **`booking_policy`**, igual que en citas: aquí lee
+`reservations.settings.get`, y el flag se llama `auto_confirm` y vuelve **crudo** (`0`/`1`). Su
+vacío tampoco significa lo mismo — un restaurante que no ha guardado sus ajustes reserva `pending`,
+al revés que un salón. Ver «La receta dice la VERDAD» arriba.
 
 **Las cuatro lecturas de Reservas son `query` de verdad**, no commands que contestan. Eso las hace
 más simples que las de Citas: corren en el turno con cualquier política sin depender de hub#1595 —
 aunque el suelo del módulo (`compatibility.min_erplora_version`) siga siendo el mismo para todos.
 
-### 🔴 Lo que estas dos familias NO hacen: tocar una reserva que YA existe
+### 🔴 Lo que esta familia NO hace: tocar una reserva que YA existe
 
 Y no es por falta de tiempo. Cambiar o anular una reserva es lo segundo que un cliente escribe, y
 aquí el prompt contesta **«alguien del restaurante se ocupa»** a propósito, porque hoy no se puede
@@ -370,7 +417,7 @@ hacer de forma segura sin nadie delante:
 Es el mismo agujero que Citas cerró en `appointments.appointments.cancel` dándole `channel` +
 `customer_id` (appointments#140) y que sigue abierto en su `reschedule` (appointments#142). Para
 Reservas sale como **ERPlora/reservations#50**. Hasta que aterrice, la regla es la de
-`moving_problems` para la familia desatendida de citas: **si no se puede acotar a quien escribe, no
+`moving_problems` para la receta de citas: **si no se puede acotar a quien escribe, no
 se entrega la herramienta** — se contesta que una persona se ocupa, que es una espera, pero no la
 reserva de otro cambiada por un desconocido.
 
@@ -393,11 +440,11 @@ kernel son `_flow*`. Es una guarda deliberada: `_flow_grants` es la tabla de cap
 Así que hoy la plantilla se instala **por la misma puerta que usa una persona**, con sesión de
 owner/admin:
 
-Sustituye `<familia>` por la que quieras instalar: `appointment-from-whatsapp` /
-`appointment-from-whatsapp-unattended` para una cita, `reservation-from-whatsapp` /
-`reservation-from-whatsapp-unattended` para una mesa — con revisión la primera de cada par, sin ella
-la segunda. **Una sola**: las cuatro disparan con el MISMO evento, así que dos instaladas a la vez
-arrancarían dos flujos con el mismo mensaje y el cliente acabaría con dos reservas.
+Sustituye `<familia>` por la del uso que toque: `appointment-from-whatsapp` para una cita,
+`reservation-from-whatsapp` para una mesa. **Una sola**: las dos disparan con el MISMO evento, así
+que dos instaladas a la vez arrancarían dos flujos con el mismo mensaje y el cliente acabaría con
+dos reservas. Si el negocio quiere revisar lo que entra, eso **no** se elige aquí: se apaga
+«confirmar automáticamente» en Citas (o `auto_confirm` en Reservas) y la receta lo cuenta.
 
 ```bash
 # 1) crear el flujo
@@ -420,8 +467,8 @@ La vía declarativa para que un blueprint la reparta está propuesta en **ERPlor
 - El módulo **`whatsapp_inbox` instalado y activo** con entitlement, y el hub **enrolado**: es lo
   que enciende el poller que trae los mensajes (hub#664), y es lo que crea la conversación de la
   que sale el destinatario.
-- Los módulos que aportan las tools. Para las familias de **cita**: `customers`, `services`,
-  `appointments` (>= 1.1.73, ver `requires.json`) y `staff`. Para las de **mesa**: `customers` y
+- Los módulos que aportan las tools. Para la familia de **cita**: `customers`, `services`,
+  `appointments` (>= 1.1.73, ver `requires.json`) y `staff`. Para la de **mesa**: `customers` y
   `reservations` (>= 1.1.72 no, **>= 3.0.19** — el suelo lo fija `blocked_dates.on_date`, que es la
   única lectura con la que la plantilla sabe que el restaurante cierra ese día; ver
   `reservation-from-whatsapp.requires.json`). El horario del negocio ya **no** se le pregunta a `schedules` desde el

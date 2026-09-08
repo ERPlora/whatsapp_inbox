@@ -84,13 +84,15 @@ export interface WhatsAppUse {
    */
   triggerEvent: string;
   /**
-   * A command grant EVERY variant of {@link WhatsAppUse.family} carries — the other half.
+   * A command grant {@link WhatsAppUse.family} carries — the other half.
    *
-   * «Every variant» is the requirement, not «the main recipe»: this module ships an attended and an
-   * unattended appointment recipe, and a command only one of them holds would leave the other
-   * unrecognised and the card inviting the owner to build a second automation. Together with
-   * {@link WhatsAppUse.triggerEvent} it also keeps the uses apart — the table-booking recipe
-   * (whatsapp_inbox#60) listens to the SAME event with a `reservations.*` command.
+   * It has to be one the recipe holds in EVERY language it ships in, which is all that is left of
+   * the older requirement: this module used to ship an attended and an unattended recipe per use,
+   * and a command only one of them held left the other unrecognised and the card inviting the owner
+   * to build a second automation. Since whatsapp_inbox#124 there is one recipe per use, so the
+   * variants are the translations. Together with {@link WhatsAppUse.triggerEvent} it also keeps the
+   * uses apart — the table-booking recipe (whatsapp_inbox#60) listens to the SAME event with a
+   * `reservations.*` command.
    */
   setupCommand: string;
   icon: string;
