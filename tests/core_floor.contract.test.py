@@ -35,7 +35,10 @@ WHAT THIS PINS:
      bump: a template that starts using a newer kernel feature, or a permission that starts
      fixing a value only a newer kernel applies, raises the floor by existing, which is the
      whole point;
-  4. and every requirement is RE-MEASURED against the neighbouring hub checkout instead of
+  4. nor ABOVE it: a floor higher than anything the shipped files demand is a number nothing
+     derives any more, which is what every derivation going blind at once looks like. The table is
+     anchored in BOTH directions, so blinding the sidecar reading cannot turn this file green;
+  5. and every requirement is RE-MEASURED against the neighbouring hub checkout instead of
      trusted: the marker has to be PRESENT at the declared release AND ABSENT at the release before
      it. A control that cannot tell the two apart would pass no matter what the floor said.
 
@@ -282,7 +285,27 @@ def main() -> int:
             f"({', '.join(sorted({dotted(n.floor) for n, _ in demanded}))})"
         )
 
-    # 4 · Re-measure each need instead of trusting the table in the docstring: PRESENT at its
+    # 4 · …and NOT ABOVE it either. Step 3 only pushes the floor UP, so every derivation going
+    #     blind at once — a predicate that stops matching, a key renamed in the sidecars, a glob
+    #     that no longer casts — leaves «>= everything demanded» trivially true and the declared
+    #     number justified by nothing. Anchoring the table in BOTH directions is what makes the
+    #     derivation load-bearing (`table-driven-guards-need-anchoring-in-both-directions`).
+    highest = max((need.floor for need, _ in demanded), default=None)
+    if highest is not None and floor > highest:
+        failures.append(
+            f"the manifest declares `{declared}` but the shipped files only demand up to "
+            f"{dotted(highest)}, so nothing derives that number any more: either a derivation went "
+            f"blind (a FEATURES/GRANT_FEATURES predicate, a key renamed in `flows/`, a glob that "
+            f"stopped matching) or the requirement really is gone. Re-derive it — and if the floor "
+            f"is meant to stand on something no shipped file can show, it belongs in `ALWAYS` as a "
+            f"KernelNeed, not as a bare number here"
+        )
+    elif highest is not None:
+        print(
+            f"  ok: `{declared}` is exactly what the shipped files demand, not a number above them"
+        )
+
+    # 5 · Re-measure each need instead of trusting the table in the docstring: PRESENT at its
     #     release, ABSENT at the one before it.
     for need in sorted({n for n, _ in demanded}):
         at_floor, measured = marker_count(f"v{dotted(need.floor)}", need.path, need.marker), (
