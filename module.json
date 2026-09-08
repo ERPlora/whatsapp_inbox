@@ -20,7 +20,7 @@
     "customers"
   ],
   "compatibility": {
-    "min_erplora_version": "1.1.17"
+    "min_erplora_version": "1.1.19"
   },
   "permissions": [
     "whatsapp_inbox.view_conversation",
@@ -58,13 +58,6 @@
       "icon": "clipboard-outline",
       "component": "erp-whatsapp-inbox-requests",
       "permission": "whatsapp_inbox.view_request"
-    },
-    {
-      "id": "templates",
-      "label": "Templates",
-      "icon": "document-text-outline",
-      "component": "erp-whatsapp-inbox-templates",
-      "permission": "whatsapp_inbox.manage_settings"
     },
     {
       "id": "settings",
