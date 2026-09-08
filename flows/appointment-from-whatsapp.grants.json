@@ -25,6 +25,10 @@
       "value": "staff.schedules.list_for_member"
     },
     {
+      "kind": "query",
+      "value": "appointments.settings.get"
+    },
+    {
       "kind": "command",
       "value": "appointments.availability.day_opening"
     },
@@ -42,7 +46,10 @@
     },
     {
       "kind": "command",
-      "value": "appointments.appointments.create"
+      "value": "appointments.appointments.create",
+      "payload": {
+        "booked_online": true
+      }
     },
     {
       "kind": "query",

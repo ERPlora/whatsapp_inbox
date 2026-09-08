@@ -128,15 +128,14 @@ Automatizaciones no sabe nada de WhatsApp «por dentro». Trabaja con **eventos*
 
 ```mermaid
 flowchart TD
-    E["evento<br/>hub.whatsapp.message_received"] --> T{{"Automatización<br/>«WhatsApp → cita propuesta»"}}
-    T --> N1["paso notify (whatsapp)<br/>«¡Recibido! Te confirmo en un momento»"]
-    N1 --> A1["paso ai · manual<br/>¿tiene ficha de cliente? si no, propone crearla"]
-    A1 --> A2["paso ai · manual<br/>¿reservar o anular?<br/>lee la agenda y propone → petición en revisión"]
-    A2 --> AP{"aprobación"}
+    E["evento<br/>hub.whatsapp.message_received"] --> T{{"Automatización<br/>«WhatsApp → cita reservada»"}}
+    T --> N1["paso notify (whatsapp)<br/>«¡Recibido! Lo miro ahora»"]
+    N1 --> A1["paso ai · auto<br/>¿tiene ficha de cliente? si no, la crea"]
+    A1 --> Q["paso query<br/>Citas: ¿confirma sola las reservas online?"]
+    Q --> A2["paso ai · auto<br/>¿reservar, anular o mover?<br/>lee la agenda y RESERVA en el turno"]
+    A2 -- "reservó" --> R["Citas crea la cita<br/>aceptada o pendiente, según el ajuste"]
+    R --> N2["paso notify (whatsapp)<br/>«Te he reservado el viernes a las 18:30»<br/>o «te la he apuntado y te la confirman»"]
     A2 -- "no había hueco" --> N2
-    AP -- "auto o el dueño aprueba" --> R["Citas crea la reserva"]
-    R --> N2["paso notify (whatsapp)<br/>«Te he reservado el viernes a las 18:30»"]
-    AP -- "rechaza" --> X["el run se cancela<br/>(hoy la clienta no recibe nada)"]
 ```
 
 **Los permisos mandan.** Una automatización no puede escribir a nadie ni leer nada que el dueño no
@@ -199,7 +198,7 @@ conversación ya guardada. Y el **destinatario** se lee de la conversación (`f_
 `input.from`): no hay forma de escribir un teléfono a mano en un flujo, a propósito.
 
 **Dónde se crea.** En Automatizaciones, desde la galería o desde el editor. La plantilla completa
-«WhatsApp → cita propuesta» viaja con este módulo (`flows/appointment-from-whatsapp.es.flow.json`,
+«WhatsApp → cita reservada» viaja con este módulo (`flows/appointment-from-whatsapp.es.flow.json`,
 con sus permisos en `appointment-from-whatsapp.grants.json`); mientras la galería no la ofrezca
 (`ERPlora/flows#52`), se crea con ese documento desde el editor. Se crea **desactivada y sin
 permisos**: el dueño concede los permisos, la revisa y la activa.
