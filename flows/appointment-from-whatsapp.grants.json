@@ -46,7 +46,10 @@
     },
     {
       "kind": "query",
-      "value": "appointments.appointments.list_for_customer"
+      "value": "appointments.appointments.list_for_customer",
+      "payload": {
+        "customer_id": "steps.resolve_customer.id"
+      }
     },
     {
       "kind": "command",

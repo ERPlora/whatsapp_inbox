@@ -31,27 +31,42 @@ WHAT THIS PINS:
   2. the floor is a version the hub can compare against — an unreadable one is refused too
      (`ManifestCoreFloorUnreadable`), so a typo would brick the install rather than loosen it;
   3. it is not below what the SHIPPED TEMPLATES actually ask the kernel for. Derived from the
-     documents in `flows/` and not from a constant somebody remembers to bump: a template that
-     starts using a newer kernel feature raises the floor by existing, which is the whole point;
-  4. and every requirement is RE-MEASURED against the neighbouring hub checkout instead of
+     documents AND the grant sidecars in `flows/` — not from a constant somebody remembers to
+     bump: a template that starts using a newer kernel feature, or a permission that starts
+     fixing a value only a newer kernel applies, raises the floor by existing, which is the
+     whole point;
+  4. nor ABOVE it: a floor higher than anything the shipped files demand is a number nothing
+     derives any more, which is what every derivation going blind at once looks like. The table is
+     anchored in BOTH directions, so blinding the sidecar reading cannot turn this file green;
+  5. and every requirement is RE-MEASURED against the neighbouring hub checkout instead of
      trusted: the marker has to be PRESENT at the declared release AND ABSENT at the release before
      it. A control that cannot tell the two apart would pass no matter what the floor said.
 
-THE KERNEL FLOORS, MEASURED (2026-09-07, `git show <tag>:<path> | grep -c <marker>`):
+THE KERNEL FLOORS, MEASURED (2026-09-08, `git show <ref>:<path> | grep -c <marker>`):
 
-  | ref             | `answers_only` in agent_runner.rs | `AiOutputKind` in def.rs | `interactive` in def.rs |
-  |-----------------|-----------------------------------|--------------------------|-------------------------|
-  | v1.1.13         | absent                            | absent                   | absent                  |
-  | v1.1.14         | absent                            | absent                   | absent                  |
-  | v1.1.15         | present (x5)                      | absent                   | absent                  |
-  | origin/develop  | present (x5)                      | present (x17)            | present (x31)           |
+  | ref            | `answers_only`  | `AiOutputKind` | `interactive` | `fn can_pin`   | `PIN_ROOTS`    |
+  |                | agent_runner.rs | def.rs         | def.rs        | flows/grants.rs| flows/grants.rs|
+  |----------------|-----------------|----------------|---------------|----------------|----------------|
+  | v1.1.14        | absent          | absent         | absent        | absent         | absent         |
+  | v1.1.15        | present (x5)    | absent         | absent        | absent         | absent         |
+  | v1.1.16        | present (x5)    | present (x17)  | present (x33) | absent         | absent         |
+  | origin/develop | present (x5)    | present (x17)  | present (x33) | present (x1)   | present (x3)   |
 
-So `v1.1.15` is the first release carrying hub#1595, and NO release yet carries hub#1633/hub#1639 —
-`git tag --contains 53523796` is empty. `1.1.16` is therefore a floor pointing at a release that
-does not exist yet, which is the CORRECT way to ship something the fleet cannot run: the hub refuses
-the install with `core_version_too_old` instead of taking a template that explodes at save time.
-The positive half of the re-measure falls back to `origin/develop` while that tag is missing, so the
-marker still has to be real somewhere rather than merely asserted here.
+So `v1.1.15` is the first release carrying hub#1595, `v1.1.16` the first carrying
+hub#1633/hub#1639, and NO release yet carries hub#1662 — `git tag --contains 17fe65ce` is empty.
+`1.1.17` is therefore a floor pointing at a release that does not exist yet, which is the CORRECT
+way to ship something the fleet cannot run: the hub refuses the install with `core_version_too_old`
+instead of taking a template that explodes at save time. The positive half of the re-measure falls
+back to `origin/develop` while that tag is missing, so the marker still has to be real somewhere
+rather than merely asserted here.
+
+🔴 AND THE FLOOR IS NOT ONLY IN THE DOCUMENTS (whatsapp_inbox#119). Since hub#1654 the
+`<family>.grants.json` travels to the hub as well, and what a permission DECLARES there is refused
+by an older core exactly as hard as an unknown step key — harder, in fact: `PUT …/grants` is
+all-or-nothing, so a `payload` an old hub does not accept on a `query` does not degrade to the wide
+permission, it leaves the recipe with NO permissions. `GRANT_FEATURES` derives from the sidecars for
+that reason; deriving from the documents alone would have let this pin ship under a floor that
+predates pinning.
 
 Usage: tests/core_floor.contract.test.py   (exit 0 = green). No Postgres, no Docker.
 """
@@ -111,12 +126,58 @@ NEED_INTERACTIVE = KernelNeed(
     "`flow.invalid_definition`",
 )
 
+NEED_PINNED_READ = KernelNeed(
+    issue="hub#1662",
+    floor=(1, 1, 17),
+    path="crates/runtime/src/flows/grants.rs",
+    marker="fn can_pin",
+    last_without="v1.1.16",
+    why="a grant may fix payload values on a `query`, so «may read a diary» becomes «may read "
+    "THIS customer's diary». Below it `check_grants` refuses a `payload` on anything but a "
+    "`command` — and `PUT …/grants` is ALL-OR-NOTHING, so the recipe does not install with the "
+    "wide permission, it installs with NO permission at all and dies on its first step",
+)
+NEED_PIN_REFERENCE = KernelNeed(
+    issue="hub#1662",
+    floor=(1, 1, 17),
+    path="crates/runtime/src/flows/grants.rs",
+    marker="PIN_ROOTS",
+    last_without="v1.1.16",
+    why="a fixed value may NAME a place in the run (`steps.<id>.<field>`) instead of being a "
+    "literal, which is the only shape an identity can take — who the run is about is not known "
+    "until it resolves her. Measured separately from `can_pin` on purpose: a hub that stored the "
+    "pin without resolving it would compare the literal string `steps.resolve_customer.id` "
+    "against a real id and deny every single read",
+)
+
 # What a shipped document has to contain for each need to be REAL, so the floor is derived from the
 # templates rather than from a number somebody has to remember to raise (whatsapp_inbox#101).
 FEATURES = (
     (NEED_INTERACTIVE, "interactive", lambda step: bool(step.get("interactive"))),
     (NEED_DECLARED_OUTPUT, "output", lambda step: bool(step.get("output"))),
 )
+# …and the same, one file over. A kernel need does not only come from the DOCUMENT: since hub#1654
+# the `<family>.grants.json` travels to the hub too, and what it declares there is refused by an
+# older core exactly as hard (whatsapp_inbox#119). Reading only the documents would have let a pin
+# ship under a floor that predates pinning.
+GRANT_FEATURES = (
+    (
+        NEED_PINNED_READ,
+        "a `query` grant fixes payload values",
+        lambda grant: grant.get("kind") == "query" and bool(grant.get("payload")),
+    ),
+    (
+        NEED_PIN_REFERENCE,
+        "a pin NAMES a place in the run instead of fixing a literal",
+        lambda grant: any(
+            isinstance(v, str) and "." in v and v.split(".")[0] in PIN_ROOTS
+            for v in (grant.get("payload") or {}).values()
+        ),
+    ),
+)
+# The roots `check_pin_value` accepts, and nothing else: `secret.…` is refused on purpose (it would
+# turn the gate into an oracle) and `event.…` is not in the run scope.
+PIN_ROOTS = ("input", "steps")
 # …and this one is not a step key: it is why the module declared a floor in the first place, and
 # every template still rides on it, so it is asked of the whole family.
 ALWAYS = (NEED_ANSWERS_ONLY,)
@@ -158,6 +219,15 @@ def needs_of_templates() -> list[tuple[KernelNeed, str]]:
             hits = [s.get("id") for s in doc.get("steps", []) if present(s)]
             if hits:
                 demanded.append((need, f"{template.name} step `{hits[0]}` uses `{label}`"))
+    for sidecar in sorted((MODULE_DIR / "flows").glob("*.grants.json")):
+        body = json.loads(sidecar.read_text(encoding="utf-8"))
+        grants = body.get("grants", []) if isinstance(body, dict) else body
+        for need, label, present in GRANT_FEATURES:
+            hits = [g for g in grants if isinstance(g, dict) and present(g)]
+            if hits:
+                demanded.append(
+                    (need, f"{sidecar.name} `{hits[0].get('kind')} {hits[0].get('value')}` — {label}")
+                )
     if templates:
         for need in ALWAYS:
             demanded.append((need, f"all {len(templates)} template(s) ride on it"))
@@ -215,7 +285,27 @@ def main() -> int:
             f"({', '.join(sorted({dotted(n.floor) for n, _ in demanded}))})"
         )
 
-    # 4 · Re-measure each need instead of trusting the table in the docstring: PRESENT at its
+    # 4 · …and NOT ABOVE it either. Step 3 only pushes the floor UP, so every derivation going
+    #     blind at once — a predicate that stops matching, a key renamed in the sidecars, a glob
+    #     that no longer casts — leaves «>= everything demanded» trivially true and the declared
+    #     number justified by nothing. Anchoring the table in BOTH directions is what makes the
+    #     derivation load-bearing (`table-driven-guards-need-anchoring-in-both-directions`).
+    highest = max((need.floor for need, _ in demanded), default=None)
+    if highest is not None and floor > highest:
+        failures.append(
+            f"the manifest declares `{declared}` but the shipped files only demand up to "
+            f"{dotted(highest)}, so nothing derives that number any more: either a derivation went "
+            f"blind (a FEATURES/GRANT_FEATURES predicate, a key renamed in `flows/`, a glob that "
+            f"stopped matching) or the requirement really is gone. Re-derive it — and if the floor "
+            f"is meant to stand on something no shipped file can show, it belongs in `ALWAYS` as a "
+            f"KernelNeed, not as a bare number here"
+        )
+    elif highest is not None:
+        print(
+            f"  ok: `{declared}` is exactly what the shipped files demand, not a number above them"
+        )
+
+    # 5 · Re-measure each need instead of trusting the table in the docstring: PRESENT at its
     #     release, ABSENT at the one before it.
     for need in sorted({n for n, _ in demanded}):
         at_floor, measured = marker_count(f"v{dotted(need.floor)}", need.path, need.marker), (

@@ -1480,15 +1480,13 @@ def unpinned_command_problems(name, doc, pins):
     it goes missing every other rule here stays green: the grant still covers the tool, the prompt
     still says `customer`, the document still parses.
 
-    ⚠️ **The hub does not apply this pin YET, and saying otherwise here would be the expensive
-    lie.** The machinery exists — `check_payload_pin` (hub#1623) refuses a payload that omits or
-    contradicts a pinned field, at the door the dispatcher goes through and at the approval door
-    too — but a pin declared in THIS file never reaches it: `FlowTemplateGrant`
-    (`crates/runtime/src/manifest.rs`) is `{kind, value}`, so serde drops `payload` without a word
-    and the factory recipe is installed with the WIDE permission (hub#1654, open). What keeps a
-    real hub narrow today is the gallery card's own `grantPins` in `ERPlora/flows`, a copy of this
-    by hand. So this rule guards the module's DECLARATION, which is the half that lives here; the
-    day hub#1654 lands, the declaration is also what is enforced, and nothing here has to change.
+    ✅ **And since hub#1654 the declaration IS what is enforced.** `FlowTemplateGrant`
+    (`crates/runtime/src/manifest.rs`) was `{kind, value}` until then, so serde dropped `payload`
+    without a word and the factory recipe installed with the WIDE permission while this rule sat
+    green. It now carries the pin to the hub, where `check_payload_pin` (hub#1623) refuses a payload
+    that omits or contradicts a pinned field — at the door the dispatcher goes through and at the
+    approval door too. Nothing here had to change when it landed, which was the point of guarding
+    the declaration in the first place.
 
     🔴 **Every `ai` step that is handed the command owes the pin, whoever is watching**
     (whatsapp_inbox#107). The rule used to skip steps under `policy: "manual"`, on the grounds that
@@ -1548,6 +1546,112 @@ def unpinned_command_problems(name, doc, pins):
                     f"«may customers cancel», no check of whose appointment it is. A review does "
                     f"not close it: whoever approves reads a draft for the customer, not a payload"
                 )
+    return problems
+
+
+# ── «a diary is somebody's» — whatsapp_inbox#119 ───────────────────────────────────
+#
+# `query -> the payload field that says WHOSE`.
+#
+# hub#1662 widened hub#1623 to reads: a grant may FIX part of the payload on a `query` too, and the
+# fixed value may NAME a place in the run (`steps.<id>.<field>`) instead of being a literal — which
+# is the only shape an identity can take, because who this run is about is not known until the run
+# resolves her.
+#
+# The field is named here and the VALUE is derived from the document, on purpose: what the pin has
+# to point at is the deterministic resolver `own_customer_only_problems` already demands, and a
+# constant repeating its step id would go stale the day somebody renames the step — quietly, and in
+# the direction that WIDENS the permission.
+PINNED_QUERY_IDENTITY = {OWNED_APPOINTMENTS_QUERY: "customer_id"}
+
+
+def declared_query_pins(path):
+    """`query -> the payload fields its grant FIXES`, `{}` for a grant that fixes none.
+
+    The read-side twin of `declared_command_pins`, and separate from it for the reason the hub keeps
+    them separate: `Authority.pins` is keyed by the PAIR `(kind, value)`, because a read and a write
+    that happen to share a name must not inherit each other's restriction.
+    """
+    body = json.loads(path.read_text())
+    items = body["grants"] if isinstance(body, dict) else body
+    return {g["value"]: (g.get("payload") or {}) for g in items if g.get("kind") == "query"}
+
+
+def unpinned_query_problems(name, doc, pins):
+    """A diary handed to a model is granted for ONE customer, not for anybody — whatsapp_inbox#119.
+
+    `own_customer_only_problems` took the address book out of the model's hands and put a
+    deterministic resolver in front of the diary. What it could NOT do at the time it was written is
+    say so in the permission: a grant pinned payload values only on a `command`, so
+    `list_for_customer` was granted by NAME and «may read a diary» meant «may read ANYBODY's diary».
+    The only thing left holding the boundary was a paragraph of prompt — «One customer, and only
+    that one» — addressed to a model that is reading a stranger's WhatsApp message in the same turn.
+    A paragraph is not a door.
+
+    hub#1662 is the door. The pin travels in the sidecar (hub#1654), the screen keeps it when the
+    owner touches another permission (ERPlora/flows#108), and `check_query_grant` resolves
+    `steps.<resolver>.id` against the run and refuses every other `customer_id` with
+    `flow.grant_payload_denied` — including the run where the resolver found nobody, which publishes
+    `null` and is denied rather than widened.
+
+    What this rule holds is that the pin is really in the file, because it is one JSON key deep in a
+    sidecar nobody reads out loud and the day it goes missing every other rule here stays green: the
+    grant still covers the read, the prompt still says «only that one», the document still parses.
+
+    Three things it deliberately does NOT complain about, each because something else says it better:
+
+    * **no grant at all** — `main()` already compares needed against declared, and a second
+      complaint would send whoever reads it hunting for a pin on a grant that is not there;
+    * **no resolver in the document** — `own_customer_only_problems` owns that red, and it is a
+      bigger one: without a resolver there is no id to pin TO;
+    * **a deterministic `kind: query` step reading the diary** — there the params are mapped by the
+      DOCUMENT, so no model chooses whose diary it is.
+
+    🔴 And the pin has to be a BARE path. `check_pin_value` refuses one carrying `{{…}}`
+    (`flow.invalid_grant_payload`), and that refusal is ALL-OR-NOTHING: `PUT …/grants` rejects the
+    whole list, so the recipe installs with no permissions whatsoever. A pin written as a template
+    does not degrade to a wide grant — it takes the recipe down with it.
+    """
+    problems = []
+    resolvers = [(i, s.get("id")) for i, s in _query_steps(doc, DIRECTORY_QUERY)]
+    for index, step in enumerate(doc.get("steps", [])):
+        if step.get("kind") != "ai":
+            continue
+        handed = ((step.get("tools") or {}).get("queries")) or []
+        for qname in handed:
+            field = PINNED_QUERY_IDENTITY.get(qname)
+            if not field:
+                continue
+            fixed = pins.get(qname)
+            if fixed is None:
+                continue  # no grant at all: main() is already saying that, louder
+            # Only a resolver that has already RUN can be pinned to: `steps.x` of a step that has
+            # not run resolves to `null`, and `resolve_pin` refuses a pin that resolves to nothing
+            # (`flow.grant_payload_denied`). A pin aimed forwards denies every call, for everyone.
+            before = [sid for i, sid in resolvers if i < index]
+            if not before:
+                continue  # `own_customer_only_problems` owns this red, and it is the bigger one
+            # …and of those, the one THIS step already works with. The prompt sends
+            # `{{steps.<id>.id}}` as the `customer_id`, so pinning any OTHER resolver denies the
+            # call the moment the two differ — which is exactly the run where the customer was
+            # created a step ago and the earlier resolver found nobody.
+            named = [sid for sid in before if "{{steps." + str(sid) + ".id}}" in (prompt_of(step) or "")]
+            wanted = sorted(f"steps.{sid}.id" for sid in (named or before))
+            if fixed.get(field) in wanted:
+                continue
+            sent = (
+                f"fixes `{field}` = `{fixed[field]}`" if field in fixed else "fixes nothing"
+            )
+            problems.append(
+                f"{name} hands `{qname}` to the model in `{step.get('id')}`, and its grant "
+                f"{sent}: a read is granted by NAME, so that permission is «may read ANYBODY’s "
+                f"diary» — day, hour and professional of whoever the model puts in `{field}`, "
+                f"while it reads a stranger’s message. Pin it in "
+                f"`{name.split('.')[0]}.grants.json` (`payload`, hub#1662) to `{wanted[0]}`, the "
+                f"customer this run resolved from the phone WhatsApp itself vouched for. A BARE "
+                f"path, never `{{{{…}}}}`: the hub refuses a pin with templates in it, and that "
+                f"refusal takes the whole permission list with it"
+            )
     return problems
 
 
@@ -1882,12 +1986,15 @@ def own_customer_only_problems(name, doc):
     to search by phone — which is the same «control» whatsapp_inbox#100 and hub#1623 exist to say
     is not one.
 
-    🔴 **And it cannot be closed the way the write side is.** A grant pins payload values
-    (hub#1623), but only on a `command`: `crates/runtime/src/flows/grants.rs` refuses a `payload`
-    on any other kind with `flow.invalid_grant_payload`, because `check_command_grant` is the one
-    gate handed a payload and a restriction nothing applies is worse than none. Both links here
-    are `query` grants. So there is nothing to pin, and taking the reads away instead would take
-    cancelling with them.
+    🔴 **It could not be closed the way the write side is — until hub#1662.** A grant pinned
+    payload values (hub#1623) on a `command` only: `crates/runtime/src/flows/grants.rs` refused a
+    `payload` on any other kind with `flow.invalid_grant_payload`, because `check_command_grant`
+    was the one gate handed a payload and a restriction nothing applies is worse than none. Both
+    links here are `query` grants, so there was nothing to pin and taking the reads away instead
+    would have taken cancelling with them. hub#1662 widened it: `check_query_grant` resolves a pin
+    against the run, and `unpinned_query_problems` (whatsapp_inbox#119) now holds the diary read to
+    naming the resolver this rule installs. The four marks below stay — the pin is a fifth lock on
+    the same door, not a replacement: without a resolver in the document there is no id to pin TO.
 
     What closes it is moving the LOOKUP out of the model's hands. The kernel already has the
     shape: a `query` step (hub#954) is a deterministic read whose params are mapped by the
@@ -2632,6 +2739,7 @@ DOCUMENT_RULES = (
     moving_problems,
     own_customer_only_problems,
     unpinned_command_problems,
+    unpinned_query_problems,
     missing_instruction_problems,
     only_the_customer_problems,
     tappable_option_problems,
@@ -2661,6 +2769,7 @@ SELF_CHECKED_RULES = (
     moving_problems,
     own_customer_only_problems,
     unpinned_command_problems,
+    unpinned_query_problems,
     missing_instruction_problems,
     only_the_customer_problems,
     tappable_option_problems,
@@ -4626,6 +4735,148 @@ PIN_CASES = [
 ]
 
 
+# `(label, file name, document, the pins its grants declare, problems expected)` — the unit tests of
+# `unpinned_query_problems`. Handed in for the same reason as `PIN_CASES`: half of what the rule
+# judges lives in a sidecar, so a row has to be able to describe one that does not exist.
+_RESOLVER = _query_step("resolve_customer", DIRECTORY_QUERY, {"f_phone": "+{{input.from}}"})
+_QPIN_OK = {OWNED_APPOINTMENTS_QUERY: {"customer_id": "steps.resolve_customer.id"}}
+_QPIN_NONE = {OWNED_APPOINTMENTS_QUERY: {}}
+
+
+def _diary_reader(policy="auto", sid="book_appointment"):
+    """The step whatsapp_inbox#119 is about: a model holding the read that returns a whole diary."""
+    return _ai_step(sid, policy, (BOOKING_COMMAND,), queries=(OWNED_APPOINTMENTS_QUERY,))
+
+
+def _diary_reader_using(resolver, policy="auto", sid="book_appointment"):
+    """…and the same step with a prompt that SENDS one resolver's id, as the real ones do."""
+    step = _diary_reader(policy, sid)
+    step["prompt"] = f"Her id is {{{{steps.{resolver}.id}}}}. Use it and nothing else."
+    return step
+
+
+QUERY_PIN_CASES = [
+    (
+        "what this module ships after whatsapp_inbox#119: the model may read a diary, and its "
+        "grant says WHOSE — the customer the deterministic resolver found from the trusted phone",
+        UNATTENDED,
+        _fixture_doc(_RESOLVER, _diary_reader()),
+        _QPIN_OK,
+        0,
+    ),
+    (
+        "\U0001f534 the red whatsapp_inbox#119 IS: the same read granted by name with nothing "
+        "fixed, so «one customer, and only that one» is a paragraph of prompt and the model picks "
+        "the `customer_id` while it reads a stranger's message",
+        UNATTENDED,
+        _fixture_doc(_RESOLVER, _diary_reader()),
+        _QPIN_NONE,
+        1,
+    ),
+    (
+        "the pin aimed at the MODEL's own step instead of the resolver: the id is still whatever "
+        "the turn decided it was, which is the hole with one more hop in it",
+        UNATTENDED,
+        _fixture_doc(_RESOLVER, _diary_reader()),
+        {OWNED_APPOINTMENTS_QUERY: {"customer_id": "steps.book_appointment.id"}},
+        1,
+    ),
+    (
+        "the pin written as a TEMPLATE: `check_pin_value` refuses `{{…}}` and `PUT …/grants` is "
+        "all-or-nothing, so this does not widen the grant — it installs the recipe with no "
+        "permissions at all",
+        UNATTENDED,
+        _fixture_doc(_RESOLVER, _diary_reader()),
+        {OWNED_APPOINTMENTS_QUERY: {"customer_id": "{{steps.resolve_customer.id}}"}},
+        1,
+    ),
+    (
+        "a pin on ANOTHER field looks like a pinned grant and fixes nothing that matters: whose "
+        "diary it is stays the model's to choose",
+        UNATTENDED,
+        _fixture_doc(_RESOLVER, _diary_reader()),
+        {OWNED_APPOINTMENTS_QUERY: {"limit": 20}},
+        1,
+    ),
+    (
+        "the ATTENDED twin owes it too: what the salon approves in the tray is a draft for the "
+        "customer, and a read never reaches the tray at all — by then the diary has been read",
+        ATTENDED,
+        _fixture_doc(_RESOLVER, _diary_reader("manual", "propose_appointment")),
+        _QPIN_NONE,
+        1,
+    ),
+    (
+        "silent when the document has NO resolver: there is no id to pin to, and "
+        "`own_customer_only_problems` is already failing on the bigger half",
+        UNATTENDED,
+        _fixture_doc(_diary_reader()),
+        _QPIN_NONE,
+        0,
+    ),
+    (
+        "silent when the grant is missing altogether: `main()` compares needed against declared "
+        "and says it in its own words",
+        UNATTENDED,
+        _fixture_doc(_RESOLVER, _diary_reader()),
+        {},
+        0,
+    ),
+    (
+        "silent on a DETERMINISTIC read of the diary: there the `customer_id` is mapped by the "
+        "document, so no model chooses whose it is",
+        UNATTENDED,
+        _fixture_doc(
+            _RESOLVER,
+            _query_step("her_diary", OWNED_APPOINTMENTS_QUERY, {"customer_id": "{{steps.resolve_customer.id}}"}),
+        ),
+        _QPIN_NONE,
+        0,
+    ),
+    (
+        "silent on a read this table says nothing about: the rule names the diary, not every query "
+        "a model may ever hold",
+        UNATTENDED,
+        _fixture_doc(_RESOLVER, _ai_step("ask", "auto", (), queries=("services.services.list",))),
+        {"services.services.list": {}},
+        0,
+    ),
+    (
+        "what the shipped documents really look like — TWO resolvers, and the pin names the one "
+        "the step's own prompt sends as the `customer_id`",
+        UNATTENDED,
+        _fixture_doc(
+            _query_step("find_customer", DIRECTORY_QUERY, {"f_phone": "+{{input.from}}"}),
+            _RESOLVER,
+            _diary_reader_using("resolve_customer"),
+        ),
+        _QPIN_OK,
+        0,
+    ),
+    (
+        "\U0001f534 pinned to the OTHER resolver: both are deterministic and both are keyed on the "
+        "trusted phone, so this looks narrow — and it denies every run where the customer was "
+        "CREATED a step ago, because the earlier read found nobody and the pin resolves to `null`",
+        UNATTENDED,
+        _fixture_doc(
+            _query_step("find_customer", DIRECTORY_QUERY, {"f_phone": "+{{input.from}}"}),
+            _RESOLVER,
+            _diary_reader_using("resolve_customer"),
+        ),
+        {OWNED_APPOINTMENTS_QUERY: {"customer_id": "steps.find_customer.id"}},
+        1,
+    ),
+    (
+        "silent when the only resolver runs AFTER the reader: there is nothing resolved yet to pin "
+        "to, and `own_customer_only_problems` owns that red",
+        UNATTENDED,
+        _fixture_doc(_diary_reader(), _RESOLVER),
+        _QPIN_NONE,
+        0,
+    ),
+]
+
+
 # `(label, file name, document, the families that really ship, problems expected)` — the unit
 # tests of `missing_instruction_problems`. The families are handed in for the same reason the pins
 # are in `PIN_CASES`: half of what the rule judges is not in the document, and a row has to be able
@@ -5436,6 +5687,40 @@ def self_check():
                 f"the battery's own «the narrow value lives in the grant» rule is wrong — {label}: "
                 f"expected {expected} problem(s), got {len(got)}: {got}"
             )
+    for label, name, doc, pins, expected in QUERY_PIN_CASES:
+        got = unpinned_query_problems(name, doc, pins)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «a diary is somebody's» rule is wrong — {label}: "
+                f"expected {expected} problem(s), got {len(got)}: {got}"
+            )
+    # The sidecar READERS are anchored on a fixture, because a blind reader is invisible to the
+    # tables above: `unpinned_query_problems` is silent when handed no pin at all (that red belongs
+    # to `main()`, by design), so a `declared_query_pins` that stopped seeing `query` grants — a
+    # one-word slip, measured in review — leaves every real document green while every case above
+    # keeps passing, since those are handed their pins directly. The positive has to be seen by the
+    # reader itself, in both shapes a sidecar may take, and its twin is held to the same standard.
+    with tempfile.TemporaryDirectory() as tmp:
+        grants = [
+            {"kind": "command", "value": "x.write", "payload": {"channel": "customer"}},
+            {"kind": "query", "value": "x.read", "payload": {"customer_id": "steps.r.id"}},
+            {"kind": "query", "value": "x.wide"},
+        ]
+        for shape, body in (("an object with `grants`", {"grants": grants}), ("a bare list", grants)):
+            path = pathlib.Path(tmp) / "fixture.grants.json"
+            path.write_text(json.dumps(body))
+            for reader, expected in (
+                (declared_query_pins, {"x.read": {"customer_id": "steps.r.id"}, "x.wide": {}}),
+                (declared_command_pins, {"x.write": {"channel": "customer"}}),
+            ):
+                got = reader(path)
+                if got != expected:
+                    problems.append(
+                        f"the battery's own sidecar reader `{reader.__name__}` is blind on {shape}: "
+                        f"expected {expected}, got {got} — a reader that misses a pin leaves the "
+                        f"«the narrow value lives in the grant» rules silent on every real "
+                        f"document, and nothing else here would notice"
+                    )
     for label, name, doc, families, expected in INSTRUCTION_CASES:
         got = missing_instruction_problems(name, doc, families)
         if len(got) != expected:
@@ -5750,6 +6035,9 @@ def main():
         # Reads the sidecar, never a manifest: a bare checkout judges it too.
         problems += applied(
             ledger, unpinned_command_problems, path.name, doc, declared_command_pins(gpath)
+        )
+        problems += applied(
+            ledger, unpinned_query_problems, path.name, doc, declared_query_pins(gpath)
         )
 
         # 3a-bis-vii) …and the instructions that may not be lost are in the document, IN ITS OWN
