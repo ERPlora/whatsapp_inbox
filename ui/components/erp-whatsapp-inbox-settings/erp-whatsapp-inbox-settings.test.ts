@@ -1,145 +1,146 @@
-// Contract of the WhatsApp CHANNEL SETTINGS screen (whatsapp_inbox#6).
+// Contract of the WhatsApp screen — THREE STEPS and one decision (whatsapp_inbox#123, ADR-0470).
 //
-// `settings.get` and `settings.upsert` shipped with a permission, a schema and an SQL upsert, and
-// with NO screen: the channel was «configured by whoever installed it», which in practice meant
-// nobody. The gate `tests/surface_has_a_door.contract.test.py` carried the two names as debt.
+// WHAT THIS FILE IS FOR. Measured on `banco-pre` the 08/09: a salon owner who wanted appointments to
+// arrive by WhatsApp needed NINE screens and about fifteen taps after Meta's popup — four tabs, a
+// «Channel» block with two counters and three paragraphs, a card that sent her to Automations, four
+// look-alike gallery cards, one of them with nine steps and fourteen raw permissions, the editor,
+// the Permissions tab, a switch, and back to a selector that read nothing. Ioan, in front of it:
+// «no sé ni cómo configurarlo».
 //
-// The three things this screen must NOT get wrong, and why each one is a test:
+// So the acceptance is a NUMBER, and the last describe here is the one that measures it: after
+// Meta, **two screens and three taps** — «Activar», «Activar» in the consent panel, and the switch
+// only if she wants to review. Anything this screen grows that adds a tap breaks that test.
 //
-// 1. **The meter is not this screen's to send.** `free_tier_monthly_limit` is what the two ingest
-//    guards read to stop counting inbound messages on the free tier
-//    (`commands/message_ingest_msg.sql`, `commands/inbound_message_insert.sql`), and the module is
-//    billed per message. It is shown, and it is read-only.
-//    🔄 This test used to assert the opposite — that the value read travelled back UNCHANGED in the
-//    upsert payload — because `settings_upsert.sql` wrote every column and omitting the meter would
-//    have blanked the merchant's plan. whatsapp_inbox#37 moved the column out of that command
-//    altogether: its only writer is now `whatsapp_inbox._quota.set`, internal, fed by the Cloud that
-//    decides the allowance. So the screen must NOT send the field — a guarantee that lives in the
-//    browser is not a guarantee, and the payload echoing the invoice back is the shape of the hole.
-// 2. **No credentials here, ever.** Meta's token lives Fernet-sealed in the SaaS and the hub never
-//    sees it (`architecture/modules/whatsapp_inbox.md` §9.3; the notify proxy is
-//    `POST /api/v1/hub/device/notify/whatsapp/`). There is no secret to type in this screen, so
-//    there is no secret input either — and if one were ever needed it would go the way the flow
-//    kernel does it, `_flow_secrets`: write-only, name listed, value never returned.
-// 3. **No dead switches.** WASM-TODO.md (revision of 2026-08-11, pm#112) lists the settings columns
-//    that lost their owner when the automation kernel replaced the bot: what they used to say is now
-//    said by the flow document. They are NOT deleted — they are external contract, `settings.upsert`
-//    requires them — but a screen that offered them would promise behaviour no code implements, the
-//    same mistake printing#17 had to undo.
+// The four ways this screen can go wrong, each one a describe below:
+//
+// 1. **It offers a button that cannot work.** A hub older than hub#1677 has no activate route, and
+//    the SDK simply leaves the method out. Reading that absence as «not installed yet» paints
+//    «Activar» on a hub that has no way to honour it — a button that fails the moment it is pressed.
+// 2. **It turns something on without being asked.** What the owner consents to is one sentence
+//    naming the consequence, and the tap that opens the panel must activate NOTHING by itself.
+// 3. **It writes the one decision in the wrong place.** «Bookings confirm themselves / I review
+//    them first» is `auto_confirm_online` of Appointments (ADR-0470 §6). Before the replan the same
+//    decision sat in three places and they contradicted each other. This screen must not write a
+//    single column of `whatsapp_inbox_settings` — the Save button is gone with them.
+// 4. **It hides a failure.** A discarded recipe (`409`), a session that is not an admin (`403`), a
+//    network that dropped: each has to be READ on the card, with nothing activated.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import esLocale from '../../../locales/es.json';
 import enLocale from '../../../locales/en.json';
-import { WHATSAPP_USES } from '../../lib/whatsapp-uses';
+import { APPS_PATH, AUTOMATIONS_PATH, MODULE_ID, WHATSAPP_USES } from '../../lib/whatsapp-uses';
 
-/** A hub on the free tier: 30 inbound messages a month, and a channel already configured. */
-const SAVED_SETTINGS = {
-  id: 's1',
-  is_enabled: 1,
-  account_mode: 'shared',
-  auto_reply_enabled: 1,
-  approval_mode: 'manual',
-  require_confirmation: 1,
-  request_schema: '{"required":["service"]}',
-  gpt_system_prompt: 'You are the salon assistant',
-  input_modules: '["services"]',
-  output_modules: '["appointments"]',
-  auto_close_hours: 24,
-  notify_staff_new_request: 1,
-  greeting_message: 'Hi!',
-  out_of_hours_message: 'We are closed',
-  free_tier_monthly_limit: 30,
-};
+/** The use this hub can offer today. `#126` adds the restaurant one, and every test here reads the
+ *  family off the lib rather than spelling it, so a rename cannot leave this file green. */
+const APPOINTMENTS = WHATSAPP_USES[0];
 
 const queries: { name: string; params: unknown }[] = [];
 const commands: { name: string; payload: Record<string, unknown> }[] = [];
+/** Every call that reached the kernel's template door, in order, with the scope it was made under. */
+const kernel: { call: string; family?: string; scopedTo?: string }[] = [];
 
-// `null`, not `undefined`: passing `undefined` to a parameter with a default value RE-APPLIES the
-// default, so `mountWith(undefined)` would have mounted the saved row and the «no row yet» case
-// would have been tested against the opposite of itself.
-/**
- * Which OTHER modules this hub has. Absence is what the uses card is built on, and it is a
- * different answer from «installed, nothing to show»: the SDK only ever reports it through the two
- * codes below (`queryOptional` returns `undefined` for exactly those and re-throws everything
- * else), so the mock speaks the same language the runtime does.
- */
-interface Neighbours {
-  /** Module ids this hub does NOT have. */
+/** What `installed` looks like once a family has been built here. */
+type Installed = { flow_id: string; enabled: boolean } | null;
+
+interface Hub {
+  /** Module ids this hub does NOT have. `queryOptional` answers `undefined` for exactly these. */
   absent?: string[];
-  /** Play a shell too old to offer `queryOptional`: the call lands as a TypeError, which is
-   *  «could not ask», never an absence — the screen has to keep offering the uses. */
-  noQueryOptional?: boolean;
-  /** Module ids this hub has DEACTIVATED, on a shell whose `queryOptional` predates the ADR-0128
-   *  cascade and RE-THROWS `module_inactive` instead of answering `undefined` for it. */
-  legacyInactive?: string[];
-  /** A witness that fails for a reason that is NOT absence — a denied permission, a broken handler. */
-  brokenWitness?: string;
-  /** A witness whose answer never arrives: the hub is slow, the screen is still finding out. */
-  pendingWitness?: string;
+  /** What the kernel already built from each family. Absent key = `null` (nothing built yet). */
+  built?: Record<string, Installed>;
   /**
-   * What `flows.automations.status` answers about the use's automation: how many listen to its
-   * event and may run its command, how many of those are switched on, and how many listen but were
-   * never granted anything. Left out, the hub answers what an untouched one answers — nothing set
-   * up — which is the state the card was written for before whatsapp_inbox#79.
+   * A hub from before hub#1677: the SDK method is not there at all. That is the version probe the
+   * SDK's own docstring prescribes, and it is why the card can say «update the hub» instead of
+   * painting a button that answers 404.
    */
-  automations?: { total: number; enabled: number; unfinished: number };
-  /** Query names this hub answers `not_found` to: a neighbour module from before the query
-   *  existed. That is a broken contract, never an absence, so `queryOptional` re-throws it. */
-  notFound?: string[];
+  oldHub?: boolean;
+  /** A shell so old it has no `forModule` either — same answer as {@link Hub.oldHub}. */
+  noForModule?: boolean;
+  /** What `activateTemplate` refuses with: the discard codes (`409`), `forbidden`, a dropped fetch. */
+  activateError?: { code: string; message: string };
+  /** What the listing itself refuses with — the screen has to say it could not find out. */
+  templatesError?: { code: string; message: string };
+  /** What Appointments answers to `settings.get`. `[]` = a hub that never configured it. */
+  appointmentsSettings?: Record<string, unknown>[];
+  /** Appointments refuses the narrow command: too old to publish it, or a denied permission. */
+  policyError?: { code: string; message: string };
 }
 
-function mountWith(row: Record<string, unknown> | null = SAVED_SETTINGS, hub: Neighbours = {}) {
+function mountWith(hub: Hub = {}) {
   queries.length = 0;
   commands.length = 0;
-  const ownerOf = (name: string) => name.split('.')[0];
+  kernel.length = 0;
   const absent = new Set(hub.absent ?? []);
-  const legacyInactive = new Set(hub.legacyInactive ?? []);
+  const built: Record<string, Installed> = { ...(hub.built ?? {}) };
+  const ownerOf = (name: string) => name.split('.')[0];
+
+  const templates = async () => {
+    kernel.push({ call: 'templates' });
+    if (hub.templatesError) throw Object.assign(new Error(hub.templatesError.message), { code: hub.templatesError.code });
+    // The kernel serves this module its OWN families and nothing else (hub#1677).
+    return WHATSAPP_USES.map((use) => ({
+      module: MODULE_ID,
+      family: use.family,
+      documents: {},
+      grants: [],
+      requires: {},
+      installed: built[use.family] ?? null,
+    }));
+  };
+
   const client: Record<string, unknown> = {
     query: async (name: string, params?: unknown) => {
       queries.push({ name, params });
-      if (name === 'whatsapp_inbox.usage.get') return [{ inbound_this_month: 12, monthly_limit: row ? 30 : 0 }];
-      if (name === hub.pendingWitness) return new Promise(() => {});
-      if (name === hub.brokenWitness) throw Object.assign(new Error('permission denied'), { code: 'permission_denied' });
       if (absent.has(ownerOf(name))) {
         throw Object.assign(new Error('module_not_installed'), { code: 'module_not_installed' });
       }
-      if (legacyInactive.has(ownerOf(name))) {
-        throw Object.assign(new Error('module_inactive'), { code: 'module_inactive' });
-      }
-      if ((hub.notFound ?? []).includes(name)) {
-        throw Object.assign(new Error('not_found'), { code: 'not_found' });
-      }
-      if (name === 'flows.automations.status') {
-        return [hub.automations ?? { total: 0, enabled: 0, unfinished: 0 }];
-      }
-      if (ownerOf(name) !== 'whatsapp_inbox') return [];
-      return row ? [row] : [];
+      if (name === 'appointments.settings.get') return hub.appointmentsSettings ?? [{ auto_confirm_online: true }];
+      return [];
     },
     command: async (name: string, payload: Record<string, unknown>) => {
       commands.push({ name, payload });
       return {};
     },
-    on: () => () => {},
     locale: 'es',
-    // Resolved against the shipped catalog: asserting on a key that returns the key would pass no
-    // matter what the text says.
+    // Resolved against the SHIPPED catalog: asserting on a key that returns the key would pass no
+    // matter what the sentence said.
     t: (catalog: Record<string, { ui: Record<string, string> }>, key: string) => {
       const [, k] = key.split('.');
       return catalog.es?.ui?.[k] ?? key;
     },
   };
-  if (!hub.noQueryOptional) {
-    client.queryOptional = async (name: string, params?: Record<string, unknown>) => {
-      try {
-        return await (client.query as (n: string, p?: unknown) => Promise<unknown>)(name, params);
-      } catch (e) {
-        const code = (e as { code?: string }).code;
-        // An SDK before the ADR-0128 cascade only mapped `module_not_installed`; `module_inactive`
-        // reached the caller as an error. The screen has to read it as the absence it is.
-        if (code === 'module_not_installed') return undefined;
-        if (code === 'module_inactive' && legacyInactive.size === 0) return undefined;
-        throw e;
+  client.queryOptional = async (name: string, params?: Record<string, unknown>) => {
+    try {
+      return await (client.query as (n: string, p?: unknown) => Promise<unknown>)(name, params);
+    } catch (e) {
+      if ((e as { code?: string }).code === 'module_not_installed') return undefined;
+      throw e;
+    }
+  };
+  client.commandOptional = async (name: string, payload?: Record<string, unknown>) => {
+    if (hub.policyError) throw Object.assign(new Error(hub.policyError.message), { code: hub.policyError.code });
+    if (absent.has(ownerOf(name))) return undefined;
+    return await (client.command as (n: string, p?: unknown) => Promise<unknown>)(name, payload ?? {});
+  };
+  if (!hub.noForModule) {
+    client.forModule = (id: string) => {
+      const flows: Record<string, unknown> = { templates };
+      if (!hub.oldHub) {
+        flows.activateTemplate = async (family: string) => {
+          kernel.push({ call: 'activate', family, scopedTo: id });
+          if (hub.activateError) {
+            throw Object.assign(new Error(hub.activateError.message), { code: hub.activateError.code });
+          }
+          // What the hub really does: builds it (or finds it) and leaves it RUNNING.
+          built[family] = { flow_id: `flow-${family}`, enabled: true };
+          return { id: built[family]!.flow_id };
+        };
+        flows.deactivateTemplate = async (family: string) => {
+          kernel.push({ call: 'deactivate', family, scopedTo: id });
+          built[family] = { flow_id: `flow-${family}`, enabled: false };
+          return { id: built[family]!.flow_id };
+        };
       }
+      return { ...client, flows };
     };
   }
   (globalThis as Record<string, unknown>).erplora = client;
@@ -149,532 +150,490 @@ async function mount() {
   await import('./erp-whatsapp-inbox-settings');
   const el = document.createElement('erp-whatsapp-inbox-settings');
   document.body.appendChild(el);
-  await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
-  await new Promise((r) => setTimeout(r, 0));
-  await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+  await settle(el as HTMLElement);
   return el as HTMLElement & { shadowRoot: ShadowRoot };
 }
 
-async function save(el: HTMLElement) {
-  await (el as unknown as { save: (ev: Event) => Promise<void> }).save(new Event('submit'));
+/** Two microtask drains: the screen asks the kernel and the neighbour in one round, then renders. */
+async function settle(el: HTMLElement) {
+  const ready = el as unknown as { updateComplete: Promise<unknown> };
+  await ready.updateComplete;
+  await new Promise((r) => setTimeout(r, 0));
+  await ready.updateComplete;
+  await new Promise((r) => setTimeout(r, 0));
+  await ready.updateComplete;
 }
 
-describe('the screen is the door of settings.get / settings.upsert', () => {
+const pick = (el: HTMLElement & { shadowRoot: ShadowRoot }, testid: string) =>
+  el.shadowRoot.querySelector<HTMLElement>(`[data-testid="${testid}"]`);
+
+/** A tap, the way the owner makes it: press, then let the screen finish reacting. */
+async function tap(el: HTMLElement & { shadowRoot: ShadowRoot }, testid: string) {
+  const target = pick(el, testid);
+  expect(target, `there is no \`${testid}\` to tap`).not.toBeNull();
+  target!.click();
+  await settle(el);
+}
+
+const text = (el: HTMLElement & { shadowRoot: ShadowRoot }) => el.shadowRoot.textContent ?? '';
+
+afterEach(() => {
+  document.body.innerHTML = '';
+  vi.restoreAllMocks();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// STEP 1 · «Tu número»
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+describe('step 1 · the number is connected here, and the screen says how', () => {
   beforeEach(() => mountWith());
 
-  it('reads the configuration with whatsapp_inbox.settings.get', async () => {
+  it('embeds the shell element that runs Meta\'s popup, never a script of its own', async () => {
+    const original = customElements.get('erp-whatsapp-connect');
+    if (!original) customElements.define('erp-whatsapp-connect', class extends HTMLElement {});
+    const el = await mount();
+    expect(
+      el.shadowRoot.querySelector('erp-whatsapp-connect'),
+      'the connect element the shell provides is not on the screen: step 1 has no button',
+    ).not.toBeNull();
+  });
+
+  it('says the hub is too old instead of leaving an inert tag the owner stares at', async () => {
+    vi.spyOn(customElements, 'get').mockReturnValue(undefined);
+    const el = await mount();
+    expect(el.shadowRoot.querySelector('erp-whatsapp-connect')).toBeNull();
+    expect(text(el)).toContain(esLocale.ui.helpConnectNeedsNewerHub);
+  });
+
+  it('tells her the QR is scanned with WhatsApp Business and her phone keeps working', async () => {
+    const el = await mount();
+    expect(
+      text(el),
+      'without this line the owner does not know WHERE to scan, or that she keeps her phone',
+    ).toContain(esLocale.ui.helpConnectScanQr);
+  });
+
+  it('names the step, so «what do I do first» is answered by the heading', async () => {
+    const el = await mount();
+    expect(text(el)).toContain(esLocale.ui.stepNumber);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// STEP 2 · «¿Para qué lo usas?» — the one tap
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+describe('step 2 · one tap turns the recipe on, through the kernel and under this module', () => {
+  it('asks the kernel what it has already built, scoped to THIS module', async () => {
+    mountWith();
     await mount();
-    expect(queries.map((q) => q.name)).toContain('whatsapp_inbox.settings.get');
+    expect(kernel.filter((k) => k.call === 'templates').length, 'never asked the kernel at all').toBe(1);
   });
 
-  it('saves with whatsapp_inbox.settings.upsert', async () => {
+  it('offers «Activar» when nothing has been built from the family yet', async () => {
+    mountWith();
     const el = await mount();
-    await save(el);
-    expect(commands.map((c) => c.name)).toContain('whatsapp_inbox.settings.upsert');
+    expect(pick(el, `activate-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.activate);
+    expect(pick(el, `deactivate-${APPOINTMENTS.family}`), 'offered «Desactivar» on a recipe that does not exist').toBeNull();
   });
 
-  it('sends every field the command schema requires', async () => {
+  it('the first tap activates NOTHING: it asks, in one sentence naming the consequence', async () => {
+    mountWith();
     const el = await mount();
-    await save(el);
-    const payload = commands.find((c) => c.name === 'whatsapp_inbox.settings.upsert')!.payload;
-    for (const required of [
-      'is_enabled', 'account_mode', 'auto_reply_enabled', 'approval_mode', 'require_confirmation',
-      'request_schema', 'gpt_system_prompt', 'input_modules', 'output_modules', 'auto_close_hours',
-      'notify_staff_new_request', 'greeting_message', 'out_of_hours_message',
+    await tap(el, `activate-${APPOINTMENTS.family}`);
+    expect(
+      kernel.filter((k) => k.call === 'activate'),
+      'turned the automation on without asking: the owner consented to nothing',
+    ).toEqual([]);
+    expect(text(el), 'the consent sentence is not on screen').toContain(
+      esLocale.ui[APPOINTMENTS.consentKey.split('.')[1] as keyof typeof esLocale.ui],
+    );
+    expect(pick(el, `confirm-activate-${APPOINTMENTS.family}`), 'no way to say yes').not.toBeNull();
+    expect(pick(el, `cancel-activate-${APPOINTMENTS.family}`), 'no way to say «not now»').not.toBeNull();
+  });
+
+  it('consenting builds THAT family, once, and under this module\'s own scope', async () => {
+    mountWith();
+    const el = await mount();
+    await tap(el, `activate-${APPOINTMENTS.family}`);
+    await tap(el, `confirm-activate-${APPOINTMENTS.family}`);
+    expect(kernel.filter((k) => k.call === 'activate')).toEqual([
+      { call: 'activate', family: APPOINTMENTS.family, scopedTo: MODULE_ID },
+    ]);
+  });
+
+  it('and lands on the SAME screen: it is one tap, not a trip to the gallery', async () => {
+    mountWith();
+    const push = vi.spyOn(window.history, 'pushState');
+    const el = await mount();
+    await tap(el, `activate-${APPOINTMENTS.family}`);
+    await tap(el, `confirm-activate-${APPOINTMENTS.family}`);
+    expect(
+      push,
+      'sent the owner somewhere else to finish: that trip is the whole complaint of this issue',
+    ).not.toHaveBeenCalled();
+  });
+
+  it('after consenting the card reads «Activo» and offers to turn it off', async () => {
+    mountWith();
+    const el = await mount();
+    await tap(el, `activate-${APPOINTMENTS.family}`);
+    await tap(el, `confirm-activate-${APPOINTMENTS.family}`);
+    expect(pick(el, `state-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.stateOn);
+    expect(pick(el, `deactivate-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.turnOff);
+    expect(pick(el, `activate-${APPOINTMENTS.family}`), 'still offering to activate what is running').toBeNull();
+  });
+
+  it('and tells her how to see it work: text the number from another phone', async () => {
+    mountWith();
+    const el = await mount();
+    await tap(el, `activate-${APPOINTMENTS.family}`);
+    await tap(el, `confirm-activate-${APPOINTMENTS.family}`);
+    expect(text(el)).toContain(esLocale.ui[APPOINTMENTS.doneKey.split('.')[1] as keyof typeof esLocale.ui]);
+  });
+
+  it('«Ahora no» closes the panel and activates nothing', async () => {
+    mountWith();
+    const el = await mount();
+    await tap(el, `activate-${APPOINTMENTS.family}`);
+    await tap(el, `cancel-activate-${APPOINTMENTS.family}`);
+    expect(kernel.filter((k) => k.call === 'activate')).toEqual([]);
+    expect(pick(el, `confirm-activate-${APPOINTMENTS.family}`), 'the panel stayed open after «Ahora no»').toBeNull();
+    expect(pick(el, `activate-${APPOINTMENTS.family}`), 'lost the way back in').not.toBeNull();
+  });
+
+  it('a recipe built and paused says «Desactivada» and offers «Activar», not a second one', async () => {
+    mountWith({ built: { [APPOINTMENTS.family]: { flow_id: 'f1', enabled: false } } });
+    const el = await mount();
+    expect(pick(el, `state-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.stateOff);
+    expect(pick(el, `activate-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.activate);
+  });
+
+  it('«Desactivar» pauses it through the kernel, and the card follows', async () => {
+    mountWith({ built: { [APPOINTMENTS.family]: { flow_id: 'f1', enabled: true } } });
+    const el = await mount();
+    await tap(el, `deactivate-${APPOINTMENTS.family}`);
+    expect(kernel.filter((k) => k.call === 'deactivate')).toEqual([
+      { call: 'deactivate', family: APPOINTMENTS.family, scopedTo: MODULE_ID },
+    ]);
+    expect(pick(el, `state-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.stateOff);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// The four ways it can fail, and what each one has to READ
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+describe('a failure is read on the card, never swallowed', () => {
+  it('a hub without the route says «update the hub» and offers no button that cannot work', async () => {
+    mountWith({ oldHub: true });
+    const el = await mount();
+    expect(text(el)).toContain(esLocale.ui.usesNeedsNewerHub);
+    expect(
+      pick(el, `activate-${APPOINTMENTS.family}`),
+      'offered «Activar» on a hub with no activate route: it 404s the moment it is pressed',
+    ).toBeNull();
+  });
+
+  it('a shell too old to scope the client says the same, instead of throwing on mount', async () => {
+    mountWith({ noForModule: true });
+    const el = await mount();
+    expect(text(el)).toContain(esLocale.ui.usesNeedsNewerHub);
+    expect(pick(el, `activate-${APPOINTMENTS.family}`)).toBeNull();
+  });
+
+  it('a listing that fails says so — it does not read as «nothing built yet»', async () => {
+    mountWith({ templatesError: { code: 'internal', message: 'la red se cayó' } });
+    const el = await mount();
+    expect(text(el)).toContain(esLocale.ui.errTemplates);
+    expect(
+      pick(el, `activate-${APPOINTMENTS.family}`),
+      'offered «Activar» while it could not find out what is already running: two automations answer the same message',
+    ).toBeNull();
+  });
+
+  it('a discarded recipe (409) paints the hub\'s own reason, and nothing is activated', async () => {
+    mountWith({ activateError: { code: 'template_floor_module_too_old', message: 'Este hub necesita Citas 1.2.0' } });
+    const el = await mount();
+    await tap(el, `activate-${APPOINTMENTS.family}`);
+    await tap(el, `confirm-activate-${APPOINTMENTS.family}`);
+    expect(text(el), 'the reason the kernel gave was thrown away').toContain('Este hub necesita Citas 1.2.0');
+    expect(pick(el, `state-${APPOINTMENTS.family}`), 'claimed it is running after a refusal').toBeNull();
+  });
+
+  it('a session that is not an admin is told who can do it', async () => {
+    mountWith({ activateError: { code: 'forbidden', message: 'se requiere rol owner/admin' } });
+    const el = await mount();
+    await tap(el, `activate-${APPOINTMENTS.family}`);
+    await tap(el, `confirm-activate-${APPOINTMENTS.family}`);
+    expect(text(el)).toContain(esLocale.ui.activateForbidden);
+  });
+
+  it('an unauthenticated session gets the same sentence, not a raw code', async () => {
+    mountWith({ activateError: { code: 'unauthorized', message: 'sesión inválida o caducada' } });
+    const el = await mount();
+    await tap(el, `activate-${APPOINTMENTS.family}`);
+    await tap(el, `confirm-activate-${APPOINTMENTS.family}`);
+    expect(text(el)).toContain(esLocale.ui.activateForbidden);
+  });
+
+  it('a dropped network says the activation failed, and the card stays off', async () => {
+    mountWith({ activateError: { code: '', message: '' } });
+    const el = await mount();
+    await tap(el, `activate-${APPOINTMENTS.family}`);
+    await tap(el, `confirm-activate-${APPOINTMENTS.family}`);
+    expect(text(el)).toContain(esLocale.ui.errActivate);
+    expect(pick(el, `state-${APPOINTMENTS.family}`)).toBeNull();
+    expect(pick(el, `activate-${APPOINTMENTS.family}`), 'left her no way to try again').not.toBeNull();
+  });
+
+  it('no booking module at all: it says which app to install, and how to get there', async () => {
+    mountWith({ absent: ['appointments', 'flows'] });
+    const el = await mount();
+    expect(text(el)).toContain(esLocale.ui.usesNeedBookingModule);
+    expect(pick(el, `activate-${APPOINTMENTS.family}`), 'offered a use whose module is not installed').toBeNull();
+    const push = vi.spyOn(window.history, 'pushState');
+    await tap(el, 'uses-go-to-apps');
+    expect(push).toHaveBeenCalledWith({}, '', APPS_PATH);
+  });
+
+  it('while it is still finding out it stays silent, instead of saying «nothing to offer»', async () => {
+    mountWith();
+    await import('./erp-whatsapp-inbox-settings');
+    const el = document.createElement('erp-whatsapp-inbox-settings') as HTMLElement & { shadowRoot: ShadowRoot };
+    document.body.appendChild(el);
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    expect(
+      text(el),
+      'told the owner her channel is useless before the answers even arrived',
+    ).not.toContain(esLocale.ui.usesNeedBookingModule);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// STEP 3 · the ONE decision, and where it lives
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+describe('step 3 · «se confirman solas / las reviso yo» is a setting of the diary, not of this module', () => {
+  const running = { [APPOINTMENTS.family]: { flow_id: 'f1', enabled: true } };
+
+  it('the switch appears only once the recipe is running: there is nothing to decide before', async () => {
+    mountWith();
+    const el = await mount();
+    expect(
+      pick(el, `policy-${APPOINTMENTS.family}`),
+      'asked her how to confirm bookings that nothing is taking yet',
+    ).toBeNull();
+  });
+
+  it('defaults to «se confirman solas» on a hub that never configured the diary', async () => {
+    mountWith({ built: running, appointmentsSettings: [] });
+    const el = await mount();
+    const segment = pick(el, `policy-${APPOINTMENTS.family}`);
+    expect(segment, 'the one decision is not on screen').not.toBeNull();
+    expect(
+      (segment as unknown as { value: string }).value,
+      'painted «I review them first» while the diary is in fact confirming by itself',
+    ).toBe('auto');
+  });
+
+  it('reads the decision the salon already saved', async () => {
+    mountWith({ built: running, appointmentsSettings: [{ auto_confirm_online: false }] });
+    const el = await mount();
+    expect((pick(el, `policy-${APPOINTMENTS.family}`) as unknown as { value: string }).value).toBe('review');
+  });
+
+  it('choosing «las reviso yo» writes the NARROW command of the diary', async () => {
+    mountWith({ built: running });
+    const el = await mount();
+    const segment = pick(el, `policy-${APPOINTMENTS.family}`)!;
+    segment.dispatchEvent(new CustomEvent('ionChange', { detail: { value: 'review' } }));
+    await settle(el);
+    expect(commands).toEqual([
+      { name: APPOINTMENTS.policy.write, payload: { [APPOINTMENTS.policy.field]: false } },
+    ]);
+  });
+
+  it('and going back to automatic writes the same command the other way', async () => {
+    mountWith({ built: running, appointmentsSettings: [{ auto_confirm_online: false }] });
+    const el = await mount();
+    const segment = pick(el, `policy-${APPOINTMENTS.family}`)!;
+    segment.dispatchEvent(new CustomEvent('ionChange', { detail: { value: 'auto' } }));
+    await settle(el);
+    expect(commands).toEqual([
+      { name: APPOINTMENTS.policy.write, payload: { [APPOINTMENTS.policy.field]: true } },
+    ]);
+  });
+
+  it('the help sentence appears only when she chooses to review', async () => {
+    mountWith({ built: running });
+    const el = await mount();
+    expect(text(el), 'explained the review flow to somebody who is not reviewing').not.toContain(
+      esLocale.ui.helpPolicyReview,
+    );
+    pick(el, `policy-${APPOINTMENTS.family}`)!.dispatchEvent(
+      new CustomEvent('ionChange', { detail: { value: 'review' } }),
+    );
+    await settle(el);
+    expect(text(el)).toContain(esLocale.ui.helpPolicyReview);
+  });
+
+  it('a diary too old to publish the narrow command says so instead of failing mute', async () => {
+    mountWith({ built: running, policyError: { code: 'not_found', message: 'no existe' } });
+    const el = await mount();
+    pick(el, `policy-${APPOINTMENTS.family}`)!.dispatchEvent(
+      new CustomEvent('ionChange', { detail: { value: 'review' } }),
+    );
+    await settle(el);
+    expect(text(el)).toContain(esLocale.ui.errPolicy);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// What this screen STOPPED doing, which is most of what it used to be
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+describe('everything the owner does not have to read any more is gone', () => {
+  const running = { [APPOINTMENTS.family]: { flow_id: 'f1', enabled: true } };
+
+  it('writes NOTHING of this module: no upsert, no Save, one policy in one place', async () => {
+    mountWith({ built: running });
+    const el = await mount();
+    pick(el, `policy-${APPOINTMENTS.family}`)!.dispatchEvent(
+      new CustomEvent('ionChange', { detail: { value: 'review' } }),
+    );
+    await settle(el);
+    expect(
+      commands.filter((c) => c.name.startsWith(`${MODULE_ID}.`)),
+      'still writes a column of this module: the decision would live in two places and contradict itself',
+    ).toEqual([]);
+  });
+
+  it('reads no settings row and no meter: the counters live in the Plan tab', async () => {
+    mountWith({ built: running });
+    await mount();
+    expect(queries.map((q) => q.name).filter((n) => n.startsWith(`${MODULE_ID}.`))).toEqual([]);
+  });
+
+  it('has no «Guardar» button left to press', async () => {
+    mountWith({ built: running });
+    const el = await mount();
+    const buttons = [...el.shadowRoot.querySelectorAll('ion-button')].map((b) => b.textContent?.trim());
+    expect(buttons, 'a Save button on a screen that saves nothing').not.toContain(esLocale.ui.save);
+    expect(el.shadowRoot.querySelector('form'), 'still a form: there is nothing to submit').toBeNull();
+  });
+
+  it('offers no `approval_mode` selector: nothing reads that column', async () => {
+    mountWith({ built: running });
+    const el = await mount();
+    expect(el.shadowRoot.querySelector('ion-select'), 'the dead selector is still on screen').toBeNull();
+  });
+
+  // ADR-0143 and its amendment of 2026-08-11: `fill="outline"` is a NO-OP in `ios` mode, which the
+  // shell pins, so a control that leans on it for its border has none at the counter.
+  it('no form control leans on `fill="outline"`, a no-op in the mode the shell pins', async () => {
+    mountWith({ built: running });
+    const el = await mount();
+    const controls = [...el.shadowRoot.querySelectorAll('ion-input, ion-select, ion-textarea')];
+    for (const control of controls) {
+      expect(control.getAttribute('fill'), `${control.tagName} paints no border in \`ios\` mode`).not.toBe('outline');
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// Advanced — still there, just not on the way
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+describe('the advanced door is where it always was, and only if it exists', () => {
+  it('links to Automations when the kernel module is installed', async () => {
+    mountWith();
+    const el = await mount();
+    const push = vi.spyOn(window.history, 'pushState');
+    await tap(el, 'advanced-automations');
+    expect(push).toHaveBeenCalledWith({}, '', AUTOMATIONS_PATH);
+  });
+
+  it('offers no advanced link without the flows module, and «Activar» still works', async () => {
+    mountWith({ absent: ['flows'] });
+    const el = await mount();
+    expect(pick(el, 'advanced-automations'), 'a door to a module that is not installed').toBeNull();
+    await tap(el, `activate-${APPOINTMENTS.family}`);
+    await tap(el, `confirm-activate-${APPOINTMENTS.family}`);
+    expect(kernel.filter((k) => k.call === 'activate').length, 'the one tap needs the flows MODULE now').toBe(1);
+  });
+
+  it('Meta templates live folded away, not as a tab of their own', async () => {
+    mountWith();
+    const el = await mount();
+    const details = el.shadowRoot.querySelector('details');
+    expect(details, 'the Meta templates are not folded anywhere').not.toBeNull();
+    expect(details!.hasAttribute('open'), 'the advanced block is open, so it is back on the way').toBe(false);
+    expect(details!.querySelector('erp-whatsapp-inbox-templates'), 'the templates screen is not embedded').not.toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// The acceptance, as a NUMBER (whatsapp_inbox#123)
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+describe('after Meta: two screens and three taps', () => {
+  it('two taps and the automation is running, without leaving the screen', async () => {
+    mountWith();
+    const push = vi.spyOn(window.history, 'pushState');
+    const el = await mount();
+    let taps = 0;
+    for (const testid of [`activate-${APPOINTMENTS.family}`, `confirm-activate-${APPOINTMENTS.family}`]) {
+      await tap(el, testid);
+      taps += 1;
+    }
+    expect(taps).toBe(2);
+    expect(pick(el, `state-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.stateOn);
+    expect(push, 'a second screen means a third tap to come back').not.toHaveBeenCalled();
+  });
+
+  it('the third tap is the switch, and only if she wants to review', async () => {
+    mountWith();
+    const el = await mount();
+    await tap(el, `activate-${APPOINTMENTS.family}`);
+    await tap(el, `confirm-activate-${APPOINTMENTS.family}`);
+    const segment = pick(el, `policy-${APPOINTMENTS.family}`);
+    expect(segment, 'the switch is not reachable right after activating: that is a fourth tap').not.toBeNull();
+    segment!.dispatchEvent(new CustomEvent('ionChange', { detail: { value: 'review' } }));
+    await settle(el);
+    expect(commands.map((c) => c.name)).toEqual([APPOINTMENTS.policy.write]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// i18n (ADR-0055/0199)
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+describe('every sentence of this screen ships in both languages, translated', () => {
+  const keys = [
+    'stepNumber', 'stepUses', 'helpConnectScanQr', 'helpConnectNeedsNewerHub',
+    'activate', 'notNow', 'turnOff', 'stateOn', 'stateOff',
+    'policyAuto', 'policyReview', 'helpPolicyReview',
+    'advancedInAutomations', 'advancedMetaTemplates',
+    'usesNeedsNewerHub', 'usesNeedBookingModule', 'usesGoToApps',
+    'activateForbidden', 'errActivate', 'errTemplates', 'errPolicy',
+    ...WHATSAPP_USES.flatMap((u) => [u.nameKey, u.summaryKey, u.consentKey, u.doneKey].map((k) => k.split('.')[1])),
+  ];
+
+  it.each(keys)('`ui.%s` is written in English and translated into Spanish', (key) => {
+    const en = (enLocale.ui as Record<string, string>)[key];
+    const es = (esLocale.ui as Record<string, string>)[key];
+    expect(en, `missing \`ui.${key}\` in en.json — English is the source language`).toBeTruthy();
+    expect(es, `missing \`ui.${key}\` in es.json`).toBeTruthy();
+    expect(es, `\`ui.${key}\` was shipped in English to a Spanish salon`).not.toBe(en);
+  });
+
+  it('the keys the old screen needed are gone, so nobody re-paints the counters from them', () => {
+    for (const dead of [
+      'sectionChannel', 'sectionRequests', 'sectionUses', 'labelUsedThisMonth', 'labelMonthlyAllowance',
+      'allowanceUnlimited', 'helpAllowance', 'helpChannelCredentialsStaySealed', 'noReplyHere',
+      'labelApprovalMode', 'approvalAuto', 'approvalManual', 'helpApprovalMode',
+      'helpConversationLivesInFlow', 'helpUses', 'usesOpen', 'usesView', 'usesActive', 'usesPaused',
+      'usesUnfinished', 'usesEmpty', 'usesNeedAutomations', 'settingsSaved', 'errorSave', 'errorLoadSettings',
     ]) {
-      expect(payload, `\`${required}\` is required by schemas/settings_upsert.json`).toHaveProperty(required);
-    }
-  });
-
-  it('sends the flags as 0/1 integers, which is what the schema accepts', async () => {
-    const el = await mount();
-    await save(el);
-    const payload = commands.find((c) => c.name === 'whatsapp_inbox.settings.upsert')!.payload;
-    for (const flag of ['is_enabled', 'auto_reply_enabled', 'require_confirmation', 'notify_staff_new_request']) {
-      expect(typeof payload[flag], `\`${flag}\` travels as ${typeof payload[flag]}; the schema says integer 0|1`).toBe('number');
-      expect([0, 1]).toContain(payload[flag]);
-    }
-  });
-});
-
-describe('the billing meter cannot be touched from here', () => {
-  it('saving does not send free_tier_monthly_limit at all (whatsapp_inbox#37)', async () => {
-    mountWith();
-    const el = await mount();
-    await save(el);
-    const payload = commands.find((c) => c.name === 'whatsapp_inbox.settings.upsert')!.payload;
-    expect(
-      'free_tier_monthly_limit' in payload,
-      'the screen still puts the invoice in the upsert payload: the command ignores it now, but a ' +
-        'screen that sends a number it does not own is one refactor away from writing it again',
-    ).toBe(false);
-  });
-
-  it('no input, select or toggle is bound to the meter', async () => {
-    mountWith();
-    const el = await mount();
-    const controls = [...el.shadowRoot.querySelectorAll('ion-input, ion-select, ion-toggle, ion-textarea, input, select')];
-    for (const c of controls) {
-      const label = `${c.getAttribute('label') ?? ''} ${c.getAttribute('name') ?? ''}`.toLowerCase();
-      expect(label, 'the free-tier limit is offered as an editable control').not.toContain('limit');
-    }
-  });
-
-  it('shows the allowance, read-only, so the merchant knows what they bought', async () => {
-    mountWith();
-    const el = await mount();
-    expect(el.shadowRoot.textContent ?? '').toContain('30');
-  });
-
-  // Every one of the 14 products surveyed (Twilio, 360dialog, Wati, respond.io, Freshchat, Zoho…)
-  // puts the same read-only block on this screen: number, connection state, quality rating,
-  // messaging limit and USAGE against the quota. Of those, usage-against-quota is the one this hub
-  // owns — the rest live in the SaaS with Meta's credentials — and it is the one that answers the
-  // question a merchant actually has: how close am I to the end of my plan?
-  it('reads the month\'s consumption with whatsapp_inbox.usage.get', async () => {
-    mountWith();
-    await mount();
-    expect(queries.map((q) => q.name)).toContain('whatsapp_inbox.usage.get');
-  });
-
-  it('shows consumption against the allowance, not the allowance alone', async () => {
-    mountWith();
-    const el = await mount();
-    const text = el.shadowRoot.textContent ?? '';
-    expect(text, 'a limit without the count does not tell the merchant how close they are').toContain('12');
-    expect(text).toContain('30');
-  });
-});
-
-describe('no credential ever reaches this screen', () => {
-  beforeEach(() => mountWith());
-
-  it('renders no password / secret input', async () => {
-    const el = await mount();
-    const secretish = [...el.shadowRoot.querySelectorAll('ion-input, input')].filter(
-      (n) => (n.getAttribute('type') ?? '').toLowerCase() === 'password',
-    );
-    expect(secretish, 'a secret typed in the hub is a secret the hub now stores').toEqual([]);
-  });
-
-  it('does not send anything that looks like a credential to the command', async () => {
-    const el = await mount();
-    await save(el);
-    const payload = commands.find((c) => c.name === 'whatsapp_inbox.settings.upsert')!.payload;
-    const suspicious = Object.keys(payload).filter((k) => /token|secret|password|api_key|access/i.test(k));
-    expect(suspicious).toEqual([]);
-  });
-});
-
-describe('the columns that lost their owner are carried, never offered (WASM-TODO §revisión pm#112)', () => {
-  const ORPHANED = [
-    'auto_reply_enabled', 'greeting_message', 'out_of_hours_message', 'require_confirmation',
-    'auto_close_hours', 'input_modules', 'output_modules', 'gpt_system_prompt',
-  ] as const;
-
-  it('saving returns each of them exactly as it was read', async () => {
-    mountWith();
-    const el = await mount();
-    await save(el);
-    const payload = commands.find((c) => c.name === 'whatsapp_inbox.settings.upsert')!.payload;
-    for (const key of ORPHANED) {
       expect(
-        payload[key],
-        `\`${key}\` was rewritten by a screen that does not show it — saving would blank what somebody set`,
-      ).toBe(SAVED_SETTINGS[key]);
-    }
-  });
-
-  it('renders no control for them: they promise behaviour the kernel does now', async () => {
-    mountWith();
-    const el = await mount();
-    const labels = [...el.shadowRoot.querySelectorAll('ion-input, ion-select, ion-toggle, ion-textarea')]
-      .map((n) => (n.getAttribute('label') ?? '').toLowerCase());
-    for (const dead of ['auto-reply', 'respuesta automática', 'saludo', 'greeting', 'prompt', 'fuera de horario']) {
-      expect(labels.join(' | '), `the screen offers «${dead}», which no code reads any more`).not.toContain(dead);
-    }
-  });
-});
-
-describe('what the screen DOES decide', () => {
-  it('approval mode is a closed domain (auto|manual), picked from a select', async () => {
-    mountWith();
-    const el = await mount();
-    const options = [...el.shadowRoot.querySelectorAll('ion-select-option')].map((o) => o.getAttribute('value'));
-    expect(options).toEqual(['auto', 'manual']);
-  });
-
-  it('changing it is what travels to the command', async () => {
-    mountWith();
-    const el = await mount();
-    (el as unknown as { set: (k: string, v: unknown) => void }).set('approval_mode', 'auto');
-    await save(el);
-    const payload = commands.find((c) => c.name === 'whatsapp_inbox.settings.upsert')!.payload;
-    expect(payload.approval_mode).toBe('auto');
-  });
-
-  it('a hub with no settings row yet starts from defaults and can save', async () => {
-    mountWith(null);
-    const el = await mount();
-    await save(el);
-    const payload = commands.find((c) => c.name === 'whatsapp_inbox.settings.upsert')!.payload;
-    expect(payload.approval_mode, 'a brand-new channel must review what the AI parsed').toBe('manual');
-    expect('free_tier_monthly_limit' in payload, 'the meter is never this screen\'s to send').toBe(false);
-  });
-});
-
-describe('i18n: English is the source and Spanish is shipped (ADR-0055/0199)', () => {
-  it('every English key has its Spanish translation', () => {
-    const es = (esLocale as { ui: Record<string, string> }).ui;
-    const en = (enLocale as { ui: Record<string, string> }).ui;
-    expect(Object.keys(es).sort()).toEqual(Object.keys(en).sort());
-  });
-});
-
-// whatsapp_inbox#54 — the «Channel» block is WHERE the number gets connected. The button, the
-// Meta popup (the QR scanned with the WhatsApp Business app) and the runtime doors are the shell's
-// (`<erp-whatsapp-connect>`, hub#1600, ADR-0452): a module may not load a foreign script, the
-// shell may. This screen embeds the element — and on a hub too old to define it, says so instead
-// of rendering an inert tag the owner would stare at.
-describe('the channel block is where the number gets connected (whatsapp_inbox#54)', () => {
-  const TAG = 'erp-whatsapp-connect';
-
-  afterEach(() => vi.restoreAllMocks());
-
-  // The positive of the degradation: on a hub whose shell predates hub#1601 the element is not
-  // defined, and the block must SAY so — not leave an unknown tag the browser renders as nothing.
-  // `customElements.define` cannot be undone, so the old hub is played by answering «not defined»
-  // for this one tag, whatever the other tests registered before.
-  it('says the hub is too old instead of leaving an inert tag when the shell lacks the element', async () => {
-    const real = customElements.get.bind(customElements);
-    vi.spyOn(customElements, 'get').mockImplementation((name: string) => (name === TAG ? undefined : real(name)));
-    mountWith();
-    const el = await mount();
-    expect(el.shadowRoot.querySelector(TAG), 'an old hub still got the tag it cannot define').toBeNull();
-    expect(el.shadowRoot.textContent).toContain(esLocale.ui.helpConnectNeedsNewerHub);
-  });
-
-  it('embeds the shell element when the hub provides it', async () => {
-    if (!customElements.get(TAG)) customElements.define(TAG, class extends HTMLElement {});
-    mountWith();
-    const el = await mount();
-    const channel = el.shadowRoot.querySelector(TAG);
-    expect(channel, 'the settings screen does not embed <erp-whatsapp-connect>').not.toBeNull();
-    expect(el.shadowRoot.textContent).not.toContain(esLocale.ui.helpConnectNeedsNewerHub);
-  });
-
-  it('no longer tells the owner the number lives somewhere else', async () => {
-    mountWith();
-    const el = await mount();
-    const text = el.shadowRoot.textContent ?? '';
-    expect(text).not.toContain('viven en tu cuenta de ERPlora');
-    expect(text).toContain(esLocale.ui.helpChannelCredentialsStaySealed);
-  });
-
-  it('ships the sentence for a hub that cannot connect yet, in both languages', () => {
-    for (const catalog of [esLocale, enLocale]) {
-      expect(catalog.ui.helpConnectNeedsNewerHub, 'missing helpConnectNeedsNewerHub').toBeTruthy();
-      expect(catalog.ui.helpChannelCredentialsStaySealed, 'missing helpChannelCredentialsStaySealed').toBeTruthy();
-    }
-    expect(esLocale.ui.helpConnectNeedsNewerHub).not.toBe(enLocale.ui.helpConnectNeedsNewerHub);
-  });
-});
-
-// whatsapp_inbox#59 — «What do you use WhatsApp for?».
-//
-// The complaint: the owner scans the QR, the inbox starts filling up, and that is where the product
-// stops. Turning a WhatsApp into a booked appointment means leaving Settings, finding Automations,
-// recognising which of a dozen gallery cards is theirs, granting permissions and switching it on.
-// Nobody who has just connected a number knows that screen exists. Wati, respond.io and Zoko all
-// ask «what do you want it for?» right after the connection; this is our version of that question.
-//
-// **It is a shortcut, and that is a decision, not a shortcoming** (the reasoning lives in
-// `ui/lib/whatsapp-uses.ts`): the module does not create the flow, because `/api/hub/flows*` is
-// gated behind `manage_flows` — the widest capability the runtime has — and because the kernel
-// creates every template PAUSED on purpose. So the card names the use, says what it does, and opens
-// the door. The owner still walks through it.
-//
-// What these tests pin is everything that can silently lie on that card:
-// · offering a use whose module is not installed — a door to a room that is not there;
-// · claiming there is nothing to offer while still finding out;
-// · treating a broken witness (denied permission, renamed query) as an absence: that hides a
-//   working use behind somebody else's bug, and the module cannot tell the two apart by guessing;
-// · pointing at Automations when Automations is what is missing.
-describe('the settings screen says what this WhatsApp can be used for (whatsapp_inbox#59)', () => {
-  const APPOINTMENTS = WHATSAPP_USES.find((u) => u.module === 'appointments')!;
-  const testid = (use: { id: string }) => `[data-testid="use-${use.id}"]`;
-  const uses = (el: HTMLElement & { shadowRoot: ShadowRoot }) =>
-    [...el.shadowRoot.querySelectorAll('[data-testid^="use-"]')];
-
-  afterEach(() => vi.restoreAllMocks());
-
-  it('offers the use when its module and Automations are both installed', async () => {
-    mountWith();
-    const el = await mount();
-    const card = el.shadowRoot.querySelector(testid(APPOINTMENTS));
-    expect(card, 'the hub has Appointments and Automations and the screen offers nothing').not.toBeNull();
-    const text = el.shadowRoot.textContent ?? '';
-    expect(text, 'the card does not name the use').toContain(esLocale.ui[APPOINTMENTS.nameKey.split('.')[1]]);
-    expect(text, 'the card does not say what the use does').toContain(
-      esLocale.ui[APPOINTMENTS.summaryKey.split('.')[1]],
-    );
-  });
-
-  it('puts the question straight after the channel block, where the number was just connected', async () => {
-    mountWith();
-    const el = await mount();
-    const headings = [...el.shadowRoot.querySelectorAll('section h3')].map((h) => h.textContent?.trim());
-    expect(headings).toEqual([esLocale.ui.sectionChannel, esLocale.ui.sectionUses, esLocale.ui.sectionRequests]);
-  });
-
-  it('asks the module it would send the owner to whether it is installed', async () => {
-    mountWith();
-    await mount();
-    expect(queries.map((q) => q.name)).toContain(APPOINTMENTS.witness);
-  });
-
-  it('hides a use whose module this hub does not have', async () => {
-    mountWith(SAVED_SETTINGS, { absent: [APPOINTMENTS.module] });
-    const el = await mount();
-    expect(
-      el.shadowRoot.querySelector(testid(APPOINTMENTS)),
-      'the screen offers a use that leads to a gallery card this hub cannot run',
-    ).toBeNull();
-  });
-
-  it('says so in a sentence when no use is available, instead of an empty box', async () => {
-    mountWith(SAVED_SETTINGS, { absent: WHATSAPP_USES.map((u) => u.module) });
-    const el = await mount();
-    expect(uses(el)).toEqual([]);
-    expect(el.shadowRoot.textContent ?? '').toContain(esLocale.ui.usesEmpty);
-  });
-
-  it('offers nothing while it is still finding out — silence, not «nothing to offer»', async () => {
-    mountWith(SAVED_SETTINGS, { pendingWitness: APPOINTMENTS.witness });
-    const el = await mount();
-    const text = el.shadowRoot.textContent ?? '';
-    expect(uses(el), 'a use was offered before its module answered').toEqual([]);
-    expect(text, 'told the owner there is nothing to use WhatsApp for while still asking').not.toContain(
-      esLocale.ui.usesEmpty,
-    );
-    expect(text).not.toContain(esLocale.ui.usesNeedAutomations);
-  });
-
-  it('still offers the use when the witness fails for something that is NOT absence', async () => {
-    mountWith(SAVED_SETTINGS, { brokenWitness: APPOINTMENTS.witness });
-    const el = await mount();
-    expect(
-      el.shadowRoot.querySelector(testid(APPOINTMENTS)),
-      'a denied permission or a renamed query was read as «the module is not here», hiding a use ' +
-        'that works: only module_not_installed / module_inactive prove an absence',
-    ).not.toBeNull();
-  });
-
-  // A shell whose SDK predates `queryOptional` cannot answer the question at all — the call lands
-  // as a TypeError, not as an absence. That is the same class of «I could not find out» as a denied
-  // permission, and it degrades the same way: offer the use. The screen is not allowed to turn «I
-  // could not ask» into «you cannot do this», which on an old hub would empty the card for everyone.
-  it('offers the uses anyway on a shell too old to answer the question', async () => {
-    mountWith(SAVED_SETTINGS, { noQueryOptional: true });
-    const el = await mount();
-    expect(
-      el.shadowRoot.querySelector(testid(APPOINTMENTS)),
-      'an old shell was read as «this hub has nothing», hiding every use on hubs that have them',
-    ).not.toBeNull();
-    expect(el.shadowRoot.textContent ?? '').not.toContain(esLocale.ui.usesEmpty);
-  });
-
-  // `module_inactive` is an absence (ADR-0128: a deactivated module is not available), and the
-  // screen must read it as one even on a shell whose SDK still re-throws it instead of answering
-  // `undefined`. Without this case, «every failure counts as present» passes every other test.
-  it('hides the use when an older SDK re-throws module_inactive instead of answering undefined', async () => {
-    mountWith(SAVED_SETTINGS, { legacyInactive: [APPOINTMENTS.module] });
-    const el = await mount();
-    expect(
-      el.shadowRoot.querySelector(testid(APPOINTMENTS)),
-      'a deactivated module was offered as a use: module_inactive is an absence, not a broken contract',
-    ).toBeNull();
-  });
-
-  // Counting a failed witness as «present» is the safe reading, but a witness that fails EVERY time
-  // — renamed, or behind a permission this session lacks — would keep the use offered for ever with
-  // nobody ever learning why. A failure nobody can see does not exist (CLAUDE.md: «Fallos»).
-  it('says in the console why a witness could not answer, so a broken witness is not silent', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    mountWith(SAVED_SETTINGS, { brokenWitness: APPOINTMENTS.witness });
-    await mount();
-    const said = warn.mock.calls.map((c) => c.map(String).join(' '));
-    expect(
-      said.find((line) => line.includes(APPOINTMENTS.witness) && line.includes('permission_denied')),
-      `nothing in the console names the witness and its failure code; console.warn calls were: ${JSON.stringify(said)}`,
-    ).toBeTruthy();
-  });
-
-  it('stays quiet in the console when the answer is a plain absence', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    mountWith(SAVED_SETTINGS, { absent: [APPOINTMENTS.module] });
-    await mount();
-    const said = warn.mock.calls.map((c) => c.map(String).join(' '));
-    expect(said.filter((line) => line.includes(APPOINTMENTS.witness))).toEqual([]);
-  });
-
-  it('takes the owner to that gallery card when the use is tapped', async () => {
-    mountWith();
-    const el = await mount();
-    const push = vi.spyOn(window.history, 'pushState');
-    const dispatch = vi.spyOn(window, 'dispatchEvent');
-
-    el.shadowRoot.querySelector<HTMLElement>(testid(APPOINTMENTS))!.click();
-
-    expect(push).toHaveBeenCalledWith({}, '', `/m/flows/automations?template=${APPOINTMENTS.id}`);
-    const popped = dispatch.mock.calls.map(([e]) => e).filter((e) => e.type === 'popstate');
-    expect(popped, 'the URL changed and the shell was never told: the screen would not move').not.toEqual([]);
-  });
-
-  // Without the automation kernel the shortcut has no destination at all, so pointing at it would
-  // be a door to a room that does not exist. The app list is where that gets fixed.
-  it('sends the owner to install Automations instead of offering doors that lead nowhere', async () => {
-    mountWith(SAVED_SETTINGS, { absent: ['flows'] });
-    const el = await mount();
-    expect(uses(el), 'offered a use whose destination is not installed').toEqual([]);
-    expect(el.shadowRoot.textContent ?? '').toContain(esLocale.ui.usesNeedAutomations);
-
-    const push = vi.spyOn(window.history, 'pushState');
-    const apps = el.shadowRoot.querySelector<HTMLElement>('[data-testid="uses-go-to-apps"]');
-    expect(apps, 'said Automations is missing and offered no way to get it').not.toBeNull();
-    apps!.click();
-    expect(push).toHaveBeenCalledWith({}, '', '/apps');
-  });
-
-  // ---------------------------------------------------------------------------------------------
-  // «Already set up?» (whatsapp_inbox#79).
-  //
-  // Until this, the card said «Set it up» to the salon that connected the number a minute ago AND
-  // to the one that has been taking appointments through it for three weeks. The second one is the
-  // expensive reader: it follows an invitation it has already accepted, and ends up with two
-  // automations answering the same message — both of them replying to the customer.
-  //
-  // The states are three because the gallery leaves a real third one behind: it creates every
-  // template PAUSED and with no grants (`flows/ui/lib/templates.ts`, rule 3) and hands the owner to
-  // Permissions, so «listens but may do nothing» is where a half-finished setup stops. Calling that
-  // absent would put the invitation back and buy the duplicate; calling it active would promise
-  // something that is not running.
-  describe('and whether it is already set up here', () => {
-    const badge = (el: HTMLElement & { shadowRoot: ShadowRoot }) =>
-      el.shadowRoot.querySelector(`[data-testid="automation-state-${APPOINTMENTS.id}"]`);
-    const button = (el: HTMLElement & { shadowRoot: ShadowRoot }) =>
-      el.shadowRoot.querySelector(testid(APPOINTMENTS));
-
-    it('asks Automations about the event and the command that identify this use', async () => {
-      mountWith();
-      await mount();
-      const asked = queries.find((q) => q.name === 'flows.automations.status');
-      expect(asked, 'never asked whether the automation of the use is already there').toBeTruthy();
-      expect(asked!.params).toEqual({
-        event: APPOINTMENTS.triggerEvent,
-        command: APPOINTMENTS.setupCommand,
-      });
-    });
-
-    it('says it is running, and offers to see it instead of setting it up again', async () => {
-      mountWith(SAVED_SETTINGS, { automations: { total: 1, enabled: 1, unfinished: 0 } });
-      const el = await mount();
-      expect(badge(el)?.textContent?.trim(), 'no badge on an automation that is running').toBe(
-        esLocale.ui.usesActive,
-      );
-      expect(
-        button(el)?.textContent?.trim(),
-        'invited the owner to set up an automation they already have: two would answer the same message',
-      ).toBe(esLocale.ui.usesView);
-    });
-
-    it('says it is paused — which is set up, so the invitation still does not come back', async () => {
-      mountWith(SAVED_SETTINGS, { automations: { total: 1, enabled: 0, unfinished: 0 } });
-      const el = await mount();
-      expect(badge(el)?.textContent?.trim()).toBe(esLocale.ui.usesPaused);
-      expect(button(el)?.textContent?.trim()).toBe(esLocale.ui.usesView);
-    });
-
-    it('says it was left unfinished when it listens but was never granted the command', async () => {
-      mountWith(SAVED_SETTINGS, { automations: { total: 0, enabled: 0, unfinished: 1 } });
-      const el = await mount();
-      expect(badge(el)?.textContent?.trim()).toBe(esLocale.ui.usesUnfinished);
-      expect(button(el)?.textContent?.trim()).toBe(esLocale.ui.usesView);
-    });
-
-    it('keeps the invitation when there is really nothing set up', async () => {
-      mountWith(SAVED_SETTINGS, { automations: { total: 0, enabled: 0, unfinished: 0 } });
-      const el = await mount();
-      expect(badge(el), 'put a badge on a hub that has no automation for this use').toBeNull();
-      expect(button(el)?.textContent?.trim()).toBe(esLocale.ui.usesOpen);
-    });
-
-    // The card must never say more than it knows. An `flows` from before the status query answers
-    // `not_found`, which is a broken contract and not an absence — so the honest reading is «I
-    // could not find out», and that has to look exactly like the card looked before #79.
-    it('behaves as it did before, on an Automations too old to answer the question', async () => {
-      mountWith(SAVED_SETTINGS, { notFound: ['flows.automations.status'] });
-      const el = await mount();
-      expect(
-        badge(el),
-        'told the owner what state their automation is in on the strength of a failed request',
-      ).toBeNull();
-      expect(button(el)?.textContent?.trim()).toBe(esLocale.ui.usesOpen);
-    });
-
-    it('says in the console why the status could not be read, so a renamed query is not silent', async () => {
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      mountWith(SAVED_SETTINGS, { notFound: ['flows.automations.status'] });
-      await mount();
-      const said = warn.mock.calls.map((c) => c.map(String).join(' '));
-      expect(
-        said.find((line) => line.includes('flows.automations.status') && line.includes('not_found')),
-        `nothing in the console names the query and its failure code; console.warn calls were: ${JSON.stringify(said)}`,
-      ).toBeTruthy();
-    });
-
-    it('stays quiet in the console when Automations is simply not installed', async () => {
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      mountWith(SAVED_SETTINGS, { absent: ['flows'] });
-      await mount();
-      const said = warn.mock.calls.map((c) => c.map(String).join(' '));
-      expect(said.filter((line) => line.includes('flows.automations.status'))).toEqual([]);
-    });
-
-    // «View it» has to land where THEIR automation is — the list at the top of Automations — and
-    // never on the gallery card `?template=` names: the gallery scrolls that card into view
-    // (flows#56/#57) and its one button is «Use», which creates a second flow. A button that reads
-    // «View it» and lands on «Use» is the invitation of #79 wearing a different label. The list is
-    // the closest this card can get: the status answer carries no id on purpose (three counters).
-    it.each([
-      ['running', { total: 1, enabled: 1, unfinished: 0 }],
-      ['paused', { total: 1, enabled: 0, unfinished: 0 }],
-      ['unfinished', { total: 0, enabled: 0, unfinished: 1 }],
-    ])('takes the owner to their automations, not to the card that builds a second one, when it is %s', async (_state, automations) => {
-      mountWith(SAVED_SETTINGS, { automations });
-      const el = await mount();
-      const push = vi.spyOn(window.history, 'pushState');
-      button(el)!.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
-      expect(push).toHaveBeenCalledWith({}, '', '/m/flows/automations');
-      expect(
-        push,
-        'sent the owner to the template card: the one button there is «Use», which builds a second automation',
-      ).not.toHaveBeenCalledWith({}, '', expect.stringContaining('?template='));
-    });
-  });
-
-  it('ships every sentence of the card in both languages, translated (ADR-0055/0199)', () => {
-    const keys = [
-      'sectionUses', 'helpUses', 'usesOpen', 'usesEmpty', 'usesNeedAutomations', 'usesGoToApps',
-      'usesActive', 'usesPaused', 'usesUnfinished', 'usesView',
-      ...WHATSAPP_USES.flatMap((u) => [u.nameKey.split('.')[1], u.summaryKey.split('.')[1]]),
-    ];
-    for (const key of keys) {
-      expect(enLocale.ui[key], `missing \`ui.${key}\` in en.json`).toBeTruthy();
-      expect(esLocale.ui[key], `missing \`ui.${key}\` in es.json`).toBeTruthy();
-      expect(esLocale.ui[key], `\`ui.${key}\` was shipped in English to a Spanish salon`).not.toBe(
-        enLocale.ui[key],
-      );
+        (enLocale.ui as Record<string, string>)[dead],
+        `\`ui.${dead}\` is still shipped and nothing renders it: the orphan is what invites the old block back`,
+      ).toBeUndefined();
+      expect((esLocale.ui as Record<string, string>)[dead]).toBeUndefined();
     }
   });
 });
