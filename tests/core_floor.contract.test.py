@@ -185,7 +185,11 @@ FEATURES = (
     # `on_expire` is asked of the `ai` kind ALONE and that is the whole measurement: the APPROVAL
     # step has carried the same key since hub#950, so a predicate that took any step would derive
     # this floor from a document that needs nothing newer than v1.1.14.
-    (NEED_AI_EXPIRY, "on_expire", lambda step: step.get("kind") == "ai" and "on_expire" in step),
+    (
+        NEED_AI_EXPIRY,
+        "on_expire",
+        lambda step: step.get("kind") == "ai" and "on_expire" in step,
+    ),
     (NEED_STEP_ERROR_POLICY, "on_error", lambda step: "on_error" in step),
 )
 # …and the same, one file over. A kernel need does not only come from the DOCUMENT: since hub#1654
@@ -214,6 +218,50 @@ PIN_ROOTS = ("input", "steps")
 # every template still rides on it, so it is asked of the whole family.
 ALWAYS = (NEED_ANSWERS_ONLY,)
 
+NEED_TEMPLATE_ACTIVATE = KernelNeed(
+    issue="hub#1677",
+    floor=(1, 1, 19),
+    path="crates/server/src/routes.rs",
+    marker="/api/hub/flows/templates/:module/:family/activate",
+    last_without="v1.1.18",
+    why="the settings screen turns a factory recipe on IN ONE TAP through the kernel, which "
+    "builds it and grants it exactly the sidecar's permissions. Below it the SDK has no such "
+    "method, so the screen would paint «Activar» on a hub that answers 404 to it — a button that "
+    "fails the moment the owner presses it (whatsapp_inbox#123, ADR-0470)",
+)
+
+# …and a third place a floor can come from, which is neither the document nor the sidecar: the
+# SCREEN (whatsapp_inbox#123). The one-tap activation of ADR-0470 is not a flow feature at all —
+# `flows/` is byte for byte what it was — it is `ui/` calling an SDK method that only exists from
+# v1.1.19. Deriving the floor only from `flows/` would have left the manifest at 1.1.17 while the
+# shipped screen needs 1.1.19, which is the exact failure this battery exists to prevent, one layer
+# over: the module installs on a v1.1.17 hub and the owner gets a button that 404s.
+#
+# 🔴 The source is read with its COMMENTS STRIPPED, and that is load-bearing rather than tidy. This
+# very module's screen explains `activateTemplate` at length in its header docstring, so a raw
+# substring match would derive the 1.1.19 floor from PROSE — and would go on deriving it after
+# somebody deleted the call and left the paragraph behind, which is precisely the regression the
+# floor guards. The negative half of `UI_PREDICATE_CASES` pins that.
+UI_FEATURES = (
+    (
+        NEED_TEMPLATE_ACTIVATE,
+        "the screen turns a recipe on through the kernel's one-tap door",
+        lambda code: "activateTemplate" in code or "deactivateTemplate" in code,
+    ),
+)
+
+
+def strip_comments(source: str) -> str:
+    """The CODE of a TypeScript file, with `//` lines and `/* … */` blocks taken out.
+
+    Nothing clever: string literals containing `//` would be trimmed too. That errs towards reading
+    LESS, which for this gate is the safe direction — it can only lose a derivation and fail loud,
+    never invent one and pass quiet.
+    """
+    without_blocks = re.sub(r"/\*.*?\*/", "", source, flags=re.DOTALL)
+    return re.sub(r"^\s*//.*$", "", without_blocks, flags=re.MULTILINE)
+
+
 # Every predicate above, proved against SYNTHETIC steps in both directions — the step that must
 # demand the floor and the step that must NOT. The documents are the one input this battery does
 # not get to choose (it reads whatever `flows/` ships that day), so a predicate that silently
@@ -240,7 +288,12 @@ PREDICATE_CASES = (
         {"kind": "ai", "output": {"slots": {"type": "options"}}},
         True,
     ),
-    (NEED_DECLARED_OUTPUT, "an `ai` step that only writes words", {"kind": "ai"}, False),
+    (
+        NEED_DECLARED_OUTPUT,
+        "an `ai` step that only writes words",
+        {"kind": "ai"},
+        False,
+    ),
     (
         NEED_AI_EXPIRY,
         "an `ai` step that declares what a SILENCE costs the run",
@@ -259,7 +312,40 @@ PREDICATE_CASES = (
         {"kind": "ai", "on_error": "continue"},
         True,
     ),
-    (NEED_STEP_ERROR_POLICY, "a step that says nothing about failure", {"kind": "ai"}, False),
+    (
+        NEED_STEP_ERROR_POLICY,
+        "a step that says nothing about failure",
+        {"kind": "ai"},
+        False,
+    ),
+)
+
+# The same, for the screen — synthetic SOURCE this time, and the negative half is why the table is
+# here at all. Case 2 is the one that would have caught the mistake: a screen that only TALKS about
+# the one-tap door in a comment demands nothing of the hub, and a predicate reading the raw file
+# would say it does — this module's own screen explains the door at length in its header. Case 3 is
+# the world before ADR-0470, the screen that sent the owner to the gallery to switch it on herself,
+# which is exactly the state this floor must NOT be derived from.
+UI_PREDICATE_CASES = (
+    (
+        NEED_TEMPLATE_ACTIVATE,
+        "a screen that calls the kernel's one-tap door",
+        "const flow = await erplora().forModule(MODULE_ID).flows.activateTemplate(family);",
+        True,
+    ),
+    (
+        NEED_TEMPLATE_ACTIVATE,
+        "a screen that only MENTIONS the door in a comment it never calls",
+        "// Since hub#1677 the kernel exposes activateTemplate for this.\n"
+        "const go = () => window.history.pushState({}, '', AUTOMATIONS_PATH);",
+        False,
+    ),
+    (
+        NEED_TEMPLATE_ACTIVATE,
+        "the screen as it was before ADR-0470, linking out to the gallery",
+        "const open = () => window.history.pushState({}, '', galleryPath(use));",
+        False,
+    ),
 )
 
 failures: list[str] = []
@@ -299,7 +385,11 @@ def newest_tag_below(floor: tuple[int, int, int]) -> str | None:
     if tags.returncode != 0:
         return None
     known = [(tag, triple(tag[1:])) for tag in tags.stdout.split()]
-    below = [(tag, version) for tag, version in known if version is not None and version < floor]
+    below = [
+        (tag, version)
+        for tag, version in known
+        if version is not None and version < floor
+    ]
     return max(below, key=lambda pair: pair[1])[0] if below else None
 
 
@@ -326,7 +416,9 @@ def needs_of_templates() -> list[tuple[KernelNeed, str]]:
         for need, label, present in FEATURES:
             hits = [s.get("id") for s in doc.get("steps", []) if present(s)]
             if hits:
-                demanded.append((need, f"{template.name} step `{hits[0]}` uses `{label}`"))
+                demanded.append(
+                    (need, f"{template.name} step `{hits[0]}` uses `{label}`")
+                )
     for sidecar in sorted((MODULE_DIR / "flows").glob("*.grants.json")):
         body = json.loads(sidecar.read_text(encoding="utf-8"))
         grants = body.get("grants", []) if isinstance(body, dict) else body
@@ -334,11 +426,38 @@ def needs_of_templates() -> list[tuple[KernelNeed, str]]:
             hits = [g for g in grants if isinstance(g, dict) and present(g)]
             if hits:
                 demanded.append(
-                    (need, f"{sidecar.name} `{hits[0].get('kind')} {hits[0].get('value')}` — {label}")
+                    (
+                        need,
+                        f"{sidecar.name} `{hits[0].get('kind')} {hits[0].get('value')}` — {label}",
+                    )
                 )
     if templates:
         for need in ALWAYS:
             demanded.append((need, f"all {len(templates)} template(s) ride on it"))
+    demanded.extend(needs_of_ui())
+    return demanded
+
+
+def needs_of_ui() -> list[tuple[KernelNeed, str]]:
+    """Every kernel need the SHIPPED SCREENS demand, with the file that demands it.
+
+    Tests are excluded on purpose: a `.test.ts` never travels to a hub, so a mock of a method the
+    real screen does not call would raise the floor of every business running this module for a
+    capability nothing shipped uses.
+    """
+    demanded: list[tuple[KernelNeed, str]] = []
+    sources = sorted(
+        path
+        for path in (MODULE_DIR / "ui").rglob("*.ts")
+        if not path.name.endswith(".test.ts")
+    )
+    for path in sources:
+        code = strip_comments(path.read_text(encoding="utf-8"))
+        for need, label, present in UI_FEATURES:
+            if present(code):
+                demanded.append(
+                    (need, f"ui/{path.relative_to(MODULE_DIR / 'ui')} — {label}")
+                )
     return demanded
 
 
@@ -381,15 +500,59 @@ def predicate_self_check() -> None:
     for need, _label, _present in FEATURES:
         for expected in (True, False):
             if (need.issue, expected) not in proved:
-                half = "a step that DEMANDS it" if expected else "a step that must NOT demand it"
+                half = (
+                    "a step that DEMANDS it"
+                    if expected
+                    else "a step that must NOT demand it"
+                )
                 failures.append(
                     f"no `PREDICATE_CASES` row proves the {need.issue} predicate against {half}, so "
                     f"nothing here would notice it going blind: the floor it derives would keep "
                     f"coming out right off today's documents and stay right after the regression"
                 )
+    ui_predicates: dict[KernelNeed, list] = {}
+    for need, _label, present in UI_FEATURES:
+        ui_predicates.setdefault(need, []).append(present)
+
+    ui_proved: set[tuple[str, bool]] = set()
+    for need, what, source, expected in UI_PREDICATE_CASES:
+        if need not in ui_predicates:
+            failures.append(
+                f"`UI_PREDICATE_CASES` proves {need.issue} but no `UI_FEATURES` predicate derives "
+                f"it any more, so the case is measuring nothing: drop the case, or restore the "
+                f"predicate"
+            )
+            continue
+        code = strip_comments(source)
+        matched = any(present(code) for present in ui_predicates[need])
+        if matched != expected:
+            owed = "demand" if expected else "NOT demand"
+            failures.append(
+                f"the {need.issue} screen predicate reads {what} as "
+                f"{'demanding' if matched else 'not demanding'} the {dotted(need.floor)} floor, and "
+                f"it must {owed} it. {need.why}"
+            )
+        ui_proved.add((need.issue, expected))
+
+    for need, _label, _present in UI_FEATURES:
+        for expected in (True, False):
+            if (need.issue, expected) not in ui_proved:
+                half = (
+                    "a screen that DEMANDS it"
+                    if expected
+                    else "a screen that must NOT demand it"
+                )
+                failures.append(
+                    f"no `UI_PREDICATE_CASES` row proves the {need.issue} screen predicate against "
+                    f"{half}, so nothing here would notice it going blind: the floor it derives "
+                    f"would keep coming out right off today's sources and stay right after the "
+                    f"regression"
+                )
+
     if not failures:
         print(
-            f"  ok: {len(FEATURES)} floor derivation(s) proved to discriminate, in both directions"
+            f"  ok: {len(FEATURES) + len(UI_FEATURES)} floor derivation(s) proved to "
+            f"discriminate, in both directions"
         )
 
 
@@ -428,7 +591,9 @@ def main() -> int:
     print(f"  ok: declares `{declared}`, a version the runtime can compare")
 
     demanded = needs_of_templates()
-    print(f"  ok: {len(templates)} template(s) demand {len(demanded)} kernel behaviour(s)")
+    print(
+        f"  ok: {len(templates)} template(s) demand {len(demanded)} kernel behaviour(s)"
+    )
 
     # 3 · The floor covers everything the SHIPPED documents ask for.
     for need, who in demanded:
@@ -442,7 +607,7 @@ def main() -> int:
             )
     if not failures:
         print(
-            f"  ok: `{declared}` >= every floor the templates demand "
+            f"  ok: `{declared}` >= every floor the shipped files demand "
             f"({', '.join(sorted({dotted(n.floor) for n, _ in demanded}))})"
         )
 
@@ -456,8 +621,9 @@ def main() -> int:
         failures.append(
             f"the manifest declares `{declared}` but the shipped files only demand up to "
             f"{dotted(highest)}, so nothing derives that number any more: either a derivation went "
-            f"blind (a FEATURES/GRANT_FEATURES predicate, a key renamed in `flows/`, a glob that "
-            f"stopped matching) or the requirement really is gone. Re-derive it — and if the floor "
+            f"blind (a FEATURES/GRANT_FEATURES/UI_FEATURES predicate, a key renamed in `flows/`, a "
+            f"call dropped from `ui/`, a glob that stopped matching) or the requirement really is "
+            f"gone. Re-derive it — and if the floor "
             f"is meant to stand on something no shipped file can show, it belongs in `ALWAYS` as a "
             f"KernelNeed, not as a bare number here"
         )
@@ -469,8 +635,9 @@ def main() -> int:
     # 5 · Re-measure each need instead of trusting the table in the docstring: PRESENT at its
     #     release, ABSENT at the one before it.
     for need in sorted({n for n, _ in demanded}):
-        at_floor, measured = marker_count(f"v{dotted(need.floor)}", need.path, need.marker), (
-            f"v{dotted(need.floor)}"
+        at_floor, measured = (
+            marker_count(f"v{dotted(need.floor)}", need.path, need.marker),
+            (f"v{dotted(need.floor)}"),
         )
         if at_floor is None:
             # A floor above the newest published tag is the CORRECT way to ship something the fleet
@@ -536,7 +703,9 @@ def report() -> int:
         for failure in failures:
             print(f"  - {failure}")
         return 1
-    print("\nOK: an old hub is told to update instead of installing an automation it cannot run")
+    print(
+        "\nOK: an old hub is told to update instead of installing an automation it cannot run"
+    )
     return 0
 
 

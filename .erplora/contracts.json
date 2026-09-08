@@ -8,13 +8,10 @@
       "whatsapp_inbox.messages.list",
       "whatsapp_inbox.requests.get",
       "whatsapp_inbox.requests.list",
-      "whatsapp_inbox.settings.get",
-      "whatsapp_inbox.templates.list",
-      "whatsapp_inbox.usage.get"
+      "whatsapp_inbox.templates.list"
     ],
     "optional_queries": [
       "appointments.settings.get",
-      "flows.automations.status",
       "flows.drafts.list"
     ],
     "commands": [
@@ -23,10 +20,12 @@
       "whatsapp_inbox.requests.delete",
       "whatsapp_inbox.requests.fulfill",
       "whatsapp_inbox.requests.reject",
-      "whatsapp_inbox.settings.upsert",
       "whatsapp_inbox.templates.create",
       "whatsapp_inbox.templates.delete",
       "whatsapp_inbox.templates.update"
+    ],
+    "optional_commands": [
+      "appointments.settings.set_auto_confirm_online"
     ],
     "events": [
       "appointments.booking_request.failed",

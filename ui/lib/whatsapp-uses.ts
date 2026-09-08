@@ -1,28 +1,33 @@
 /**
- * **What a business can put its WhatsApp to, and where each one is set up.**
+ * **What a business can put its WhatsApp to, and what turning one on actually does.**
  *
- * The complaint this answers (whatsapp_inbox#59): the owner scans the QR, the inbox starts filling
- * up, and nothing else happens. Turning a WhatsApp into an appointment means leaving Settings,
- * finding Automations, recognising which of a dozen gallery cards is theirs, granting a fistful of
- * permissions and switching it on. Nobody who has just connected a number knows that place exists.
- * Wati, respond.io and Zoko all ask «what do you want it for?» at connection time; this is our
- * version of that question.
+ * The complaint this answers (whatsapp_inbox#123, ADR-0470): the owner scanned the QR and then had
+ * nine screens and about fifteen taps to go — Settings, a jump to Automations, four look-alike
+ * cards, one of them with nine steps and fourteen raw permissions, the editor, the Permissions tab,
+ * a switch, and back to a selector that read nothing. Measured on `banco-pre` the 08/09. Ioan, in
+ * front of it: «no sé ni cómo configurarlo».
  *
- * **It is a shortcut, not a second gallery, and that is a decision.** The kernel's REST surface
- * (`/api/hub/flows*`) is gated behind the `manage_flows` capability, which the runtime itself calls
- * «la capability con más alcance de todas» (`crates/runtime/src/manifest.rs`): it hands its holder
- * every automation of the business and the event catalogue, which carries customers' names
- * (`crates/runtime/src/event_shape.rs`). An inbox module has no business holding that so it can
- * install one recipe — and it would not even help, since the owner grants capabilities by hand in
- * Settings → Permissions, so the switch would be born behind another permission to go hunting for.
- * On top of that the gallery creates every template PAUSED on purpose (`flows/ui/lib/templates.ts`,
- * rule 3: *«an automation acts while nobody is watching; one that starts acting because somebody
- * tapped a picture of it is the thing the grants system exists to prevent»*). So the card names the
- * use, says what it does, and opens the door. The owner still walks through it.
+ * **This file is no longer a shortcut to the gallery, and that is the change.** Since hub#1677 the
+ * kernel has one door that builds a module's OWN factory recipe, gives it exactly the permissions
+ * the family's sidecar declared — pins included — and leaves it running:
+ * `POST /api/hub/flows/templates/<module>/<family>/activate`. It needs **no capability**: a module
+ * may only light up its own families, which is a far narrower thing than `manage_flows` («la
+ * capability con más alcance de todas», `crates/runtime/src/manifest.rs`) that the old path
+ * demanded and this module deliberately does not declare. What the owner consents to is one
+ * sentence naming the consequence, which is the shape Meta's own onboarding uses — not a list of
+ * scopes granted one by one.
+ *
+ * So a use is identified by its **family** — the shared prefix of the files this module ships in
+ * `flows/` — and not by a gallery card id. That is also what retired the heuristic of wi#79 (guess
+ * the automation by trigger event + command): it could not tell two families of the same module
+ * apart, and the kernel now answers the question directly with `installed`.
  */
 
+/** This module, as the kernel names it. `activateTemplate` is scoped to it and to nothing else. */
+export const MODULE_ID = 'whatsapp_inbox';
+
 /**
- * The read door of the SDK this file needs, and nothing else.
+ * The read door of the SDK a witness needs, and nothing else.
  *
  * `queryOptional` is the only one: it answers `undefined` for `module_not_installed` /
  * `module_inactive` and RE-THROWS everything else, which is the whole reason a witness can prove an
@@ -34,16 +39,42 @@ export interface WitnessAsker {
   queryOptional<T = unknown>(name: string, params?: Record<string, unknown>): Promise<T | undefined>;
 }
 
+/** The write door of the SDK the one decision needs, same absence rules as {@link WitnessAsker}. */
+export interface PolicyWriter {
+  commandOptional<T = unknown>(name: string, payload?: Record<string, unknown>): Promise<T | undefined>;
+}
+
+/**
+ * **Where «the bookings are confirmed automatically / I review them first» lives.**
+ *
+ * In the module that owns the diary, never here (ADR-0470 §6). Before the replan the same decision
+ * sat in three places — two recipes, a dead `approval_mode` selector, and Appointments' own
+ * `auto_confirm_online` — so the owner could set it and have it contradicted by the other two. One
+ * decision, one place, is also what Square does: «Reservation Guarantee» is a setting of
+ * Appointments, not of the assistant that books.
+ */
+export interface BookingPolicy {
+  /** The query of the owning module that answers with the current policy. */
+  read: string;
+  /** The NARROW command that changes only this, leaving every other setting as the owner left it. */
+  write: string;
+  /** The field, in both the answer and the payload. */
+  field: string;
+  /**
+   * What an EMPTY answer means — the module's own default, which is what a business that never
+   * touched the setting is running. Getting this backwards paints a switch that lies on the first
+   * visit of every hub that has not configured Appointments.
+   */
+  defaultOn: boolean;
+}
+
 /** One thing a business can use its WhatsApp for. */
 export interface WhatsAppUse {
   /**
-   * The gallery template's id — this is what the shortcut asks Automations to open, so it is the
-   * id `flows/ui/lib/templates.ts` uses, NOT the name of the document in `flows/`. The two differ
-   * (`whatsapp-appointment` vs `appointment-from-whatsapp`) and `whatsapp-uses.test.ts` checks each
-   * of them against its own source.
+   * The recipe in this module's `flows/` this card turns on — its file name, without language.
+   * This is the `:family` segment of the activate route, so a typo here is a button that answers
+   * `flow.template_not_found` and can never work.
    */
-  id: string;
-  /** The recipe in this module's `flows/` the gallery card mirrors — its file name, without language. */
   family: string;
   /** The module that has to be installed for this use to mean anything. */
   module: string;
@@ -72,50 +103,106 @@ export interface WhatsAppUse {
    * arrived at.
    */
   probe(client: WitnessAsker): Promise<unknown>;
+  /** Where the one decision of this use is kept — in {@link WhatsAppUse.module}, never here. */
+  policy: BookingPolicy;
   /** `ion-icon` name, registered by the module build. Never a loose SVG. */
-  /**
-   * The event every recipe of {@link WhatsAppUse.family} is triggered by — half of what identifies
-   * «the automation of this use» in a hub (whatsapp_inbox#79).
-   *
-   * It is NOT the gallery template: a created flow keeps no record of the template it came from,
-   * and the document cannot carry one either — the root of `hub/schemas/flow.schema.json` is
-   * `additionalProperties: false`. What a flow does keep is what it LISTENS to and what it is
-   * allowed to DO, and the kernel maintains both, so neither goes stale behind our back.
-   */
-  triggerEvent: string;
-  /**
-   * A command grant {@link WhatsAppUse.family} carries — the other half.
-   *
-   * It has to be one the recipe holds in EVERY language it ships in, which is all that is left of
-   * the older requirement: this module used to ship an attended and an unattended recipe per use,
-   * and a command only one of them held left the other unrecognised and the card inviting the owner
-   * to build a second automation. Since whatsapp_inbox#124 there is one recipe per use, so the
-   * variants are the translations. Together with {@link WhatsAppUse.triggerEvent} it also keeps the
-   * uses apart — the table-booking recipe (whatsapp_inbox#60) listens to the SAME event with a
-   * `reservations.*` command.
-   */
-  setupCommand: string;
   icon: string;
   nameKey: string;
   summaryKey: string;
+  /** The ONE sentence the owner consents to. It names the consequence, not the permissions. */
+  consentKey: string;
+  /** What to do next, once it is on: text the number from another phone. */
+  doneKey: string;
 }
 
 export const WHATSAPP_USES: readonly WhatsAppUse[] = [
   {
-    id: 'whatsapp-appointment',
     family: 'appointment-from-whatsapp',
     module: 'appointments',
     witness: 'appointments.settings.get',
     probe: (client) => client.queryOptional('appointments.settings.get'),
-    triggerEvent: 'hub.whatsapp.message_received',
-    setupCommand: 'appointments.appointments.create',
+    policy: {
+      read: 'appointments.settings.get',
+      write: 'appointments.settings.set_auto_confirm_online',
+      field: 'auto_confirm_online',
+      // Appointments creates the row with the column ON, and it is what the market does: Square,
+      // Cal.com and SimplyBook all default to booking without review.
+      defaultOn: true,
+    },
     icon: 'calendar-outline',
     nameKey: 'ui.useAppointmentsName',
     summaryKey: 'ui.useAppointmentsSummary',
+    consentKey: 'ui.useAppointmentsConsent',
+    doneKey: 'ui.useAppointmentsDone',
   },
 ];
 
-/** The module that owns the gallery. Without it there is no door to send anyone through. */
+/**
+ * Asks the policy of one use. Through `queryOptional`, so a hub without the booking module answers
+ * «could not find out» instead of throwing into a screen that is only deciding what to paint.
+ *
+ * The literal is inside the thunk for the reason spelt out on {@link WhatsAppUse.probe}: the
+ * ADR-0127 extractor reads string literals out of the AST, and a name held in a variable is a name
+ * `contracts.json` never learns about.
+ */
+export const readBookingPolicy = (client: WitnessAsker, _use: WhatsAppUse): Promise<unknown> =>
+  client.queryOptional('appointments.settings.get');
+
+/**
+ * Changes the policy of one use, and only that.
+ *
+ * The payload is a BOOLEAN because that is what `settings_set_auto_confirm_online.json` types, and
+ * it refuses everything else with `additionalProperties: false` — the 0/1 integer the rest of this
+ * module speaks would come back `invalid_payload` on every change.
+ */
+export const writeBookingPolicy = (
+  client: PolicyWriter,
+  use: WhatsAppUse,
+  on: boolean,
+): Promise<unknown> =>
+  client.commandOptional('appointments.settings.set_auto_confirm_online', { [use.policy.field]: on });
+
+/**
+ * Reads the policy out of whatever the owning module answered, or the module's own default when it
+ * has no row yet.
+ *
+ * A hub that never opened Appointments' settings has no row, and «no row» is not «review every
+ * booking»: the column is born ON. Painting the switch the other way would tell a salon it is
+ * reviewing bookings that are in fact confirming themselves.
+ */
+export function bookingPolicyOn(answer: unknown, use: WhatsAppUse): boolean {
+  const row: unknown = Array.isArray(answer) ? answer[0] : answer;
+  if (row === null || typeof row !== 'object') return use.policy.defaultOn;
+  const value = (row as Record<string, unknown>)[use.policy.field];
+  if (typeof value === 'boolean') return value;
+  // Postgres hands a boolean column back as `true`/`false`, but a driver that maps it to 0/1 or
+  // to `'t'`/`'f'` must not silently read as «off»: the honest fallback is the module's default.
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string' && value.trim() !== '') return !['0', 'f', 'false', 'no'].includes(value.trim().toLowerCase());
+  return use.policy.defaultOn;
+}
+
+/** What this hub has already built from a family, in one word. */
+export type TemplateState = 'unknown' | 'off' | 'paused' | 'on';
+
+/**
+ * Reads the `installed` field of `GET /api/hub/flows/templates` (hub#1677, ADR-0470 §5).
+ *
+ * `undefined` is a fourth answer and NOT one of the three buttons: a hub from before that route
+ * leaves the key out entirely, and reading its absence as «not installed» would offer a «Turn it
+ * on» the same hub has no route to honour — a button that fails the moment it is pressed. `null`
+ * is the hub saying «nothing built from this family yet», which is the one that really means off.
+ */
+export function templateState(installed: { flow_id: string; enabled: boolean } | null | undefined): TemplateState {
+  if (installed === undefined) return 'unknown';
+  if (installed === null) return 'off';
+  if (typeof installed !== 'object') return 'unknown';
+  const { enabled } = installed as { enabled?: unknown };
+  if (typeof enabled !== 'boolean') return 'unknown';
+  return enabled ? 'on' : 'paused';
+}
+
+/** The module that owns the gallery. Without it there is nothing advanced to link to. */
 export const AUTOMATIONS_MODULE = 'flows';
 
 /** Proof that {@link AUTOMATIONS_MODULE} is installed here, same rules as `WhatsAppUse.witness`. */
@@ -126,95 +213,16 @@ export const AUTOMATIONS_WITNESS = 'flows.drafts.list';
 export const probeAutomations = (client: WitnessAsker): Promise<unknown> =>
   client.queryOptional('flows.drafts.list');
 
-/**
- * **How far along the automation of a use is in THIS hub.**
- *
- * `unknown` is not a tidy default: it is «I could not find out», and it is the only value that
- * degrades to what this card did before whatsapp_inbox#79 — no badge, «Set it up». An older
- * `flows` without the status query, a denied permission, an answer nobody could parse: all of them
- * land there, because the alternative is telling a salon its automation is running on the strength
- * of an answer we did not understand.
- */
-export type AutomationState = 'unknown' | 'absent' | 'unfinished' | 'paused' | 'active';
-
-/**
- * The query of {@link AUTOMATIONS_MODULE} that answers «is this one already set up here?».
- *
- * Read-only and behind `flows.view_flow`, NOT behind `manage_flows` — the capability the runtime
- * itself calls «la capability con más alcance de todas» (`crates/runtime/src/manifest.rs`), which
- * hands its holder every automation of the business plus the event catalogue, carrying customers'
- * names. It answers three integers about the ONE event and ONE command the caller names, and
- * nothing about any other automation of the business.
- */
-export const AUTOMATION_STATUS_WITNESS = 'flows.automations.status';
-
-/**
- * Asks {@link AUTOMATION_STATUS_WITNESS} about one use. A thunk with the literal inside, same
- * reason as {@link WhatsAppUse.probe}.
- *
- * Through `queryOptional`, so a hub without Automations answers «I could not find out» instead of
- * throwing a failure into a screen that is only trying to decide whether to paint a badge.
- */
-export const probeAutomationStatus = (client: WitnessAsker, use: WhatsAppUse): Promise<unknown> =>
-  client.queryOptional('flows.automations.status', {
-    event: use.triggerEvent,
-    command: use.setupCommand,
-  });
-
-/** One counter of the status answer, or `null` if it is not a number we can trust. `SUM()` is a
- *  bigint, which reaches a browser as a number on some drivers and as a string on others. */
-function counter(value: unknown): number | null {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-  if (typeof value === 'string' && value.trim() !== '') {
-    const n = Number(value);
-    return Number.isFinite(n) ? n : null;
-  }
-  return null;
-}
-
-/**
- * Reads the answer of {@link AUTOMATION_STATUS_WITNESS} into one word.
- *
- * `total` counts the automations that listen to the use's event AND may run its command;
- * `unfinished` counts the ones that listen and hold no command grant at all — the state the gallery
- * leaves behind, since it creates every template paused and ungranted (`flows/ui/lib/templates.ts`,
- * rule 3). Anything that is not three readable counters is {@link AutomationState} `unknown`.
- */
-export function automationState(answer: unknown): AutomationState {
-  const row: unknown = Array.isArray(answer) ? answer[0] : answer;
-  if (row === null || typeof row !== 'object') return 'unknown';
-  const counts = row as Record<string, unknown>;
-  const total = counter(counts.total);
-  const enabled = counter(counts.enabled);
-  const unfinished = counter(counts.unfinished);
-  if (total === null || enabled === null || unfinished === null) return 'unknown';
-  if (total > 0) return enabled > 0 ? 'active' : 'paused';
-  return unfinished > 0 ? 'unfinished' : 'absent';
-}
-
-/** Where the hub lists what can be installed — where a missing Automations is fixed. */
+/** Where the hub lists what can be installed — where a missing booking module is fixed. */
 export const APPS_PATH = '/apps';
 
 /**
- * The Automations screen itself: the owner's flows listed at the top, the gallery underneath.
+ * The Automations screen: the owner's flows listed at the top, the gallery underneath.
  *
- * Where «View it» goes once the automation of a use is already here (whatsapp_inbox#79). The
- * status answer carries no id on purpose — three counters, nothing about any one flow — so the
- * closest the card can bring the owner is the list their flow is in. What it must NOT do is name the
- * template card: the gallery scrolls that card into view (flows#56/#57) and its one button is «Use»,
- * which builds the second automation this badge exists to prevent. The `navId` is spelled in full
- * because the shell drops the query string when it has to correct it (`ModuleView.vue`).
+ * Where «Advanced settings» goes, and the ONLY thing this screen still links to over there. Steps,
+ * the prompt, each of the fourteen permissions with «Limits» and «Revoke», and the History all stay
+ * exactly where they were (ADR-0470 §4) — nothing was hidden, it stopped being on the way. The
+ * `navId` is spelled in full because the shell drops the query string when it has to correct it
+ * (`ModuleView.vue`).
  */
 export const AUTOMATIONS_PATH = `/m/${AUTOMATIONS_MODULE}/automations`;
-
-/**
- * The gallery, with the card the owner asked for named in the query string — where «Set it up» goes
- * while there is nothing set up yet.
- *
- * `?template=` is the contract for opening that card already selected. A gallery that does not read
- * it yet still lands the owner in Automations, which is where the card is — the shortcut degrades
- * to «took me to the right screen» instead of breaking.
- */
-export function galleryPath(templateId: string): string {
-  return `${AUTOMATIONS_PATH}?template=${encodeURIComponent(templateId)}`;
-}
