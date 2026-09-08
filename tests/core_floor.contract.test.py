@@ -44,16 +44,18 @@ WHAT THIS PINS:
 
 THE KERNEL FLOORS, MEASURED (2026-09-08, `git show <ref>:<path> | grep -c <marker>`):
 
-  | ref            | `answers_only`  | `AiOutputKind` | `interactive` | `fn can_pin`   | `PIN_ROOTS`    |
-  |                | agent_runner.rs | def.rs         | def.rs        | flows/grants.rs| flows/grants.rs|
-  |----------------|-----------------|----------------|---------------|----------------|----------------|
-  | v1.1.14        | absent          | absent         | absent        | absent         | absent         |
-  | v1.1.15        | present (x5)    | absent         | absent        | absent         | absent         |
-  | v1.1.16        | present (x5)    | present (x17)  | present (x33) | absent         | absent         |
-  | origin/develop | present (x5)    | present (x17)  | present (x33) | present (x1)   | present (x3)   |
+  | ref            | `answers_only`  | `AiOutputKind` | `interactive` | `ApprovalStep::` | `ON_ERROR_`    | `fn can_pin`   | `PIN_ROOTS`    |
+  |                | agent_runner.rs | def.rs         | def.rs        | `on_expire`      | `CONTINUE`     | flows/grants.rs| flows/grants.rs|
+  |                |                 |                |               | def.rs           | def.rs         |                |                |
+  |----------------|-----------------|----------------|---------------|------------------|----------------|----------------|----------------|
+  | v1.1.14        | absent          | absent         | absent        | absent           | absent         | absent         | absent         |
+  | v1.1.15        | present (x5)    | absent         | absent        | absent           | absent         | absent         | absent         |
+  | v1.1.16        | present (x5)    | present (x17)  | present (x33) | present (x1)     | present (x3)   | absent         | absent         |
+  | v1.1.17        | present (x5)    | present (x17)  | present (x33) | present (x1)     | present (x3)   | present (x1)   | present (x3)   |
+  | origin/develop | present (x5)    | present (x17)  | present (x33) | present (x1)     | present (x3)   | present (x1)   | present (x3)   |
 
-So `v1.1.15` is the first release carrying hub#1595, `v1.1.16` the first carrying
-hub#1633/hub#1639, and NO release yet carries hub#1662 — `git tag --contains 17fe65ce` is empty.
+So `v1.1.15` is the first release carrying hub#1595 and `v1.1.16` the first carrying
+hub#1633/hub#1639 and hub#1634/hub#1635; hub#1662 arrived in `v1.1.17`.
 `1.1.17` is therefore a floor pointing at a release that does not exist yet, which is the CORRECT
 way to ship something the fleet cannot run: the hub refuses the install with `core_version_too_old`
 instead of taking a template that explodes at save time. The positive half of the re-measure falls
@@ -126,6 +128,31 @@ NEED_INTERACTIVE = KernelNeed(
     "`flow.invalid_definition`",
 )
 
+NEED_AI_EXPIRY = KernelNeed(
+    issue="hub#1634",
+    floor=(1, 1, 16),
+    path="crates/runtime/src/flows/def.rs",
+    marker="ApprovalStep::on_expire",
+    last_without="v1.1.15",
+    why="an `ai` step declares what a SILENCE costs the run, so a proposal nobody ever answered "
+    "carries on to the step that tells the customer instead of cancelling the run at 72 h. Below "
+    "it `on_expire` is an unknown key on that kind and the parser refuses the WHOLE document "
+    "with `flow.invalid_definition`. Measured through the doc-link the key's own field carries "
+    "(`[`ApprovalStep::on_expire`]`) rather than through `on_expire` itself, which the APPROVAL "
+    "step has had since hub#950 and would therefore read «present» at every release",
+)
+NEED_STEP_ERROR_POLICY = KernelNeed(
+    issue="hub#1635",
+    floor=(1, 1, 16),
+    path="crates/runtime/src/flows/def.rs",
+    marker="ON_ERROR_CONTINUE",
+    last_without="v1.1.15",
+    why="a step declares what a FAILURE costs the run, so an approved booking that breaks — the "
+    "slot taken in between, the professional gone — still reaches the step that tells the "
+    "customer instead of ending the run as `failed`. Below it `on_error` is an unknown key on "
+    "every kind and the parser refuses the WHOLE document with `flow.invalid_definition`",
+)
+
 NEED_PINNED_READ = KernelNeed(
     issue="hub#1662",
     floor=(1, 1, 17),
@@ -155,6 +182,11 @@ NEED_PIN_REFERENCE = KernelNeed(
 FEATURES = (
     (NEED_INTERACTIVE, "interactive", lambda step: bool(step.get("interactive"))),
     (NEED_DECLARED_OUTPUT, "output", lambda step: bool(step.get("output"))),
+    # `on_expire` is asked of the `ai` kind ALONE and that is the whole measurement: the APPROVAL
+    # step has carried the same key since hub#950, so a predicate that took any step would derive
+    # this floor from a document that needs nothing newer than v1.1.14.
+    (NEED_AI_EXPIRY, "on_expire", lambda step: step.get("kind") == "ai" and "on_expire" in step),
+    (NEED_STEP_ERROR_POLICY, "on_error", lambda step: "on_error" in step),
 )
 # …and the same, one file over. A kernel need does not only come from the DOCUMENT: since hub#1654
 # the `<family>.grants.json` travels to the hub too, and what it declares there is refused by an

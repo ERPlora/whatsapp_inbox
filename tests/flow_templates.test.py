@@ -704,6 +704,110 @@ def mute_refusal_problems(name, doc):
     return problems
 
 
+# The endings a status can carry that `mute_refusal_problems` does not cover, and what each of
+# them costs the run when the document stays silent about it. Both keys were opened by the kernel
+# for THIS hole and default to the answer that predates them, so a document that says nothing keeps
+# the bug: the vocabulary is closed and `continue` is the only value that reaches the next step.
+UNANSWERED_ENDINGS = (
+    (
+        "on_expire",
+        "expired",
+        "hub#1634",
+        "nobody decides at all — the proposal sits in the tray until its 72 h run out and the "
+        "sweep CANCELS the run",
+    ),
+    (
+        "on_error",
+        "failed",
+        "hub#1635",
+        "the salon approves and the WRITE breaks — somebody took the slot in between, the "
+        "professional no longer works that day — and the run ends as `failed` right there",
+    ),
+)
+
+
+def unanswered_ending_problems(name, doc):
+    """The two endings left over after «booked», «nothing found» and «no» — whatsapp_inbox#70.
+
+    `silence_problems` covers the endings where the automation ACTED, `mute_refusal_problems` the
+    one where a person said no. These are the two where NOBODY said anything the customer could be
+    told about, and until hub#1634/hub#1635 they were the two a document could not survive:
+
+    * **the proposal expires** — she wrote at 3 AM, the salon never opened the tray, and 72 h later
+      the sweep closes the proposal. Nothing was booked, nothing was refused, and the run is
+      `cancelled` before the `notify` is reached;
+    * **the salon approves and the write FAILS** — between 3 AM and 9 AM the slot went, or the
+      professional stopped working that day. `decide_flow_approval` completes the step with
+      `IoResult::Failed`, the tray shows the failure to the salon, and the run ends as `failed`.
+
+    In both the customer was told «we will confirm as soon as the salon opens» and is then told
+    nothing at all, for ever. Two things have to be true, and they are the same two halves
+    `mute_refusal_problems` asks of a rejection:
+
+    * **the run has to survive the ending** — the step that can park declares
+      `"on_expire": "continue"` and `"on_error": "continue"`. Both keys DEFAULT to what the kernel
+      always did (`reject` / `stop`), so silence here is not neutral: it is the bug;
+    * **and what goes out has to KNOW which ending it was** — the step whose `text` the `notify`
+      sends already reads `steps.<writer>.status` (that is `mute_refusal_problems`), and now that
+      status can also read `expired` or `failed`. A prompt that was never told those two words
+      reads them as neither `rejected` nor anything else it knows and takes its «nothing was
+      refused» branch, which sends her, word for word, the booking the model wrote for an
+      appointment that does not exist. Half this fix is a new defect, exactly as it was for the «no».
+
+    Same gate as the rejection rule, and for the same reasons: only the LAST `ai` step that can
+    write, only under `manual` — `auto` parks nothing, so there is no tray to expire and a broken
+    tool call comes back to the model as a tool result rather than failing the step — and only when
+    a `notify` follows it. A speaker that does not read `status` at all is `mute_refusal_problems`'s
+    hole, not this one: one hole, one owner.
+    """
+    steps = doc.get("steps", [])
+    writing = writing_ai_steps(doc)
+    if not writing:
+        return []
+    last = writing[-1]
+    step = steps[last]
+    if (step.get("policy") or "manual") != "manual":
+        return []
+    writer = step.get("id")
+    after = [s for s in steps[last + 1 :] if s.get("kind") == "notify"]
+    if not after:
+        return []
+
+    # The steps that actually WRITE what she receives: quoted by a `notify` after the writer, and
+    # already reading how the turn ended. Deduplicated by id — two `notify` steps sending the same
+    # relay is one prompt, not two defects.
+    by_id = {s.get("id"): s for s in steps}
+    speakers = {}
+    for notify in after:
+        for path in sorted(quoted_paths(notify)):
+            if not path.endswith(".text"):
+                continue
+            speaker = path[len("steps.") :].split(".")[0].strip()
+            source = by_id.get(speaker)
+            if source is not None and f"steps.{writer}.status" in quoted_paths(source):
+                speakers[speaker] = source
+
+    problems = []
+    for key, word, issue, cost in UNANSWERED_ENDINGS:
+        if step.get(key) != "continue":
+            problems.append(
+                f"{name} step `{writer}` can park a proposal (`policy: manual`) and does not "
+                f'declare `"{key}": "continue"` ({issue}): {cost}, so the `notify` written after '
+                f"it never runs and the customer — promised an answer «as soon as the salon "
+                f"opens» — is never told anything at all"
+            )
+        for speaker, source in sorted(speakers.items()):
+            if f"`{word}`" not in (prompt_of(source) or ""):
+                problems.append(
+                    f"{name} step `{speaker}` writes the message the customer receives and never "
+                    f"names the `{word}` ending of `{{{{steps.{writer}.status}}}}` ({issue}): with "
+                    f'`{key}` the run REACHES it, and an outcome the prompt was never told about '
+                    f"falls into its «nothing was refused» branch — so she is sent, word for word, "
+                    f"the booking the model wrote for an appointment that does not exist"
+                )
+    return problems
+
+
 # The rules `main()` has to apply to EVERY real document. `self_check()` proves each of them against
 # synthetic documents — which is exactly why deleting the one line that applied a rule to the REAL
 # templates used to leave the battery green (whatsapp_inbox#69, mutant N5): the cases still passed,
@@ -2728,6 +2832,7 @@ DOCUMENT_RULES = (
     floor_field_problems,
     silence_problems,
     mute_refusal_problems,
+    unanswered_ending_problems,
     undeclared_tool_problems,
     unordered_tool_problems,
     budget_problems,
@@ -2758,6 +2863,7 @@ SELF_CHECKED_RULES = (
     floor_field_problems,
     silence_problems,
     mute_refusal_problems,
+    unanswered_ending_problems,
     undeclared_tool_problems,
     unordered_tool_problems,
     budget_problems,
@@ -2887,6 +2993,7 @@ def structural_shape(doc):
                 # (whatsapp_inbox#67).
                 "on_reject": s.get("on_reject"),
                 "on_expire": s.get("on_expire"),
+                "on_error": s.get("on_error"),
                 "command": s.get("command"),
                 "when": s.get("when"),
                 "seconds": s.get("seconds"),
@@ -3083,6 +3190,18 @@ def _relay_step(step_id, writer, prompt=""):
             f"Words: {{{{steps.{writer}.text}}}}"
         ),
     }
+
+
+def _ending_relay(step_id, writer, names=("expired", "failed")):
+    """A relay that reads how the turn ended AND names the endings it may read back.
+
+    The shape whatsapp_inbox#70 needs: `_relay_step` already quotes `status`, which is what
+    `mute_refusal_problems` asks for, and this adds the two words a status can now carry so the
+    prompt cannot fall into its «nothing was refused» branch on one of them.
+    """
+    step = _relay_step(step_id, writer)
+    step["prompt"] += " Endings: " + ", ".join(f"`{n}`" for n in names)
+    return step
 
 
 def _fixture_doc(*steps):
@@ -4370,6 +4489,191 @@ REFUSAL_CASES = [
     ),
 ]
 
+
+
+ENDING_CASES = [
+    (
+        "the shape whatsapp_inbox#70 ships: the booking step survives BOTH endings and the step "
+        "that writes the reply knows all three words a status can carry",
+        _fixture_doc(
+            dict(
+                _ai_step(
+                    "book", "manual", ["appointments.appointments.create"], on_reject="continue"
+                ),
+                on_expire="continue",
+                on_error="continue",
+            ),
+            _ending_relay("reply", "book"),
+            _notify_step("tell", "{{steps.reply.text}}"),
+        ),
+        0,
+    ),
+    (
+        "neither key: the run dies at the expiry AND at the failure, and both are the same "
+        "customer left waiting for ever — two holes, two problems",
+        _fixture_doc(
+            _ai_step(
+                "book", "manual", ["appointments.appointments.create"], on_reject="continue"
+            ),
+            _ending_relay("reply", "book"),
+            _notify_step("tell", "{{steps.reply.text}}"),
+        ),
+        2,
+    ),
+    (
+        "surviving the failure but not the silence: nobody opens the tray and the sweep cancels "
+        "the run at 72 h",
+        _fixture_doc(
+            dict(
+                _ai_step(
+                    "book", "manual", ["appointments.appointments.create"], on_reject="continue"
+                ),
+                on_error="continue",
+            ),
+            _ending_relay("reply", "book"),
+            _notify_step("tell", "{{steps.reply.text}}"),
+        ),
+        1,
+    ),
+    (
+        "…and the other way round: the salon approves, the slot has gone, and the run ends as "
+        "`failed` before the notify",
+        _fixture_doc(
+            dict(
+                _ai_step(
+                    "book", "manual", ["appointments.appointments.create"], on_reject="continue"
+                ),
+                on_expire="continue",
+            ),
+            _ending_relay("reply", "book"),
+            _notify_step("tell", "{{steps.reply.text}}"),
+        ),
+        1,
+    ),
+    (
+        "saying the kernel's own defaults out loud is the same two endings, not an exemption",
+        _fixture_doc(
+            dict(
+                _ai_step(
+                    "book", "manual", ["appointments.appointments.create"], on_reject="continue"
+                ),
+                on_expire="reject",
+                on_error="stop",
+            ),
+            _ending_relay("reply", "book"),
+            _notify_step("tell", "{{steps.reply.text}}"),
+        ),
+        2,
+    ),
+    (
+        "surviving is only half: a relay that was never told about `expired` reads it as «nothing "
+        "was refused» and sends her the booking that never happened",
+        _fixture_doc(
+            dict(
+                _ai_step(
+                    "book", "manual", ["appointments.appointments.create"], on_reject="continue"
+                ),
+                on_expire="continue",
+                on_error="continue",
+            ),
+            _ending_relay("reply", "book", names=("failed",)),
+            _notify_step("tell", "{{steps.reply.text}}"),
+        ),
+        1,
+    ),
+    (
+        "…and the same for `failed`",
+        _fixture_doc(
+            dict(
+                _ai_step(
+                    "book", "manual", ["appointments.appointments.create"], on_reject="continue"
+                ),
+                on_expire="continue",
+                on_error="continue",
+            ),
+            _ending_relay("reply", "book", names=("expired",)),
+            _notify_step("tell", "{{steps.reply.text}}"),
+        ),
+        1,
+    ),
+    (
+        "one relay quoted by TWO notify steps is one prompt, not two defects",
+        _fixture_doc(
+            dict(
+                _ai_step(
+                    "book", "manual", ["appointments.appointments.create"], on_reject="continue"
+                ),
+                on_expire="continue",
+                on_error="continue",
+            ),
+            _ending_relay("reply", "book", names=()),
+            _notify_step("tell", "{{steps.reply.text}}"),
+            _notify_step("tell_again", "{{steps.reply.text}}"),
+        ),
+        2,
+    ),
+    (
+        "a relay that never reads `status` at all is `mute_refusal_problems`'s hole, not this "
+        "one — one hole, one owner",
+        _fixture_doc(
+            dict(
+                _ai_step(
+                    "book", "manual", ["appointments.appointments.create"], on_reject="continue"
+                ),
+                on_expire="continue",
+                on_error="continue",
+            ),
+            {"id": "reply", "kind": "ai", "policy": "manual", "prompt": "Send {{steps.book.text}}"},
+            _notify_step("tell", "{{steps.reply.text}}"),
+        ),
+        0,
+    ),
+    (
+        "`auto` parks nothing: there is no tray to expire, and a broken tool call comes back to "
+        "the model as a tool result instead of failing the step (the `-unattended` family)",
+        _fixture_doc(
+            _ai_step("book", "auto", ["appointments.appointments.create"]),
+            _notify_step("tell", "{{steps.book.text}}"),
+        ),
+        0,
+    ),
+    (
+        "a document that says nothing to anybody is `silence_problems`, not this rule",
+        _fixture_doc(_ai_step("book", "manual", ["appointments.appointments.create"])),
+        0,
+    ),
+    (
+        "and a document that proposes nothing has no ending to survive",
+        _fixture_doc(
+            {"id": "look", "kind": "ai", "policy": "manual", "prompt": "", "tools": {"queries": ["customers.list"]}},
+            _notify_step("tell", "hello"),
+        ),
+        0,
+    ),
+    (
+        "a step that declares `output` under `manual` can never park a proposal, so it is not the "
+        "writer this rule is about either (whatsapp_inbox#109)",
+        _fixture_doc(
+            dict(
+                _ai_step(
+                    "book", "manual", ["appointments.appointments.create"], on_reject="continue"
+                ),
+                on_expire="continue",
+                on_error="continue",
+            ),
+            {
+                "id": "reply",
+                "kind": "ai",
+                "policy": "manual",
+                "prompt": "{{steps.book.text}} {{steps.book.status}} `expired` `failed`",
+                "tools": {"commands": ["appointments.availability.slots"]},
+                "output": {"slots": {"type": "options", "describe": "what she may tap"}},
+            },
+            _notify_step("tell", "{{steps.reply.text}}"),
+        ),
+        0,
+    ),
+]
 
 
 _KNOWN_OPS = {
@@ -5749,6 +6053,13 @@ def self_check():
                 f"the battery's own «a «no» reaches the customer too» rule is wrong — {label}: "
                 f"expected {expected} problem(s), got {len(got)}: {got}"
             )
+    for label, doc, expected in ENDING_CASES:
+        got = unanswered_ending_problems("(self-check)", doc)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «nobody decided, or the write broke» rule is wrong — {label}: "
+                f"expected {expected} problem(s), got {len(got)}: {got}"
+            )
     for label, doc, expected in TOOL_CASES:
         got = undeclared_tool_problems("(self-check)", doc, _KNOWN_OPS)
         if len(got) != expected:
@@ -6002,6 +6313,8 @@ def main():
         # 3a-bis-i) …and it says something back when the answer is «no» too (whatsapp_inbox#67).
         # The ending `silence_problems` cannot see: the run used to die AT the rejection.
         problems += applied(ledger, mute_refusal_problems, path.name, doc)
+        # …and the two nobody could write until hub#1634/hub#1635: the silence and the breakage.
+        problems += applied(ledger, unanswered_ending_problems, path.name, doc)
 
         # 3a-bis-ii) …and a family that CALLS itself unattended really is (whatsapp_inbox#58): the
         # other half of the exception `policy_problems` grants it. Needs no manifest either.
