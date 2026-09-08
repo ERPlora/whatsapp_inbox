@@ -73,17 +73,77 @@ def grants_of(doc_path):
     return FLOWS_DIR / f"{family}.grants.json"
 
 
-# How a template DECLARES that it runs with nobody watching (whatsapp_inbox#58). It is the file
-# name and not a key inside the document because the document has nowhere to put it: the hub's
-# `flow.schema.json` is `additionalProperties: false` at the root, so an invented `"unattended":
-# true` would be REFUSED by `PUT /api/hub/flows` — the declaration has to live where the kernel
-# does not read. The family name also survives translation, which the flow's `name` does not.
-UNATTENDED_SUFFIX = "-unattended"
+def family_of(name):
+    """The family a document belongs to: its file name without language or extension."""
+    return name.split(".")[0]
+
+
+# Which families run with NOBODY watching (whatsapp_inbox#58), as a LEDGER rather than a suffix in
+# the file name (whatsapp_inbox#124).
+#
+# It used to be `-unattended` at the end of the family name, and the reason given was sound as far
+# as it went: the document has nowhere to put the flag, because the hub's `flow.schema.json` is
+# `additionalProperties: false` at the root, so an invented `"unattended": true` would be REFUSED
+# by `PUT /api/hub/flows`. What made it stop working is that the suffix was doing a SECOND job it
+# was never suited for — telling two shipped recipes apart. There were two of each: one that parked
+# the booking at a person and one that did not, for a single decision the business had already
+# taken in Citas («confirm automatically» on or off). The owner had to guess which card was theirs,
+# every fix had to be made twice (whatsapp_inbox#100/#107, #103/#105), and the one named «without
+# review» told the customer she was booked while the appointment was born waiting for a review.
+#
+# So the suffix is gone and the family name is the plain use — which is also what the hub route
+# behind the WhatsApp card activates (whatsapp_inbox#123). What is left is this table, and it is
+# anchored in BOTH directions by `unattended_ledger_problems`: a family in `flows/` that is not
+# named here is one no unattended rule holds, and a row here with no family in `flows/` is a
+# promise nothing keeps.
+UNATTENDED_FAMILIES = frozenset(
+    {
+        "appointment-from-whatsapp",
+        "reservation-from-whatsapp",
+    }
+)
 
 
 def is_unattended(name):
-    """Does this document belong to the family that books with nobody watching?"""
-    return name.split(".")[0].endswith(UNATTENDED_SUFFIX)
+    """Does this document belong to a family that books with nobody watching?"""
+    return family_of(name) in UNATTENDED_FAMILIES
+
+
+def unattended_ledger_problems(name, doc, families):
+    """`UNATTENDED_FAMILIES` and `flows/` say the same thing — read both ways.
+
+    A ledger rule, like `shipped_recipe_problems`, and for the same reason: what it judges is what
+    is NOT there, so it cannot be a rule that reads a document. Both halves have teeth.
+
+    * **A family in `flows/` that the table does not name** is a recipe every unattended rule goes
+      quiet over — `unattended_problems` stops holding it to `policy: auto`, `hour_choice_problems`
+      stops demanding the sentence that keeps the model from picking the hour, and
+      `policy_problems` starts calling its writes a defect. A shipped recipe nobody classified is
+      the shape whatsapp_inbox#58 spent an issue on.
+    * **A row with no family in `flows/`** is the mirror: the table grows a name, every rule keyed
+      off it stays green because there is no document to judge, and the business the row was added
+      for has nothing to install.
+    """
+    problems = []
+    for family in sorted(families):
+        if family in UNATTENDED_FAMILIES:
+            continue
+        problems.append(
+            f"{name}: `flows/` ships the family `{family}` and `UNATTENDED_FAMILIES` does not "
+            f"name it. Every rule that asks «is anybody watching?» reads that table, so an "
+            f"unnamed family is one nothing holds to `policy: auto`, to the hour rule or to the "
+            f"wording it owes the customer — and `policy_problems` reports its writes as a defect "
+            f"instead. Name it, or take the recipe out of `flows/`"
+        )
+    for family in sorted(UNATTENDED_FAMILIES):
+        if family in families:
+            continue
+        problems.append(
+            f"{name}: `UNATTENDED_FAMILIES` names `{family}` and no document in `flows/` belongs "
+            f"to it. The row makes every rule keyed off it vacuously green, and the business it "
+            f"was written for has no recipe to install"
+        )
+    return problems
 
 
 def needed_grants(doc):
@@ -1357,6 +1417,149 @@ BOOKING_RULES = {
 }
 
 
+# ── «say what really happened, not what usually happens» — whatsapp_inbox#124 ─────────────────
+#
+# A booking made from this channel is NOT always confirmed, and the recipe used to write as if it
+# were: «by the time they read this, it happened». Both modules decide the birth status from the
+# business's own setting, and both ship it OFF-able:
+#
+# * `appointments` — `born_confirmed` in its handler is `auto_confirm_online` AND the booking
+#   declaring itself made by the customer (`booked_online`). With the switch off, the appointment
+#   is born `pending` and waits for somebody at the salon to accept it.
+# * `reservations` — `_create_gated_insert.sql` writes `pending` unless `auto_confirm` is 1, and
+#   its column DEFAULTS to 0, so the ordinary restaurant is the one that reviews.
+#
+# So the wording is not decoration: told «booked» over an appointment that is really waiting, the
+# customer turns up to a slot the salon never accepted. Told «I have written you down, they will
+# confirm» over one that is already in the diary, she waits for a message nobody is going to send
+# and rings up to ask.
+#
+# `booking command -> the READ that says which of the two it will be`. It is a deterministic
+# `query` step of the document and not a tool in the model's hands on purpose: `book_appointment`
+# already sits AT `MAX_ITERS_CAP`, so one more read it has to remember to make is a read it
+# sometimes will not make — and the branch it feeds is the sentence the customer reads.
+BIRTH_STATUS_SOURCE = {
+    BOOKING_COMMAND: "appointments.settings.get",
+    TABLE_BOOKING_COMMAND: "reservations.settings.get",
+}
+
+# `booking command -> {language -> {status it is born with: the sentence that tells the truth}}`.
+#
+# Pinned as prose for the same reason `BOOKING_RULES` is (and `TAP_WORDS`, and `HOUR_RULE`): the
+# branch has no structural home. The document cannot express «say this when the row comes back
+# pending» — the kernel has no conditional inside an `ai` turn — and the command answers `{ok,
+# operations, new_ids}` with no status in it, so the model cannot read the outcome afterwards
+# either. What it CAN do is read the setting that decides it before it writes, which is what
+# `BIRTH_STATUS_SOURCE` is for; the two sentences below are the two ends that reading leads to.
+# Reword either of them and change it here in the same commit — the wording IS the promise.
+BIRTH_STATUS_RULES = {
+    BOOKING_COMMAND: {
+        "en": {
+            "confirmed": "When it is born confirmed, tell her it is booked.",
+            "pending": (
+                "When it is born pending, tell her you have written her in and the salon will "
+                "confirm it here shortly."
+            ),
+        },
+        "es": {
+            "confirmed": "Si nace confirmada, dile que está reservada.",
+            "pending": (
+                "Si nace pendiente, dile que se la has apuntado y que el salón se la "
+                "confirma por aquí en un momento."
+            ),
+        },
+    },
+    TABLE_BOOKING_COMMAND: {
+        "en": {
+            "confirmed": "When it is born confirmed, tell them the table is booked.",
+            "pending": (
+                "When it is born pending, tell them you have written it down and the restaurant "
+                "will confirm it here shortly."
+            ),
+        },
+        "es": {
+            "confirmed": "Si nace confirmada, diles que la mesa está reservada.",
+            "pending": (
+                "Si nace pendiente, diles que la has apuntado y que el restaurante se la "
+                "confirma por aquí en un momento."
+            ),
+        },
+    },
+}
+
+
+def deterministic_reads(doc):
+    """Every query a `kind: query` step of this document reads — the ones that always happen."""
+    return {
+        step.get("query")
+        for step in doc.get("steps", [])
+        if step.get("kind") == "query" and isinstance(step.get("query"), str)
+    }
+
+
+def birth_status_problems(name, doc):
+    """The step that books tells the customer what really happened, both ways round.
+
+    whatsapp_inbox#124. Two halves, and neither stands without the other:
+
+    1. **The document READS the setting** that decides the birth status, deterministically, before
+       the model is asked for anything. Without it the model is guessing, and the sentence it picks
+       is the one the customer believes.
+    2. **The prompt carries BOTH sentences**, in the language the document is written in — the one
+       for a booking born `pending` and the one for a booking born `confirmed`. One of the two on
+       its own is the bug this issue is about wearing the other face: the recipe that only knows
+       «booked» lies to the salon that reviews, and a recipe that only knows «they will confirm»
+       lies to the salon that does not.
+
+    Judged per language for the reason `hour_choice_problems` is: the model reads the prompt in the
+    language it is written in, so a Spanish document carrying the English sentence has the rule for
+    nobody.
+    """
+    parts = name.split(".")
+    lang = parts[1] if len(parts) >= 3 else ""
+    reads = deterministic_reads(doc)
+    problems = []
+    for step in doc.get("steps", []):
+        if step.get("kind") != "ai":
+            continue
+        commands = (step.get("tools") or {}).get("commands") or []
+        prompt = prompt_of(step)
+        for booking in sorted(BIRTH_STATUS_RULES):
+            if booking not in commands:
+                continue
+            source = BIRTH_STATUS_SOURCE[booking]
+            if source not in reads:
+                problems.append(
+                    f"{name} step `{step.get('id')}` can book with `{booking}` and no `kind: "
+                    f"query` step of this document reads `{source}`: that read is the only thing "
+                    f"in the run that knows whether the booking will be born `pending` or "
+                    f"`confirmed`, and the command answers `{{ok, operations, new_ids}}` with no "
+                    f"status in it. Without it the words sent to the customer are a guess"
+                )
+            wording = BIRTH_STATUS_RULES[booking].get(lang)
+            if wording is None:
+                problems.append(
+                    f"{name} step `{step.get('id')}` can book with `{booking}` and this battery "
+                    f"has no wording of the birth status for language `{lang}`: add the "
+                    f"translation to `BIRTH_STATUS_RULES` in the same commit, or the promise is "
+                    f"made to nobody who reads this document"
+                )
+                continue
+            for status, sentence in sorted(wording.items()):
+                if sentence in prompt:
+                    continue
+                problems.append(
+                    f"{name} step `{step.get('id')}` can book with `{booking}` and its prompt no "
+                    f"longer says what to write when the booking is born `{status}` "
+                    f"(«{sentence}»). With one branch missing the recipe tells every customer the "
+                    f"same thing, and it is wrong for half the businesses: «booked» over a "
+                    f"booking that is still waiting sends her to a slot nobody accepted, and "
+                    f"«they will confirm» over one already in the diary leaves her waiting for a "
+                    f"message that is never coming"
+                )
+    return problems
+
+
 # ── «a rule with no recipe is a promise nothing keeps» ────────────────────────────────────────
 #
 # whatsapp_inbox#60. `BOOKING_RULES` is the table of everything this channel knows how to book
@@ -1366,10 +1569,12 @@ BOOKING_RULES = {
 # a hairdresser and nothing it could use. That is the issue exactly: not a broken template, a
 # missing one, and every rule here was green over it.
 #
-# BOTH families or neither, because `flows/README.md` sells the choice and the business makes it at
-# install: only the attended one leaves the restaurant that runs its WhatsApp alone waiting for an
-# approval nobody will give at 3 AM; only the unattended one leaves the one that wants to read its
-# bookings first with nothing to install.
+# ONE family per booking, no more and no less (whatsapp_inbox#124). It used to be BOTH — an
+# attended recipe and an unattended one — on the grounds that `flows/README.md` sold the choice and
+# the business made it at install. The choice was never the business's to make twice: it had
+# already made it in Citas («confirm automatically») and in Reservas (`auto_confirm`), and the pair
+# only asked it again in words it could not check. Whichever the owner picked, the setting still
+# decided what really happened.
 def booked_families(docs):
     """`family -> every command its `ai` steps can call`, over the documents shipped in `flows/`."""
     out = {}
@@ -1391,15 +1596,22 @@ def shipped_recipe_problems(name, doc, booked):
     """
     problems = []
     for booking in sorted(BOOKING_RULES):
-        shipped = {f for f, commands in booked.items() if booking in commands}
-        for unattended, label in ((True, "unattended"), (False, "attended")):
-            if any(is_unattended(f) is unattended for f in shipped):
-                continue
+        shipped = sorted(f for f, commands in booked.items() if booking in commands)
+        if not shipped:
             problems.append(
-                f"{name}: `{booking}` has its wording pinned in BOOKING_RULES and no {label} "
-                f"family in `flows/` hands it, so the business that books with it has no recipe to "
-                f"install and every other rule here stays green — they only judge the documents "
-                f"that exist. Ship the pair, or take the row out of the table"
+                f"{name}: `{booking}` has its wording pinned in BOOKING_RULES and no family in "
+                f"`flows/` hands it, so the business that books with it has no recipe to install "
+                f"and every other rule here stays green — they only judge the documents that "
+                f"exist. Ship the recipe, or take the row out of the table"
+            )
+            continue
+        if len(shipped) > 1:
+            problems.append(
+                f"{name}: `{booking}` is handed by {len(shipped)} families "
+                f"({', '.join(shipped)}), and one use gets ONE recipe (whatsapp_inbox#124). Two "
+                f"of them for a single decision is what the owner had to guess between, what made "
+                f"every fix land twice, and what let one card promise the customer something the "
+                f"other one did not do"
             )
     return problems
 
@@ -1563,6 +1775,33 @@ PINNED_COMMAND_PAYLOAD = {
     # the WIDE move — no minimum notice, no maximum advance, and no check that the appointment
     # belongs to whoever wrote in.
     MOVE_COMMAND: {"channel": "customer"},
+    # And BOOKING, where the omitted default does not widen a permission but breaks a PROMISE
+    # (whatsapp_inbox#124). `appointments`' `born_confirmed` is `auto_confirm_online` AND the
+    # booking saying it was made by the customer; `schemas/appointment_create.json` defaults
+    # `booked_online` to `false`, so a payload that leaves it out is born `pending` on EVERY hub,
+    # including the salon that switched «confirm automatically» on and was told this channel would
+    # stop making it accept bookings one by one. The switch would do nothing and nothing would say
+    # so: the document parses, the grant covers the command, the appointment is created.
+    BOOKING_COMMAND: {"booked_online": True},
+}
+
+# What the WIDE default actually costs, per command — the sentence `unpinned_command_problems`
+# quotes. A table because the three harms are different, and a message that describes the wrong one
+# sends whoever reads it looking for a bug that is not there.
+PIN_HARM = {
+    CANCEL_COMMAND: (
+        "omitting the field is enough to cancel AS THE SALON — no notice window, no «may "
+        "customers cancel», no check of whose appointment it is"
+    ),
+    MOVE_COMMAND: (
+        "omitting the field is enough to move the hour AS THE SALON — no minimum notice, no "
+        "maximum advance, and no check that the appointment belongs to whoever wrote in"
+    ),
+    BOOKING_COMMAND: (
+        "omitting the field makes the appointment be born `pending` on every hub, whatever the "
+        "salon set in «confirm automatically» — so the switch does nothing and the recipe tells "
+        "the customer the opposite of what the diary holds"
+    ),
 }
 
 
@@ -1641,14 +1880,16 @@ def unpinned_command_problems(name, doc, pins):
                     if field in fixed
                     else "fixes nothing"
                 )
+                harm = PIN_HARM.get(
+                    cname, "the caller gets to choose the default, which is what the pin is for"
+                )
                 problems.append(
                     f"{name} hands `{cname}` to the model in `{step.get('id')}`, and its grant "
                     f"{sent}: the payload is written by a model reading a stranger's message, so "
                     f"`{field}` = `{value}` has to be pinned in "
-                    f"`{name.split('.')[0]}.grants.json` (`payload`, hub#1623). Left open, "
-                    f"omitting the field is enough to cancel AS THE SALON — no notice window, no "
-                    f"«may customers cancel», no check of whose appointment it is. A review does "
-                    f"not close it: whoever approves reads a draft for the customer, not a payload"
+                    f"`{family_of(name)}.grants.json` (`payload`, hub#1623). Left open, "
+                    f"{harm}. A review does not close it: whoever approves reads a draft for the "
+                    f"customer, not a payload"
                 )
     return problems
 
@@ -2867,7 +3108,9 @@ DOCUMENT_RULES = (
     enum_value_problems,
     unattended_problems,
     hour_choice_problems,
+    birth_status_problems,
     shipped_recipe_problems,
+    unattended_ledger_problems,
     unowned_table_problems,
     moving_problems,
     own_customer_only_problems,
@@ -2898,7 +3141,9 @@ SELF_CHECKED_RULES = (
     enum_value_problems,
     unattended_problems,
     hour_choice_problems,
+    birth_status_problems,
     shipped_recipe_problems,
+    unattended_ledger_problems,
     unowned_table_problems,
     moving_problems,
     own_customer_only_problems,
@@ -6386,7 +6631,13 @@ def main():
 
         # 3a-bis-iii-bis) …and every booking that wording exists for is one this module really
         # SHIPS, in both families (whatsapp_inbox#60). Needs no manifest: it reads `flows/`.
+        problems += applied(ledger, birth_status_problems, path.name, doc)
+
         problems += applied(ledger, shipped_recipe_problems, path.name, doc, booked)
+
+        problems += applied(
+            ledger, unattended_ledger_problems, path.name, doc, set(booked)
+        )
 
         # 3a-bis-iii-ter) …and no step that writes with NOBODY watching is handed an operation on a
         # booking that already exists, because `reservations` cannot tell whose it is
