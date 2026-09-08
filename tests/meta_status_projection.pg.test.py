@@ -3,11 +3,13 @@
 
 `whatsapp_inbox_template.meta_status` is written by this module and by nobody else: the row is born
 `'pending'` (`commands/template_create.sql`) and every edit puts it back to `'pending'`
-(`commands/template_update.sql`). Nothing in this module has ever spoken to Meta — the door that
-registers a template lives in the SaaS (ERPlora/saas#1899) and the runtime does not proxy it yet
-(ERPlora/hub#1610). So the column has always said «Meta is reviewing it» about a template Meta had
-never received, and the tab printed that word straight onto the screen. The owner waited for a
-verdict that was never coming, and the reminder they thought was covered never went out.
+(`commands/template_update.sql`). Nothing in this module has ever spoken to Meta: the door that
+registers a template lives in the SaaS (ERPlora/saas#1899), the runtime proxies it since
+ERPlora/hub#1610 (published in v1.1.18) — and no module can reach that proxy, because
+`ErploraClient` exposes no `coreRequest` and the shell defines no templates element. So the column
+has always said «Meta is reviewing it» about a template Meta had never received, and the tab
+printed that word straight onto the screen. The owner waited for a verdict that was never coming,
+and the reminder they thought was covered never went out.
 
 A template is the ONLY way a business may write to a customer outside the 24 h that follow the
 customer's last message, so this is not cosmetic: it is the difference between «this goes out
@@ -26,6 +28,11 @@ tonight» and «nobody receives it».
    wraps the base SELECT as `sub`), so a `select` option the projection cannot produce is a filter
    that answers «no rows» with total credibility.
 4. **The projection did not open a hole in tenancy.** Another hub's templates stay invisible.
+5. **An EDIT does not claim a review Meta is not doing** (whatsapp_inbox#87). Nothing in this
+   module sends a template to Meta — the runtime door landed with ERPlora/hub#1610 (v1.1.18)
+   but no module can reach it — so an edit changes this hub's row and nothing leaves the hub.
+   A template whose text has been edited must read as `not_sent`, the same as one Meta has
+   never seen, because that is what it is: Meta has not received THIS text.
 
 Usage: tests/meta_status_projection.pg.test.py   (exit 0 = green)
   Uses the `erplora-test-pg-5433` container by default (override: ERPLORA_TEST_PG_CONTAINER).
@@ -47,6 +54,7 @@ CONTAINER = os.environ.get("ERPLORA_TEST_PG_CONTAINER", "erplora-test-pg-5433")
 
 LIST_QUERY = "whatsapp_inbox.templates.list"
 CREATE_COMMAND = "whatsapp_inbox.templates.create"
+UPDATE_COMMAND = "whatsapp_inbox.templates.update"
 
 HUB = "h1"
 OTHER_HUB = "h2"
@@ -111,6 +119,24 @@ def create_binds(new_id, name, hub=HUB):
         "body": "Hola {{1}}, tu mesa esta lista.",
         "footer": "",
         "variables": "[]",
+    }
+
+
+def update_binds(template_id, name, hub=HUB, body="Hola {{1}}, cambiamos la hora."):
+    """The payload of `whatsapp_inbox.templates.update` (`schemas/template_update.json`) + system."""
+    return {
+        "hub_id": hub,
+        "current_user_id": "u1",
+        "now": "2026-09-07T10:00:00+00:00",
+        "template_id": template_id,
+        "name": name,
+        "language": "es",
+        "category": "UTILITY",
+        "header": "",
+        "body": body,
+        "footer": "",
+        "variables": "[]",
+        "is_active": 1,
     }
 
 
@@ -211,13 +237,93 @@ def check_tenancy(db, base):
     return []
 
 
+def check_an_edit_does_not_claim_a_review_meta_is_not_doing(db, base):
+    """(5) editing a template Meta approved must not come back as «Meta is reviewing it».
+
+    This module has no way of sending a template to Meta. The runtime door exists (ERPlora/hub#1610,
+    published in v1.1.18) but nothing a module can call reaches it: `ErploraClient` exposes no
+    `coreRequest` and the shell defines no templates element. So an edit rewrites the row in this
+    hub and NOTHING leaves the hub.
+
+    `commands/template_update.sql` put the column back to `'pending'` and kept the
+    `meta_template_id` Meta had handed back, and that pair is exactly what the projection reads as
+    «pending». The tab then said «En revisión» / «In review» and `ui.metaActionPending` told the
+    owner to wait up to 24 h for a verdict on an edit Meta never received — the same failure
+    whatsapp_inbox#65 removed for a brand-new template, walked back in through the edit.
+
+    What is true is what the row already knows how to say: Meta has not received THIS text. So the
+    edit drops the id Meta gave the PREVIOUS text, and the state reads `not_sent`.
+
+    Runs LAST on purpose: it edits the seed the two checks above assert on.
+    """
+    problems = run_command(
+        db, UPDATE_COMMAND, update_binds("t-meta", "recordatorio_cita")
+    )
+    if problems:
+        return problems
+
+    got, error = rows(
+        db,
+        f"PREPARE e AS SELECT sub.name || '|' || sub.meta_status FROM ({base}) sub "
+        "ORDER BY sub.name;\n"
+        f"EXECUTE e({sql_literal(HUB)});\nDEALLOCATE e;",
+    )
+    if got is None:
+        return [f"`{LIST_QUERY}` did not run after the edit: {error}"]
+    want = ["mesa_lista|not_sent", "recordatorio_cita|not_sent"]
+    if got != want:
+        return [
+            f"after editing `recordatorio_cita` the list projected {got!r}, not {want!r}. Saving an "
+            f"edit sends nothing to Meta, so the tab must not report a review: `pending` tells the "
+            f"owner to wait up to 24 h (`ui.metaActionPending`) for a verdict on a text Meta never "
+            f"received, and `ui.metaActionRejected` sends them back to save again for the same "
+            f"nothing."
+        ]
+
+    # The mechanism, not only the word: the id Meta gave the PREVIOUS text may not survive an edit,
+    # or the projection would go back to reporting Meta's verdict on a text Meta never saw.
+    kept, error = rows(
+        db,
+        "PREPARE k AS SELECT COALESCE(meta_template_id, '') FROM whatsapp_inbox_template "
+        "WHERE id = 't-meta' AND hub_id = $1;\n"
+        f"EXECUTE k({sql_literal(HUB)});\nDEALLOCATE k;",
+    )
+    if kept is None:
+        return [f"could not read the edited row back: {error}"]
+    if kept != []:
+        return [
+            f"the edited row still carries Meta's id ({kept!r}): the id belongs to the text Meta "
+            f"approved, not to the one just typed, and while it is there the projection reports "
+            f"Meta's verdict on a text Meta never received."
+        ]
+
+    # And the state has to move where the tab can FILTER it: the `select` filters server-side by
+    # equality on the projected value, so a state the filter cannot find is a state nobody can list.
+    for state, expected in (("approved", []), ("not_sent", ["mesa_lista", "recordatorio_cita"])):
+        found, error = rows(
+            db,
+            f"PREPARE g AS SELECT sub.name FROM ({base}) sub "
+            "WHERE CAST(sub.meta_status AS TEXT) = CAST($2 AS TEXT) ORDER BY sub.name;\n"
+            f"EXECUTE g({sql_literal(HUB)}, {sql_literal(state)});\nDEALLOCATE g;",
+        )
+        if found is None:
+            return [f"filtering by `{state}` after the edit did not run: {error}"]
+        if found != expected:
+            return [
+                f"after the edit, filtering by `{state}` gave {found!r}, not {expected!r}: the tab "
+                f"would still list the edited template under Meta's old verdict."
+            ]
+    return []
+
+
 def main():
     if LIST_QUERY not in MANIFEST.get("queries", {}):
         print(f"FAIL: `{LIST_QUERY}` is not declared in module.json")
         return 1
-    if CREATE_COMMAND not in MANIFEST.get("commands", {}):
-        print(f"FAIL: `{CREATE_COMMAND}` is not declared in module.json")
-        return 1
+    for command in (CREATE_COMMAND, UPDATE_COMMAND):
+        if command not in MANIFEST.get("commands", {}):
+            print(f"FAIL: `{command}` is not declared in module.json")
+            return 1
 
     base, names = list_sql()
     if base is None:
@@ -249,6 +355,8 @@ def main():
             problems += check_the_state_can_be_filtered(db, base)
         if not problems:
             problems += check_tenancy(db, base)
+        if not problems:
+            problems += check_an_edit_does_not_claim_a_review_meta_is_not_doing(db, base)
 
         for problem in problems:
             print(f"FAIL {LIST_QUERY}\n    {problem}")
@@ -258,7 +366,8 @@ def main():
         print(
             "OK: the templates list projects Meta's verdict instead of the column — a template "
             "Meta never received arrives as `not_sent`, Meta's own UPPERCASE arrives lowercased, "
-            "both are filterable server-side, and no hub sees another hub's templates"
+            "both are filterable server-side, an edit goes back to `not_sent` instead of claiming a "
+            "review Meta is not doing, and no hub sees another hub's templates"
         )
         return 0
     finally:

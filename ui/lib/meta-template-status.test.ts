@@ -100,3 +100,63 @@ describe('the sentences exist in English (source) AND Spanish (ADR-0055)', () =>
     expect(same, `these keys were never translated: ${same.join(', ')}`).toEqual([]);
   });
 });
+
+// whatsapp_inbox#87 — what the sentence may PROMISE.
+//
+// Saving in this tab does not reach Meta. The runtime door landed with ERPlora/hub#1610 (v1.1.18),
+// but nothing a module can call reaches it, so `templates.update` rewrites this hub's row and
+// nothing leaves the hub. «Change the wording and save again to send it back for review» was
+// therefore an instruction that cost the owner the template: they saved, the edit dropped the id
+// Meta had given the approved text (`commands/template_update.sql`), and the row came back as
+// «Sin enviar a Meta» — further from a delivered reminder than before they followed the advice.
+//
+// So the states whose fix does NOT live in this tab send the owner where the change can actually
+// be made — the same WhatsApp Manager `ui.metaActionUnknown` already points at — and no sentence
+// claims that saving here reaches Meta. This guard is anchored in BOTH directions on purpose: it
+// would pass just as well by sending every state to WhatsApp Manager, which would be a different
+// lie (a template that was never sent is fixed HERE, by writing it and saving).
+describe('no sentence promises a trip to Meta that saving here does not make (#87)', () => {
+  /** Meta already holds a version of these, and this tab cannot send it a new one. */
+  const OUT_OF_REACH: readonly string[] = ['rejected', 'paused'];
+  /** Meta's own console, named the same in both languages — where the change can be made today. */
+  const MANAGER = 'WhatsApp Manager';
+  /** The promise no sentence may make: saving in this tab does not reach Meta. */
+  const SAVE_AGAIN: Record<string, RegExp> = {
+    en: /sav(e|ing) (it )?again|send it back for review from here/i,
+    es: /guarda de nuevo|vuelve a guardar|guárdala de nuevo/i,
+  };
+
+  const sentence = (lang: string, raw: string): string =>
+    String(lookup(lang, metaTemplateView(raw).actionKey) ?? '');
+
+  for (const lang of ['en', 'es']) {
+    it(`\`${lang}\`: a state this tab cannot fix points at ${MANAGER}`, () => {
+      for (const raw of OUT_OF_REACH) {
+        expect(
+          sentence(lang, raw),
+          `\`${raw}\` in \`${lang}\` does not say where the owner can actually change it`,
+        ).toContain(MANAGER);
+      }
+    });
+
+    it(`\`${lang}\`: no state tells the owner that saving here sends it to Meta`, () => {
+      const lying = [...META_TEMPLATE_STATES, 'unknown'].filter((raw) =>
+        SAVE_AGAIN[lang].test(sentence(lang, raw)),
+      );
+      expect(
+        lying,
+        `these sentences promise a review that saving does not start: ${lying.join(', ')}`,
+      ).toEqual([]);
+    });
+
+    it(`\`${lang}\`: a template that IS fixed here is not sent away to ${MANAGER}`, () => {
+      const sentAway = META_TEMPLATE_STATES.filter(
+        (raw) => !OUT_OF_REACH.includes(raw) && sentence(lang, raw).includes(MANAGER),
+      );
+      expect(
+        sentAway,
+        `these are fixed in this tab, by writing and saving: ${sentAway.join(', ')}`,
+      ).toEqual([]);
+    });
+  }
+});
