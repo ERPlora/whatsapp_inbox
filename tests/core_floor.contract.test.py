@@ -263,6 +263,11 @@ PREDICATE_CASES = (
 )
 
 failures: list[str] = []
+# Raised by `predicate_self_check()`, and `report()` refuses to print a green without it. Deleting
+# the ONE line that calls the self-check is otherwise a silent pass: the cases still hold, and
+# nothing says the derivations were never put in front of them. It is the same hole `applied()`
+# closes for the document rules one battery over (whatsapp_inbox#69, mutant N5).
+predicates_proved = False
 
 
 def triple(value: str) -> tuple[int, int, int] | None:
@@ -325,6 +330,9 @@ def predicate_self_check() -> None:
       says a predicate went unproved, and the derivation is back to being justified by nothing
       (`table-driven-guards-need-anchoring-in-both-directions`).
     """
+    global predicates_proved
+    predicates_proved = True
+
     predicates: dict[KernelNeed, list] = {}
     for need, _label, present in FEATURES:
         predicates.setdefault(need, []).append(present)
@@ -480,6 +488,12 @@ def main() -> int:
 
 
 def report() -> int:
+    if not predicates_proved:
+        failures.append(
+            "the floor derivations were never proved to discriminate: nothing called "
+            "`predicate_self_check()`, so `PREDICATE_CASES` is a table nobody reads and every "
+            "`FEATURES` predicate is back to being justified by today's documents alone"
+        )
     if failures:
         print(f"\nFAIL ({len(failures)}):")
         for failure in failures:
