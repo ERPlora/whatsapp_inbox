@@ -28,7 +28,8 @@ tonight» and «nobody receives it».
    wraps the base SELECT as `sub`), so a `select` option the projection cannot produce is a filter
    that answers «no rows» with total credibility.
 4. **The projection did not open a hole in tenancy.** Another hub's templates stay invisible.
-5. **An EDIT does not claim a review Meta is not doing** (whatsapp_inbox#87). Nothing in this
+5. **An EDIT does not claim a review Meta is not doing, and walks in through the `hub_id`
+   gate** (whatsapp_inbox#87). Nothing in this
    module sends a template to Meta — the runtime door landed with ERPlora/hub#1610 (v1.1.18)
    but no module can reach it — so an edit changes this hub's row and nothing leaves the hub.
    A template whose text has been edited must read as `not_sent`, the same as one Meta has
@@ -256,6 +257,31 @@ def check_an_edit_does_not_claim_a_review_meta_is_not_doing(db, base):
 
     Runs LAST on purpose: it edits the seed the two checks above assert on.
     """
+    # First, the door: this is the only check that runs `templates.update`, so it is the one that
+    # proves the edit walks in through the `hub_id` gate. A stranger editing the same id must leave
+    # Meta's id and verdict on this hub's row exactly where they were — otherwise the state below
+    # would be «not_sent» for a reason that has nothing to do with this hub's own edit.
+    problems = run_command(
+        db, UPDATE_COMMAND, update_binds("t-meta", "recordatorio_cita", hub=OTHER_HUB)
+    )
+    if problems:
+        return problems
+    got, error = rows(
+        db,
+        f"PREPARE s AS SELECT sub.name || '|' || sub.meta_status FROM ({base}) sub "
+        "ORDER BY sub.name;\n"
+        f"EXECUTE s({sql_literal(HUB)});\nDEALLOCATE s;",
+    )
+    if got is None:
+        return [f"`{LIST_QUERY}` did not run after a stranger's edit: {error}"]
+    untouched = ["mesa_lista|not_sent", "recordatorio_cita|approved"]
+    if got != untouched:
+        return [
+            f"an edit issued by hub {OTHER_HUB} changed hub {HUB}'s template: the list projected "
+            f"{got!r}, not {untouched!r}. `commands/template_update.sql` must keep its `hub_id` "
+            f"gate — the runtime injects `:hub_id`, and the WHERE is what makes it count."
+        ]
+
     problems = run_command(
         db, UPDATE_COMMAND, update_binds("t-meta", "recordatorio_cita")
     )
@@ -367,7 +393,7 @@ def main():
             "OK: the templates list projects Meta's verdict instead of the column — a template "
             "Meta never received arrives as `not_sent`, Meta's own UPPERCASE arrives lowercased, "
             "both are filterable server-side, an edit goes back to `not_sent` instead of claiming a "
-            "review Meta is not doing, and no hub sees another hub's templates"
+            "review Meta is not doing, and no hub sees or edits another hub's templates"
         )
         return 0
     finally:
