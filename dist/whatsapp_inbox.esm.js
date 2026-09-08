@@ -3512,9 +3512,6 @@ var es_default = {
     requests: {
       label: "Solicitudes"
     },
-    templates: {
-      label: "Plantillas"
-    },
     settings: {
       label: "Ajustes"
     }
@@ -3607,7 +3604,6 @@ var es_default = {
     assignPlaceholder: "Id del empleado (vac\xEDo = nadie)",
     assign: "Asignar",
     unassign: "Desasignar",
-    noReplyHere: "Desde esta pantalla no se responde: el hub contesta por WhatsApp con el paso \xABnotify\xBB de un flujo, que es donde viven las credenciales del canal.",
     errLoadThread: "No se pudo cargar la conversaci\xF3n",
     errAssign: "No se pudo asignar la conversaci\xF3n",
     delete: "Borrar",
@@ -3624,40 +3620,37 @@ var es_default = {
     confirmDeleteTemplate: "\xBFBorrar esta plantilla?",
     errDeleteTemplate: "No se pudo borrar la plantilla",
     settingsTitle: "Ajustes del canal",
-    settingsSaved: "Ajustes guardados.",
-    sectionChannel: "Canal",
-    sectionRequests: "Peticiones entrantes",
-    labelMonthlyAllowance: "Mensajes entrantes incluidos al mes",
-    allowanceUnlimited: "Sin tope en este plan",
-    helpAllowance: "Lo fija el plan que contrataste para este m\xF3dulo. Se cuenta por mes natural y no se edita aqu\xED.",
-    helpChannelCredentialsStaySealed: "Las credenciales del canal se quedan selladas en el servidor de ERPlora, nunca en este hub: conectar el n\xFAmero aqu\xED se las entrega al servidor, no a esta pantalla.",
     helpConnectNeedsNewerHub: "Este hub es demasiado antiguo para conectar el n\xFAmero desde aqu\xED. Actualiza el hub y vuelve a esta pantalla.",
-    labelApprovalMode: "Una petici\xF3n que lee el asistente",
-    approvalAuto: "Se confirma directamente",
-    approvalManual: "Queda en revisi\xF3n",
-    helpApprovalMode: "El asistente lee el mensaje y apunta lo que pide el cliente. \xABQueda en revisi\xF3n\xBB la deja en la pantalla de Peticiones para que una persona la apruebe; \xABse confirma directamente\xBB acepta lo que entendi\xF3 el asistente.",
-    helpConversationLivesInFlow: "El saludo, la respuesta autom\xE1tica y el texto de fuera de horario son parte del flujo que contesta, no de esta pantalla: se editan en Automatizaciones, donde se cambian sin republicar el m\xF3dulo.",
-    errorLoadSettings: "No se han podido cargar los ajustes del canal",
-    errorSave: "No se han podido guardar los ajustes del canal",
     open: "Abrir",
     requestDetail: "Petici\xF3n",
     labelParsedData: "Lo que entendi\xF3 el asistente",
     labelNotes: "Notas",
     labelLinkedObject: "Registro creado",
     errLoadRequest: "No se ha podido cargar la petici\xF3n",
-    labelUsedThisMonth: "Consumidos este mes",
-    sectionUses: "\xBFPara qu\xE9 usas WhatsApp?",
-    helpUses: "Elige qu\xE9 quieres que haga este n\xFAmero. Te llevamos a la automatizaci\xF3n que lo hace, ya preparada; t\xFA la lees y la enciendes.",
     useAppointmentsName: "Reservar citas",
     useAppointmentsSummary: "Una clienta pide cita por WhatsApp, el asistente le ofrece las horas que de verdad tienes libres y le reserva la que elija; luego le dice que ya est\xE1.",
-    usesOpen: "Configurar",
-    usesEmpty: "Todav\xEDa no hay nada que este WhatsApp pueda hacer solo: lo que puedes hacer con \xE9l sale de las aplicaciones que tengas instaladas.",
-    usesNeedAutomations: "Contestar solo lo hacen las Automatizaciones, y este hub a\xFAn no las tiene.",
-    usesActive: "Activa",
-    usesPaused: "En pausa",
-    usesUnfinished: "Sin terminar",
-    usesView: "Verla",
-    usesGoToApps: "Ver aplicaciones"
+    usesGoToApps: "Ver aplicaciones",
+    stepNumber: "Tu n\xFAmero",
+    stepUses: "\xBFPara qu\xE9 lo usas?",
+    helpConnectScanQr: "Escanea el c\xF3digo QR con la app WhatsApp Business del n\xFAmero del negocio. Sigues usando WhatsApp en el m\xF3vil como siempre.",
+    activate: "Activar",
+    notNow: "Ahora no",
+    turnOff: "Desactivar",
+    stateOn: "Activo",
+    stateOff: "Desactivada",
+    policyAuto: "Las citas se confirman solas",
+    policyReview: "Las reviso yo antes",
+    helpPolicyReview: "Cada cita nueva te espera en la Agenda con \u201CConfirmar\u201D; a la clienta le decimos que se la confirmas en breve.",
+    advancedInAutomations: "Ajustes avanzados en Automatizaciones",
+    advancedMetaTemplates: "Plantillas de Meta",
+    usesNeedsNewerHub: "Este hub es demasiado antiguo para activarlo desde aqu\xED. Actualiza el hub.",
+    usesNeedBookingModule: "Instala Citas o Reservas para que WhatsApp reserve solo",
+    activateForbidden: "Solo un due\xF1o o un administrador puede activarlo.",
+    errActivate: "No se pudo activar. No se ha cambiado nada: int\xE9ntalo otra vez.",
+    errTemplates: "No hemos podido saber qu\xE9 hay activo ahora mismo. Vuelve a cargar la pantalla.",
+    errPolicy: "No se pudo guardar c\xF3mo se confirman las citas. Int\xE9ntalo otra vez.",
+    useAppointmentsConsent: "WhatsApp contestar\xE1 solo: lee tu agenda, ofrece los huecos libres, reserva, mueve o anula la cita de la clienta que escribe y le contesta. No puede tocar las citas de nadie m\xE1s. \xBFLo activas?",
+    useAppointmentsDone: "Listo. Escr\xEDbete desde otro m\xF3vil: \u201Cquiero cita ma\xF1ana\u201D."
   },
   errors: {
     "whatsapp_inbox.conversation_not_found": "Esa conversaci\xF3n no existe en este negocio.",
@@ -3680,9 +3673,6 @@ var en_default = {
     },
     requests: {
       label: "Requests"
-    },
-    templates: {
-      label: "Templates"
     },
     settings: {
       label: "Settings"
@@ -3776,7 +3766,6 @@ var en_default = {
     assignPlaceholder: "Employee id (empty = nobody)",
     assign: "Assign",
     unassign: "Unassign",
-    noReplyHere: "Replies do not go out from this screen: the hub answers WhatsApp through a flow's notify step, which is where the channel credentials live.",
     errLoadThread: "Could not load the conversation",
     errAssign: "Could not assign the conversation",
     delete: "Delete",
@@ -3793,40 +3782,37 @@ var en_default = {
     confirmDeleteTemplate: "Delete this template?",
     errDeleteTemplate: "Could not delete the template",
     settingsTitle: "Channel settings",
-    settingsSaved: "Settings saved.",
-    sectionChannel: "Channel",
-    sectionRequests: "Incoming requests",
-    labelMonthlyAllowance: "Inbound messages included each month",
-    allowanceUnlimited: "No cap on this plan",
-    helpAllowance: "Set by the plan you bought for this module. It is counted per calendar month and it is not edited here.",
-    helpChannelCredentialsStaySealed: "The channel credentials stay sealed on the ERPlora server, never on this hub: connecting the number here hands them to the server, not to this screen.",
     helpConnectNeedsNewerHub: "This hub is too old to connect the number from here. Update the hub and come back to this screen.",
-    labelApprovalMode: "A request the assistant reads",
-    approvalAuto: "Is confirmed straight away",
-    approvalManual: "Waits in review",
-    helpApprovalMode: "The assistant reads a message and files what the customer asked for. \xABWaits in review\xBB leaves it on the Requests screen for a person to approve; \xABconfirmed straight away\xBB accepts what the assistant understood.",
-    helpConversationLivesInFlow: "The greeting, the automatic reply and the out-of-hours text are part of the flow that answers, not of this screen: edit them in Automations, where they can be changed without republishing the module.",
-    errorLoadSettings: "Could not load the channel settings",
-    errorSave: "Could not save the channel settings",
     open: "Open",
     requestDetail: "Request",
     labelParsedData: "What the assistant understood",
     labelNotes: "Notes",
     labelLinkedObject: "Created record",
     errLoadRequest: "Could not load the request",
-    labelUsedThisMonth: "Used this month",
-    sectionUses: "What do you use WhatsApp for?",
-    helpUses: "Pick what this number should do for you. We take you to the automation that does it, already set up; you read it and switch it on yourself.",
     useAppointmentsName: "Book appointments",
     useAppointmentsSummary: "A customer asks for an appointment on WhatsApp, the assistant offers the hours you actually have free, and books the one they pick \u2014 then tells them it is done.",
-    usesOpen: "Set it up",
-    usesEmpty: "There is nothing for this WhatsApp to do on its own yet: what it can be used for comes from the apps you have installed.",
-    usesNeedAutomations: "Answering on its own is done by Automations, and this hub does not have it yet.",
-    usesActive: "Active",
-    usesPaused: "Paused",
-    usesUnfinished: "Unfinished",
-    usesView: "View it",
-    usesGoToApps: "See apps"
+    usesGoToApps: "See apps",
+    stepNumber: "Your number",
+    stepUses: "What do you use it for?",
+    helpConnectScanQr: "Scan the QR code with the WhatsApp Business app of your business number. You keep using WhatsApp on your phone as always.",
+    activate: "Turn it on",
+    notNow: "Not now",
+    turnOff: "Turn off",
+    stateOn: "On",
+    stateOff: "Off",
+    policyAuto: "Bookings are confirmed automatically",
+    policyReview: "I review them first",
+    helpPolicyReview: "Each new booking waits for you in the Diary with \u201CConfirm\u201D; the customer is told you will confirm shortly.",
+    advancedInAutomations: "Advanced settings in Automations",
+    advancedMetaTemplates: "Meta templates",
+    usesNeedsNewerHub: "This hub is too old to turn this on from here. Update the hub.",
+    usesNeedBookingModule: "Install Appointments or Reservations so WhatsApp can book on its own",
+    activateForbidden: "Only an owner or an administrator can turn this on.",
+    errActivate: "It could not be turned on. Nothing was changed \u2014 try again.",
+    errTemplates: "We could not find out what is already turned on. Reload the screen.",
+    errPolicy: "We could not save how bookings are confirmed. Try again.",
+    useAppointmentsConsent: "WhatsApp will answer on its own: it reads your diary, offers free slots, books, moves or cancels the appointment of the customer who writes, and replies to them. It cannot touch anyone else\u2019s appointments. Turn it on?",
+    useAppointmentsDone: "Done. Text your number from another phone: \u201CI\u2019d like an appointment tomorrow\u201D."
   },
   errors: {
     "whatsapp_inbox.conversation_not_found": "That conversation does not exist in this business.",
@@ -4798,445 +4784,414 @@ __decorateClass([
 define("erp-whatsapp-inbox-requests", ErpWhatsappInboxRequests);
 
 // ui/lib/whatsapp-uses.ts
+var MODULE_ID = "whatsapp_inbox";
 var WHATSAPP_USES = [
   {
-    id: "whatsapp-appointment",
     family: "appointment-from-whatsapp",
     module: "appointments",
     witness: "appointments.settings.get",
     probe: (client) => client.queryOptional("appointments.settings.get"),
-    triggerEvent: "hub.whatsapp.message_received",
-    setupCommand: "appointments.appointments.create",
+    policy: {
+      read: "appointments.settings.get",
+      write: "appointments.settings.set_auto_confirm_online",
+      field: "auto_confirm_online",
+      // Appointments creates the row with the column ON, and it is what the market does: Square,
+      // Cal.com and SimplyBook all default to booking without review.
+      defaultOn: true
+    },
     icon: "calendar-outline",
     nameKey: "ui.useAppointmentsName",
-    summaryKey: "ui.useAppointmentsSummary"
+    summaryKey: "ui.useAppointmentsSummary",
+    consentKey: "ui.useAppointmentsConsent",
+    doneKey: "ui.useAppointmentsDone"
   }
 ];
-var AUTOMATIONS_MODULE = "flows";
-var AUTOMATIONS_WITNESS = "flows.drafts.list";
-var probeAutomations = (client) => client.queryOptional("flows.drafts.list");
-var AUTOMATION_STATUS_WITNESS = "flows.automations.status";
-var probeAutomationStatus = (client, use) => client.queryOptional("flows.automations.status", {
-  event: use.triggerEvent,
-  command: use.setupCommand
-});
-function counter(value) {
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  if (typeof value === "string" && value.trim() !== "") {
-    const n6 = Number(value);
-    return Number.isFinite(n6) ? n6 : null;
-  }
-  return null;
-}
-function automationState(answer) {
+var readBookingPolicy = (client, _use) => client.queryOptional("appointments.settings.get");
+var writeBookingPolicy = (client, use, on) => client.commandOptional("appointments.settings.set_auto_confirm_online", { [use.policy.field]: on });
+function bookingPolicyOn(answer, use) {
   const row = Array.isArray(answer) ? answer[0] : answer;
-  if (row === null || typeof row !== "object") return "unknown";
-  const counts = row;
-  const total = counter(counts.total);
-  const enabled = counter(counts.enabled);
-  const unfinished = counter(counts.unfinished);
-  if (total === null || enabled === null || unfinished === null) return "unknown";
-  if (total > 0) return enabled > 0 ? "active" : "paused";
-  return unfinished > 0 ? "unfinished" : "absent";
+  if (row === null || typeof row !== "object") return use.policy.defaultOn;
+  const value = row[use.policy.field];
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string" && value.trim() !== "") return !["0", "f", "false", "no"].includes(value.trim().toLowerCase());
+  return use.policy.defaultOn;
 }
+function templateState(installed) {
+  if (installed === void 0) return "unknown";
+  if (installed === null) return "off";
+  if (typeof installed !== "object") return "unknown";
+  const { enabled } = installed;
+  if (typeof enabled !== "boolean") return "unknown";
+  return enabled ? "on" : "paused";
+}
+var AUTOMATIONS_MODULE = "flows";
+var probeAutomations = (client) => client.queryOptional("flows.drafts.list");
 var APPS_PATH = "/apps";
 var AUTOMATIONS_PATH = `/m/${AUTOMATIONS_MODULE}/automations`;
-function galleryPath(templateId) {
-  return `${AUTOMATIONS_PATH}?template=${encodeURIComponent(templateId)}`;
-}
 
 // ui/components/erp-whatsapp-inbox-settings/erp-whatsapp-inbox-settings.ts
 var CATALOG3 = { es: es_default, en: en_default };
-var STATE_BADGE = {
-  unknown: null,
-  absent: null,
-  unfinished: "ui.usesUnfinished",
-  paused: "ui.usesPaused",
-  active: "ui.usesActive"
-};
-var STATE_CLASS = {
-  active: "is-active",
-  unfinished: "is-unfinished"
-};
-var DEFAULTS = {
-  is_enabled: 0,
-  account_mode: "shared",
-  auto_reply_enabled: 1,
-  approval_mode: "manual",
-  require_confirmation: 1,
-  request_schema: "{}",
-  gpt_system_prompt: "",
-  input_modules: "[]",
-  output_modules: "[]",
-  auto_close_hours: 24,
-  notify_staff_new_request: 1,
-  greeting_message: "",
-  out_of_hours_message: "",
-  free_tier_monthly_limit: 0
-};
 function erplora3() {
   const c5 = globalThis.erplora;
   if (!c5) throw new Error("erplora SDK no inicializado por el shell");
   return c5;
 }
-function flag(value, fallback) {
-  const n6 = Number(value);
-  return n6 === 0 || n6 === 1 ? n6 : fallback;
+function door() {
+  const client = erplora3();
+  if (typeof client.forModule !== "function") return null;
+  const flows = client.forModule(MODULE_ID).flows;
+  if (typeof flows?.activateTemplate !== "function") return null;
+  return flows;
 }
 var ErpWhatsappInboxSettings = class extends i3 {
   constructor() {
     super(...arguments);
-    this.s = { ...DEFAULTS };
-    this.loading = true;
-    this.saving = false;
-    this.error = "";
-    this.saved = false;
-    this.usage = null;
-    this.uses = null;
-    this.onLocaleChange = () => this.requestUpdate();
+    this.built = {};
+    this.templatesFailed = false;
+    this.missing = /* @__PURE__ */ new Set();
+    this.loaded = false;
+    this.asking = "";
+    this.busy = "";
+    this.cardError = {};
+    this.justActivated = "";
+    this.policy = {};
+    this.policyFailed = {};
+    this.hasAutomations = false;
+    this.hubTooOld = false;
+    this.connectAvailable = false;
   }
   static {
     this.styles = i`
-    :host { display:block; font-family: system-ui, sans-serif; color: var(--ion-text-color, #1c1b18); }
-    header { display:flex; gap:.5rem; align-items:center; margin-bottom:.75rem; }
-    h2 { margin:0; font-size:1.15rem; flex:1; }
-    h3 { margin:0 0 .35rem; font-size:.95rem; }
-    section { border:1px solid var(--ion-border-color,#e7e2d6); border-radius: var(--ok-radius-sm, 10px);
-      padding:.75rem 1rem; margin:0 0 1rem; background:var(--ok-surface-2, var(--ion-color-step-50, rgba(0,0,0,.04))); }
-    .field { display:flex; flex-direction:column; gap:.25rem; margin-bottom:.75rem; }
-    .help { margin:.25rem 0 0; font-size:.85rem; color: var(--ion-color-medium,#6b6557); }
-    .readonly { display:flex; justify-content:space-between; gap:1rem; align-items:baseline;
-      padding:.35rem 0; border-bottom:1px dashed var(--ion-border-color,#e7e2d6); }
-    .readonly:last-of-type { border-bottom:0; }
-    .readonly b { font-variant-numeric: tabular-nums; }
-    .err { color:#d9480f; font-weight:600; }
-    .ok { color:#2b8a3e; font-weight:600; }
-    .actions { display:flex; gap:.5rem; }
-    .uses { list-style:none; margin:.5rem 0 0; padding:0; display:flex; flex-direction:column; gap:.5rem; }
-    .uses li { display:flex; gap:.6rem; align-items:center; flex-wrap:wrap; }
-    .use-text { flex:1 1 12rem; min-width:0; }
-    .use-text b { display:block; font-size:.95rem; }
-    .use-text .help { margin:.1rem 0 0; }
-    .use-icon { font-size:1.35rem; color: var(--ion-color-medium,#6b6557); flex:0 0 auto; }
-    /* The badge sits with the name, not with the button: what the owner reads first is «is mine
-       already there?», and the answer belongs next to the thing it is about. */
-    .use-state {
-      display:inline-block; margin-top:.15rem; padding:.1rem .45rem; border-radius:.7rem;
-      font-size:.72rem; font-weight:600; text-transform:uppercase; letter-spacing:.02em;
-      background: var(--ion-color-light,#f1efe9); color: var(--ion-color-medium-shade,#5b5648);
+    :host { display: block; padding: 12px; }
+    h2 { margin: 0 0 4px; font-size: 1.25rem; }
+    h3 { margin: 20px 0 6px; font-size: 1rem; }
+    p.help { margin: 4px 0 8px; color: var(--ion-color-medium, #6b7280); font-size: 0.9rem; }
+    .card {
+      border: 1px solid var(--ion-color-step-150, #e5e7eb);
+      border-radius: 12px; padding: 12px; margin: 8px 0;
     }
-    .use-state.is-active {
-      background: var(--ion-color-success-tint,#dff3e4); color: var(--ion-color-success-shade,#1c7a3e);
-    }
-    .use-state.is-unfinished {
-      background: var(--ion-color-warning-tint,#fbeecd); color: var(--ion-color-warning-shade,#8a6300);
-    }
-    /* 44px minimum touch target: this screen is used one-handed, at a counter. */
-    ion-button { --min-height: 44px; }
+    .card header { display: flex; align-items: center; gap: 8px; }
+    .card header h4 { margin: 0; font-size: 1rem; flex: 1; }
+    .state { font-weight: 600; font-size: 0.85rem; }
+    .state.is-on { color: var(--ion-color-success, #16a34a); }
+    .consent { margin-top: 10px; padding: 10px; border-radius: 10px;
+      background: var(--ion-color-step-50, #f8fafc); }
+    .consent p { margin: 0 0 8px; }
+    .done { margin: 8px 0 0; }
+    ion-segment { margin-top: 10px; }
+    details { margin-top: 24px; }
+    summary { cursor: pointer; padding: 8px 0; }
+    .advanced { margin-top: 16px; }
+    /* Three viewports: the cards go full width on a phone and cap their line length on a desk. */
+    @media (min-width: 768px) { .card { max-width: 640px; } }
   `;
   }
-  async connectedCallback() {
+  connectedCallback() {
     super.connectedCallback();
-    window.addEventListener("erplora:locale-changed", this.onLocaleChange);
-    await this.refresh();
+    this.connectAvailable = Boolean(customElements.get("erp-whatsapp-connect"));
+    void this.load();
   }
-  disconnectedCallback() {
-    window.removeEventListener("erplora:locale-changed", this.onLocaleChange);
-    super.disconnectedCallback();
-  }
-  async refresh() {
-    this.loading = true;
-    this.error = "";
-    try {
-      const rows = await erplora3().query("whatsapp_inbox.settings.get");
-      const row = Array.isArray(rows) ? rows[0] : rows;
-      this.s = row ? { ...DEFAULTS, ...row } : { ...DEFAULTS };
-      const usage = await erplora3().query(
-        "whatsapp_inbox.usage.get"
-      );
-      this.usage = Array.isArray(usage) ? usage[0] ?? null : usage;
-      await this.resolveUses();
-    } catch (e5) {
-      this.error = e5 instanceof Error ? e5.message : erplora3().t(CATALOG3, "ui.errorLoadSettings");
-    } finally {
-      this.loading = false;
+  /** One round: what is built, which neighbours are here, and the policy of whatever is running. */
+  async load() {
+    const client = erplora3();
+    const flows = door();
+    this.hubTooOld = flows === null;
+    if (flows) {
+      try {
+        const listed = await flows.templates();
+        const built = {};
+        for (const t5 of listed) built[t5.family] = t5.installed ?? null;
+        this.built = built;
+        this.templatesFailed = false;
+      } catch {
+        this.templatesFailed = true;
+        this.built = {};
+      }
     }
-  }
-  set(key, value) {
-    this.s = { ...this.s, [key]: value };
-    this.saved = false;
-  }
-  /** `settings.upsert` writes EVERY column of the singleton row, so what the screen does not show
-   *  travels back exactly as it was read. That is not politeness: omitting the flow's texts would
-   *  blank them on the first save. The free-tier meter is the exception and travels nowhere: it is
-   *  not a column this command writes any more (whatsapp_inbox#37). */
-  async save(ev) {
-    ev.preventDefault();
-    this.saving = true;
-    this.error = "";
-    this.saved = false;
-    try {
-      await erplora3().command("whatsapp_inbox.settings.upsert", {
-        // The one decision this screen owns.
-        approval_mode: this.s.approval_mode === "auto" ? "auto" : "manual",
-        // Carried, never offered — see the header comment.
-        is_enabled: flag(this.s.is_enabled, DEFAULTS.is_enabled),
-        account_mode: this.s.account_mode || DEFAULTS.account_mode,
-        auto_reply_enabled: flag(this.s.auto_reply_enabled, DEFAULTS.auto_reply_enabled),
-        require_confirmation: flag(this.s.require_confirmation, DEFAULTS.require_confirmation),
-        request_schema: this.s.request_schema ?? DEFAULTS.request_schema,
-        gpt_system_prompt: this.s.gpt_system_prompt ?? DEFAULTS.gpt_system_prompt,
-        input_modules: this.s.input_modules ?? DEFAULTS.input_modules,
-        output_modules: this.s.output_modules ?? DEFAULTS.output_modules,
-        auto_close_hours: Number(this.s.auto_close_hours) || 0,
-        notify_staff_new_request: flag(this.s.notify_staff_new_request, DEFAULTS.notify_staff_new_request),
-        greeting_message: this.s.greeting_message ?? DEFAULTS.greeting_message,
-        out_of_hours_message: this.s.out_of_hours_message ?? DEFAULTS.out_of_hours_message
-        // `free_tier_monthly_limit` is deliberately NOT here — see the header comment.
-      });
-      this.saved = true;
-      await this.refresh();
-    } catch (e5) {
-      this.error = e5 instanceof Error ? e5.message : erplora3().t(CATALOG3, "ui.errorSave");
-    } finally {
-      this.saving = false;
-    }
-  }
-  renderChannel() {
-    const t5 = (k2) => erplora3().t(CATALOG3, k2);
-    const limit = Number(this.s.free_tier_monthly_limit) || 0;
-    return b2`<section>
-      <h3>${t5("ui.sectionChannel")}</h3>
-      <div class="readonly">
-        <span>${t5("ui.labelUsedThisMonth")}</span>
-        <b>${String(Number(this.usage?.inbound_this_month ?? 0))}</b>
-      </div>
-      <div class="readonly">
-        <span>${t5("ui.labelMonthlyAllowance")}</span>
-        <b>${limit > 0 ? String(limit) : t5("ui.allowanceUnlimited")}</b>
-      </div>
-      <p class="help">${t5("ui.helpAllowance")}</p>
-      ${this.renderConnect(t5)}
-      <p class="help">${t5("ui.helpChannelCredentialsStaySealed")}</p>
-      <p class="help">${t5("ui.noReplyHere")}</p>
-    </section>`;
-  }
-  /**
-   * Where the number gets connected (whatsapp_inbox#54). The button, Meta's popup — the QR scanned
-   * with the WhatsApp Business app — and the runtime doors belong to the SHELL, as the element
-   * `<erp-whatsapp-connect>` (hub#1600, ADR-0452): a module may not load a foreign script, the
-   * shell may. This screen only embeds it. On a hub too old to define the element, the tag would
-   * be inert — an empty box the owner stares at — so that case gets a sentence instead.
-   */
-  renderConnect(t5) {
-    const provided = typeof customElements !== "undefined" && Boolean(customElements.get("erp-whatsapp-connect"));
-    return provided ? b2`<erp-whatsapp-connect></erp-whatsapp-connect>` : b2`<p class="help">${t5("ui.helpConnectNeedsNewerHub")}</p>`;
-  }
-  /**
-   * **Is this module here?** — the one question the uses card is built on.
-   *
-   * `queryOptional` answers `undefined` for `module_not_installed` / `module_inactive` and RE-THROWS
-   * everything else (`packages/module-sdk/src/index.ts`), which is exactly the distinction needed:
-   * only those two codes prove an absence.
-   *
-   * **Everything that is not a proven absence counts as PRESENT**, and that asymmetry is the
-   * decision. A denied permission, a renamed query, a handler that blew up — or a shell so old its
-   * SDK has no `queryOptional` at all, which lands here as a `TypeError` — say nothing about
-   * whether the module is installed. Reading them as «not here» would hide a working use behind
-   * somebody else's bug, silently and for as long as the bug lasts. The other way round, the worst
-   * case is a shortcut to a gallery card the owner looks at and does not use.
-   *
-   * **But not silently.** A witness that fails every time — renamed, or behind a permission this
-   * session lacks — would keep its use offered for ever with nobody ever learning why, so the
-   * reason goes to the console, named after the witness. A failure nobody can see does not exist.
-   */
-  async isHere(witness, probe) {
-    try {
-      return await probe(erplora3()) !== void 0;
-    } catch (e5) {
-      const code = e5.code;
-      if (code === "module_not_installed" || code === "module_inactive") return false;
-      const reason = code ?? (e5 instanceof Error ? e5.message : String(e5));
-      console.warn(
-        `[whatsapp_inbox] witness ${witness} could not answer (${reason}); counting its module as present`
-      );
-      return true;
-    }
-  }
-  /**
-   * **How far along the automation of one use is here** (whatsapp_inbox#79), or `unknown` when the
-   * question could not be answered at all.
-   *
-   * Every failure ends in `unknown`, and `unknown` renders exactly as this card rendered before
-   * #79 — no badge, «Set it up». Being wrong in that direction costs the owner a trip to a gallery
-   * card they already have; being wrong the other way tells a salon its automation is running when
-   * nothing is. Only the failures that are NOT a plain absence say so in the console: an
-   * `flows.automations.status` that has been renamed would otherwise put the #79 bug back
-   * permanently, with nothing anywhere to say why.
-   */
-  async automationStateOf(use) {
-    try {
-      return automationState(await probeAutomationStatus(erplora3(), use));
-    } catch (e5) {
-      const code = e5.code;
-      if (code === "module_not_installed" || code === "module_inactive") return "unknown";
-      const reason = code ?? (e5 instanceof Error ? e5.message : String(e5));
-      console.warn(
-        `[whatsapp_inbox] ${AUTOMATION_STATUS_WITNESS} could not answer for ${use.id} (${reason}); the card cannot say whether this use is already set up`
-      );
-      return "unknown";
-    }
-  }
-  /**
-   * Resolved in one go so the section never renders half-answered — see `availableUses`.
-   *
-   * The status question travels in the SAME round as the presence one, and asked for every use
-   * rather than only the available ones: one round is the contract this section already had, and a
-   * second phase would add a rendered state nobody has ever seen. It costs one extra read-only
-   * query per use on a screen the owner opens rarely, and it is asked through `queryOptional`, so
-   * a hub without Automations answers «could not find out» instead of failing.
-   */
-  async resolveUses() {
-    const [automationsHere, ...answers] = await Promise.all([
-      this.isHere(AUTOMATIONS_WITNESS, probeAutomations),
-      ...WHATSAPP_USES.map(async (use) => {
-        const [present, state] = await Promise.all([
-          this.isHere(use.witness, (client) => use.probe(client)),
-          this.automationStateOf(use)
-        ]);
-        return { use, present, state };
+    const missing = /* @__PURE__ */ new Set();
+    await Promise.all(
+      WHATSAPP_USES.map(async (use) => {
+        try {
+          const answer = await use.probe(client);
+          if (answer === void 0) missing.add(use.module);
+        } catch {
+        }
       })
-    ]);
-    this.uses = {
-      automationsHere,
-      available: answers.filter((a3) => a3.present).map(({ use, state }) => ({ use, state }))
-    };
+    );
+    this.missing = missing;
+    try {
+      this.hasAutomations = await probeAutomations(client) !== void 0;
+    } catch {
+      this.hasAutomations = false;
+    }
+    await Promise.all(WHATSAPP_USES.map((use) => this.loadPolicy(use)));
+    this.loaded = true;
   }
-  /**
-   * The channel module→shell (whatsapp_inbox#59). A Web Component gets no router, so the way to
-   * move the hub is to push the URL and tell the shell with `popstate` — the same pattern
-   * `sales` uses to send a doubtful checkout to Sales and `appointments` to send an appointment to
-   * the POS (`sales/ui/components/erp-pos-touch/erp-pos-touch.ts`).
-   */
-  goTo(path) {
+  /** The diary's own answer, or the diary's own default when the salon never configured it. */
+  async loadPolicy(use) {
+    if (this.missing.has(use.module)) return;
+    try {
+      const answer = await readBookingPolicy(erplora3(), use);
+      this.policy = { ...this.policy, [use.family]: bookingPolicyOn(answer, use) };
+    } catch {
+      this.policy = { ...this.policy, [use.family]: use.policy.defaultOn };
+    }
+  }
+  t(key) {
+    return erplora3().t(CATALOG3, key);
+  }
+  go(path) {
     window.history.pushState({}, "", path);
     window.dispatchEvent(new PopStateEvent("popstate"));
   }
   /**
-   * **What this WhatsApp can be used for, and where each one is set up** (whatsapp_inbox#59).
+   * Turns the family on through the kernel and re-reads the listing.
    *
-   * A shortcut, deliberately: it does NOT create or switch on the automation. `/api/hub/flows*` is
-   * gated behind `manage_flows` — «la capability con más alcance de todas»
-   * (`crates/runtime/src/manifest.rs`), granting power over every automation of the business and
-   * over the event catalogue, which carries customers' data — and an inbox module has no business
-   * holding it. The kernel also creates every gallery template PAUSED on purpose
-   * (`flows/ui/lib/templates.ts`, rule 3): «one tap and it is running» is the thing the grants
-   * system exists to prevent. So this names the use, says what it does, and opens the door.
+   * The listing is authoritative on purpose: the door answers with the flow it built, but what the
+   * card paints is what the hub says is there. Trusting the write would make a card that reads
+   * «Activo» over a flow that a later refusal never created.
    */
+  async activate(use) {
+    const flows = door();
+    if (!flows?.activateTemplate) return;
+    this.busy = use.family;
+    this.cardError = { ...this.cardError, [use.family]: null };
+    try {
+      await flows.activateTemplate(use.family);
+      this.asking = "";
+      await this.refresh(flows);
+      this.justActivated = use.family;
+      await this.loadPolicy(use);
+    } catch (e5) {
+      this.asking = "";
+      this.cardError = { ...this.cardError, [use.family]: activationError(e5) };
+    } finally {
+      this.busy = "";
+    }
+  }
+  async deactivate(use) {
+    const flows = door();
+    if (!flows?.deactivateTemplate) return;
+    this.busy = use.family;
+    this.cardError = { ...this.cardError, [use.family]: null };
+    try {
+      await flows.deactivateTemplate(use.family);
+      this.justActivated = "";
+      await this.refresh(flows);
+    } catch (e5) {
+      this.cardError = { ...this.cardError, [use.family]: activationError(e5) };
+    } finally {
+      this.busy = "";
+    }
+  }
+  async refresh(flows) {
+    try {
+      const listed = await flows.templates();
+      const built = {};
+      for (const t5 of listed) built[t5.family] = t5.installed ?? null;
+      this.built = built;
+    } catch {
+      this.templatesFailed = true;
+    }
+  }
+  /** The one decision, written where it lives: in the diary, through its narrow command. */
+  async setPolicy(use, on) {
+    this.policyFailed = { ...this.policyFailed, [use.family]: false };
+    try {
+      await writeBookingPolicy(erplora3(), use, on);
+      this.policy = { ...this.policy, [use.family]: on };
+    } catch {
+      this.policyFailed = { ...this.policyFailed, [use.family]: true };
+    }
+  }
+  // ── Render ─────────────────────────────────────────────────────────────────────────────────────
+  render() {
+    return b2`
+      <h2>${this.t("ui.settingsTitle")}</h2>
+      ${this.renderConnect()}
+      ${this.renderUses()}
+      ${this.renderAdvanced()}
+    `;
+  }
+  /** Step 1 — the number. The popup is Meta's and the element that runs it is the shell's. */
+  renderConnect() {
+    return b2`
+      <h3>${this.t("ui.stepNumber")}</h3>
+      ${this.connectAvailable ? b2`<erp-whatsapp-connect></erp-whatsapp-connect>` : b2`<ok-inline-feedback tone="warning">${this.t("ui.helpConnectNeedsNewerHub")}</ok-inline-feedback>`}
+      <p class="help">${this.t("ui.helpConnectScanQr")}</p>
+    `;
+  }
+  /** Step 2 — what the number is for. One card per use this hub can actually offer. */
   renderUses() {
-    const t5 = (k2) => erplora3().t(CATALOG3, k2);
-    const resolved = this.uses;
-    const body = () => {
-      if (resolved === null) return A;
-      if (!resolved.automationsHere) {
-        return b2`<p class="help">${t5("ui.usesNeedAutomations")}</p>
-          <ion-button size="small" data-testid="uses-go-to-apps" @click=${() => this.goTo(APPS_PATH)}>
-            <ion-icon slot="start" name="apps-outline"></ion-icon>${t5("ui.usesGoToApps")}
-          </ion-button>`;
-      }
-      if (resolved.available.length === 0) {
-        return b2`<p class="help">${t5("ui.usesEmpty")}</p>
-          <ion-button size="small" data-testid="uses-go-to-apps" @click=${() => this.goTo(APPS_PATH)}>
-            <ion-icon slot="start" name="apps-outline"></ion-icon>${t5("ui.usesGoToApps")}
-          </ion-button>`;
-      }
-      return b2`<ul class="uses">
-        ${resolved.available.map(
-        ({ use, state }) => b2`<li>
-            <ion-icon class="use-icon" name=${use.icon} aria-hidden="true"></ion-icon>
-            <div class="use-text">
-              <b>${t5(use.nameKey)}</b>
-              <p class="help">${t5(use.summaryKey)}</p>
-              ${STATE_BADGE[state] ? b2`<span
-                    class="use-state ${STATE_CLASS[state] ?? ""}"
-                    data-testid="automation-state-${use.id}"
-                    >${t5(STATE_BADGE[state])}</span
-                  >` : A}
-            </div>
+    const heading = b2`<h3>${this.t("ui.stepUses")}</h3>`;
+    if (!this.loaded) return heading;
+    if (this.hubTooOld) {
+      return b2`${heading}
+        <ok-inline-feedback tone="warning">${this.t("ui.usesNeedsNewerHub")}</ok-inline-feedback>`;
+    }
+    if (this.templatesFailed) {
+      return b2`${heading}
+        <ok-inline-feedback tone="danger">${this.t("ui.errTemplates")}</ok-inline-feedback>`;
+    }
+    const available = WHATSAPP_USES.filter((use) => !this.missing.has(use.module));
+    if (available.length === 0) {
+      return b2`${heading}
+        <ok-inline-feedback tone="warning">${this.t("ui.usesNeedBookingModule")}</ok-inline-feedback>
+        <ion-button data-testid="uses-go-to-apps" size="small" @click=${() => this.go(APPS_PATH)}>
+          ${this.t("ui.usesGoToApps")}
+        </ion-button>`;
+    }
+    return b2`${heading}${available.map((use) => this.renderUse(use))}`;
+  }
+  renderUse(use) {
+    const stateOf = templateState(this.built[use.family]);
+    const on = stateOf === "on";
+    const error = this.cardError[use.family] ?? null;
+    return b2`
+      <section class="card">
+        <header>
+          <ion-icon name=${use.icon} aria-hidden="true"></ion-icon>
+          <h4>${this.t(use.nameKey)}</h4>
+          ${stateOf === "on" || stateOf === "paused" ? b2`<span class="state ${on ? "is-on" : ""}" data-testid=${`state-${use.family}`}
+                >${this.t(on ? "ui.stateOn" : "ui.stateOff")}</span
+              >` : A}
+        </header>
+        <p class="help">${this.t(use.summaryKey)}</p>
+
+        ${on ? b2`<ion-button
+              size="small"
+              fill="clear"
+              data-testid=${`deactivate-${use.family}`}
+              ?disabled=${this.busy === use.family}
+              @click=${() => this.deactivate(use)}
+            >${this.t("ui.turnOff")}</ion-button>` : b2`<ion-button
+              size="small"
+              data-testid=${`activate-${use.family}`}
+              ?disabled=${this.busy === use.family}
+              @click=${() => {
+      this.asking = use.family;
+      this.cardError = { ...this.cardError, [use.family]: null };
+    }}
+            >${this.t("ui.activate")}</ion-button>`}
+
+        ${this.asking === use.family ? this.renderConsent(use) : A}
+        ${error ? b2`<ok-inline-feedback tone="danger">${errorText(error, (k2) => this.t(k2))}</ok-inline-feedback>` : A}
+        ${on && this.justActivated === use.family ? b2`<p class="done">${this.t(use.doneKey)}</p>` : A}
+        ${on ? this.renderPolicy(use) : A}
+      </section>
+    `;
+  }
+  /** The consent: ONE sentence naming the consequence, and two buttons. Nothing runs until «yes». */
+  renderConsent(use) {
+    return b2`
+      <div class="consent">
+        <p>${this.t(use.consentKey)}</p>
+        <ion-button
+          size="small"
+          data-testid=${`confirm-activate-${use.family}`}
+          ?disabled=${this.busy === use.family}
+          @click=${() => this.activate(use)}
+        >${this.t("ui.activate")}</ion-button>
+        <ion-button
+          size="small"
+          fill="clear"
+          data-testid=${`cancel-activate-${use.family}`}
+          @click=${() => {
+      this.asking = "";
+    }}
+        >${this.t("ui.notNow")}</ion-button>
+      </div>
+    `;
+  }
+  /** Step 3 — the one decision, and it is the diary's. Only once there is something taking bookings. */
+  renderPolicy(use) {
+    const auto = this.policy[use.family] ?? use.policy.defaultOn;
+    return b2`
+      <ion-segment
+        data-testid=${`policy-${use.family}`}
+        .value=${auto ? "auto" : "review"}
+        @ionChange=${(e5) => this.setPolicy(use, e5.detail?.value !== "review")}
+      >
+        <ion-segment-button value="auto"><ion-label>${this.t("ui.policyAuto")}</ion-label></ion-segment-button>
+        <ion-segment-button value="review"><ion-label>${this.t("ui.policyReview")}</ion-label></ion-segment-button>
+      </ion-segment>
+      ${auto ? A : b2`<p class="help">${this.t("ui.helpPolicyReview")}</p>`}
+      ${this.policyFailed[use.family] ? b2`<ok-inline-feedback tone="danger">${this.t("ui.errPolicy")}</ok-inline-feedback>` : A}
+    `;
+  }
+  /**
+   * Advanced — exactly where it always was, just not on the way (ADR-0470 §4).
+   *
+   * Steps, the prompt, each of the fourteen permissions with «Limits» and «Revoke», and the History
+   * all stay in Automations: nothing was hidden. The link only appears when that module is here,
+   * because a door to a module that is not installed is a dead end wearing a label.
+   */
+  renderAdvanced() {
+    return b2`
+      ${this.hasAutomations ? b2`<div class="advanced">
             <ion-button
               size="small"
-              data-testid="use-${use.id}"
-              @click=${() => this.goTo(STATE_BADGE[state] ? AUTOMATIONS_PATH : galleryPath(use.id))}
-            >${t5(STATE_BADGE[state] ? "ui.usesView" : "ui.usesOpen")}</ion-button>
-          </li>`
-      )}
-      </ul>`;
-    };
-    return b2`<section>
-      <h3>${t5("ui.sectionUses")}</h3>
-      <p class="help">${t5("ui.helpUses")}</p>
-      ${body()}
-    </section>`;
-  }
-  renderRequests() {
-    const t5 = (k2) => erplora3().t(CATALOG3, k2);
-    return b2`<section>
-      <h3>${t5("ui.sectionRequests")}</h3>
-      <div class="field">
-        <ion-select
-          mode="md"
-          fill="outline"
-          label-placement="floating"
-          label=${t5("ui.labelApprovalMode")}
-          .value=${this.s.approval_mode === "auto" ? "auto" : "manual"}
-          @ionChange=${(e5) => this.set("approval_mode", String(e5.target.value))}
-        >
-          <ion-select-option value="auto">${t5("ui.approvalAuto")}</ion-select-option>
-          <ion-select-option value="manual">${t5("ui.approvalManual")}</ion-select-option>
-        </ion-select>
-        <p class="help">${t5("ui.helpApprovalMode")}</p>
-      </div>
-      <p class="help">${t5("ui.helpConversationLivesInFlow")}</p>
-    </section>`;
-  }
-  render() {
-    const t5 = (k2) => erplora3().t(CATALOG3, k2);
-    return b2`<form @submit=${(e5) => this.save(e5)}>
-        <header><h2>${t5("ui.settingsTitle")}</h2></header>
-        ${this.error ? b2`<p class="err">${this.error}</p>` : A}
-        ${this.saved ? b2`<p class="ok">${t5("ui.settingsSaved")}</p>` : A}
-        ${this.renderChannel()}
-        ${this.renderUses()}
-        ${this.renderRequests()}
-        <div class="actions">
-          <ion-button type="submit" ?disabled=${this.saving || this.loading}>
-            ${this.saving ? t5("ui.saving") : t5("ui.save")}
-          </ion-button>
-        </div>
-      </form>`;
+              fill="clear"
+              data-testid="advanced-automations"
+              @click=${() => this.go(AUTOMATIONS_PATH)}
+            >${this.t("ui.advancedInAutomations")}</ion-button>
+          </div>` : A}
+      <details>
+        <summary>${this.t("ui.advancedMetaTemplates")}</summary>
+        <erp-whatsapp-inbox-templates></erp-whatsapp-inbox-templates>
+      </details>
+    `;
   }
 };
 __decorateClass([
   r5()
-], ErpWhatsappInboxSettings.prototype, "s", 2);
+], ErpWhatsappInboxSettings.prototype, "built", 2);
 __decorateClass([
   r5()
-], ErpWhatsappInboxSettings.prototype, "loading", 2);
+], ErpWhatsappInboxSettings.prototype, "templatesFailed", 2);
 __decorateClass([
   r5()
-], ErpWhatsappInboxSettings.prototype, "saving", 2);
+], ErpWhatsappInboxSettings.prototype, "missing", 2);
 __decorateClass([
   r5()
-], ErpWhatsappInboxSettings.prototype, "error", 2);
+], ErpWhatsappInboxSettings.prototype, "loaded", 2);
 __decorateClass([
   r5()
-], ErpWhatsappInboxSettings.prototype, "saved", 2);
+], ErpWhatsappInboxSettings.prototype, "asking", 2);
 __decorateClass([
   r5()
-], ErpWhatsappInboxSettings.prototype, "usage", 2);
+], ErpWhatsappInboxSettings.prototype, "busy", 2);
 __decorateClass([
   r5()
-], ErpWhatsappInboxSettings.prototype, "uses", 2);
+], ErpWhatsappInboxSettings.prototype, "cardError", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxSettings.prototype, "justActivated", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxSettings.prototype, "policy", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxSettings.prototype, "policyFailed", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxSettings.prototype, "hasAutomations", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxSettings.prototype, "hubTooOld", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxSettings.prototype, "connectAvailable", 2);
+function activationError(e5) {
+  const code = e5?.code ?? "";
+  if (code === "forbidden" || code === "unauthorized" || code === "flow.template_not_yours") {
+    return { key: "ui.activateForbidden" };
+  }
+  const detail = e5 instanceof Error ? e5.message : "";
+  return detail ? { detail } : { key: "ui.errActivate" };
+}
+var errorText = (error, t5) => "key" in error ? t5(error.key) : error.detail;
 define("erp-whatsapp-inbox-settings", ErpWhatsappInboxSettings);
 
 // ui/lib/meta-template-status.ts

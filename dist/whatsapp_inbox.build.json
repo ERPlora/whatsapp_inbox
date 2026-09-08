@@ -1,7 +1,7 @@
 {
   "file": "dist/whatsapp_inbox.esm.js",
-  "sources_sha256": "825221a7499b378400cefe2135c4b13752764e4422bed44ed899ae704b0f59c3",
-  "locales_sha256": "77d595e796ab4028d45fafae0ce394c88826b07b7576a3fac0abcb7fc88bbb1e",
-  "bundle_sha256": "b70979b362d65d2dab32e42ace884b63060f39b65c7a5150670a852291d7bc32",
-  "built_at": "2026-09-08T21:02:51.481Z"
+  "sources_sha256": "8456a6f6f1c86f290133cd4f5f64d60bb536d5ba78efce7b2d3212025666993b",
+  "locales_sha256": "d05a7a8d1a3d942e6b3f2370d2ff32debf5be1c221b2294e5e696bcd6df011a5",
+  "bundle_sha256": "21474d9824524c2404199ebf0e1c3cbce0189ad485708f7e71e3724ab5922b66",
+  "built_at": "2026-09-08T21:52:49.903Z"
 }
