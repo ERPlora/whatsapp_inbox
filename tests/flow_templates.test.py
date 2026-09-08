@@ -2079,10 +2079,10 @@ def missing_instruction_problems(name, doc, families):
 
     Judged per language, because the model reads the prompt in the language it is written in: a
     Spanish document that carries only the English sentence has the rule for nobody who reads it.
-    And judged per FAMILY, because the same promise is worded differently by the attended and the
-    unattended halves — the attended one leans on what an earlier step already told the customer,
-    the unattended one names the setting it read — and flattening the two into one wording would
-    force a document to say something it has no reason to say.
+    And judged per FAMILY, because the same promise is worded differently by the recipe that books
+    a chair and the one that books a table — the salon orders `booked_online`, the restaurant has
+    no pin to order — and flattening the two into one wording would force a document to say
+    something it has no reason to say.
 
     Looked for anywhere in the document rather than in a named step, on purpose: which step holds a
     sentence is exactly what a legitimate rewrite moves around, and a rule that also pins the step

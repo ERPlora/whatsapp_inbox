@@ -1,5 +1,5 @@
 {
-  "_why": "El suelo de version de los modulos cuyas operaciones pide esta plantilla. Existe por lo mismo que el de la familia atendida: tests/flow_templates.test.py resuelve los nombres contra los checkouts VECINOS del workspace, y un checkout viejo convierte un rojo en un verde (whatsapp_inbox#52). Las dos familias piden EXACTAMENTE las mismas operaciones, asi que el suelo es el mismo numero; se declara aparte y no se comparte porque la bateria busca el fichero por el nombre de la familia, y una familia sin suelo propio es una familia que se valida contra lo que la maquina tenga a mano.",
+  "_why": "El suelo de version de los modulos cuyas operaciones pide esta plantilla. tests/flow_templates.test.py resuelve los nombres contra los checkouts VECINOS del workspace, y un checkout viejo convierte un rojo en un verde (whatsapp_inbox#52). Cada familia declara el suyo y no se comparte: la bateria busca el fichero por el nombre de la familia, y una familia sin suelo propio es una familia que se valida contra lo que la maquina tenga a mano. Viaja ademas al hub desde hub#1611: `flow_template_floor_is_met` decide con el si la receta se OFRECE.",
   "modules": {
     "appointments": "1.1.73"
   },
