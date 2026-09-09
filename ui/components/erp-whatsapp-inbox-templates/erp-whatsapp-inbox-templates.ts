@@ -8,6 +8,7 @@ import type { ListController, ListClient, ListParams, ListPage } from '@erplora/
 import esLocale from '../../../locales/es.json';
 import enLocale from '../../../locales/en.json';
 import { domainErrorText as declaredErrorText } from '../../lib/domain-error-text';
+import { doorRefusalText } from '../../lib/meta-door-refusal';
 import {
   META_TEMPLATE_STATES,
   metaTemplateView,
@@ -15,10 +16,22 @@ import {
 import type { MetaTemplateView } from '../../lib/meta-template-status';
 const CATALOG: Record<string, unknown> = { es: esLocale, en: enLocale };
 
+/** The door to the business's templates at Meta (hub#1682): the ONLY way a module reaches them,
+ *  and it is module-scoped — `forModule(...)`, so the runtime can check this module's `notify`
+ *  capability and its `whatsapp` channel before letting anything through. */
+interface WhatsappTemplatesDoor {
+  register(template: Record<string, unknown>): Promise<{
+    status?: unknown;
+    meta_id?: unknown;
+    rejected_reason?: unknown;
+  }>;
+}
+
 interface ErploraClientLike extends ListClient {
   query<T = unknown>(name: string, params?: Record<string, unknown>): Promise<T>;
   queryPage<R = unknown>(name: string, params: ListParams): Promise<ListPage<R>>;
   command<T = unknown>(name: string, payload?: Record<string, unknown>): Promise<T>;
+  forModule(id: string): { whatsappTemplates: WhatsappTemplatesDoor };
   on(event: string, cb: (payload: unknown) => void): () => void;
   locale: string;
   t(catalog: Record<string, unknown>, key: string, params?: Record<string, unknown>): string;
@@ -34,8 +47,20 @@ interface Template {
   footer: string;
   variables: string;
   meta_status: string;
+  /** Meta's own reason code for a refusal (`INVALID_FORMAT`, `ABUSIVE_CONTENT`…), `''` otherwise.
+   *  Projected by `queries/templates_list.sql` since whatsapp_inbox#87. */
+  meta_rejected_reason: string;
   is_active: number;
 }
+
+/** The seven fields Meta REVIEWS. `is_active` is deliberately not among them: it is this hub's own
+ *  switch and Meta has never seen it. They travel to the door, and they travel back with the
+ *  answer so `template_record_meta_answer.sql` can refuse to write a verdict onto a row whose text
+ *  moved on while Meta was thinking. */
+type ReviewedFields = Pick<
+  Template,
+  'name' | 'language' | 'category' | 'header' | 'body' | 'footer' | 'variables'
+>;
 
 function erplora(): ErploraClientLike {
   const c = (globalThis as { erplora?: ErploraClientLike }).erplora;
@@ -122,6 +147,12 @@ export class ErpWhatsappInboxTemplates extends LitElement {
   /** Meta's raw word for the row being edited: what the panel shows when the code is one this
    *  module has not learned, so it can be looked up in WhatsApp Manager. */
   @state() editingMetaCode = '';
+
+  /** Meta's REASON for turning the template being edited down (`INVALID_FORMAT`…), `''` otherwise.
+   *  The verdict says «rejected» and #65 already says what to do about it; this says what was
+   *  wrong, which is the difference between fixing it here and going to WhatsApp Manager to find
+   *  out (whatsapp_inbox#87). */
+  @state() editingMetaReason = '';
 
   /** Carried through an edit so `templates.update` — whose schema requires every field — can send
    *  back untouched what this panel does not show. */
@@ -227,6 +258,70 @@ export class ErpWhatsappInboxTemplates extends LitElement {
       | null;
   }
 
+  /** What the panel currently holds, in the shape Meta reviews it. */
+  private reviewedFields(): ReviewedFields {
+    return {
+      name: this.newName.trim(),
+      language: this.newLanguage.trim() || 'es',
+      category: this.newCategory,
+      header: this.editingRest.header,
+      body: this.newBody,
+      footer: this.editingRest.footer,
+      variables: this.editingRest.variables,
+    };
+  }
+
+  /**
+   * Register the template with Meta and put back what Meta answered (whatsapp_inbox#87).
+   *
+   * 🔴 **Called AFTER the local write, always.** Meta is a third party across the internet and the
+   * template is the shop's: a Meta that does not answer costs a notice, never the owner's text.
+   * That order is what whatsapp_inbox#65 could not have — before hub#1682 there was no door at
+   * all, so the column said «pending» about a template nobody had ever sent.
+   *
+   * A refusal is SPOKEN, never echoed: the door answers a code (ADR-0055) and this module owns the
+   * sentence. And a refusal never writes a verdict — the row stays `not_sent`, which is the truth.
+   */
+  private async registerWithMeta(templateId: string, reviewed: ReviewedFields): Promise<void> {
+    let verdict: { status?: unknown; meta_id?: unknown; rejected_reason?: unknown };
+    try {
+      verdict = await erplora().forModule('whatsapp_inbox').whatsappTemplates.register({ ...reviewed });
+    } catch (e) {
+      this.formError = doorRefusalText(CATALOG, erplora().locale, e);
+      return;
+    }
+    const text = (value: unknown): string => (typeof value === 'string' ? value : '');
+    const status = text(verdict?.status).trim();
+    if (!status || !templateId) {
+      // The door answered, but with nothing to put on the row. Writing `''` would be refused by
+      // the command's schema anyway, and staying quiet would leave the owner believing the
+      // template is under review — the exact lie whatsapp_inbox#65 removed.
+      this.formError = doorRefusalText(CATALOG, erplora().locale, null);
+      return;
+    }
+    try {
+      await erplora().command('whatsapp_inbox.templates.record_meta_answer', {
+        template_id: templateId,
+        meta_template_id: text(verdict.meta_id),
+        meta_status: status,
+        meta_rejected_reason: text(verdict.rejected_reason),
+        ...reviewed,
+      });
+    } catch (e) {
+      // Meta DID answer; it is this hub that could not store it. Said with the module's own
+      // refusal reader, not with a Meta sentence that would blame the wrong half.
+      this.formError = domainErrorText(e, 'ui.errUpdateTemplate');
+    }
+  }
+
+  /** The id of the row a declarative create just inserted: the runtime answers `new_ids`, whose
+   *  first entry is the main entity by convention (`hub: crates/runtime/src/commands.rs`). */
+  private static newId(result: unknown): string {
+    const ids = (result as { new_ids?: unknown })?.new_ids;
+    const first = Array.isArray(ids) ? ids[0] : undefined;
+    return typeof first === 'string' ? first : '';
+  }
+
   private async createTemplate(ev: Event) {
     ev.preventDefault();
     if (!this.newName.trim()) return;
@@ -236,16 +331,10 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     }
     this.saving = true;
     this.formError = '';
+    const reviewed = this.reviewedFields();
     try {
-      await erplora().command('whatsapp_inbox.templates.create', {
-        name: this.newName.trim(),
-        language: this.newLanguage.trim() || 'es',
-        category: this.newCategory,
-        header: '',
-        body: this.newBody,
-        footer: '',
-        variables: '[]',
-      });
+      const created = await erplora().command('whatsapp_inbox.templates.create', reviewed);
+      await this.registerWithMeta(ErpWhatsappInboxTemplates.newId(created), reviewed);
       this.resetForm();
       this.dataTable()?.close(); // cierra el panel lateral tras crear
       await this.ctrl.load();
@@ -271,6 +360,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     };
     this.editingMeta = metaTemplateView(row.meta_status);
     this.editingMetaCode = String(row.meta_status ?? '');
+    this.editingMetaReason = String(row.meta_rejected_reason ?? '');
     this.formError = '';
     this.dataTable()?.open('create');
   }
@@ -299,6 +389,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     this.editingRest = { header: '', footer: '', variables: '[]', is_active: 1 };
     this.editingMeta = null;
     this.editingMetaCode = '';
+    this.editingMetaReason = '';
   }
 
   private cancelEdit() {
@@ -312,18 +403,17 @@ export class ErpWhatsappInboxTemplates extends LitElement {
   private async updateTemplate() {
     this.saving = true;
     this.formError = '';
+    const reviewed = this.reviewedFields();
+    const templateId = this.editingId;
     try {
       await erplora().command('whatsapp_inbox.templates.update', {
-        template_id: this.editingId,
-        name: this.newName.trim(),
-        language: this.newLanguage.trim() || 'es',
-        category: this.newCategory,
-        header: this.editingRest.header,
-        body: this.newBody,
-        footer: this.editingRest.footer,
-        variables: this.editingRest.variables,
+        template_id: templateId,
+        ...reviewed,
         is_active: this.editingRest.is_active,
       });
+      // Every edit goes back through Meta's review — that is Meta's rule, not ours, and it is why
+      // `templates.update` resets the verdict to `pending` (whatsapp_inbox#87, piece 2).
+      await this.registerWithMeta(templateId, reviewed);
       this.resetForm();
       this.dataTable()?.close();
       await this.ctrl.load();
@@ -375,6 +465,9 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     return html`<div class="meta" data-state=${state}>
       <strong>${t('ui.colMetaStatus')}: ${labelKey ? t(labelKey) : this.editingMetaCode}</strong>
       <p>${t(actionKey)}</p>
+      ${this.editingMetaReason
+        ? html`<p>${erplora().t(CATALOG, 'ui.metaRejectedReason', { reason: this.editingMetaReason })}</p>`
+        : nothing}
     </div>`;
   }
 
