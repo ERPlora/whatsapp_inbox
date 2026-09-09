@@ -740,7 +740,8 @@ describe('al ABRIR la pestaña, el veredicto de Meta se pone al día (whatsapp_i
 
   it('una plantilla que la puerta ya no menciona se deja como está', async () => {
     // Borrada desde WhatsApp Manager. Marcarla pide vocabulario que Meta no da (ausencia no es un
-    // veredicto) y va en su propia issue: aquí lo que NO se hace es inventarle un estado.
+    // veredicto) y va en su propia issue (whatsapp_inbox#140): aquí lo que NO se hace es
+    // inventarle un estado.
     filas = [EN_REVISION];
     respondeListado = async () => ({
       templates: [{ name: 'otra_distinta', language: 'es', status: 'APPROVED', meta_id: '5' }],

@@ -328,7 +328,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
       const verdict = atMeta.get(metaKey(row.name, row.language));
       // A row Meta does not mention is left EXACTLY as it is. Absence is not a verdict — it can be
       // a template deleted from WhatsApp Manager or one this hub never sent — and inventing a
-      // status would put a word in Meta's mouth. Painting that case is whatsapp_inbox#141.
+      // status would put a word in Meta's mouth. Painting that case is whatsapp_inbox#140.
       if (!verdict) continue;
       const status = text(verdict.status).trim();
       if (!status) continue; // nothing to record; `record_meta_answer` refuses an empty verdict too

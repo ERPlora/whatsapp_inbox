@@ -3661,6 +3661,7 @@ var es_default = {
     doorRefusalUnknown: "No se ha podido registrar la plantilla en Meta, y el motivo es uno que esta pantalla a\xFAn no conoce ({code}). Queda guardada aqu\xED: busca ese c\xF3digo en WhatsApp Manager o envi\xE1selo a soporte.",
     doorRefusalNoCode: "No se ha podido registrar la plantilla en Meta. Queda guardada aqu\xED: prueba a guardarla otra vez dentro de un rato.",
     metaRejectedReason: "Motivo de Meta: {reason}",
+    metaSyncUnavailable: "No hemos podido comprobar con Meta si hay veredictos nuevos, as\xED que lo que ves es lo \xFAltimo que sabemos. Vuelve a abrir esta pesta\xF1a dentro de un rato.",
     doorRefusal: {
       invalid_name: "Meta no ha aceptado el nombre. Usa solo min\xFAsculas, n\xFAmeros y guiones bajos \u2014sin espacios ni acentos\u2014 y vuelve a intentarlo.",
       invalid_category: "Meta no ha aceptado la categor\xEDa. Elige Utilidad, Marketing o Autenticaci\xF3n y vuelve a enviarla.",
@@ -3854,6 +3855,7 @@ var en_default = {
     doorRefusalUnknown: "The template could not be registered with Meta, and the reason is one this screen does not know yet ({code}). It is saved here: look that code up in WhatsApp Manager or send it to support.",
     doorRefusalNoCode: "The template could not be registered with Meta. It is saved here: try saving it again in a moment.",
     metaRejectedReason: "Meta's reason: {reason}",
+    metaSyncUnavailable: "We could not check with Meta for new verdicts, so what you see is the last we know. Open this tab again in a while.",
     doorRefusal: {
       invalid_name: "Meta did not accept the name. Use lowercase letters, numbers and underscores only \u2014 no spaces or accents \u2014 and try again.",
       invalid_category: "Meta did not accept the category. Pick Utility, Marketing or Authentication and send it again.",
@@ -5408,6 +5410,10 @@ function metaTemplateView(raw) {
 
 // ui/components/erp-whatsapp-inbox-templates/erp-whatsapp-inbox-templates.ts
 var CATALOG4 = { es: es_default, en: en_default };
+function metaKey(name, language) {
+  const word = (value) => String(value ?? "").trim().toLowerCase();
+  return `${word(name)}\0${word(language)}`;
+}
 function erplora4() {
   const c5 = globalThis.erplora;
   if (!c5) throw new Error("erplora SDK no inicializado por el shell");
@@ -5434,6 +5440,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     this.tick = 0;
     this.editingId = "";
     this.pendingDelete = null;
+    this.metaSyncNotice = "";
     this.editingMeta = null;
     this.editingMetaCode = "";
     this.editingMetaReason = "";
@@ -5544,6 +5551,74 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
       this.unsub = () => offs.forEach((o7) => o7());
     } catch {
     }
+    await this.refreshMetaVerdicts();
+  }
+  /**
+   * Put Meta's CURRENT verdict on the rows, once, as the tab opens (whatsapp_inbox#134).
+   *
+   * Meta answers a template minutes — sometimes hours — after it is sent, and until this existed
+   * the answer never reached the tab: the row kept the verdict it had when it was saved, so a
+   * template Meta had already approved went on reading «En revisión» and the owner had to go to
+   * WhatsApp Manager to find out, which is the one errand this tab exists to save.
+   *
+   * 🔴 **On opening, NEVER on a timer.** The SaaS refreshes against Meta on every read of that door
+   * and the path carries no throttle of its own (hub#1610, ERPlora/saas#1905): an interval here
+   * would be one call to Meta per open tab per tick. `connectedCallback` is exactly «the tab
+   * opened», and `tests/meta_refresh_is_not_a_poll.contract.test.py` is what keeps it that way.
+   *
+   * Nothing in here can cost the owner the list: every leg is guarded and the worst outcome is the
+   * rows this hub already had, with a line saying they may have moved.
+   */
+  async refreshMetaVerdicts() {
+    this.metaSyncNotice = "";
+    let answer;
+    let rows;
+    try {
+      answer = await erplora4().forModule("whatsapp_inbox").whatsappTemplates.list();
+      rows = await erplora4().queryAll("whatsapp_inbox.templates.list");
+    } catch {
+      this.metaSyncNotice = erplora4().t(CATALOG4, "ui.metaSyncUnavailable");
+      return;
+    }
+    if (answer?.stale === true) this.metaSyncNotice = erplora4().t(CATALOG4, "ui.metaSyncUnavailable");
+    const atMeta = /* @__PURE__ */ new Map();
+    const listed = Array.isArray(answer?.templates) ? answer.templates : [];
+    for (const template of listed) atMeta.set(metaKey(template?.name, template?.language), template);
+    const text = (value) => typeof value === "string" ? value : "";
+    let written = 0;
+    for (const row of rows) {
+      const verdict = atMeta.get(metaKey(row.name, row.language));
+      if (!verdict) continue;
+      const status = text(verdict.status).trim();
+      if (!status) continue;
+      const metaId = text(verdict.meta_id).trim() || text(row.meta_template_id);
+      const reason = text(verdict.rejected_reason);
+      const projected = metaId ? status.toLowerCase() : "not_sent";
+      if (projected === text(row.meta_status) && reason === text(row.meta_rejected_reason) && metaId === text(row.meta_template_id)) {
+        continue;
+      }
+      try {
+        await erplora4().command("whatsapp_inbox.templates.record_meta_answer", {
+          template_id: row.id,
+          meta_template_id: metaId,
+          meta_status: status,
+          meta_rejected_reason: reason,
+          // The seven fields Meta reviewed travel with the answer: the command only writes if the
+          // row still holds them, so a verdict never lands on a text the owner has since changed.
+          name: row.name,
+          language: row.language,
+          category: row.category,
+          header: row.header,
+          body: row.body,
+          footer: row.footer,
+          variables: row.variables
+        });
+        written += 1;
+      } catch (e5) {
+        this.metaSyncNotice = domainErrorText4(e5, "ui.errUpdateTemplate");
+      }
+    }
+    if (written) await this.ctrl.load();
   }
   disconnectedCallback() {
     window.removeEventListener("erplora:locale-changed", this.onLocaleChange);
@@ -5761,6 +5836,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     return b2`<div class="page">
         ${this.formError ? b2`<p class="err">${this.formError}</p>` : A}
         ${this.ctrl?.error ? b2`<p class="err">${this.ctrl.error}</p>` : A}
+        ${this.metaSyncNotice ? b2`<section class="panel"><p>${this.metaSyncNotice}</p></section>` : A}
         ${this.renderDeleteConfirm()}
         <ok-data-table .serverSide=${true} .fill=${true} .primaryAction=${{ label: t5("ui.add"), icon: "add" }} @primaryAction=${() => this.openCreate()} .views=${true} .actions=${this.rowActions} .rowClickable=${true} .cardTitle=${(row) => String(row.name ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "desc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchTemplates")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyTemplates")} @rowAction=${(e5) => this.onRowAction(e5)} @rowClick=${(e5) => this.onRowAction({ detail: { actionId: "edit", row: e5.detail.row } })} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @pageSizeChange=${(e5) => this.ctrl.setPageSize(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}>
           <!-- Alta: se proyecta SIEMPRE (aunque el panel esté cerrado). Si solo se renderizara con el
@@ -5810,6 +5886,9 @@ __decorateClass([
 __decorateClass([
   r5()
 ], _ErpWhatsappInboxTemplates.prototype, "pendingDelete", 2);
+__decorateClass([
+  r5()
+], _ErpWhatsappInboxTemplates.prototype, "metaSyncNotice", 2);
 __decorateClass([
   r5()
 ], _ErpWhatsappInboxTemplates.prototype, "editingMeta", 2);
