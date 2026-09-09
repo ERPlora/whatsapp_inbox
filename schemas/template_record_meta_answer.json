@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "whatsapp_inbox.templates.record_meta_answer",
+  "description": "What Meta answered about a template, as the runtime's door handed it back. The seven reviewed fields are the text the door SENT: the write only lands if the row still holds it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "template_id",
+    "meta_template_id",
+    "meta_status",
+    "meta_rejected_reason",
+    "name",
+    "language",
+    "category",
+    "header",
+    "body",
+    "footer",
+    "variables"
+  ],
+  "properties": {
+    "template_id": { "type": "string", "minLength": 1 },
+    "meta_template_id": {
+      "type": "string",
+      "maxLength": 64,
+      "description": "Meta's own id for the template. Empty when Meta refused it outright and never created one."
+    },
+    "meta_status": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40,
+      "description": "Meta's verdict as Meta words it (PENDING, APPROVED, REJECTED, PAUSED, IN_APPEAL…). Deliberately NOT an enum: Meta documents ten values and adds to them, and a template whose word this module has not learned must keep it — `ui/lib/meta-template-status.ts` shows an unlearned code as itself and sends the owner to WhatsApp Manager, which is honest. An enum here would refuse the answer and leave the row claiming the previous verdict, which is not."
+    },
+    "meta_rejected_reason": {
+      "type": "string",
+      "maxLength": 512,
+      "description": "Meta's reason code for a refusal (INVALID_FORMAT, ABUSIVE_CONTENT…). Empty for anything that is not a refusal."
+    },
+    "name": { "type": "string", "minLength": 1, "maxLength": 255 },
+    "language": { "type": "string", "maxLength": 10 },
+    "category": { "type": "string", "enum": ["MARKETING", "UTILITY", "AUTHENTICATION"] },
+    "header": { "type": "string" },
+    "body": { "type": "string" },
+    "footer": { "type": "string" },
+    "variables": { "type": "string", "description": "JSON array de nombres de variable" }
+  }
+}

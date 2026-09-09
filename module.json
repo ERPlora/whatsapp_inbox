@@ -30,6 +30,13 @@
     "whatsapp_inbox.manage_settings",
     "whatsapp_inbox.manage_connections"
   ],
+  "capabilities": {
+    "notify": {
+      "channels": [
+        "whatsapp"
+      ]
+    }
+  },
   "role_permissions": {
     "admin": [
       "*"
@@ -74,7 +81,8 @@
       "migrations/postgres/003_request_counter.sql",
       "migrations/postgres/004_booking_handoff.sql",
       "migrations/postgres/005_message_dedup.sql",
-      "migrations/postgres/006_message_source.sql"
+      "migrations/postgres/006_message_source.sql",
+      "migrations/postgres/007_meta_rejected_reason.sql"
     ]
   },
   "queries": {
@@ -536,6 +544,17 @@
       },
       "ai": {
         "description": "Updates the content of an existing WhatsApp message template"
+      }
+    },
+    "whatsapp_inbox.templates.record_meta_answer": {
+      "permission": "whatsapp_inbox.manage_settings",
+      "transaction": true,
+      "sql": [
+        "commands/template_record_meta_answer.sql"
+      ],
+      "schema": "schemas/template_record_meta_answer.json",
+      "ai": {
+        "description": "Records what Meta answered about a template (its id, verdict and refusal reason). Called by the screen right after registering the template with Meta, never on its own"
       }
     },
     "whatsapp_inbox.templates.delete": {

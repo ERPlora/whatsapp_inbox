@@ -1,0 +1,36 @@
+-- WHY Meta said no, so the owner can fix it instead of guessing (whatsapp_inbox#87).
+--
+-- When Meta refuses a template it says what is wrong with it — its own code, `INVALID_FORMAT`,
+-- `ABUSIVE_CONTENT`, `TAG_CONTENT_MISMATCH` — and that sentence is the whole difference between a
+-- screen the owner can act on and a dead end. Until now this table had nowhere to hold it, so the
+-- tab could only paint «Rechazada» and send the person to WhatsApp Manager to find out why. A
+-- template is the ONLY way a business may write to a customer outside the 24 h after her last
+-- message, so «rejected, reason unknown» is a reminder that will never go out and nobody knows how
+-- to unblock.
+--
+-- ── Why a column and not the existing one ────────────────────────────────────────────────────
+-- `meta_status` is a closed vocabulary the list FILTERS on by equality, and the reason is prose
+-- from Meta. Folding one into the other would break the filter of `queries/templates_list.sql`
+-- (`meta_status = 'rejected'` would stop matching the moment a reason was appended) and would lose
+-- the reason the first time anything lowercased the status.
+--
+-- Written by `commands/template_record_meta_answer.sql` and by nothing else — the same write that
+-- lands Meta's id and verdict, because they arrive together in one answer from the door.
+--
+-- `DEFAULT ''`, which is also what every row already out there gets, and it is the truth about
+-- them: Meta had never been asked about any of them, so there is no reason to record. It is also
+-- what a NON-rejected template holds — Meta only sends a reason with a refusal — so the tab reads
+-- «is there a reason?» rather than «is the status rejected?» and an empty one paints nothing.
+--
+-- Additive only (`expand`, ADR-0269): one ADD COLUMN with a default, no DROP and no DELETE. Every
+-- statement that does not name it keeps working untouched. Rolling back is rolling back the code:
+-- the column stops being consulted and takes no data with it.
+--
+-- No index. Nobody filters or sorts by it: it is read one row at a time, in the panel of the
+-- template the owner just opened, on a set already cut down to one hub.
+--
+-- WARNING No semicolons in this header. The migration guard that runs on the fleet splits
+-- statements by `;` without understanding comments, and a `;` inside a `--` line turns the rest of
+-- the sentence into SQL (printing#23 — the module stopped installing everywhere for two days).
+ALTER TABLE whatsapp_inbox_template
+  ADD COLUMN IF NOT EXISTS meta_rejected_reason TEXT NOT NULL DEFAULT '';

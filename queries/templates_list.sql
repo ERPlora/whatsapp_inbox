@@ -12,12 +12,19 @@
 --     con el MAYÚSCULAS de Meta (APPROVED, PAUSED…) y la columna del hub va en minúsculas; a la
 --     pantalla llega un solo vocabulario, y el filtro por igualdad del motor de listas casa igual
 --     lo escriba quien lo escriba.
+--
+-- `meta_rejected_reason` viaja al lado (whatsapp_inbox#87). Es la palabra de Meta —`INVALID_FORMAT`,
+-- `ABUSIVE_CONTENT`— y sale CRUDA, sin traducir y sin minúsculas: el panel la pinta junto al «qué
+-- hacer» de #65, y para un rechazo el «qué hacer» sin el «por qué» manda al dueño a adivinar. Va
+-- vacía en todo lo que no es un rechazo, que es lo que Meta contesta, así que la pantalla pregunta
+-- «¿hay motivo?» y no «¿el estado es rechazado?».
 SELECT id, name, language, category, header, body, footer,
        meta_template_id,
        CASE
          WHEN COALESCE(meta_template_id, '') = '' THEN 'not_sent'
          ELSE LOWER(meta_status)
        END AS meta_status,
+       COALESCE(meta_rejected_reason, '') AS meta_rejected_reason,
        variables, is_active, created_at, updated_at
 FROM whatsapp_inbox_template
 WHERE hub_id = :hub_id AND is_deleted = 0
