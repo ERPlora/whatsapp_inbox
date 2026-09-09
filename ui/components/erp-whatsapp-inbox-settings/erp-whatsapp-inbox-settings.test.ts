@@ -694,8 +694,12 @@ describe('step 3 · the restaurant decides about ITS OWN tables, never about the
     ).toEqual([{ name: 'reservations.settings.set_auto_confirm', payload: { auto_confirm: true } }]);
   });
 
+  // The salon's row says «confirm by itself» OUT LOUD here, and the restaurant has none. Both
+  // empty would let a screen that read the WRONG neighbour still land on the right answer by
+  // falling back twice — the crossed read would pass unseen. Measured: with the read crossed, this
+  // paints «auto» over a restaurant that is holding every table.
   it('reads its own policy too: an unconfigured restaurant is REVIEWING, the salon is not', async () => {
-    mountWith({ built: bothRunning, reservationsSettings: [], appointmentsSettings: [] });
+    mountWith({ built: bothRunning, reservationsSettings: [], appointmentsSettings: [{ auto_confirm_online: true }] });
     const el = await mount();
     expect(
       (pick(el, `policy-${RESERVATIONS.family}`) as unknown as { value: string }).value,
