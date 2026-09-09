@@ -795,6 +795,44 @@ describe('al ABRIR la pestaña, el veredicto de Meta se pone al día (whatsapp_i
     expect(el.shadowRoot.textContent, 'el aviso no llega a pintarse').toContain('ui.metaSyncUnavailable');
   });
 
+  // La otra mitad del fallo mudo, y la que NO tenía guardia (revisión de la PR #141): la puerta
+  // contestó — Meta SÍ dijo algo — y es este hub el que no ha podido guardarlo. Sin aviso, la fila
+  // se queda leyendo «En revisión» y la dueña la lee como el veredicto de hoy, que es exactamente
+  // el defecto de #134 con otro disfraz. Borrar la línea del `catch` dejaba la batería en verde.
+  it('Meta contestó y es el hub el que no pudo guardarlo: eso tampoco se calla', async () => {
+    filas = [EN_REVISION];
+    respondeListado = async () => ({
+      templates: [{ name: 'recordatorio_cita', language: 'es', status: 'APPROVED', meta_id: '77' }],
+      stale: false,
+    });
+    const base = (globalThis as Record<string, unknown>).erplora as Record<string, unknown>;
+    const comandoBase = base.command as (n: string, p: Record<string, unknown>) => Promise<unknown>;
+    (globalThis as Record<string, unknown>).erplora = {
+      ...base,
+      command: async (name: string, payload: Record<string, unknown>) => {
+        if (name === 'whatsapp_inbox.templates.record_meta_answer') {
+          throw refusal('db_write_failed', 'la base de datos no aceptó la escritura');
+        }
+        return comandoBase(name, payload);
+      },
+    };
+
+    const el = await montar();
+
+    expect(
+      tabla(el)?.rows ?? [],
+      'un veredicto que no se pudo guardar se llevó por delante la lista',
+    ).toHaveLength(1);
+    expect(
+      (el as unknown as { metaSyncNotice: string }).metaSyncNotice,
+      'el hub no pudo guardar lo que Meta contestó y no lo dice: la fila sigue diciendo «En revisión» y nadie sabe que miente',
+    ).toBeTruthy();
+    expect(
+      el.shadowRoot.textContent,
+      'lo que dijo el servidor no llega a la pantalla',
+    ).toContain('la base de datos no aceptó la escritura');
+  });
+
   it('cuando el SaaS contesta de memoria (`stale`) se dice que puede haber cambiado', async () => {
     filas = [EN_REVISION];
     respondeListado = async () => ({
