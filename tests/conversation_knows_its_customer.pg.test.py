@@ -27,15 +27,26 @@ What is checked here, and each one is a separate way the chain breaks silently:
    `''` were accepted, the recipe would quietly ERASE a good link on the next message instead of
    linking. Blank is refused at the gate, not swallowed by the SQL.
 
+   The door is keyed by `wa_contact_id`, not by `conversation_id`, and that is a contract this file
+   pins on purpose. What every recipe holds is the phone the message came from (`input.from`); the
+   conversation's id is not in the event they are triggered by. Keying by the id would force each
+   recipe to read `whatsapp_inbox.conversations.list` first, and therefore to carry a plain `query`
+   grant for it — today they only carry a `recipient_query` narrowed to `#contact_phone`. Widening
+   what an unattended automation may READ, to save the module a lookup it can do in its own WHERE,
+   is the wrong trade. `uq_wa_conv_hub_contact (hub_id, wa_contact_id)` is UNIQUE, so the contact
+   picks out exactly one row anyway.
+
 3. **The link is actually written, and the request inherits it.** Against a real Postgres: a fresh
    conversation carries no customer (this is the bug, reproduced), the door writes it, the filtered
    read that used to answer nothing now returns the thread, and a request inserted afterwards is
    born carrying the customer. Steps 3a/3b are the before/after of the same measurement — the
    `before` is what stops this test passing on the code that has the bug.
 
-4. **The link does not cross hubs.** Two hubs can hold the same `wa_contact_id` (the same person
-   writes to two businesses). Linking one must not touch the other: `hub_id` is in the WHERE, not
-   just in the payload.
+4. **The link does not cross hubs, and does not raise the dead.** Two hubs can hold the same
+   `wa_contact_id` (the same person writes to two businesses). Linking one must not touch the
+   other: `hub_id` is in the WHERE, not just in the payload. A deleted thread is not writable
+   either — `is_deleted = 0` is in the WHERE, so a contact whose only thread was removed writes
+   nothing and the gate speaks, instead of resurrecting a customer onto a deleted row.
 
 5. **The recipes walk through the door.** The two «from WhatsApp» recipes already resolve the
    customer by phone on every message and then threw the answer away. Each one (both languages) has
@@ -70,6 +81,9 @@ BUMP_COUNTER = "whatsapp_inbox._bump_request_counter"
 HUB = "hub-133"
 OTHER_HUB = "hub-133-other"
 CUSTOMER = "cust-marta"
+CONTACT = "wa-marta"          # the same person writes to both businesses
+OTHER_ONLY_CONTACT = "wa-only-there"   # a contact this hub has never heard of
+DELETED_CONTACT = "wa-gone"   # this hub's only thread with her was removed
 
 # The two inbound recipes: they are the ones that already know who wrote, in both languages.
 INBOUND_RECIPES = [
@@ -160,14 +174,19 @@ def check_schema_refuses_a_blank_customer(jsonschema):
     validator = jsonschema.Draft202012Validator(schema)
 
     problems = []
-    good = {"conversation_id": "c1", "customer_id": CUSTOMER}
+    good = {"wa_contact_id": CONTACT, "customer_id": CUSTOMER}
     if list(validator.iter_errors(good)):
         problems.append(f"`{rel}` refuses a legitimate link {good!r}")
 
     for name, payload in [
-        ("a blank customer", {"conversation_id": "c1", "customer_id": ""}),
-        ("no customer at all", {"conversation_id": "c1"}),
-        ("a blank conversation", {"conversation_id": "", "customer_id": CUSTOMER}),
+        ("a blank customer", {"wa_contact_id": CONTACT, "customer_id": ""}),
+        ("no customer at all", {"wa_contact_id": CONTACT}),
+        ("a blank contact", {"wa_contact_id": "", "customer_id": CUSTOMER}),
+        ("no contact at all", {"customer_id": CUSTOMER}),
+        (
+            "a conversation id instead of the contact",
+            {"conversation_id": "c1", "customer_id": CUSTOMER},
+        ),
     ]:
         if not list(validator.iter_errors(payload)):
             problems.append(
@@ -198,10 +217,23 @@ def check_recipes_use_the_door():
             continue
         step = linking[0]
         payload = step.get("payload") or {}
-        if "customer_id" not in payload or "customer_id" not in json.dumps(payload):
+        if "customer_id" not in payload:
             problems.append(f"`{name}` calls `{LINK}` without a `customer_id` in its payload")
-        if "conversation_id" not in payload:
-            problems.append(f"`{name}` calls `{LINK}` without a `conversation_id` in its payload")
+        if "wa_contact_id" not in payload:
+            problems.append(f"`{name}` calls `{LINK}` without a `wa_contact_id` in its payload")
+        elif "input.from" not in json.dumps(payload.get("wa_contact_id")):
+            problems.append(
+                f"`{name}` calls `{LINK}` with a `wa_contact_id` that is not the phone this "
+                f"message came from ({payload.get('wa_contact_id')!r}): it would link a stranger's "
+                "thread, or none at all"
+            )
+        if step.get("on_error") != "continue":
+            problems.append(
+                f"`{name}` calls `{LINK}` with on_error={step.get('on_error')!r}, expected "
+                "'continue': a customer the AI step never got round to creating would fail this "
+                "step and KILL the whole recipe — she would be left with no answer at all, which "
+                "is a far worse outcome than an inbox that does not know her name yet"
+            )
         # The step has to run AFTER the customer is resolved, or it links the empty string.
         ids = [s.get("id") for s in steps]
         referenced = [
@@ -296,15 +328,24 @@ def scalar(db, sql):
 
 
 def seed(db):
-    """Two hubs, the same person, neither conversation linked to anybody. That is today."""
+    """Two hubs, the same person, nobody linked to anybody. That is today.
+
+    `c7` is this hub's DELETED thread with another person, and `c8` belongs only to the other
+    business: between them they are the two ways the WHERE can be wrong without the happy path
+    ever noticing.
+    """
     return psql(
         db,
         "INSERT INTO whatsapp_inbox_conversation"
-        " (id, hub_id, wa_contact_id, contact_name, contact_phone, created_at) VALUES"
-        f" ('c1', {sql_literal(HUB)}, 'wa1', 'Marta', '+34600111222',"
+        " (id, hub_id, wa_contact_id, contact_name, contact_phone, is_deleted, created_at) VALUES"
+        f" ('c1', {sql_literal(HUB)}, {sql_literal(CONTACT)}, 'Marta', '+34600111222', 0,"
         " '2026-09-09T08:00:00+00:00'),"
-        f" ('c9', {sql_literal(OTHER_HUB)}, 'wa1', 'Marta', '+34600111222',"
-        " '2026-09-09T08:00:00+00:00');\n",
+        f" ('c9', {sql_literal(OTHER_HUB)}, {sql_literal(CONTACT)}, 'Marta', '+34600111222', 0,"
+        " '2026-09-09T08:00:00+00:00'),"
+        f" ('c7', {sql_literal(HUB)}, {sql_literal(DELETED_CONTACT)}, 'Sara', '+34600333444', 1,"
+        " '2026-09-09T08:00:00+00:00'),"
+        f" ('c8', {sql_literal(OTHER_HUB)}, {sql_literal(OTHER_ONLY_CONTACT)}, 'Lu',"
+        " '+34600555666', 0, '2026-09-09T08:00:00+00:00');\n",
     )
 
 
@@ -355,7 +396,7 @@ def check_behaviour(db):
 
     # 3b) AFTER — the door writes the link.
     err, affected = run_command(
-        db, LINK, {"conversation_id": "c1", "customer_id": CUSTOMER}, "link"
+        db, LINK, {"wa_contact_id": CONTACT, "customer_id": CUSTOMER}, "link"
     )
     if err:
         return problems + [err]
@@ -420,26 +461,47 @@ def check_behaviour(db):
             f"{other!r} — the customer of one business leaked into another"
         )
 
-    # 4b) a conversation of another hub cannot be linked from this one: 0 rows, which is what
-    #     makes the declared `expect_rows` gate speak instead of answering a silent `200 ok`.
+    # 4b) a contact only the OTHER business knows cannot be linked from here: 0 rows, which is
+    #     what makes the declared `expect_rows` gate speak instead of answering a silent `200 ok`.
     err, affected = run_command(
-        db, LINK, {"conversation_id": "c9", "customer_id": CUSTOMER}, "link_cross"
+        db, LINK, {"wa_contact_id": OTHER_ONLY_CONTACT, "customer_id": CUSTOMER}, "link_cross"
     )
     if err:
         return problems + [err]
     if affected != 0:
         problems.append(
-            f"linking c9 (another hub) from `{HUB}` affected {affected} rows, expected 0"
+            f"linking `{OTHER_ONLY_CONTACT}` (a contact of `{OTHER_HUB}` only) from `{HUB}` "
+            f"affected {affected} rows, expected 0"
+        )
+    leaked = scalar(
+        db,
+        "SELECT coalesce(customer_id, '<null>') FROM whatsapp_inbox_conversation WHERE id = 'c8';",
+    )
+    if leaked != "<null>":
+        problems.append(
+            f"linking from `{HUB}` wrote into `{OTHER_HUB}`'s thread c8: customer_id = {leaked!r}"
         )
 
-    # 4c) an unknown conversation writes nothing at all.
+    # 4c) a deleted thread is not writable: the customer is not resurrected onto a removed row.
     err, affected = run_command(
-        db, LINK, {"conversation_id": "nope", "customer_id": CUSTOMER}, "link_ghost"
+        db, LINK, {"wa_contact_id": DELETED_CONTACT, "customer_id": CUSTOMER}, "link_deleted"
     )
     if err:
         return problems + [err]
     if affected != 0:
-        problems.append(f"linking an unknown conversation affected {affected} rows, expected 0")
+        problems.append(
+            f"linking a DELETED conversation ({DELETED_CONTACT}) affected {affected} rows, "
+            "expected 0 — a removed thread must not be written to"
+        )
+
+    # 4d) an unknown contact writes nothing at all.
+    err, affected = run_command(
+        db, LINK, {"wa_contact_id": "nobody-ever", "customer_id": CUSTOMER}, "link_ghost"
+    )
+    if err:
+        return problems + [err]
+    if affected != 0:
+        problems.append(f"linking an unknown contact affected {affected} rows, expected 0")
 
     return problems
 
