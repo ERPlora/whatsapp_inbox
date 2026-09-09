@@ -213,6 +213,9 @@ CONFIRMED_ID = "input.appointment_id"
 # The one field of the diary that says where to write to her, and the filter that carries it.
 DIARY_PHONE = "customer_phone"
 PHONE_FILTER = "f_contact_phone"
+# The contract key a `result: "first"` read always answers with, row or no row (`flows/query.rs`):
+# it is the ONLY thing that tells this family apart from a run whose appointment vanished.
+READ_FOUND = "found"
 
 
 def confirmation_notice_problems(name, doc):
@@ -303,6 +306,32 @@ def confirmation_notice_problems(name, doc):
         for path, clause in (step.get("when") or {}).items()
         if isinstance(clause, dict) and clause.get("neq") == ""
     }
+    # Mark 5 — the SAME trap, reached by `null` instead of by `""`, and the `neq` does not see it.
+    found_guarded = {
+        path
+        for step in steps
+        if step.get("kind") == "condition"
+        for path, clause in (step.get("when") or {}).items()
+        if isinstance(clause, dict) and clause.get("eq") is True
+    }
+    for reader in readers:
+        found = f"steps.{reader.get('id')}.{READ_FOUND}"
+        if found in found_guarded:
+            continue
+        problems.append(
+            f"{name} step `{reader.get('id')}` reads the appointment and no `condition` demands "
+            f"`{{\"{found}\": {{\"eq\": true}}}}`: when the read finds NO row — the appointment "
+            f"was deleted between the confirmation and the run, and the outbox delivers "
+            f"at-least-once — `result: first` still answers, only without the row's fields. A path "
+            f"that resolves to nothing is `null` (`flows/def.rs::resolve`), `json_eq(null, \"\")` "
+            f"is false, so the `neq: \"\"` guard above answers TRUE and lets the run through. The "
+            f"phone then travels as `null`, which the list engine treats as ABSENT "
+            f"(`queries.rs`: `p.get(k).is_some_and(|v| !v.is_null())`), the filter is dropped "
+            f"altogether and `{CONVERSATIONS_READ}` answers the first conversation of the hub. It "
+            f"is the `%%` of mark 4 by another road: `flow.recipient_ambiguous` where there are "
+            f"several chats, and a confirmation with an empty service and an empty professional "
+            f"delivered to the wrong customer where there is one"
+        )
     for path in sorted(phones - guarded):
         problems.append(
             f"{name} sends to `{PHONE_FILTER}` = `{path}` and no `condition` step demands "
@@ -6932,6 +6961,7 @@ def _confirmation(
     read_id="read_appointment",
     appointment_id=CONFIRMED_ID,
     guard=True,
+    found_guard=True,
     notify=True,
     notify_to=None,
 ):
@@ -6962,6 +6992,8 @@ def _confirmation(
     when = {"steps.reachable_on_whatsapp.found": {"eq": True}}
     if guard:
         when[phone] = {"neq": ""}
+    if read and found_guard:
+        when[f"steps.{read_id}.{READ_FOUND}"] = {"eq": True}
     steps.append({"id": "has_a_thread", "kind": "condition", "when": when})
     if notify:
         steps.append(
@@ -7019,6 +7051,15 @@ CONFIRMATION_CASES = [
         "on her card goes out as `%%`, matches every conversation in the inbox and answers "
         "`found: true`: the confirmation is delivered to a stranger, or the run dies with "
         "`flow.recipient_ambiguous` and nobody can read why",
+        _CONFIRMED_DOC,
+        _confirmation(found_guard=False),
+        1,
+    ),
+    (
+        "🔴 the same `%%`, reached by `null`: nothing demands that the diary read FOUND the "
+        "appointment. Deleted between the confirmation and the run — the outbox delivers "
+        "at-least-once — the read answers with no fields, the `neq: \"\"` above is TRUE over a "
+        "`null`, and the phone travels as `null`, which the list engine reads as NO FILTER AT ALL",
         _CONFIRMED_DOC,
         _confirmation(guard=False),
         1,

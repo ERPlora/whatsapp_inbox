@@ -230,6 +230,19 @@ NEED_TEMPLATE_ACTIVATE = KernelNeed(
     "fails the moment the owner presses it (whatsapp_inbox#123, ADR-0470)",
 )
 
+NEED_TEMPLATE_REGISTER = KernelNeed(
+    issue="hub#1688",
+    floor=(1, 1, 21),
+    path="crates/server/src/whatsapp_templates.rs",
+    marker="proxy_cloud_get_enveloped",
+    last_without="v1.1.20",
+    why="the templates screen registers what the owner wrote WITH Meta and puts back the verdict. "
+    "The `whatsappTemplates` surface of the SDK landed one release earlier, in v1.1.20, but its "
+    "three doors still answered the SaaS's bare body: every call — the successful ones included — "
+    "reached the module as `unknown error`, so a hub on v1.1.20 would tell the owner the "
+    "registration failed while Meta had taken the template (whatsapp_inbox#87)",
+)
+
 # …and a third place a floor can come from, which is neither the document nor the sidecar: the
 # SCREEN (whatsapp_inbox#123). The one-tap activation of ADR-0470 is not a flow feature at all —
 # `flows/` is byte for byte what it was — it is `ui/` calling an SDK method that only exists from
@@ -247,6 +260,19 @@ UI_FEATURES = (
         NEED_TEMPLATE_ACTIVATE,
         "the screen turns a recipe on through the kernel's one-tap door",
         lambda code: "activateTemplate" in code or "deactivateTemplate" in code,
+    ),
+    (
+        NEED_TEMPLATE_REGISTER,
+        "the screen registers the template with Meta through the runtime's door",
+        # Matched as a CALL (`.whatsappTemplates.<method>(`) and never as the bare name: the screen
+        # also DECLARES the door's shape to type it, and a name-only match would keep deriving the
+        # floor from that declaration after the call itself was deleted — the regression this
+        # exists to catch. Any of the three methods demands it: the envelope is what makes the
+        # whole surface answerable, not one route of it.
+        lambda code: any(
+            f".whatsappTemplates.{method}(" in code
+            for method in ("register", "list", "remove")
+        ),
     ),
 )
 
@@ -338,6 +364,24 @@ UI_PREDICATE_CASES = (
         "a screen that only MENTIONS the door in a comment it never calls",
         "// Since hub#1677 the kernel exposes activateTemplate for this.\n"
         "const go = () => window.history.pushState({}, '', AUTOMATIONS_PATH);",
+        False,
+    ),
+    (
+        NEED_TEMPLATE_REGISTER,
+        "a screen that registers the template with Meta",
+        "const v = await erplora().forModule(MODULE_ID).whatsappTemplates.register(reviewed);",
+        True,
+    ),
+    (
+        NEED_TEMPLATE_REGISTER,
+        "a screen that only DECLARES the door's shape to type it, and never calls it",
+        # The load-bearing negative. `erp-whatsapp-inbox-templates.ts` carries exactly this
+        # declaration next to the call, and it is CODE — `strip_comments` does not touch it. A
+        # predicate keyed on the bare name would read the floor off this and go on reading it
+        # after the call was deleted, which is the same shape of blindness `on_expire` had.
+        "interface WhatsappTemplatesDoor {\n"
+        "  whatsappTemplates: { register(t: Record<string, unknown>): Promise<unknown> };\n"
+        "}",
         False,
     ),
     (

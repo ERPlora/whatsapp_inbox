@@ -3650,7 +3650,31 @@ var es_default = {
     errTemplates: "No hemos podido saber qu\xE9 hay activo ahora mismo. Vuelve a cargar la pantalla.",
     errPolicy: "No se pudo guardar c\xF3mo se confirman las citas. Int\xE9ntalo otra vez.",
     useAppointmentsConsent: "WhatsApp contestar\xE1 solo: lee tu agenda, ofrece los huecos libres, reserva, mueve o anula la cita de la clienta que escribe y le contesta; y le avisa cuando confirmas su cita. No puede tocar las citas de nadie m\xE1s. \xBFLo activas?",
-    useAppointmentsDone: "Listo. Escr\xEDbete desde otro m\xF3vil: \u201Cquiero cita ma\xF1ana\u201D."
+    useAppointmentsDone: "Listo. Escr\xEDbete desde otro m\xF3vil: \u201Cquiero cita ma\xF1ana\u201D.",
+    doorRefusalUnknown: "No se ha podido registrar la plantilla en Meta, y el motivo es uno que esta pantalla a\xFAn no conoce ({code}). Queda guardada aqu\xED: busca ese c\xF3digo en WhatsApp Manager o envi\xE1selo a soporte.",
+    doorRefusalNoCode: "No se ha podido registrar la plantilla en Meta. Queda guardada aqu\xED: prueba a guardarla otra vez dentro de un rato.",
+    metaRejectedReason: "Motivo de Meta: {reason}",
+    doorRefusal: {
+      invalid_name: "Meta no ha aceptado el nombre. Usa solo min\xFAsculas, n\xFAmeros y guiones bajos \u2014sin espacios ni acentos\u2014 y vuelve a intentarlo.",
+      invalid_category: "Meta no ha aceptado la categor\xEDa. Elige Utilidad, Marketing o Autenticaci\xF3n y vuelve a enviarla.",
+      invalid_language: "Meta no ha aceptado el idioma. Escr\xEDbelo como c\xF3digo de idioma de Meta, por ejemplo es o en_US.",
+      invalid_placeholders: "Meta no ha aceptado los huecos del cuerpo. Num\xE9ralos en orden, empezando por {{1}} y sin saltarte ninguno.",
+      invalid_header_placeholders: "Meta no ha aceptado el encabezado: admite un hueco como mucho, y tiene que ser {{1}}.",
+      invalid_variables: "Meta no ha aceptado la lista de variables. Pon un nombre por cada hueco que uses en el texto.",
+      missing_body: "Meta no revisa una plantilla vac\xEDa. Escribe el mensaje que va a leer el cliente.",
+      missing_example: "Meta necesita un ejemplo para cada hueco. Rellena qu\xE9 vale cada uno en un mensaje real.",
+      no_whatsapp_number: "Este negocio todav\xEDa no tiene un n\xFAmero de WhatsApp conectado. Con\xE9ctalo en Ajustes y vuelve a enviar la plantilla.",
+      template_not_found: "Meta ya no tiene esta plantilla. Gu\xE1rdala otra vez para volver a enviarla a revisi\xF3n.",
+      meta_rate_limited: "Meta est\xE1 rechazando peticiones ahora mismo. La plantilla no tiene nada mal: espera unos minutos y vuelve a guardarla.",
+      meta_permission_denied: "Meta no deja a este negocio gestionar plantillas. Comprueba en WhatsApp Manager que la cuenta sigue conectada y con permiso.",
+      meta_unreachable: "Meta no ha contestado. La plantilla queda guardada aqu\xED; vuelve a guardarla dentro de un rato para enviarla a revisi\xF3n.",
+      meta_template_failed: "Meta ha rechazado la plantilla sin decir por qu\xE9. Rev\xEDsala en WhatsApp Manager, donde s\xED viene el motivo.",
+      cloud_rejected: "erplora.com no ha querido registrar la plantilla. Queda guardada aqu\xED: int\xE9ntalo otra vez y avisa a soporte si sigue pasando.",
+      cloud_unreachable: "Esta caja no ha podido conectar con erplora.com. La plantilla queda guardada aqu\xED; revisa la conexi\xF3n a internet y vuelve a guardarla para enviarla a revisi\xF3n.",
+      cloud_unreadable: "erplora.com ha contestado algo que esta caja no ha sabido leer. La plantilla queda guardada aqu\xED: int\xE9ntalo dentro de un rato.",
+      hub_not_enrolled: "Esta caja todav\xEDa no est\xE1 emparejada con erplora.com, as\xED que no puede enviar plantillas a Meta. Avisa a soporte.",
+      capability_denied: "WhatsApp no tiene permiso para enviar mensajes desde este hub. Conc\xE9deselo en Ajustes \u2192 Permisos y vuelve a guardar la plantilla."
+    }
   },
   errors: {
     "whatsapp_inbox.conversation_not_found": "Esa conversaci\xF3n no existe en este negocio.",
@@ -3812,7 +3836,31 @@ var en_default = {
     errTemplates: "We could not find out what is already turned on. Reload the screen.",
     errPolicy: "We could not save how bookings are confirmed. Try again.",
     useAppointmentsConsent: "WhatsApp will answer on its own: it reads your diary, offers free slots, books, moves or cancels the appointment of the customer who writes, and replies to them; and it tells them when you confirm their appointment. It cannot touch anyone else\u2019s appointments. Turn it on?",
-    useAppointmentsDone: "Done. Text your number from another phone: \u201CI\u2019d like an appointment tomorrow\u201D."
+    useAppointmentsDone: "Done. Text your number from another phone: \u201CI\u2019d like an appointment tomorrow\u201D.",
+    doorRefusalUnknown: "The template could not be registered with Meta, and the reason is one this screen does not know yet ({code}). It is saved here: look that code up in WhatsApp Manager or send it to support.",
+    doorRefusalNoCode: "The template could not be registered with Meta. It is saved here: try saving it again in a moment.",
+    metaRejectedReason: "Meta's reason: {reason}",
+    doorRefusal: {
+      invalid_name: "Meta did not accept the name. Use lowercase letters, numbers and underscores only \u2014 no spaces or accents \u2014 and try again.",
+      invalid_category: "Meta did not accept the category. Pick Utility, Marketing or Authentication and send it again.",
+      invalid_language: "Meta did not accept the language. Write it as a Meta language code, such as es or en_US.",
+      invalid_placeholders: "Meta did not accept the placeholders in the body. Number them in order, starting at {{1}} and with no gaps.",
+      invalid_header_placeholders: "Meta did not accept the header: it takes at most one placeholder, and it has to be {{1}}.",
+      invalid_variables: "Meta did not accept the list of variables. Give one name per placeholder used in the text.",
+      missing_body: "Meta will not review an empty template. Write the message the customer is going to read.",
+      missing_example: "Meta needs an example for every placeholder. Fill in what each one is worth in a real message.",
+      no_whatsapp_number: "This business has no WhatsApp number connected yet. Connect it in Settings and send the template again.",
+      template_not_found: "Meta no longer has this template. Save it again to send it back for review.",
+      meta_rate_limited: "Meta is turning away requests for the moment. Nothing is wrong with the template: wait a few minutes and save it again.",
+      meta_permission_denied: "Meta will not let this business manage templates. Check in WhatsApp Manager that the account is still connected and has permission.",
+      meta_unreachable: "Meta did not answer. The template is saved here; save it again in a moment to send it for review.",
+      meta_template_failed: "Meta turned the template down without saying why. Review it in WhatsApp Manager, where the reason is spelled out.",
+      cloud_rejected: "erplora.com refused to register the template. It is saved here: try again, and contact support if it keeps happening.",
+      cloud_unreachable: "This till could not reach erplora.com. The template is saved here; check the internet connection and save it again to send it for review.",
+      cloud_unreadable: "erplora.com answered something this till could not read. The template is saved here \u2014 try again in a moment.",
+      hub_not_enrolled: "This till is not yet paired with erplora.com, so it cannot send templates to Meta. Contact support.",
+      capability_denied: "WhatsApp Inbox is not allowed to send WhatsApp messages on this hub. Grant it in Settings \u2192 Permissions and save the template again."
+    }
   },
   errors: {
     "whatsapp_inbox.conversation_not_found": "That conversation does not exist in this business.",
@@ -4789,7 +4837,7 @@ var WHATSAPP_USES = [
   {
     family: "appointment-from-whatsapp",
     // The notice the salon's «Confirmar» owes the customer (whatsapp_inbox#125). Its floor is
-    // `appointments` 1.1.25, well under the 1.1.73 this card already demands, so no hub can accept
+    // `appointments` 1.1.26, well under the 1.1.73 this card already demands, so no hub can accept
     // the booking recipe and refuse this one.
     companions: ["appointment-confirmed-to-whatsapp"],
     module: "appointments",
@@ -5242,6 +5290,32 @@ function activationError(e5) {
 var errorText = (error, t5) => "key" in error ? t5(error.key) : error.detail;
 define("erp-whatsapp-inbox-settings", ErpWhatsappInboxSettings);
 
+// ui/lib/meta-door-refusal.ts
+var SOURCE_LANG2 = "en";
+function doorErrorCode(e5) {
+  const code = e5?.code;
+  return typeof code === "string" ? code : "";
+}
+function textFor2(catalog, lang, key) {
+  const ui = catalog[lang]?.ui;
+  const bucket = ui?.doorRefusal;
+  const text = key ? bucket?.[key] : void 0;
+  return typeof text === "string" && text.trim() ? text : "";
+}
+function unknownText(catalog, lang, key, code) {
+  const ui = catalog[lang]?.ui;
+  const text = ui?.[key];
+  if (typeof text !== "string" || !text.trim()) return "";
+  return text.replaceAll("{code}", code);
+}
+function doorRefusalText(catalog, locale, e5) {
+  const code = doorErrorCode(e5);
+  const declared = textFor2(catalog, locale, code) || textFor2(catalog, SOURCE_LANG2, code);
+  if (declared) return declared;
+  const key = code ? "doorRefusalUnknown" : "doorRefusalNoCode";
+  return unknownText(catalog, locale, key, code) || unknownText(catalog, SOURCE_LANG2, key, code) || code;
+}
+
 // ui/lib/meta-template-status.ts
 var META_TEMPLATE_STATES = [
   "not_sent",
@@ -5285,7 +5359,7 @@ function metaStatusLabel(status) {
   const { labelKey } = metaTemplateView(status);
   return labelKey ? erplora4().t(CATALOG4, labelKey) : status;
 }
-var ErpWhatsappInboxTemplates = class extends i3 {
+var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
   constructor() {
     super(...arguments);
     this.newName = "";
@@ -5299,6 +5373,7 @@ var ErpWhatsappInboxTemplates = class extends i3 {
     this.pendingDelete = null;
     this.editingMeta = null;
     this.editingMetaCode = "";
+    this.editingMetaReason = "";
     /** Carried through an edit so `templates.update` — whose schema requires every field — can send
      *  back untouched what this panel does not show. */
     this.editingRest = {
@@ -5416,6 +5491,62 @@ var ErpWhatsappInboxTemplates = class extends i3 {
   dataTable() {
     return this.renderRoot.querySelector("ok-data-table");
   }
+  /** What the panel currently holds, in the shape Meta reviews it. */
+  reviewedFields() {
+    return {
+      name: this.newName.trim(),
+      language: this.newLanguage.trim() || "es",
+      category: this.newCategory,
+      header: this.editingRest.header,
+      body: this.newBody,
+      footer: this.editingRest.footer,
+      variables: this.editingRest.variables
+    };
+  }
+  /**
+   * Register the template with Meta and put back what Meta answered (whatsapp_inbox#87).
+   *
+   * 🔴 **Called AFTER the local write, always.** Meta is a third party across the internet and the
+   * template is the shop's: a Meta that does not answer costs a notice, never the owner's text.
+   * That order is what whatsapp_inbox#65 could not have — before hub#1682 there was no door at
+   * all, so the column said «pending» about a template nobody had ever sent.
+   *
+   * A refusal is SPOKEN, never echoed: the door answers a code (ADR-0055) and this module owns the
+   * sentence. And a refusal never writes a verdict — the row stays `not_sent`, which is the truth.
+   */
+  async registerWithMeta(templateId, reviewed) {
+    let verdict;
+    try {
+      verdict = await erplora4().forModule("whatsapp_inbox").whatsappTemplates.register({ ...reviewed });
+    } catch (e5) {
+      this.formError = doorRefusalText(CATALOG4, erplora4().locale, e5);
+      return;
+    }
+    const text = (value) => typeof value === "string" ? value : "";
+    const status = text(verdict?.status).trim();
+    if (!status || !templateId) {
+      this.formError = doorRefusalText(CATALOG4, erplora4().locale, null);
+      return;
+    }
+    try {
+      await erplora4().command("whatsapp_inbox.templates.record_meta_answer", {
+        template_id: templateId,
+        meta_template_id: text(verdict.meta_id),
+        meta_status: status,
+        meta_rejected_reason: text(verdict.rejected_reason),
+        ...reviewed
+      });
+    } catch (e5) {
+      this.formError = domainErrorText4(e5, "ui.errUpdateTemplate");
+    }
+  }
+  /** The id of the row a declarative create just inserted: the runtime answers `new_ids`, whose
+   *  first entry is the main entity by convention (`hub: crates/runtime/src/commands.rs`). */
+  static newId(result) {
+    const ids = result?.new_ids;
+    const first = Array.isArray(ids) ? ids[0] : void 0;
+    return typeof first === "string" ? first : "";
+  }
   async createTemplate(ev) {
     ev.preventDefault();
     if (!this.newName.trim()) return;
@@ -5425,16 +5556,10 @@ var ErpWhatsappInboxTemplates = class extends i3 {
     }
     this.saving = true;
     this.formError = "";
+    const reviewed = this.reviewedFields();
     try {
-      await erplora4().command("whatsapp_inbox.templates.create", {
-        name: this.newName.trim(),
-        language: this.newLanguage.trim() || "es",
-        category: this.newCategory,
-        header: "",
-        body: this.newBody,
-        footer: "",
-        variables: "[]"
-      });
+      const created = await erplora4().command("whatsapp_inbox.templates.create", reviewed);
+      await this.registerWithMeta(_ErpWhatsappInboxTemplates.newId(created), reviewed);
       this.resetForm();
       this.dataTable()?.close();
       await this.ctrl.load();
@@ -5459,6 +5584,7 @@ var ErpWhatsappInboxTemplates = class extends i3 {
     };
     this.editingMeta = metaTemplateView(row.meta_status);
     this.editingMetaCode = String(row.meta_status ?? "");
+    this.editingMetaReason = String(row.meta_rejected_reason ?? "");
     this.formError = "";
     this.dataTable()?.open("create");
   }
@@ -5485,6 +5611,7 @@ var ErpWhatsappInboxTemplates = class extends i3 {
     this.editingRest = { header: "", footer: "", variables: "[]", is_active: 1 };
     this.editingMeta = null;
     this.editingMetaCode = "";
+    this.editingMetaReason = "";
   }
   cancelEdit() {
     this.resetForm();
@@ -5496,18 +5623,15 @@ var ErpWhatsappInboxTemplates = class extends i3 {
   async updateTemplate() {
     this.saving = true;
     this.formError = "";
+    const reviewed = this.reviewedFields();
+    const templateId = this.editingId;
     try {
       await erplora4().command("whatsapp_inbox.templates.update", {
-        template_id: this.editingId,
-        name: this.newName.trim(),
-        language: this.newLanguage.trim() || "es",
-        category: this.newCategory,
-        header: this.editingRest.header,
-        body: this.newBody,
-        footer: this.editingRest.footer,
-        variables: this.editingRest.variables,
+        template_id: templateId,
+        ...reviewed,
         is_active: this.editingRest.is_active
       });
+      await this.registerWithMeta(templateId, reviewed);
       this.resetForm();
       this.dataTable()?.close();
       await this.ctrl.load();
@@ -5556,6 +5680,7 @@ var ErpWhatsappInboxTemplates = class extends i3 {
     return b2`<div class="meta" data-state=${state}>
       <strong>${t5("ui.colMetaStatus")}: ${labelKey ? t5(labelKey) : this.editingMetaCode}</strong>
       <p>${t5(actionKey)}</p>
+      ${this.editingMetaReason ? b2`<p>${erplora4().t(CATALOG4, "ui.metaRejectedReason", { reason: this.editingMetaReason })}</p>` : A}
     </div>`;
   }
   renderDeleteConfirm() {
@@ -5597,35 +5722,39 @@ var ErpWhatsappInboxTemplates = class extends i3 {
 };
 __decorateClass([
   r5()
-], ErpWhatsappInboxTemplates.prototype, "newName", 2);
+], _ErpWhatsappInboxTemplates.prototype, "newName", 2);
 __decorateClass([
   r5()
-], ErpWhatsappInboxTemplates.prototype, "newCategory", 2);
+], _ErpWhatsappInboxTemplates.prototype, "newCategory", 2);
 __decorateClass([
   r5()
-], ErpWhatsappInboxTemplates.prototype, "newLanguage", 2);
+], _ErpWhatsappInboxTemplates.prototype, "newLanguage", 2);
 __decorateClass([
   r5()
-], ErpWhatsappInboxTemplates.prototype, "newBody", 2);
+], _ErpWhatsappInboxTemplates.prototype, "newBody", 2);
 __decorateClass([
   r5()
-], ErpWhatsappInboxTemplates.prototype, "saving", 2);
+], _ErpWhatsappInboxTemplates.prototype, "saving", 2);
 __decorateClass([
   r5()
-], ErpWhatsappInboxTemplates.prototype, "formError", 2);
+], _ErpWhatsappInboxTemplates.prototype, "formError", 2);
 __decorateClass([
   r5()
-], ErpWhatsappInboxTemplates.prototype, "tick", 2);
+], _ErpWhatsappInboxTemplates.prototype, "tick", 2);
 __decorateClass([
   r5()
-], ErpWhatsappInboxTemplates.prototype, "editingId", 2);
+], _ErpWhatsappInboxTemplates.prototype, "editingId", 2);
 __decorateClass([
   r5()
-], ErpWhatsappInboxTemplates.prototype, "pendingDelete", 2);
+], _ErpWhatsappInboxTemplates.prototype, "pendingDelete", 2);
 __decorateClass([
   r5()
-], ErpWhatsappInboxTemplates.prototype, "editingMeta", 2);
+], _ErpWhatsappInboxTemplates.prototype, "editingMeta", 2);
 __decorateClass([
   r5()
-], ErpWhatsappInboxTemplates.prototype, "editingMetaCode", 2);
+], _ErpWhatsappInboxTemplates.prototype, "editingMetaCode", 2);
+__decorateClass([
+  r5()
+], _ErpWhatsappInboxTemplates.prototype, "editingMetaReason", 2);
+var ErpWhatsappInboxTemplates = _ErpWhatsappInboxTemplates;
 define("erp-whatsapp-inbox-templates", ErpWhatsappInboxTemplates);

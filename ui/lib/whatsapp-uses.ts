@@ -137,7 +137,7 @@ export const WHATSAPP_USES: readonly WhatsAppUse[] = [
   {
     family: 'appointment-from-whatsapp',
     // The notice the salon's «Confirmar» owes the customer (whatsapp_inbox#125). Its floor is
-    // `appointments` 1.1.25, well under the 1.1.73 this card already demands, so no hub can accept
+    // `appointments` 1.1.26, well under the 1.1.73 this card already demands, so no hub can accept
     // the booking recipe and refuse this one.
     companions: ['appointment-confirmed-to-whatsapp'],
     module: 'appointments',

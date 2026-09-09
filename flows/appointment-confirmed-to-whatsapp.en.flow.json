@@ -25,6 +25,9 @@
       "id": "has_a_phone",
       "kind": "condition",
       "when": {
+        "steps.read_appointment.found": {
+          "eq": true
+        },
         "steps.read_appointment.customer_phone": {
           "neq": ""
         }

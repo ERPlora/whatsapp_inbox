@@ -447,11 +447,17 @@ Cinco pasos en línea recta:
 
 1. **`read_appointment`** — `appointments.appointments.get`. El evento solo trae `appointment_id`,
    así que el teléfono, el servicio y la profesional salen de la cita, no del evento.
-2. **`has_a_phone`** — `neq: ""` sobre `customer_phone`. 🔴 Va **antes** de buscar la conversación, y
-   no es cosmético: `conversations.list` filtra `contact_phone` con `op: like`, así que un teléfono
-   vacío viaja como `%%` y casa con **TODAS** las conversaciones del hub — la confirmación de una
-   clienta acabaría en el móvil de otra. Poner la guarda delante es lo que impide que ese `%%` se
-   llegue a emitir.
+2. **`has_a_phone`** — dos cláusulas sobre la lectura de arriba, y las dos hacen falta.
+   🔴 `neq: ""` sobre `customer_phone`: `conversations.list` filtra `contact_phone` con `op: like`,
+   así que un teléfono vacío viaja como `%%` y casa con **TODAS** las conversaciones del hub — la
+   confirmación de una clienta acabaría en el móvil de otra. 🔴 Y `found: {eq: true}`, porque el
+   `neq: ""` **no cubre el caso de que no haya fila**: si la cita se borró entre la confirmación y el
+   run (el outbox entrega *at-least-once*), `result: "first"` contesta igual, solo que sin los campos
+   de la fila; un path que no resuelve es `null` (`flows/def.rs::resolve`), `json_eq(null, "")` es
+   `false` y el `neq` responde **true**. El teléfono viajaría entonces como `null`, que el motor de
+   listas trata como **ausente** (`queries.rs`), el filtro se cae entero y la lectura contesta la
+   primera conversación del hub. Es el mismo `%%` por otro camino. Lo fija
+   `confirmation_notice_problems` en `tests/flow_templates.test.py`, marca 5.
 3. **`reachable_on_whatsapp`** — la conversación de ese teléfono, si la hay.
 4. **`has_a_thread`** — `found`. Sin hilo no hay a quién escribir: el run para ahí y deja el motivo
    en su historial, que no es lo mismo que callarse.
@@ -477,12 +483,16 @@ cual le mandaría a la clienta un `2026-09-12T10:30:00`. El mensaje nombra el **
 cuando apuntó la cita. Que la agenda dé día y hora legibles es **ERPlora/appointments#151**; cuando
 esté, la frase los lleva.
 
-### Por qué el suelo es `appointments >= 1.1.25` y no el 1.1.73 de la familia de arriba
+### Por qué el suelo es `appointments >= 1.1.26` y no el 1.1.73 de la familia de arriba
 
 Porque esta receta pide dos cosas y solo dos, y ninguna es de las que subieron aquel suelo (mover y
 anular). El número lo fija el **evento**: `appointments.appointments.confirm` lo emite desde el
-primer commit del módulo, pero Citas no lo **declara** en `events.emits` hasta 1.1.25
-(appointments#40) — y lo que un vecino puede consumir es lo declarado, no lo que ocurre de rebote.
+primer commit del módulo, pero Citas no lo **declara** en `events.emits` hasta appointments#40 — y lo
+que un vecino puede consumir es lo declarado, no lo que ocurre de rebote. Y el número no es el del
+commit que lo declaró, sino el del **primer `chore(release)` posterior**: `f213ade` ES
+`chore(release): v1.1.25` y su `module.json` no tiene ni clave `events`; la declaración entra con el
+manifest todavía en 1.1.25 y, como el zip `modules/appointments/v1.1.25.zip` se sube **CREATE-ONLY**,
+no llega al 1.1.25 que sirve el marketplace: llega en `f3426cd` = `chore(release): v1.1.26`.
 La lectura (`customer_phone`, `service_name`, `staff_name`) está en el SELECT desde v1.1.6, así que
 esa mitad no sube nada. Detalle medido en `appointment-confirmed-to-whatsapp.requires.json`.
 
@@ -539,7 +549,7 @@ La vía declarativa para que un blueprint la reparta está propuesta en **ERPlor
   que sale el destinatario.
 - Los módulos que aportan las tools. Para la familia de **cita**: `customers`, `services`,
   `appointments` (>= 1.1.73, ver `requires.json`) y `staff`. Para el **aviso al confirmar**, solo
-  `appointments` (>= 1.1.25, el suelo del evento declarado). Para la de **mesa**: `customers` y
+  `appointments` (>= 1.1.26, el suelo del evento declarado). Para la de **mesa**: `customers` y
   `reservations` (>= 1.1.72 no, **>= 3.0.19** — el suelo lo fija `blocked_dates.on_date`, que es la
   única lectura con la que la plantilla sabe que el restaurante cierra ese día; ver
   `reservation-from-whatsapp.requires.json`). El horario del negocio ya **no** se le pregunta a `schedules` desde el

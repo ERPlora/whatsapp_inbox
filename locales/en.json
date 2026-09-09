@@ -145,7 +145,31 @@
     "errTemplates": "We could not find out what is already turned on. Reload the screen.",
     "errPolicy": "We could not save how bookings are confirmed. Try again.",
     "useAppointmentsConsent": "WhatsApp will answer on its own: it reads your diary, offers free slots, books, moves or cancels the appointment of the customer who writes, and replies to them; and it tells them when you confirm their appointment. It cannot touch anyone else’s appointments. Turn it on?",
-    "useAppointmentsDone": "Done. Text your number from another phone: “I’d like an appointment tomorrow”."
+    "useAppointmentsDone": "Done. Text your number from another phone: “I’d like an appointment tomorrow”.",
+    "doorRefusalUnknown": "The template could not be registered with Meta, and the reason is one this screen does not know yet ({code}). It is saved here: look that code up in WhatsApp Manager or send it to support.",
+    "doorRefusalNoCode": "The template could not be registered with Meta. It is saved here: try saving it again in a moment.",
+    "metaRejectedReason": "Meta's reason: {reason}",
+    "doorRefusal": {
+      "invalid_name": "Meta did not accept the name. Use lowercase letters, numbers and underscores only — no spaces or accents — and try again.",
+      "invalid_category": "Meta did not accept the category. Pick Utility, Marketing or Authentication and send it again.",
+      "invalid_language": "Meta did not accept the language. Write it as a Meta language code, such as es or en_US.",
+      "invalid_placeholders": "Meta did not accept the placeholders in the body. Number them in order, starting at {{1}} and with no gaps.",
+      "invalid_header_placeholders": "Meta did not accept the header: it takes at most one placeholder, and it has to be {{1}}.",
+      "invalid_variables": "Meta did not accept the list of variables. Give one name per placeholder used in the text.",
+      "missing_body": "Meta will not review an empty template. Write the message the customer is going to read.",
+      "missing_example": "Meta needs an example for every placeholder. Fill in what each one is worth in a real message.",
+      "no_whatsapp_number": "This business has no WhatsApp number connected yet. Connect it in Settings and send the template again.",
+      "template_not_found": "Meta no longer has this template. Save it again to send it back for review.",
+      "meta_rate_limited": "Meta is turning away requests for the moment. Nothing is wrong with the template: wait a few minutes and save it again.",
+      "meta_permission_denied": "Meta will not let this business manage templates. Check in WhatsApp Manager that the account is still connected and has permission.",
+      "meta_unreachable": "Meta did not answer. The template is saved here; save it again in a moment to send it for review.",
+      "meta_template_failed": "Meta turned the template down without saying why. Review it in WhatsApp Manager, where the reason is spelled out.",
+      "cloud_rejected": "erplora.com refused to register the template. It is saved here: try again, and contact support if it keeps happening.",
+      "cloud_unreachable": "This till could not reach erplora.com. The template is saved here; check the internet connection and save it again to send it for review.",
+      "cloud_unreadable": "erplora.com answered something this till could not read. The template is saved here — try again in a moment.",
+      "hub_not_enrolled": "This till is not yet paired with erplora.com, so it cannot send templates to Meta. Contact support.",
+      "capability_denied": "WhatsApp Inbox is not allowed to send WhatsApp messages on this hub. Grant it in Settings → Permissions and save the template again."
+    }
   },
   "errors": {
     "whatsapp_inbox.conversation_not_found": "That conversation does not exist in this business.",
