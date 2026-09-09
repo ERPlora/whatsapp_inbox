@@ -106,6 +106,9 @@ def counting_selects(sql):
                 "table": (table.group(1) if table else "").lower(),
                 "predicates": predicates_of(where.group(1) if where else ""),
                 "body": body,
+                # What the count is weighed against. A guard whose comparison drifted off the
+                # allowance column still counts perfectly and never stops anything.
+                "compared_to": " ".join(text[end:end + 90].split()),
             }
         )
     return found
@@ -165,16 +168,28 @@ def the_counter():
     )
 
 
+def weighed_against_the_allowance(counter):
+    """True when this count is compared against the column the Cloud writes the allowance into."""
+    return bool(
+        re.match(
+            rf"\)?\s*(?:>=|>|<=|<|=)\s*[A-Za-z_][A-Za-z0-9_]*\.{ENFORCEMENT_COLUMN}\b",
+            counter["compared_to"],
+        )
+    )
+
+
 def the_ingest_guards():
-    """Every command SQL that compares a count against the Cloud's allowance column."""
-    guards = []
+    """Every command SQL count that is actually weighed against the Cloud's allowance column."""
+    guards, unweighed = [], []
     for path in sorted((MODULE_DIR / "commands").glob("*.sql")):
         text = strip_comments(path.read_text())
         if ENFORCEMENT_COLUMN not in text:
             continue
         for counter in counting_selects(text):
-            guards.append((path.name, counter))
-    return guards
+            (guards if weighed_against_the_allowance(counter) else unweighed).append(
+                (path.name, counter)
+            )
+    return guards, unweighed
 
 
 def catalog_metrics():
@@ -194,7 +209,14 @@ def check_every_guard_counts_what_the_counter_counts(counter):
     minute its channel stops, which is the failure whatsapp_inbox#131 already paid for once.
     """
     problems = []
-    guards = the_ingest_guards()
+    guards, unweighed = the_ingest_guards()
+    for name, stray in unweighed:
+        problems.append(
+            f"{name}: this command counts `COUNT({stray['counted']})` over `{stray['table']}` but "
+            f"weighs it against `{stray['compared_to'][:40].strip()}` instead of "
+            f"`{ENFORCEMENT_COLUMN}` — it would count the month perfectly and never stop anything, "
+            "so the allowance is sold and never applied"
+        )
     if not guards:
         return [
             f"no command compares a count against `{ENFORCEMENT_COLUMN}`: nothing enforces the "
@@ -285,7 +307,7 @@ def main():
     unit = UNIT_OF_SHAPE[shape_of(counter)]
     print(
         f"OK: one unit end to end — the catalog sells `{usage_block()['metric']}`, the counter "
-        f"and {len(the_ingest_guards())} ingest guard(s) all count {unit}s the same way"
+        f"and {len(the_ingest_guards()[0])} ingest guard(s) all count {unit}s the same way"
     )
     return 0
 
