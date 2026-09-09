@@ -26,6 +26,19 @@ const puerta: Record<string, unknown>[] = [];
 /** What the door answers. A test that wants a refusal replaces it with one that throws. */
 let respondePuerta: (t: Record<string, unknown>) => Promise<Record<string, unknown>>;
 
+/** Every READ of the door, one entry per call (whatsapp_inbox#134). Kept apart from `pasos` on
+ *  purpose: `pasos` pins the ORDER of the save (text first, Meta after) and the refresh is a
+ *  different flow — folding it in would make every save test depend on when the tab syncs. */
+const listados: number[] = [];
+
+/** What the door answers when it is READ. A test that wants a refusal replaces it with a thrower. */
+let respondeListado: () => Promise<Record<string, unknown>>;
+
+/** Every template row this hub holds, as `queries/templates_list.sql` PROJECTS them: `meta_status`
+ *  already lowercased (or `not_sent` when there is no `meta_template_id`) and `meta_rejected_reason`
+ *  never null. The refresh reads them all, not just the page on screen. */
+let filas: Record<string, unknown>[];
+
 /** The id the runtime hands back for the row a declarative create just inserted
  *  (`hub: crates/runtime/src/commands.rs` → `{ok, new_ids:[…]}`, and `command()` resolves with
  *  `data`). Without it the panel cannot tell `record_meta_answer` WHICH row Meta answered about. */
@@ -39,10 +52,16 @@ beforeEach(() => {
   comandos.length = 0;
   pasos.length = 0;
   puerta.length = 0;
+  listados.length = 0;
   respondePuerta = async () => ({ status: 'PENDING', meta_id: '77', rejected_reason: '' });
+  // Meta holding NOTHING is the quiet default: a tab that syncs against an empty answer writes
+  // nothing, so every battery written before whatsapp_inbox#134 goes on measuring what it measured.
+  respondeListado = async () => ({ templates: [], stale: false });
+  filas = [PLANTILLA];
   (globalThis as Record<string, unknown>).erplora = {
     query: async () => [],
-    queryPage: async () => ({ rows: [PLANTILLA], total: 1 }),
+    queryPage: async () => ({ rows: filas, total: filas.length }),
+    queryAll: async () => filas,
     command: async (name: string, payload: Record<string, unknown>) => {
       comandos.push({ name, payload });
       pasos.push(name);
@@ -54,6 +73,10 @@ beforeEach(() => {
           puerta.push(t);
           pasos.push('door.register');
           return respondePuerta(t);
+        },
+        list: async () => {
+          listados.push(listados.length + 1);
+          return respondeListado();
         },
       },
     }),
@@ -72,8 +95,14 @@ async function montar() {
   const el = document.createElement('erp-whatsapp-inbox-templates');
   document.body.appendChild(el);
   await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
-  await new Promise((r) => setTimeout(r, 0));
-  await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+  // Mounting is a CHAIN of awaits, not one: the local list first, then Meta's verdicts, then a
+  // write per row that moved, then the reload. Three turns of the loop is what it takes to land on
+  // the other side of it — with one, `listados` reads empty and a green test would mean «nobody
+  // asked Meta yet», not «nobody asks Meta».
+  for (let i = 0; i < 3; i += 1) {
+    await new Promise((r) => setTimeout(r, 0));
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+  }
   return el as HTMLElement & { shadowRoot: ShadowRoot };
 }
 
@@ -84,6 +113,7 @@ type Tabla = HTMLElement & {
   open: (p?: string) => void;
   close: () => void;
   rowClickable: boolean;
+  rows: Record<string, unknown>[];
 };
 const tabla = (el: HTMLElement & { shadowRoot: ShadowRoot }) =>
   el.shadowRoot.querySelector('ok-data-table') as Tabla | null;
@@ -555,5 +585,311 @@ describe('el panel dice POR QUÉ la rechazó Meta (whatsapp_inbox#87)', () => {
       el.shadowRoot.querySelector('form[slot="create"] .meta')?.textContent,
       'la plantilla aprobada enseña el motivo de rechazo de la anterior',
     ).not.toContain('INVALID_FORMAT');
+  });
+});
+
+describe('al ABRIR la pestaña, el veredicto de Meta se pone al día (whatsapp_inbox#134)', () => {
+  /** Una plantilla que este hub mandó a Meta y que, para este hub, sigue en revisión. Es la fila
+   *  del síntoma: Meta contesta en minutos y la pantalla se quedaba con el veredicto del alta. */
+  const EN_REVISION = {
+    id: 't1',
+    name: 'recordatorio_cita',
+    language: 'es',
+    category: 'UTILITY',
+    header: '',
+    body: 'Te esperamos el {{1}}',
+    footer: '',
+    variables: '[]',
+    meta_template_id: '77',
+    meta_status: 'pending',
+    meta_rejected_reason: '',
+    is_active: 1,
+  };
+
+  const veredicto = () => comandos.filter((c) => c.name === 'whatsapp_inbox.templates.record_meta_answer');
+
+  it('Meta la aprobó mientras la pestaña estaba cerrada: la fila se pone al día sola', async () => {
+    filas = [EN_REVISION];
+    respondeListado = async () => ({
+      templates: [{ name: 'recordatorio_cita', language: 'es', status: 'APPROVED', meta_id: '77' }],
+      stale: false,
+    });
+
+    await montar();
+
+    expect(listados, 'la pestaña no le pregunta a Meta al abrirse').toHaveLength(1);
+    const [escrito] = veredicto();
+    expect(escrito, 'Meta contestó APPROVED y la fila se queda «En revisión» para siempre').toBeTruthy();
+    expect(escrito.payload).toMatchObject({
+      template_id: 't1',
+      meta_template_id: '77',
+      meta_status: 'APPROVED',
+      meta_rejected_reason: '',
+    });
+  });
+
+  it('el veredicto viaja con los SIETE campos revisados: sin ellos el comando no escribe', async () => {
+    filas = [EN_REVISION];
+    respondeListado = async () => ({
+      templates: [{ name: 'recordatorio_cita', language: 'es', status: 'APPROVED', meta_id: '77' }],
+      stale: false,
+    });
+
+    await montar();
+
+    // `commands/template_record_meta_answer.sql` compara los siete en el WHERE: es la guarda de
+    // carrera que impide pegarle a la fila el veredicto de un texto que ya cambió.
+    expect(veredicto()[0]?.payload).toMatchObject({
+      name: 'recordatorio_cita',
+      language: 'es',
+      category: 'UTILITY',
+      header: '',
+      body: 'Te esperamos el {{1}}',
+      footer: '',
+      variables: '[]',
+    });
+  });
+
+  it('un rechazo trae el motivo de Meta, que es lo que dice qué arreglar', async () => {
+    filas = [EN_REVISION];
+    respondeListado = async () => ({
+      templates: [
+        {
+          name: 'recordatorio_cita',
+          language: 'es',
+          status: 'REJECTED',
+          meta_id: '77',
+          rejected_reason: 'INVALID_FORMAT',
+        },
+      ],
+      stale: false,
+    });
+
+    await montar();
+
+    expect(veredicto()[0]?.payload).toMatchObject({
+      meta_status: 'REJECTED',
+      meta_rejected_reason: 'INVALID_FORMAT',
+    });
+  });
+
+  it('una plantilla que Meta no ha visto nunca deja de mentir en cuanto Meta la reconoce', async () => {
+    // El alta registró en Meta pero la escritura de vuelta se perdió (la caja se quedó sin red
+    // justo ahí): la fila dice `not_sent` sobre una plantilla que Meta SÍ tiene.
+    filas = [{ ...EN_REVISION, meta_template_id: '', meta_status: 'not_sent' }];
+    respondeListado = async () => ({
+      templates: [{ name: 'recordatorio_cita', language: 'es', status: 'APPROVED', meta_id: '99' }],
+      stale: false,
+    });
+
+    await montar();
+
+    expect(veredicto()[0]?.payload).toMatchObject({ meta_template_id: '99', meta_status: 'APPROVED' });
+  });
+
+  it('una respuesta sin id NO borra el que este hub ya conoce', async () => {
+    // Sin esa cautela la fila volvería a `not_sent` y escondería una plantilla que Meta SÍ tiene:
+    // el dueño dejaría de poder enviarla fuera de la ventana de 24 h sin que nada se lo dijera.
+    filas = [EN_REVISION];
+    respondeListado = async () => ({
+      templates: [{ name: 'recordatorio_cita', language: 'es', status: 'APPROVED' }],
+      stale: false,
+    });
+
+    await montar();
+
+    expect(veredicto()[0]?.payload).toMatchObject({ meta_template_id: '77', meta_status: 'APPROVED' });
+  });
+
+  it('se ponen al día TODAS las plantillas, no solo las de la página que se ve', async () => {
+    // La lista pagina en el servidor. Poner al día solo lo visible dejaría el mismo bug una página
+    // más allá, que es justo donde nadie va a mirar.
+    const SEGUNDA = { ...EN_REVISION, id: 't2', name: 'aviso_cierre', meta_template_id: '78' };
+    filas = [EN_REVISION, SEGUNDA];
+    (globalThis as Record<string, unknown>).erplora = {
+      ...((globalThis as Record<string, unknown>).erplora as Record<string, unknown>),
+      queryPage: async () => ({ rows: [EN_REVISION], total: 2 }), // página de UNA fila
+    };
+    respondeListado = async () => ({
+      templates: [
+        { name: 'recordatorio_cita', language: 'es', status: 'APPROVED', meta_id: '77' },
+        { name: 'aviso_cierre', language: 'es', status: 'REJECTED', meta_id: '78', rejected_reason: 'INVALID_FORMAT' },
+      ],
+      stale: false,
+    });
+
+    await montar();
+
+    expect(
+      veredicto().map((c) => c.payload.template_id).sort(),
+      'la plantilla que no cabía en la página se queda «En revisión» para siempre',
+    ).toEqual(['t1', 't2']);
+  });
+
+  it('lo que NO ha cambiado no se reescribe', async () => {
+    filas = [EN_REVISION];
+    respondeListado = async () => ({
+      templates: [{ name: 'recordatorio_cita', language: 'es', status: 'PENDING', meta_id: '77' }],
+      stale: false,
+    });
+
+    await montar();
+
+    expect(veredicto(), 'se reescribe una fila que decía exactamente lo mismo').toHaveLength(0);
+  });
+
+  it('una plantilla que la puerta ya no menciona se deja como está', async () => {
+    // Borrada desde WhatsApp Manager. Marcarla pide vocabulario que Meta no da (ausencia no es un
+    // veredicto) y va en su propia issue (whatsapp_inbox#140): aquí lo que NO se hace es
+    // inventarle un estado.
+    filas = [EN_REVISION];
+    respondeListado = async () => ({
+      templates: [{ name: 'otra_distinta', language: 'es', status: 'APPROVED', meta_id: '5' }],
+      stale: false,
+    });
+
+    await montar();
+
+    expect(veredicto(), 'se le inventó un veredicto a una plantilla de la que Meta no dijo nada').toHaveLength(0);
+  });
+
+  it('la misma plantilla en OTRO idioma es otra plantilla para Meta', async () => {
+    // Meta identifica una plantilla por nombre + idioma. Casar solo por nombre le pegaría a la
+    // versión española el veredicto de la inglesa, que Meta revisa por separado.
+    filas = [EN_REVISION];
+    respondeListado = async () => ({
+      templates: [{ name: 'recordatorio_cita', language: 'en', status: 'REJECTED', meta_id: '88' }],
+      stale: false,
+    });
+
+    await montar();
+
+    expect(veredicto(), 'el veredicto del idioma inglés aterrizó en la fila española').toHaveLength(0);
+  });
+
+  it('una respuesta sin veredicto no se escribe', async () => {
+    filas = [EN_REVISION];
+    respondeListado = async () => ({
+      templates: [{ name: 'recordatorio_cita', language: 'es', status: '', meta_id: '77' }],
+      stale: false,
+    });
+
+    await montar();
+
+    expect(veredicto(), 'se escribió un estado vacío, que el esquema del comando ni acepta').toHaveLength(0);
+  });
+
+  it('si la puerta falla, la lista se sigue viendo y el aviso se pinta', async () => {
+    filas = [EN_REVISION];
+    respondeListado = async () => {
+      throw refusal('capability_denied');
+    };
+
+    const el = await montar();
+
+    expect(tabla(el)?.rows ?? [], 'un fallo al sincronizar se llevó por delante la lista').toHaveLength(1);
+    expect(
+      (el as unknown as { metaSyncNotice: string }).metaSyncNotice,
+      'la sincronización falló en silencio: el dueño cree que está viendo lo de ahora',
+    ).toBeTruthy();
+    expect(el.shadowRoot.textContent, 'el aviso no llega a pintarse').toContain('ui.metaSyncUnavailable');
+  });
+
+  // La otra mitad del fallo mudo, y la que NO tenía guardia (revisión de la PR #141): la puerta
+  // contestó — Meta SÍ dijo algo — y es este hub el que no ha podido guardarlo. Sin aviso, la fila
+  // se queda leyendo «En revisión» y la dueña la lee como el veredicto de hoy, que es exactamente
+  // el defecto de #134 con otro disfraz. Borrar la línea del `catch` dejaba la batería en verde.
+  it('Meta contestó y es el hub el que no pudo guardarlo: eso tampoco se calla', async () => {
+    filas = [EN_REVISION];
+    respondeListado = async () => ({
+      templates: [{ name: 'recordatorio_cita', language: 'es', status: 'APPROVED', meta_id: '77' }],
+      stale: false,
+    });
+    const base = (globalThis as Record<string, unknown>).erplora as Record<string, unknown>;
+    const comandoBase = base.command as (n: string, p: Record<string, unknown>) => Promise<unknown>;
+    (globalThis as Record<string, unknown>).erplora = {
+      ...base,
+      command: async (name: string, payload: Record<string, unknown>) => {
+        if (name === 'whatsapp_inbox.templates.record_meta_answer') {
+          throw refusal('db_write_failed', 'la base de datos no aceptó la escritura');
+        }
+        return comandoBase(name, payload);
+      },
+    };
+
+    const el = await montar();
+
+    expect(
+      tabla(el)?.rows ?? [],
+      'un veredicto que no se pudo guardar se llevó por delante la lista',
+    ).toHaveLength(1);
+    expect(
+      (el as unknown as { metaSyncNotice: string }).metaSyncNotice,
+      'el hub no pudo guardar lo que Meta contestó y no lo dice: la fila sigue diciendo «En revisión» y nadie sabe que miente',
+    ).toBeTruthy();
+    expect(
+      el.shadowRoot.textContent,
+      'lo que dijo el servidor no llega a la pantalla',
+    ).toContain('la base de datos no aceptó la escritura');
+  });
+
+  it('cuando el SaaS contesta de memoria (`stale`) se dice que puede haber cambiado', async () => {
+    filas = [EN_REVISION];
+    respondeListado = async () => ({
+      templates: [{ name: 'recordatorio_cita', language: 'es', status: 'APPROVED', meta_id: '77' }],
+      stale: true,
+    });
+
+    const el = await montar();
+
+    // Lo guardado es lo último que se supo: se escribe igual, pero no se presenta como el ahora.
+    expect(veredicto(), 'lo último que se supo tampoco se guardó').toHaveLength(1);
+    expect(
+      (el as unknown as { metaSyncNotice: string }).metaSyncNotice,
+      'se presenta como veredicto de ahora algo que el SaaS sacó de su memoria',
+    ).toBeTruthy();
+  });
+
+  it('la pestaña se lee UNA vez por apertura: esa puerta no tiene freno', async () => {
+    filas = [EN_REVISION];
+    respondeListado = async () => ({
+      templates: [{ name: 'recordatorio_cita', language: 'es', status: 'APPROVED', meta_id: '77' }],
+      stale: false,
+    });
+
+    const el = await montar();
+    // Una recarga de la lista (la que provoca el propio veredicto escrito) NO puede volver a
+    // llamar a Meta: cada lectura refresca contra Meta y no lleva throttle (saas#1905).
+    await (el as unknown as { ctrl: { load(): Promise<void> } }).ctrl.load();
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(listados, 'la pestaña sondea a Meta en vez de leerla al abrirse').toHaveLength(1);
+  });
+
+  it('el veredicto escrito se ve: la lista se recarga después de ponerla al día', async () => {
+    filas = [EN_REVISION];
+    respondeListado = async () => ({
+      templates: [{ name: 'recordatorio_cita', language: 'es', status: 'APPROVED', meta_id: '77' }],
+      stale: false,
+    });
+    let paginas = 0;
+    (globalThis as Record<string, unknown>).erplora = {
+      ...((globalThis as Record<string, unknown>).erplora as Record<string, unknown>),
+      queryPage: async () => {
+        paginas += 1;
+        // La segunda lectura ya trae lo que se acaba de escribir, como haría la base de datos.
+        return paginas > 1
+          ? { rows: [{ ...EN_REVISION, meta_status: 'approved' }], total: 1 }
+          : { rows: filas, total: filas.length };
+      },
+    };
+
+    const el = await montar();
+
+    expect(paginas, 'se escribió el veredicto y nadie volvió a leer la lista').toBeGreaterThan(1);
+    expect(
+      (tabla(el)?.rows as Record<string, unknown>[] | undefined)?.[0]?.meta_status,
+      'la fila de la pantalla sigue con el veredicto viejo',
+    ).toBe('approved');
   });
 });

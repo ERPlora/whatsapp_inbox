@@ -156,6 +156,7 @@
     "doorRefusalUnknown": "The template could not be registered with Meta, and the reason is one this screen does not know yet ({code}). It is saved here: look that code up in WhatsApp Manager or send it to support.",
     "doorRefusalNoCode": "The template could not be registered with Meta. It is saved here: try saving it again in a moment.",
     "metaRejectedReason": "Meta's reason: {reason}",
+    "metaSyncUnavailable": "We could not check with Meta for new verdicts, so what you see is the last we know. Open this tab again in a while.",
     "doorRefusal": {
       "invalid_name": "Meta did not accept the name. Use lowercase letters, numbers and underscores only — no spaces or accents — and try again.",
       "invalid_category": "Meta did not accept the category. Pick Utility, Marketing or Authentication and send it again.",
