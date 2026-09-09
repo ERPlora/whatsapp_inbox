@@ -522,6 +522,29 @@ describe('el panel dice POR QUÉ la rechazó Meta (whatsapp_inbox#87)', () => {
     ).not.toContain('ui.metaRejectedReason');
   });
 
+  // Medido con un mutante (whatsapp_inbox#87): borrar `this.editingMetaReason = ''` de
+  // `resetForm()` dejaba la suite ENTERA en verde. La razón es que el bloque `.meta` solo se pinta
+  // cuando hay veredicto (`editingMeta`), y `resetForm()` también lo anula — así que el motivo
+  // rancio quedaba invisible por culpa de OTRO campo, no por estar limpio. Eso no es una guarda:
+  // el día que el motivo se pinte fuera de ese `if` —o que el veredicto se rellene por otra vía—
+  // el panel de ALTA enseñaría el rechazo de la plantilla anterior, que es exactamente appointments#42
+  // otra vez. Así que se afirma sobre el ESTADO, no sobre lo pintado.
+  it('el «+» limpia el motivo del rechazo, no solo deja de pintarlo', async () => {
+    const el = await abrir(rechazada);
+    expect((el as unknown as { editingMetaReason: string }).editingMetaReason).toBe('INVALID_FORMAT');
+
+    const t = tabla(el)!;
+    t.dispatchEvent(new CustomEvent('primaryAction', { detail: {}, bubbles: true, composed: true }));
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    await new Promise((r) => setTimeout(r, 0));
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+
+    expect(
+      (el as unknown as { editingMetaReason: string }).editingMetaReason,
+      'el panel de ALTA sigue cargando el motivo de rechazo de la plantilla anterior',
+    ).toBe('');
+  });
+
   it('el motivo de una plantilla NO se queda pegado a la siguiente que se abre', async () => {
     const el = await abrir(rechazada);
     (el as unknown as { startEdit: (r: Record<string, unknown>) => void }).startEdit({

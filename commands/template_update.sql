@@ -2,13 +2,15 @@
 -- Runtime inyecta :hub_id, :current_user_id, :now. Edición selectiva de campos opcionales
 -- vía COALESCE-like: el SDK pasa todos los campos (los no editados con su valor actual).
 --
--- An edit does NOT reach Meta (whatsapp_inbox#87). The runtime door landed with ERPlora/hub#1610
--- (v1.1.18) and the module-sdk surface with ERPlora/hub#1682, but nothing a module can call reaches
--- Meta yet: the three routes hand the SaaS's answer back untouched, with no `{ok, data}` envelope,
--- and the SDK unwraps every answer as one — so a `200` arrives at the module as a throw. So saving
--- rewrites this hub's row and NOTHING leaves the hub.
+-- An edit DOES reach Meta since whatsapp_inbox#87: the screen registers the new text through the
+-- runtime's door right after this write lands, and `commands/template_record_meta_answer.sql` puts
+-- Meta's answer back on the row. This statement is still the FIRST half and stays deliberately
+-- offline — the shop's text is saved before a third party across the internet is asked about it,
+-- so a Meta that does not answer costs a notice and never the owner's work.
 --
--- That is why the id Meta handed back is dropped when the TEXT changes. `meta_template_id` is the
+-- Which is why this write still resets the verdict rather than waiting for one: between it and
+-- Meta's answer the row must claim nothing it has not earned. The id Meta handed back is dropped
+-- when the TEXT changes for the same reason. `meta_template_id` is the
 -- proof that Meta has seen a text, and `queries/templates_list.sql` reads the pair (id + status) to
 -- decide what the tab says. Keeping the id while putting the status back to 'pending' made the tab
 -- report «En revisión» — «wait up to 24 h» (`ui.metaActionPending`) — about a text Meta never
