@@ -694,12 +694,16 @@ describe('step 3 · the restaurant decides about ITS OWN tables, never about the
     ).toEqual([{ name: 'reservations.settings.set_auto_confirm', payload: { auto_confirm: true } }]);
   });
 
-  // The salon's row says «confirm by itself» OUT LOUD here, and the restaurant has none. Both
-  // empty would let a screen that read the WRONG neighbour still land on the right answer by
-  // falling back twice — the crossed read would pass unseen. Measured: with the read crossed, this
-  // paints «auto» over a restaurant that is holding every table.
+  // What this one pins is that the two cards fall back to OPPOSITE defaults on the same screen —
+  // Appointments creates its column ON and Reservations creates its OFF — which is the reading that
+  // would lie in silence if the second card had been written by copying the first.
+  //
+  // It does NOT catch a crossed READ, and it cannot: measured, a card reading the neighbour's row
+  // finds no `auto_confirm` in it and falls back to its own default anyway, landing on the right
+  // answer for the wrong reason. The test below it is the one that catches that — it asks for a
+  // SAVED value that differs from the default, which a crossed read cannot produce.
   it('reads its own policy too: an unconfigured restaurant is REVIEWING, the salon is not', async () => {
-    mountWith({ built: bothRunning, reservationsSettings: [], appointmentsSettings: [{ auto_confirm_online: true }] });
+    mountWith({ built: bothRunning, reservationsSettings: [], appointmentsSettings: [] });
     const el = await mount();
     expect(
       (pick(el, `policy-${RESERVATIONS.family}`) as unknown as { value: string }).value,
