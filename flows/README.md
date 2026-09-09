@@ -425,6 +425,74 @@ reserva de otro cambiada por un desconocido.
 entre un mensaje y el siguiente, y no hay dónde (whatsapp_inbox#76). Por eso el prompt pide el día,
 la hora **y cuántos sois** en palabras, con un ejemplo.
 
+## `appointment-confirmed-to-whatsapp` — cuando el salón confirma, la clienta se entera
+
+whatsapp_inbox#125. Con «las reviso yo antes», la receta de arriba apunta la cita como pendiente y
+le contesta a la clienta que el salón se la confirma en breve. La dueña la ve en la Agenda, pulsa
+**Confirmar**… y a la clienta no le llega nada: se queda esperando un mensaje que no existía. Esta
+familia es ese mensaje, y nada más.
+
+**No es una automatización que la dueña elija**, y por eso no tiene tarjeta propia: es la otra mitad
+de la frase que ya aceptó, así que la tarjeta de Ajustes la enciende y la apaga **junto con**
+`appointment-from-whatsapp` (`companions`, en `ui/lib/whatsapp-uses.ts`). Un segundo interruptor
+solo serviría para dejarla apagada sin haberlo decidido — que es exactamente el silencio de la
+issue.
+
+⚠️ **Esto no contradice la regla «una sola» de más abajo**: aquella es para familias que comparten
+DISPARADOR — las dos de reservar arrancan con `hub.whatsapp.message_received`, y dos encendidas a la
+vez atenderían el mismo mensaje dos veces. Esta arranca con `appointments.appointment.confirmed`,
+que no escucha ninguna otra: no hay con quién duplicarse.
+
+Cinco pasos en línea recta:
+
+1. **`read_appointment`** — `appointments.appointments.get`. El evento solo trae `appointment_id`,
+   así que el teléfono, el servicio y la profesional salen de la cita, no del evento.
+2. **`has_a_phone`** — `neq: ""` sobre `customer_phone`. 🔴 Va **antes** de buscar la conversación, y
+   no es cosmético: `conversations.list` filtra `contact_phone` con `op: like`, así que un teléfono
+   vacío viaja como `%%` y casa con **TODAS** las conversaciones del hub — la confirmación de una
+   clienta acabaría en el móvil de otra. Poner la guarda delante es lo que impide que ese `%%` se
+   llegue a emitir.
+3. **`reachable_on_whatsapp`** — la conversación de ese teléfono, si la hay.
+4. **`has_a_thread`** — `found`. Sin hilo no hay a quién escribir: el run para ahí y deja el motivo
+   en su historial, que no es lo mismo que callarse.
+5. **`tell_the_customer`** — `notify` por `whatsapp` al `contact_phone` de esa conversación.
+
+### Por qué no se filtra a las citas que «vinieron por WhatsApp»
+
+Porque la fila de la cita no guarda su origen, y el paso 4 ya acota lo suficiente: **solo escribe a
+quien tiene conversación de WhatsApp abierta con el negocio**. Una clienta que pidió por teléfono y
+además escribe por WhatsApp recibirá también su confirmación, y eso es lo que se quiere.
+
+Lo que **no** se hace es gatear por `booked_online`, aunque la lectura lo traiga: el SELECT de Citas
+lo devuelve como `booked_online <> 0 AS booked_online` (appointments#79), que en Postgres es un
+booleano de verdad y en SQLite un `1`/`0`. `eq`/`neq` son **estrictos**, así que la misma receta
+dejaría de disparar en uno de los dos dialectos — y fallaría callando, que es el fallo que esta
+familia viene a arreglar.
+
+### Por qué el mensaje no dice el día y la hora
+
+Porque el lenguaje de mapeo no tiene reloj ni formateo, y `start_datetime` es ISO: escribirlo tal
+cual le mandaría a la clienta un `2026-09-12T10:30:00`. El mensaje nombra el **servicio** y la
+**profesional**, y aterriza en el mismo hilo en el que la automatización ya dijo el día y la hora
+cuando apuntó la cita. Que la agenda dé día y hora legibles es **ERPlora/appointments#151**; cuando
+esté, la frase los lleva.
+
+### Por qué el suelo es `appointments >= 1.1.25` y no el 1.1.73 de la familia de arriba
+
+Porque esta receta pide dos cosas y solo dos, y ninguna es de las que subieron aquel suelo (mover y
+anular). El número lo fija el **evento**: `appointments.appointments.confirm` lo emite desde el
+primer commit del módulo, pero Citas no lo **declara** en `events.emits` hasta 1.1.25
+(appointments#40) — y lo que un vecino puede consumir es lo declarado, no lo que ocurre de rebote.
+La lectura (`customer_phone`, `service_name`, `staff_name`) está en el SELECT desde v1.1.6, así que
+esa mitad no sube nada. Detalle medido en `appointment-confirmed-to-whatsapp.requires.json`.
+
+🔴 **Ese suelo por debajo del de la tarjeta es una condición, no una casualidad.**
+`flow_template_floor_is_met` (hub#1611) decide **por familia** si una receta se ofrece, así que una
+acompañante que pidiera un vecino más nuevo que su tarjeta sería rechazada justo en los hubs que sí
+aceptan la tarjeta: «Activo» en pantalla y la clienta esperando. Lo fija un test —
+`ui/lib/whatsapp-uses.test.ts`, «a companion never demands a NEWER neighbour than the card that
+carries it» — leyendo los dos `requires.json`.
+
 ## Cómo se instala HOY (y por qué no se instala solo)
 
 ⚠️ **Esta carpeta NO viaja en el zip del módulo.** El empaquetador incluye una lista cerrada
@@ -441,9 +509,11 @@ Así que hoy la plantilla se instala **por la misma puerta que usa una persona**
 owner/admin:
 
 Sustituye `<familia>` por la del uso que toque: `appointment-from-whatsapp` para una cita,
-`reservation-from-whatsapp` para una mesa. **Una sola**: las dos disparan con el MISMO evento, así
-que dos instaladas a la vez arrancarían dos flujos con el mismo mensaje y el cliente acabaría con
-dos reservas. Si el negocio quiere revisar lo que entra, eso **no** se elige aquí: se apaga
+`reservation-from-whatsapp` para una mesa. **Una sola de las dos**: disparan con el MISMO evento,
+así que dos instaladas a la vez arrancarían dos flujos con el mismo mensaje y el cliente acabaría
+con dos reservas. La regla es entre familias que comparten **disparador**, no entre todas:
+`appointment-confirmed-to-whatsapp` arranca con un evento de la Agenda y va **con** la de citas, no
+en su lugar. Si el negocio quiere revisar lo que entra, eso **no** se elige aquí: se apaga
 «confirmar automáticamente» en Citas (o `auto_confirm` en Reservas) y la receta lo cuenta.
 
 ```bash
@@ -468,7 +538,8 @@ La vía declarativa para que un blueprint la reparta está propuesta en **ERPlor
   que enciende el poller que trae los mensajes (hub#664), y es lo que crea la conversación de la
   que sale el destinatario.
 - Los módulos que aportan las tools. Para la familia de **cita**: `customers`, `services`,
-  `appointments` (>= 1.1.73, ver `requires.json`) y `staff`. Para la de **mesa**: `customers` y
+  `appointments` (>= 1.1.73, ver `requires.json`) y `staff`. Para el **aviso al confirmar**, solo
+  `appointments` (>= 1.1.25, el suelo del evento declarado). Para la de **mesa**: `customers` y
   `reservations` (>= 1.1.72 no, **>= 3.0.19** — el suelo lo fija `blocked_dates.on_date`, que es la
   única lectura con la que la plantilla sabe que el restaurante cierra ese día; ver
   `reservation-from-whatsapp.requires.json`). El horario del negocio ya **no** se le pregunta a `schedules` desde el

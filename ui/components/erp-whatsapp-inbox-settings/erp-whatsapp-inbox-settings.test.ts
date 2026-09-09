@@ -57,6 +57,12 @@ interface Hub {
   noForModule?: boolean;
   /** What `activateTemplate` refuses with: the discard codes (`409`), `forbidden`, a dropped fetch. */
   activateError?: { code: string; message: string };
+  /**
+   * Narrows {@link Hub.activateError} to ONE family. Absent, every family refuses — the whole hub
+   * being unreachable. Naming a companion is the failure that only exists since a card carries
+   * more than one recipe: the half-done activation of whatsapp_inbox#125.
+   */
+  activateErrorFamily?: string;
   /** What the listing itself refuses with — the screen has to say it could not find out. */
   templatesError?: { code: string; message: string };
   /** What Appointments answers to `settings.get`. `[]` = a hub that never configured it. */
@@ -76,14 +82,16 @@ function mountWith(hub: Hub = {}) {
   const templates = async () => {
     kernel.push({ call: 'templates' });
     if (hub.templatesError) throw Object.assign(new Error(hub.templatesError.message), { code: hub.templatesError.code });
-    // The kernel serves this module its OWN families and nothing else (hub#1677).
-    return WHATSAPP_USES.map((use) => ({
+    // The kernel serves this module its OWN families and nothing else (hub#1677) — the companions
+    // a card carries included: they are recipes of this module too, so the listing answers for
+    // them, and what the card paints stays the answer of the hub and not of the write.
+    return WHATSAPP_USES.flatMap((use) => [use.family, ...use.companions]).map((family) => ({
       module: MODULE_ID,
-      family: use.family,
+      family,
       documents: {},
       grants: [],
       requires: {},
-      installed: built[use.family] ?? null,
+      installed: built[family] ?? null,
     }));
   };
 
@@ -127,7 +135,7 @@ function mountWith(hub: Hub = {}) {
       if (!hub.oldHub) {
         flows.activateTemplate = async (family: string) => {
           kernel.push({ call: 'activate', family, scopedTo: id });
-          if (hub.activateError) {
+          if (hub.activateError && (hub.activateErrorFamily ?? family) === family) {
             throw Object.assign(new Error(hub.activateError.message), { code: hub.activateError.code });
           }
           // What the hub really does: builds it (or finds it) and leaves it RUNNING.
@@ -257,8 +265,31 @@ describe('step 2 · one tap turns the recipe on, through the kernel and under th
     const el = await mount();
     await tap(el, `activate-${APPOINTMENTS.family}`);
     await tap(el, `confirm-activate-${APPOINTMENTS.family}`);
-    expect(kernel.filter((k) => k.call === 'activate')).toEqual([
+    expect(kernel.filter((k) => k.call === 'activate' && k.family === APPOINTMENTS.family)).toEqual([
       { call: 'activate', family: APPOINTMENTS.family, scopedTo: MODULE_ID },
+    ]);
+  });
+
+  /**
+   * whatsapp_inbox#125. The salon confirms in the diary and the customer hears nothing, because the
+   * notice is a SECOND recipe. One consent turns on everything the sentence promised: two switches
+   * for one promise is a way to leave half of it off without ever deciding to.
+   *
+   * The card's own recipe goes FIRST on purpose — the ordering is asserted, not incidental. If a
+   * companion were built first and the principal then failed, the hub would be running an
+   * automation that texts customers behind a card reading «Activar».
+   */
+  it('one consent turns on the notice too — the card is the whole promise, not half', async () => {
+    mountWith();
+    const el = await mount();
+    await tap(el, `activate-${APPOINTMENTS.family}`);
+    await tap(el, `confirm-activate-${APPOINTMENTS.family}`);
+    expect(
+      kernel.filter((k) => k.call === 'activate'),
+      'the customer is still waiting for the message the salon thinks it sent',
+    ).toEqual([
+      { call: 'activate', family: APPOINTMENTS.family, scopedTo: MODULE_ID },
+      ...APPOINTMENTS.companions.map((family) => ({ call: 'activate', family, scopedTo: MODULE_ID })),
     ]);
   });
 
@@ -309,11 +340,22 @@ describe('step 2 · one tap turns the recipe on, through the kernel and under th
     expect(pick(el, `activate-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.activate);
   });
 
-  it('«Desactivar» pauses it through the kernel, and the card follows', async () => {
-    mountWith({ built: { [APPOINTMENTS.family]: { flow_id: 'f1', enabled: true } } });
+  /**
+   * The mirror image, and the ordering is the whole point: the companions stop FIRST and the card's
+   * own recipe LAST. Turn the principal off first and, for as long as the rest takes, the hub is
+   * texting customers behind a card that already reads «Desactivada» — an automation running where
+   * the owner was told there is none.
+   */
+  it('«Desactivar» stops everything the card promised, its own recipe LAST', async () => {
+    mountWith({
+      built: Object.fromEntries(
+        [APPOINTMENTS.family, ...APPOINTMENTS.companions].map((f) => [f, { flow_id: `f-${f}`, enabled: true }]),
+      ),
+    });
     const el = await mount();
     await tap(el, `deactivate-${APPOINTMENTS.family}`);
     expect(kernel.filter((k) => k.call === 'deactivate')).toEqual([
+      ...[...APPOINTMENTS.companions].reverse().map((family) => ({ call: 'deactivate', family, scopedTo: MODULE_ID })),
       { call: 'deactivate', family: APPOINTMENTS.family, scopedTo: MODULE_ID },
     ]);
     expect(pick(el, `state-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.stateOff);
@@ -358,6 +400,33 @@ describe('a failure is read on the card, never swallowed', () => {
     await tap(el, `confirm-activate-${APPOINTMENTS.family}`);
     expect(text(el), 'the reason the kernel gave was thrown away').toContain('Este hub necesita Citas 1.2.0');
     expect(pick(el, `state-${APPOINTMENTS.family}`), 'claimed it is running after a refusal').toBeNull();
+  });
+
+  /**
+   * The failure that only exists since one card carries several recipes (whatsapp_inbox#125): the
+   * booking recipe is built and the notice is refused right after. Leaving it there would paint
+   * «Activo» over exactly the silence this issue is about — the customer waiting for a confirmation
+   * that never leaves — and the card offers no way to retry a half it does not know it is missing.
+   * So a half-done activation is undone, and what the card paints stays the hub's answer.
+   */
+  it('a companion that refuses leaves no half-promise reading «Activo»', async () => {
+    const companion = APPOINTMENTS.companions[0];
+    expect(companion, 'this card carries nothing, so the case below cannot happen').toBeTruthy();
+    mountWith({ activateError: { code: '', message: '' }, activateErrorFamily: companion });
+    const el = await mount();
+    await tap(el, `activate-${APPOINTMENTS.family}`);
+    await tap(el, `confirm-activate-${APPOINTMENTS.family}`);
+    expect(text(el), 'the failure was swallowed').toContain(esLocale.ui.errActivate);
+    expect(
+      kernel.filter((k) => k.call === 'deactivate').map((k) => k.family),
+      'left the booking recipe running while the notice it promises is not: the silence of #125, ' +
+        'now under a screen that says it is working',
+    ).toEqual([APPOINTMENTS.family]);
+    expect(
+      pick(el, `state-${APPOINTMENTS.family}`)?.textContent?.trim(),
+      'reads «Activo» over a promise only half installed',
+    ).not.toBe(esLocale.ui.stateOn);
+    expect(pick(el, `activate-${APPOINTMENTS.family}`), 'left her no way to try again').not.toBeNull();
   });
 
   it('a session that is not an admin is told who can do it', async () => {
@@ -580,7 +649,10 @@ describe('the advanced door is where it always was, and only if it exists', () =
     expect(pick(el, 'advanced-automations'), 'a door to a module that is not installed').toBeNull();
     await tap(el, `activate-${APPOINTMENTS.family}`);
     await tap(el, `confirm-activate-${APPOINTMENTS.family}`);
-    expect(kernel.filter((k) => k.call === 'activate').length, 'the one tap needs the flows MODULE now').toBe(1);
+    expect(
+      kernel.filter((k) => k.call === 'activate').map((k) => k.family),
+      'the one tap needs the flows MODULE now',
+    ).toEqual([APPOINTMENTS.family, ...APPOINTMENTS.companions]);
   });
 
   it('Meta templates live folded away, not as a tab of their own', async () => {

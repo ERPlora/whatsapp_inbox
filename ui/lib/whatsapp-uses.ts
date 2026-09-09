@@ -76,6 +76,24 @@ export interface WhatsAppUse {
    * `flow.template_not_found` and can never work.
    */
   family: string;
+  /**
+   * **The other recipes of this module that this ONE card turns on with it.**
+   *
+   * whatsapp_inbox#125: with «Las reviso yo antes», the customer books by WhatsApp and is told the
+   * salon will confirm shortly; the salon presses «Confirmar» in the diary and nothing reaches her,
+   * because the notice is a second recipe (`appointment-confirmed-to-whatsapp`). It is not a
+   * feature the owner picks — it is the other half of the sentence she already consented to — so it
+   * travels with the card instead of being a second switch she can leave off without deciding to.
+   *
+   * Two rules make carrying them safe, and `whatsapp-uses.test.ts` holds both: a companion is a
+   * family this module really ships, and its `requires.json` floor never sits ABOVE the card's.
+   * `flow_template_floor_is_met` (hub#1611) decides per FAMILY whether a recipe is offered at all,
+   * so a companion asking for a newer neighbour would be refused on hubs the card itself accepts —
+   * the same silence, now with a screen reading «Activo» over it.
+   *
+   * The card's identity, and the state it paints, stay the PRINCIPAL {@link WhatsAppUse.family}.
+   */
+  companions: readonly string[];
   /** The module that has to be installed for this use to mean anything. */
   module: string;
   /**
@@ -118,6 +136,10 @@ export interface WhatsAppUse {
 export const WHATSAPP_USES: readonly WhatsAppUse[] = [
   {
     family: 'appointment-from-whatsapp',
+    // The notice the salon's «Confirmar» owes the customer (whatsapp_inbox#125). Its floor is
+    // `appointments` 1.1.25, well under the 1.1.73 this card already demands, so no hub can accept
+    // the booking recipe and refuse this one.
+    companions: ['appointment-confirmed-to-whatsapp'],
     module: 'appointments',
     witness: 'appointments.settings.get',
     probe: (client) => client.queryOptional('appointments.settings.get'),
