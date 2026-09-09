@@ -32,7 +32,8 @@ import { APPS_PATH, AUTOMATIONS_PATH, MODULE_ID, WHATSAPP_USES } from '../../lib
 
 /** The use this hub can offer today. `#126` adds the restaurant one, and every test here reads the
  *  family off the lib rather than spelling it, so a rename cannot leave this file green. */
-const APPOINTMENTS = WHATSAPP_USES[0];
+const APPOINTMENTS = WHATSAPP_USES.find((u) => u.family === 'appointment-from-whatsapp')!;
+const RESERVATIONS = WHATSAPP_USES.find((u) => u.family === 'reservation-from-whatsapp')!;
 
 const queries: { name: string; params: unknown }[] = [];
 const commands: { name: string; payload: Record<string, unknown> }[] = [];
@@ -67,7 +68,9 @@ interface Hub {
   templatesError?: { code: string; message: string };
   /** What Appointments answers to `settings.get`. `[]` = a hub that never configured it. */
   appointmentsSettings?: Record<string, unknown>[];
-  /** Appointments refuses the narrow command: too old to publish it, or a denied permission. */
+  /** What Reservations answers to `settings.get`. `[]` = a restaurant that never configured it. */
+  reservationsSettings?: Record<string, unknown>[];
+  /** The diary refuses the narrow command: too old to publish it, or a denied permission. */
   policyError?: { code: string; message: string };
 }
 
@@ -102,6 +105,10 @@ function mountWith(hub: Hub = {}) {
         throw Object.assign(new Error('module_not_installed'), { code: 'module_not_installed' });
       }
       if (name === 'appointments.settings.get') return hub.appointmentsSettings ?? [{ auto_confirm_online: true }];
+      // Reservations keeps `auto_confirm` as the INTEGER 0/1 its `settings_get.sql` selects raw,
+      // and its migration creates it DEFAULT 0 — the opposite of the diary next door. Answering a
+      // boolean here would hide the reading the restaurant card actually gets.
+      if (name === 'reservations.settings.get') return hub.reservationsSettings ?? [{ auto_confirm: 0 }];
       return [];
     },
     command: async (name: string, payload: Record<string, unknown>) => {
@@ -174,6 +181,19 @@ async function settle(el: HTMLElement) {
 
 const pick = (el: HTMLElement & { shadowRoot: ShadowRoot }, testid: string) =>
   el.shadowRoot.querySelector<HTMLElement>(`[data-testid="${testid}"]`);
+
+/**
+ * The Spanish sentence behind a catalog key, resolved the way the screen resolves it.
+ *
+ * Assertions name the KEY the use declares instead of spelling `esLocale.ui.<something>`: with two
+ * cards the same idea has two sentences, and a test that hard-codes one of them is a test that
+ * silently stops covering the other.
+ */
+const sentence = (key: string): string => {
+  const text = (esLocale.ui as Record<string, string>)[key.split('.')[1]];
+  expect(text, `\`${key}\` is not in es.json, so this assertion would compare against undefined`).toBeTruthy();
+  return text;
+};
 
 /** A tap, the way the owner makes it: press, then let the screen finish reacting. */
 async function tap(el: HTMLElement & { shadowRoot: ShadowRoot }, testid: string) {
@@ -456,7 +476,7 @@ describe('a failure is read on the card, never swallowed', () => {
   });
 
   it('no booking module at all: it says which app to install, and how to get there', async () => {
-    mountWith({ absent: ['appointments', 'flows'] });
+    mountWith({ absent: ['appointments', 'reservations', 'flows'] });
     const el = await mount();
     expect(text(el)).toContain(esLocale.ui.usesNeedBookingModule);
     expect(pick(el, `activate-${APPOINTMENTS.family}`), 'offered a use whose module is not installed').toBeNull();
@@ -472,7 +492,7 @@ describe('a failure is read on the card, never swallowed', () => {
   // say the empty state. Without the second half the first half passes over a screen that offers a
   // button for a module this hub does not have.
   it('while it is still finding out it commits to nothing, and then it does answer', async () => {
-    mountWith({ absent: ['appointments', 'flows'] });
+    mountWith({ absent: ['appointments', 'reservations', 'flows'] });
     await import('./erp-whatsapp-inbox-settings');
     const el = document.createElement('erp-whatsapp-inbox-settings') as HTMLElement & { shadowRoot: ShadowRoot };
     document.body.appendChild(el);
@@ -560,13 +580,13 @@ describe('step 3 · «se confirman solas / las reviso yo» is a setting of the d
     mountWith({ built: running });
     const el = await mount();
     expect(text(el), 'explained the review flow to somebody who is not reviewing').not.toContain(
-      esLocale.ui.helpPolicyReview,
+      sentence(APPOINTMENTS.policy.reviewHelpKey),
     );
     pick(el, `policy-${APPOINTMENTS.family}`)!.dispatchEvent(
       new CustomEvent('ionChange', { detail: { value: 'review' } }),
     );
     await settle(el);
-    expect(text(el)).toContain(esLocale.ui.helpPolicyReview);
+    expect(text(el)).toContain(sentence(APPOINTMENTS.policy.reviewHelpKey));
   });
 
   it('a diary too old to publish the narrow command says so instead of failing mute', async () => {
@@ -576,7 +596,145 @@ describe('step 3 · «se confirman solas / las reviso yo» is a setting of the d
       new CustomEvent('ionChange', { detail: { value: 'review' } }),
     );
     await settle(el);
-    expect(text(el)).toContain(esLocale.ui.errPolicy);
+    expect(text(el)).toContain(sentence(APPOINTMENTS.policy.errorKey));
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// whatsapp_inbox#126 · the restaurant, on the same screen and with the same card
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+//
+// The complaint: a restaurant with Reservations connects its number and «¿Para qué lo usas?» offers
+// «Reservar citas», which is not what it does — while `reservation-from-whatsapp` had been shipped
+// in `flows/` all along. It is the SAME card: one tap, one sentence of consent, one decision.
+//
+// What only exists because there are two of them, and what these tests are really for: the second
+// card must read and write ITS OWN diary. Cross them and the restaurant's switch paints the salon's
+// policy and, when the owner flips it, saves into the salon's column — one hub, two businesses'
+// settings silently swapped, with both screens reading as if they had worked.
+describe('step 2 · a restaurant is offered «Reservar mesa», and it is the same one tap', () => {
+  it('offers the table card to a hub that has Reservations', async () => {
+    mountWith();
+    const el = await mount();
+    expect(
+      pick(el, `activate-${RESERVATIONS.family}`),
+      'a restaurant sees only «Reservar citas», which is not what it does',
+    ).not.toBeNull();
+    expect(text(el)).toContain(sentence(RESERVATIONS.nameKey));
+  });
+
+  it('does not offer it to a salon that has no Reservations', async () => {
+    mountWith({ absent: ['reservations'] });
+    const el = await mount();
+    expect(
+      pick(el, `activate-${RESERVATIONS.family}`),
+      'offered a use whose module is not installed: the tap would fail on press',
+    ).toBeNull();
+    expect(pick(el, `activate-${APPOINTMENTS.family}`), 'took the salon card down with it').not.toBeNull();
+  });
+
+  it('asks for consent in one sentence naming the consequence, and activates nothing yet', async () => {
+    mountWith();
+    const el = await mount();
+    await tap(el, `activate-${RESERVATIONS.family}`);
+    expect(text(el)).toContain(sentence(RESERVATIONS.consentKey));
+    expect(kernel.filter((k) => k.call === 'activate'), 'turned it on before she said yes').toEqual([]);
+  });
+
+  it('one confirmation builds THE TABLE recipe, scoped to this module, and nothing else', async () => {
+    mountWith();
+    const el = await mount();
+    await tap(el, `activate-${RESERVATIONS.family}`);
+    await tap(el, `confirm-activate-${RESERVATIONS.family}`);
+    expect(kernel.filter((k) => k.call === 'activate')).toEqual([
+      { call: 'activate', family: RESERVATIONS.family, scopedTo: MODULE_ID },
+    ]);
+    expect(pick(el, `state-${RESERVATIONS.family}`)!.textContent).toContain(esLocale.ui.stateOn);
+  });
+
+  it('the two cards are two switches: turning the table on leaves the diary off', async () => {
+    mountWith();
+    const el = await mount();
+    await tap(el, `activate-${RESERVATIONS.family}`);
+    await tap(el, `confirm-activate-${RESERVATIONS.family}`);
+    expect(pick(el, `state-${APPOINTMENTS.family}`), 'the salon card claims to be running too').toBeNull();
+    expect(pick(el, `activate-${APPOINTMENTS.family}`), 'left the salon no way to turn its own on').not.toBeNull();
+  });
+
+  it('and turning it off stops the table recipe, not the diary one', async () => {
+    mountWith({
+      built: {
+        [RESERVATIONS.family]: { flow_id: 'f-res', enabled: true },
+        [APPOINTMENTS.family]: { flow_id: 'f-cit', enabled: true },
+      },
+    });
+    const el = await mount();
+    await tap(el, `deactivate-${RESERVATIONS.family}`);
+    expect(kernel.filter((k) => k.call === 'deactivate').map((k) => k.family)).toEqual([RESERVATIONS.family]);
+    expect(pick(el, `state-${APPOINTMENTS.family}`)!.textContent).toContain(esLocale.ui.stateOn);
+  });
+});
+
+describe('step 3 · the restaurant decides about ITS OWN tables, never about the salon diary', () => {
+  const bothRunning = {
+    [RESERVATIONS.family]: { flow_id: 'f-res', enabled: true },
+    [APPOINTMENTS.family]: { flow_id: 'f-cit', enabled: true },
+  };
+
+  it('writes the NARROW command of Reservations, and not the one of Appointments', async () => {
+    mountWith({ built: bothRunning });
+    const el = await mount();
+    pick(el, `policy-${RESERVATIONS.family}`)!.dispatchEvent(
+      new CustomEvent('ionChange', { detail: { value: 'auto' } }),
+    );
+    await settle(el);
+    expect(
+      commands,
+      'the restaurant flipped its switch and the SALON stopped reviewing its appointments',
+    ).toEqual([{ name: 'reservations.settings.set_auto_confirm', payload: { auto_confirm: true } }]);
+  });
+
+  it('reads its own policy too: an unconfigured restaurant is REVIEWING, the salon is not', async () => {
+    mountWith({ built: bothRunning, reservationsSettings: [], appointmentsSettings: [] });
+    const el = await mount();
+    expect(
+      (pick(el, `policy-${RESERVATIONS.family}`) as unknown as { value: string }).value,
+      'told a restaurant its tables confirm themselves while Reservations holds every one of them ' +
+        '(`auto_confirm INTEGER NOT NULL DEFAULT 0`)',
+    ).toBe('review');
+    expect(
+      (pick(el, `policy-${APPOINTMENTS.family}`) as unknown as { value: string }).value,
+      'the salon default was dragged along with the restaurant one — they are opposite next door',
+    ).toBe('auto');
+  });
+
+  it('reads the 0/1 integer Reservations really serves, both ways', async () => {
+    mountWith({ built: bothRunning, reservationsSettings: [{ auto_confirm: 1 }] });
+    const el = await mount();
+    expect((pick(el, `policy-${RESERVATIONS.family}`) as unknown as { value: string }).value).toBe('auto');
+  });
+
+  it('the sentences it shows are about tables, not about a diary it does not have', async () => {
+    mountWith({ built: bothRunning, reservationsSettings: [] });
+    const el = await mount();
+    const shown = text(el);
+    expect(shown, 'the restaurant switch reads «Las citas se confirman solas»').toContain(
+      sentence(RESERVATIONS.policy.autoKey),
+    );
+    expect(shown, 'sent a bar to look for its tables in the Agenda').toContain(
+      sentence(RESERVATIONS.policy.reviewHelpKey),
+    );
+    expect(sentence(RESERVATIONS.policy.autoKey)).not.toBe(sentence(APPOINTMENTS.policy.autoKey));
+  });
+
+  it('a refused save blames the right thing, and says so instead of failing mute', async () => {
+    mountWith({ built: bothRunning, policyError: { code: 'not_found', message: 'no existe' } });
+    const el = await mount();
+    pick(el, `policy-${RESERVATIONS.family}`)!.dispatchEvent(
+      new CustomEvent('ionChange', { detail: { value: 'auto' } }),
+    );
+    await settle(el);
+    expect(text(el)).toContain(sentence(RESERVATIONS.policy.errorKey));
   });
 });
 
@@ -703,11 +861,18 @@ describe('every sentence of this screen ships in both languages, translated', ()
   const keys = [
     'stepNumber', 'stepUses', 'helpConnectScanQr', 'helpConnectNeedsNewerHub',
     'activate', 'notNow', 'turnOff', 'stateOn', 'stateOff',
-    'policyAuto', 'policyReview', 'helpPolicyReview',
     'advancedInAutomations', 'advancedMetaTemplates',
     'usesNeedsNewerHub', 'usesNeedBookingModule', 'usesGoToApps',
-    'activateForbidden', 'errActivate', 'errTemplates', 'errPolicy',
-    ...WHATSAPP_USES.flatMap((u) => [u.nameKey, u.summaryKey, u.consentKey, u.doneKey].map((k) => k.split('.')[1])),
+    'activateForbidden', 'errActivate', 'errTemplates',
+    // Derived, never listed: every sentence a card owns — its name, its summary, its consent, its
+    // «text your number» line AND the four words of its switch — comes off the use itself, so a
+    // card added later cannot ship half-translated by being forgotten in a list over here.
+    ...new Set(
+      WHATSAPP_USES.flatMap((u) => [
+        u.nameKey, u.summaryKey, u.consentKey, u.doneKey,
+        u.policy.autoKey, u.policy.reviewKey, u.policy.reviewHelpKey, u.policy.errorKey,
+      ]).map((k) => k.split('.')[1]),
+    ),
   ];
 
   it.each(keys)('`ui.%s` is written in English and translated into Spanish', (key) => {

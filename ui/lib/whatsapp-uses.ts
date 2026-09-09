@@ -61,6 +61,27 @@ export interface BookingPolicy {
   /** The field, in both the answer and the payload. */
   field: string;
   /**
+   * Asks {@link BookingPolicy.read}, and it is a thunk holding a LITERAL for the same two reasons
+   * {@link WhatsAppUse.probe} is (ADR-0127 reads SDK call literals out of the AST).
+   *
+   * **It belongs to the use and not to the screen, and that is the whatsapp_inbox#126 part.** While
+   * there was one card, a single top-level `queryOptional('appointments.settings.get')` was right
+   * by accident. With a second card the same shape reads the SALON's diary to paint the
+   * RESTAURANT's switch — and writes the salon's column when the restaurant flips it. Pinned by
+   * `whatsapp-uses.test.ts`, which iterates every use instead of only the first.
+   */
+  ask(client: WitnessAsker): Promise<unknown>;
+  /** Writes `{ [field]: on }` through {@link BookingPolicy.write}. Literal inside, same reason. */
+  set(client: PolicyWriter, on: boolean): Promise<unknown>;
+  /** «Las citas se confirman solas» — the words are the business's, so each card has its own. */
+  autoKey: string;
+  /** «Las reviso yo antes». The same sentence fits both diaries, so both cards point at it. */
+  reviewKey: string;
+  /** Where the ones waiting for her are: the Diary for a salon, the reservations list for a bar. */
+  reviewHelpKey: string;
+  /** What a refused change reads as. It names what did not get saved, so it cannot be shared. */
+  errorKey: string;
+  /**
    * What an EMPTY answer means — the module's own default, which is what a business that never
    * touched the setting is running. Getting this backwards paints a switch that lies on the first
    * visit of every hub that has not configured Appointments.
@@ -147,6 +168,13 @@ export const WHATSAPP_USES: readonly WhatsAppUse[] = [
       read: 'appointments.settings.get',
       write: 'appointments.settings.set_auto_confirm_online',
       field: 'auto_confirm_online',
+      ask: (client) => client.queryOptional('appointments.settings.get'),
+      set: (client, on) =>
+        client.commandOptional('appointments.settings.set_auto_confirm_online', { auto_confirm_online: on }),
+      autoKey: 'ui.useAppointmentsPolicyAuto',
+      reviewKey: 'ui.policyReview',
+      reviewHelpKey: 'ui.useAppointmentsPolicyReviewHelp',
+      errorKey: 'ui.useAppointmentsPolicyError',
       // Appointments creates the row with the column ON, and it is what the market does: Square,
       // Cal.com and SimplyBook all default to booking without review.
       defaultOn: true,
@@ -157,32 +185,67 @@ export const WHATSAPP_USES: readonly WhatsAppUse[] = [
     consentKey: 'ui.useAppointmentsConsent',
     doneKey: 'ui.useAppointmentsDone',
   },
+  {
+    // whatsapp_inbox#126: a restaurant with Reservations connected its number and was offered
+    // «Reservar citas», which is not what it does — while `reservation-from-whatsapp` had been
+    // shipped in `flows/` all along. Same card, same one tap, same one decision; the only thing
+    // that changes is whose diary it is.
+    family: 'reservation-from-whatsapp',
+    // Reservations ships no notice-on-confirm recipe — the half of the sentence #125 had to carry
+    // for the salon does not exist here — so this card promises exactly one thing and carries it.
+    companions: [],
+    module: 'reservations',
+    witness: 'reservations.settings.get',
+    probe: (client) => client.queryOptional('reservations.settings.get'),
+    policy: {
+      read: 'reservations.settings.get',
+      write: 'reservations.settings.set_auto_confirm',
+      field: 'auto_confirm',
+      ask: (client) => client.queryOptional('reservations.settings.get'),
+      set: (client, on) => client.commandOptional('reservations.settings.set_auto_confirm', { auto_confirm: on }),
+      autoKey: 'ui.useReservationsPolicyAuto',
+      reviewKey: 'ui.policyReview',
+      reviewHelpKey: 'ui.useReservationsPolicyReviewHelp',
+      errorKey: 'ui.useReservationsPolicyError',
+      // 🔴 The OPPOSITE of Appointments, and it is measured, not mirrored: Reservations creates the
+      // column `auto_confirm INTEGER NOT NULL DEFAULT 0` (`migrations/postgres/001_init.sql`), so a
+      // restaurant that never opened its settings is REVIEWING every table. Copying `true` from the
+      // card above would paint «se confirman solas» over a hub that holds every booking for the
+      // owner — and the guard at the end of `whatsapp-uses.test.ts` reads that DEFAULT off
+      // `origin/main` in both directions, so neither side can drift alone.
+      defaultOn: false,
+    },
+    icon: 'restaurant-outline',
+    nameKey: 'ui.useReservationsName',
+    summaryKey: 'ui.useReservationsSummary',
+    consentKey: 'ui.useReservationsConsent',
+    doneKey: 'ui.useReservationsDone',
+  },
 ];
 
 /**
- * Asks the policy of one use. Through `queryOptional`, so a hub without the booking module answers
+ * Asks the policy OF THAT USE. Through `queryOptional`, so a hub without the booking module answers
  * «could not find out» instead of throwing into a screen that is only deciding what to paint.
  *
- * The literal is inside the thunk for the reason spelt out on {@link WhatsAppUse.probe}: the
- * ADR-0127 extractor reads string literals out of the AST, and a name held in a variable is a name
- * `contracts.json` never learns about.
+ * It hands the question to {@link BookingPolicy.ask} rather than naming a query itself: with two
+ * cards on the screen, a name written here is a name that is wrong for one of them.
  */
-export const readBookingPolicy = (client: WitnessAsker, _use: WhatsAppUse): Promise<unknown> =>
-  client.queryOptional('appointments.settings.get');
+export const readBookingPolicy = (client: WitnessAsker, use: WhatsAppUse): Promise<unknown> =>
+  use.policy.ask(client);
 
 /**
  * Changes the policy of one use, and only that.
  *
- * The payload is a BOOLEAN because that is what `settings_set_auto_confirm_online.json` types, and
- * it refuses everything else with `additionalProperties: false` — the 0/1 integer the rest of this
- * module speaks would come back `invalid_payload` on every change.
+ * The payload is a BOOLEAN because that is what both narrow schemas type
+ * (`settings_set_auto_confirm_online.json`, `settings_set_auto_confirm.json`), and they refuse
+ * everything else with `additionalProperties: false` — the 0/1 integer the rest of this module
+ * speaks would come back `invalid_payload` on every change.
  */
 export const writeBookingPolicy = (
   client: PolicyWriter,
   use: WhatsAppUse,
   on: boolean,
-): Promise<unknown> =>
-  client.commandOptional('appointments.settings.set_auto_confirm_online', { [use.policy.field]: on });
+): Promise<unknown> => use.policy.set(client, on);
 
 /**
  * Reads the policy out of whatever the owning module answered, or the module's own default when it

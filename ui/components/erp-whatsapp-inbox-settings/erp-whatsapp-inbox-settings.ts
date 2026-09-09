@@ -52,10 +52,17 @@ const CATALOG: Record<string, unknown> = { es: esLocale, en: enLocale };
 // state, and does what it says through the same kernel door.
 //
 // **And the one decision does not live here.** «Bookings confirm themselves / I review them first»
-// is `auto_confirm_online` of Appointments (ADR-0470 §6): before the replan the same decision sat in
-// three places — two recipes, a dead `approval_mode` selector, and the diary's own column — so the
-// owner could set it and have it contradicted by the other two. This screen writes NOT ONE column of
-// `whatsapp_inbox`, which is why the Save button is gone with them.
+// is `auto_confirm_online` of Appointments and `auto_confirm` of Reservations (ADR-0470 §6): before
+// the replan the same decision sat in three places — two recipes, a dead `approval_mode` selector,
+// and the diary's own column — so the owner could set it and have it contradicted by the other two.
+// This screen writes NOT ONE column of `whatsapp_inbox`, which is why the Save button is gone with
+// them.
+//
+// **There is more than one card since whatsapp_inbox#126**, and every card is a business: a salon
+// books «citas» in its Agenda, a restaurant books «mesas» in Reservas. So the query it reads, the
+// command it writes and the four words of its switch all travel ON THE USE (`whatsapp-uses.ts`) and
+// never in this file — a name written here is a name that is wrong for one of them, and the way it
+// would be wrong is silent: the restaurant's switch painting and saving the salon's policy.
 //
 // ── A note on the consent panel, because the issue asked for `ion-alert` ─────────────────────────
 // It is an INLINE panel instead. `ion-alert`'s buttons travel as a JS property, so they exist
@@ -457,7 +464,14 @@ class ErpWhatsappInboxSettings extends LitElement {
     `;
   }
 
-  /** Step 3 — the one decision, and it is the diary's. Only once there is something taking bookings. */
+  /**
+   * Step 3 — the one decision, and it is the diary's. Only once there is something taking bookings.
+   *
+   * **Every sentence here comes off the use, not off this method** (whatsapp_inbox#126). A salon
+   * reviews «citas» in the Agenda and a restaurant reviews «reservas» in Reservas: with the strings
+   * pinned in the markup, the second card told a bar its TABLES waited in a diary it does not have,
+   * and blamed a failed save on appointments it never takes.
+   */
   private renderPolicy(use: WhatsAppUse) {
     const auto = this.policy[use.family] ?? use.policy.defaultOn;
     return html`
@@ -466,12 +480,12 @@ class ErpWhatsappInboxSettings extends LitElement {
         .value=${auto ? 'auto' : 'review'}
         @ionChange=${(e: CustomEvent<{ value?: string }>) => this.setPolicy(use, e.detail?.value !== 'review')}
       >
-        <ion-segment-button value="auto"><ion-label>${this.t('ui.policyAuto')}</ion-label></ion-segment-button>
-        <ion-segment-button value="review"><ion-label>${this.t('ui.policyReview')}</ion-label></ion-segment-button>
+        <ion-segment-button value="auto"><ion-label>${this.t(use.policy.autoKey)}</ion-label></ion-segment-button>
+        <ion-segment-button value="review"><ion-label>${this.t(use.policy.reviewKey)}</ion-label></ion-segment-button>
       </ion-segment>
-      ${auto ? nothing : html`<p class="help">${this.t('ui.helpPolicyReview')}</p>`}
+      ${auto ? nothing : html`<p class="help">${this.t(use.policy.reviewHelpKey)}</p>`}
       ${this.policyFailed[use.family]
-        ? html`<ok-inline-feedback tone="danger">${this.t('ui.errPolicy')}</ok-inline-feedback>`
+        ? html`<ok-inline-feedback tone="danger">${this.t(use.policy.errorKey)}</ok-inline-feedback>`
         : nothing}
     `;
   }

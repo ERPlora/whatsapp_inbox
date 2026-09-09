@@ -72,6 +72,26 @@ describe('every offered use is backed by a recipe this module actually ships', (
     },
   );
 
+  /**
+   * The anchor of whatsapp_inbox#126, by NAME. Every other assertion in this file iterates
+   * `WHATSAPP_USES`, so all of them stay green on a list that offers the salon and forgets the
+   * restaurant — which is exactly the complaint: «Reservar mesa» never appears, though the recipe
+   * has been shipped in `flows/` all along.
+   */
+  it('a restaurant is offered «Reservar mesa», not only the salon card (whatsapp_inbox#126)', () => {
+    const use = WHATSAPP_USES.find((u) => u.family === 'reservation-from-whatsapp');
+    expect(
+      use,
+      'a restaurant with Reservations connects its number and the only use offered is «Reservar ' +
+        'citas», which is not what it does',
+    ).toBeTruthy();
+    expect(use!.module, 'the card would be offered to hubs that cannot run it').toBe('reservations');
+    expect(
+      use!.companions,
+      'Reservations ships no notice-on-confirm recipe, so this card carries nothing with it',
+    ).toEqual([]);
+  });
+
   it('families are unique: two cards activating the same recipe is one of them wrong', () => {
     expect(new Set(WHATSAPP_USES.map((u) => u.family)).size).toBe(WHATSAPP_USES.length);
   });
@@ -107,35 +127,58 @@ describe('every offered use is backed by a recipe this module actually ships', (
   });
 });
 
+/**
+ * **The policy door, asked ONCE PER CARD and never once for the screen.**
+ *
+ * Every assertion here iterates {@link WHATSAPP_USES} on purpose, and that is the guard, not a
+ * tidiness: while there was a single card the door could name its query and its command as
+ * top-level literals and be right by accident. With a second card (whatsapp_inbox#126) the same
+ * shape reads the SALON's diary to paint the RESTAURANT's switch and writes the salon's column when
+ * the restaurant flips it — one hub, two businesses' worth of settings, silently crossed. Pinned by
+ * name below so a card added later cannot quietly reintroduce it.
+ */
 describe('the booking policy door', () => {
-  it('reads through the optional query door, naming the query as a literal', async () => {
-    const use = WHATSAPP_USES[0];
-    const asked: string[] = [];
-    await readBookingPolicy({ queryOptional: async (n: string) => (asked.push(n), undefined) }, use);
-    expect(asked).toEqual([use.policy.read]);
-  });
+  it.each(WHATSAPP_USES.map((u) => [u.family, u] as const))(
+    '%s reads through the optional query door, naming ITS OWN query as a literal',
+    async (_family, use) => {
+      const asked: string[] = [];
+      await readBookingPolicy({ queryOptional: async (n: string) => (asked.push(n), undefined) }, use);
+      expect(
+        asked,
+        'this card reads a policy that is not its own: the switch would paint the other module\'s decision',
+      ).toEqual([use.policy.read]);
+    },
+  );
 
-  it('writes through the optional command door, with the narrow payload and nothing else', async () => {
-    const use = WHATSAPP_USES[0];
-    const sent: { name: string; payload: unknown }[] = [];
-    await writeBookingPolicy(
-      { commandOptional: async (n: string, p?: Record<string, unknown>) => (sent.push({ name: n, payload: p }), undefined) },
-      use,
-      false,
-    );
-    expect(sent).toEqual([{ name: use.policy.write, payload: { [use.policy.field]: false } }]);
-  });
+  it.each(WHATSAPP_USES.map((u) => [u.family, u] as const))(
+    '%s writes through the optional command door, with ITS OWN narrow payload and nothing else',
+    async (_family, use) => {
+      const sent: { name: string; payload: unknown }[] = [];
+      await writeBookingPolicy(
+        { commandOptional: async (n: string, p?: Record<string, unknown>) => (sent.push({ name: n, payload: p }), undefined) },
+        use,
+        false,
+      );
+      expect(
+        sent,
+        'this card writes into another module\'s settings: the owner flips one switch and the other ' +
+          'business\'s policy changes',
+      ).toEqual([{ name: use.policy.write, payload: { [use.policy.field]: false } }]);
+    },
+  );
 
-  // `settings_set_auto_confirm_online.json` types the field `boolean` and refuses everything else
-  // with `additionalProperties: false`, so a screen that sent the 0/1 integer the rest of this
-  // module speaks would have its every change rejected as `invalid_payload`.
-  it('sends the flag as the boolean that command schema types, never a 0/1 integer', async () => {
-    const use = WHATSAPP_USES[0];
-    const sent: Record<string, unknown>[] = [];
-    const door = { commandOptional: async (_n: string, p?: Record<string, unknown>) => (sent.push(p ?? {}), undefined) };
-    await writeBookingPolicy(door, use, true);
-    expect(sent[0][use.policy.field]).toBe(true);
-  });
+  // Both narrow schemas type the field `boolean` and refuse everything else with
+  // `additionalProperties: false`, so a screen that sent the 0/1 integer the rest of this module
+  // speaks would have its every change rejected as `invalid_payload`.
+  it.each(WHATSAPP_USES.map((u) => [u.family, u] as const))(
+    '%s sends the flag as the boolean that command schema types, never a 0/1 integer',
+    async (_family, use) => {
+      const sent: Record<string, unknown>[] = [];
+      const door = { commandOptional: async (_n: string, p?: Record<string, unknown>) => (sent.push(p ?? {}), undefined) };
+      await writeBookingPolicy(door, use, true);
+      expect(sent[0][use.policy.field]).toBe(true);
+    },
+  );
 });
 
 /**
@@ -152,42 +195,43 @@ describe('the booking policy door', () => {
  * instead of quietly disagreeing with it.
  */
 describe('what the switch reads out of the answer', () => {
-  const use = WHATSAPP_USES[0];
+  const eachUse = WHATSAPP_USES.map((u) => [u.family, u] as const);
 
-  it('an answer that never came back reads as the owning module default, not as off', () => {
+  it.each(eachUse)('%s: an answer that never came back reads as the owning module default, not as off', (_f, use) => {
     expect(bookingPolicyOn(undefined, use)).toBe(use.policy.defaultOn);
   });
 
-  it('no settings row yet reads as the owning module default, not as off', () => {
+  it.each(eachUse)('%s: no settings row yet reads as the owning module default, not as off', (_f, use) => {
     expect(bookingPolicyOn([], use)).toBe(use.policy.defaultOn);
     expect(bookingPolicyOn(null, use)).toBe(use.policy.defaultOn);
   });
 
-  it('a row that does not carry the field at all reads as the default, not as off', () => {
+  it.each(eachUse)('%s: a row that does not carry the field at all reads as the default, not as off', (_f, use) => {
     expect(bookingPolicyOn({ id: 1, default_duration: 30 }, use)).toBe(use.policy.defaultOn);
   });
 
-  it('reads the saved decision when the row carries it, both ways', () => {
+  it.each(eachUse)('%s: reads the saved decision when the row carries it, both ways', (_f, use) => {
     expect(bookingPolicyOn({ [use.policy.field]: false }, use)).toBe(false);
     expect(bookingPolicyOn({ [use.policy.field]: true }, use)).toBe(true);
   });
 
-  it('reads the first row of a list answer, which is how the query comes back', () => {
+  it.each(eachUse)('%s: reads the first row of a list answer, which is how the query comes back', (_f, use) => {
     expect(bookingPolicyOn([{ [use.policy.field]: false }], use)).toBe(false);
     expect(bookingPolicyOn([{ [use.policy.field]: true }], use)).toBe(true);
   });
 
-  // The query serves a real boolean (`auto_confirm_online <> 0`), but the row contract keeps the
-  // column as INTEGER 0/1 at rest: a driver that ever handed the raw column through must not read
-  // as «off», because off is the answer that silently disagrees with what is running.
-  it('a driver that hands 0/1 or t/f through still reads the decision, never a blanket off', () => {
+  // Appointments serves a real boolean (`auto_confirm_online <> 0`) and Reservations serves the raw
+  // INTEGER 0/1 (`queries/settings_get.sql`), so BOTH shapes reach this function in production. A
+  // reading that treated the integer as «off» would tell a restaurant it reviews every table while
+  // the recipe is confirming them by itself.
+  it.each(eachUse)('%s: a driver that hands 0/1 or t/f through still reads the decision, never a blanket off', (_f, use) => {
     expect(bookingPolicyOn({ [use.policy.field]: 0 }, use)).toBe(false);
     expect(bookingPolicyOn({ [use.policy.field]: 1 }, use)).toBe(true);
     expect(bookingPolicyOn({ [use.policy.field]: 'f' }, use)).toBe(false);
     expect(bookingPolicyOn({ [use.policy.field]: 't' }, use)).toBe(true);
   });
 
-  it('an empty string is not a decision: it reads as the default', () => {
+  it.each(eachUse)('%s: an empty string is not a decision: it reads as the default', (_f, use) => {
     expect(bookingPolicyOn({ [use.policy.field]: '' }, use)).toBe(use.policy.defaultOn);
   });
 
