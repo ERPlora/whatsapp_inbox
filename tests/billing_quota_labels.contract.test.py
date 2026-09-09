@@ -17,6 +17,12 @@ the labels have to follow. English is the source language (ADR-0055), so a missi
 English rather than breaking — which is exactly why nobody would notice, and exactly why this test
 exists.
 
+`billing.usage.metric` names the SAME key space from the other side (whatsapp_inbox#131): it says
+which of those quotas the month counter is counting, so the shell can write «12 of 30 conversations
+per month» with the unit in the customer's language. It is checked here for both reasons — its label
+has to exist like any other, and the metric has to be one the tiers actually sell, or the counter
+sits under a cap nobody bought.
+
 Usage: tests/billing_quota_labels.contract.test.py   (exit 0 = green). No Postgres, no Docker.
 """
 
@@ -40,6 +46,34 @@ def quota_metrics():
             if metric not in metrics:
                 metrics.append(metric)
     return metrics
+
+
+def usage_metric():
+    """The metric the month counter reports, or None if the module declares no counter."""
+    usage = MANIFEST.get("billing", {}).get("usage")
+    if not isinstance(usage, dict):
+        return None
+    return usage.get("metric")
+
+
+def check_the_usage_metric_is_one_the_tiers_sell():
+    """The counter has to count something a plan includes.
+
+    `billing.usage` gives the shell `used` out of `limit`; `metric` is what turns that pair into a
+    sentence. Naming a metric no tier declares is not a typo the customer can see through: the
+    «Plan» tab would put the month's consumption under a unit no plan of this module sells, and the
+    label check below would not even ask for its words, because it only walks the tiers.
+    """
+    metric = usage_metric()
+    if metric is None:
+        return []
+    if metric in quota_metrics():
+        return []
+    return [
+        f"`billing.usage.metric` is `{metric}`, which no tier's `quota` declares "
+        f"(the tiers sell: {', '.join(quota_metrics()) or 'nothing'}) — the month counter would "
+        f"report against a cap this module does not sell"
+    ]
 
 
 def locale_files():
@@ -113,7 +147,8 @@ def main():
         print("FAIL  the module ships no locales/ directory")
         return 1
 
-    problems = check_every_metric_is_named_in_every_language()
+    problems = check_the_usage_metric_is_one_the_tiers_sell()
+    problems += check_every_metric_is_named_in_every_language()
     problems += check_no_label_survives_its_metric()
     problems += check_non_english_labels_are_translated()
 
