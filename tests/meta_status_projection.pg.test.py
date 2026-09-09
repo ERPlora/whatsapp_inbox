@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 """The «Templates» tab may not report a verdict Meta never gave (whatsapp_inbox#65).
 
-`whatsapp_inbox_template.meta_status` is written by this module and by nobody else: the row is born
-`'pending'` (`commands/template_create.sql`) and every edit puts it back to `'pending'`
-(`commands/template_update.sql`). Nothing in this module has ever spoken to Meta: the door that
-registers a template lives in the SaaS (ERPlora/saas#1899), the runtime proxies it since
-ERPlora/hub#1610 (published in v1.1.18) — and no module can reach that proxy, because
-`ErploraClient` exposes no `coreRequest` and the shell defines no templates element. So the column
-has always said «Meta is reviewing it» about a template Meta had never received, and the tab
-printed that word straight onto the screen. The owner waited for a verdict that was never coming,
-and the reminder they thought was covered never went out.
+`whatsapp_inbox_template.meta_status` starts as this module's own word and only becomes Meta's
+once Meta has answered: the row is born `'pending'` (`commands/template_create.sql`), every edit
+puts it back to `'pending'` (`commands/template_update.sql`), and what Meta replies lands through
+`commands/template_record_meta_answer.sql` (whatsapp_inbox#87).
+
+For most of this module's life that last write did not exist, and neither did any way to earn it:
+the door that registers a template lives in the SaaS (ERPlora/saas#1899), the runtime proxied it
+from ERPlora/hub#1610 (v1.1.18) but no module could reach the proxy, and when the SDK surface
+arrived in v1.1.20 its three doors still handed back the SaaS's bare body, so every call — the
+successful ones included — reached the module as `unknown error` (fixed by ERPlora/hub#1688,
+v1.1.21, which is why this module's floor is there). So the column said «Meta is reviewing it»
+about a template Meta had never received, and the tab printed that word straight onto the screen.
+The owner waited for a verdict that was never coming, and the reminder they thought was covered
+never went out.
 
 A template is the ONLY way a business may write to a customer outside the 24 h that follow the
 customer's last message, so this is not cosmetic: it is the difference between «this goes out

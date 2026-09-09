@@ -15,18 +15,55 @@ const PLANTILLA = {
 
 const comandos: { name: string; payload: Record<string, unknown> }[] = [];
 
+/** Everything the panel did, in the order it did it: the door and the commands share one log,
+ *  because whatsapp_inbox#87 is as much about the ORDER as about the calls (the owner's text is
+ *  saved BEFORE Meta is asked, so a Meta that does not answer never costs the work). */
+const pasos: string[] = [];
+
+/** What the door was asked to register, call by call. */
+const puerta: Record<string, unknown>[] = [];
+
+/** What the door answers. A test that wants a refusal replaces it with one that throws. */
+let respondePuerta: (t: Record<string, unknown>) => Promise<Record<string, unknown>>;
+
+/** The id the runtime hands back for the row a declarative create just inserted
+ *  (`hub: crates/runtime/src/commands.rs` → `{ok, new_ids:[…]}`, and `command()` resolves with
+ *  `data`). Without it the panel cannot tell `record_meta_answer` WHICH row Meta answered about. */
+const ID_NUEVO = 't-nueva';
+
+function refusal(code: string, message = 'lo que dijera el servidor') {
+  return Object.assign(new Error(message), { code });
+}
+
 beforeEach(() => {
   comandos.length = 0;
+  pasos.length = 0;
+  puerta.length = 0;
+  respondePuerta = async () => ({ status: 'PENDING', meta_id: '77', rejected_reason: '' });
   (globalThis as Record<string, unknown>).erplora = {
     query: async () => [],
     queryPage: async () => ({ rows: [PLANTILLA], total: 1 }),
     command: async (name: string, payload: Record<string, unknown>) => {
       comandos.push({ name, payload });
-      return {};
+      pasos.push(name);
+      return { ok: true, operations: 1, new_ids: [ID_NUEVO] };
     },
+    forModule: (_id: string) => ({
+      whatsappTemplates: {
+        register: async (t: Record<string, unknown>) => {
+          puerta.push(t);
+          pasos.push('door.register');
+          return respondePuerta(t);
+        },
+      },
+    }),
     on: () => () => {},
     locale: 'es',
-    t: (_catalog: unknown, key: string) => key,
+    // Mirrors `ErploraClient.t()`: the key when there is nothing to splice, and the key WITH the
+    // spliced values when there is (`out.replace(/\{k\}/g, v)`). Keeping the key visible is what
+    // lets a test assert «this sentence, with this value inside» without pinning the prose.
+    t: (_catalog: unknown, key: string, params?: Record<string, unknown>) =>
+      params ? `${key}:${Object.values(params).join('|')}` : key,
   };
 });
 
@@ -295,5 +332,205 @@ describe('loading / empty / error are painted, not assumed', () => {
     wc.requestUpdate();
     await wc.updateComplete;
     expect([...el.shadowRoot.querySelectorAll('.err')].map((n) => n.textContent)).toContain('boom');
+  });
+});
+
+// ── whatsapp_inbox#87 ─────────────────────────────────────────────────────────────────────────
+//
+// whatsapp_inbox#65 stopped the tab LYING about Meta («Meta is reviewing it» about a template Meta
+// had never received). This is the other half: making it TRUE. Saving a template now registers it
+// with Meta through the runtime's door (`whatsappTemplates.register`, hub#1682 + the envelope of
+// hub#1688) and writes back what Meta answered — its id, its verdict and, when it is a refusal,
+// its reason — so the column stops being a constant and starts being a fact.
+//
+// Two rules hold the design up, and both are tested here rather than described:
+//
+//  1. **The owner's text is saved BEFORE Meta is asked.** Meta is a third party across the
+//     internet; the template is the shop's. A Meta that does not answer must cost a notice, never
+//     the work.
+//  2. **A refusal is spoken, never echoed.** The door answers a CODE (ADR-0055); this module owns
+//     the sentence. `invalid_name` on screen is a dead end for whoever is standing at the counter.
+describe('guardar una plantilla la REGISTRA en Meta (whatsapp_inbox#87)', () => {
+  async function montarConPanel() {
+    const el = await montar();
+    const t = tabla(el)!;
+    t.open = () => {};
+    t.close = () => {};
+    return el;
+  }
+
+  async function crear(el: HTMLElement & { shadowRoot: ShadowRoot }, campos: Record<string, unknown> = {}) {
+    Object.assign(el, { newName: 'recordatorio_cita', newBody: 'Te esperamos el {{1}}', ...campos });
+    await (el as unknown as { createTemplate: (e: Event) => Promise<void> }).createTemplate(
+      new Event('submit'),
+    );
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+  }
+
+  it('el alta se guarda PRIMERO y solo después se llama a Meta', async () => {
+    const el = await montarConPanel();
+    await crear(el);
+    expect(pasos[0], 'se llamó a Meta antes de guardar: si Meta no contesta se pierde el texto').toBe(
+      'whatsapp_inbox.templates.create',
+    );
+    expect(pasos[1]).toBe('door.register');
+  });
+
+  it('la puerta recibe el texto que escribió el dueño, con `variables` tal cual (TEXT)', async () => {
+    const el = await montarConPanel();
+    await crear(el, { newLanguage: 'es', newCategory: 'UTILITY' });
+    expect(puerta, 'guardar no registró nada en Meta').toHaveLength(1);
+    expect(puerta[0]).toMatchObject({
+      name: 'recordatorio_cita',
+      language: 'es',
+      category: 'UTILITY',
+      header: '',
+      body: 'Te esperamos el {{1}}',
+      footer: '',
+    });
+    // El SaaS hace `json.loads` de la cadena (`services/templates.py::_variables`). Parsearla aquí
+    // la convertiría en un array y el contrato de la columna es TEXT.
+    expect(puerta[0].variables, '`variables` viaja parseado: la columna es TEXT').toBe('[]');
+  });
+
+  it('lo que Meta contesta se escribe en la fila, sobre la plantilla recién creada', async () => {
+    const el = await montarConPanel();
+    respondePuerta = async () => ({ status: 'REJECTED', meta_id: '99', rejected_reason: 'INVALID_FORMAT' });
+    await crear(el);
+    const respuesta = comandos.find((c) => c.name === 'whatsapp_inbox.templates.record_meta_answer');
+    expect(respuesta, 'Meta contestó y su respuesta no se guardó en ningún sitio').toBeTruthy();
+    expect(respuesta!.payload).toMatchObject({
+      template_id: ID_NUEVO,
+      meta_template_id: '99',
+      meta_status: 'REJECTED',
+      meta_rejected_reason: 'INVALID_FORMAT',
+      // Los siete campos revisados viajan con la respuesta: el comando solo escribe si la fila
+      // sigue teniendo el texto que Meta revisó (la guarda de carrera de `template_record_meta_answer.sql`).
+      name: 'recordatorio_cita',
+      language: 'es',
+      category: 'UTILITY',
+      header: '',
+      body: 'Te esperamos el {{1}}',
+      footer: '',
+      variables: '[]',
+    });
+  });
+
+  it('una respuesta sin veredicto no se escribe: no hay nada que contar de la fila', async () => {
+    const el = await montarConPanel();
+    respondePuerta = async () => ({ meta_id: '99' });
+    await crear(el);
+    expect(
+      comandos.some((c) => c.name === 'whatsapp_inbox.templates.record_meta_answer'),
+      'se escribió un veredicto vacío: el estado de la fila queda mintiendo',
+    ).toBe(false);
+    expect((el as unknown as { formError: string }).formError, 'el fallo es mudo').toBeTruthy();
+  });
+
+  it('si Meta rechaza, el trabajo NO se pierde y el veredicto NO se inventa', async () => {
+    const el = await montarConPanel();
+    respondePuerta = async () => { throw refusal('invalid_name'); };
+    await crear(el);
+    expect(
+      comandos.some((c) => c.name === 'whatsapp_inbox.templates.create'),
+      'la plantilla no se guardó: el rechazo de Meta se llevó por delante el texto del dueño',
+    ).toBe(true);
+    expect(
+      comandos.some((c) => c.name === 'whatsapp_inbox.templates.record_meta_answer'),
+      'se escribió un veredicto que Meta nunca dio',
+    ).toBe(false);
+  });
+
+  it('el rechazo se lee en cristiano, no como código', async () => {
+    const el = await montarConPanel();
+    respondePuerta = async () => { throw refusal('invalid_name', 'lowercase letters only'); };
+    await crear(el);
+    const error = (el as unknown as { formError: string }).formError;
+    expect(error, 'el rechazo de Meta es mudo').toBeTruthy();
+    expect(error, 'la pantalla enseña el código pelado: no dice qué tocar').not.toBe('invalid_name');
+    expect(error, 'la pantalla enseña la frase del servidor en su idioma').not.toBe('lowercase letters only');
+    expect(error.toLowerCase(), 'la frase no explica qué hacer con el nombre').toContain('nombre');
+  });
+
+  it('un código que el módulo no conoce CONSERVA el código, para poder buscarlo', async () => {
+    const el = await montarConPanel();
+    respondePuerta = async () => { throw refusal('un_codigo_de_manana'); };
+    await crear(el);
+    expect((el as unknown as { formError: string }).formError).toContain('un_codigo_de_manana');
+  });
+
+  it('editar también pasa por Meta: toda edición vuelve a revisión', async () => {
+    const el = await montarConPanel();
+    (el as unknown as { startEdit: (row: Record<string, unknown>) => void }).startEdit({
+      ...PLANTILLA, body: 'texto viejo', header: '', footer: '', variables: '[]',
+    } as never);
+    Object.assign(el, { newBody: 'texto nuevo' });
+    await (el as unknown as { updateTemplate: () => Promise<void> }).updateTemplate();
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+
+    expect(pasos[0], 'la edición llamó a Meta antes de guardar').toBe('whatsapp_inbox.templates.update');
+    expect(puerta, 'editar la plantilla no la volvió a mandar a revisión').toHaveLength(1);
+    expect(puerta[0].body, 'a Meta le llegó el texto viejo').toBe('texto nuevo');
+    const respuesta = comandos.find((c) => c.name === 'whatsapp_inbox.templates.record_meta_answer');
+    expect(respuesta!.payload).toMatchObject({
+      // La fila EXISTE: el id es el de la plantilla editada, nunca un `new_ids` de la respuesta.
+      template_id: 't1',
+      meta_status: 'PENDING',
+      body: 'texto nuevo',
+    });
+  });
+});
+
+// ── whatsapp_inbox#87, la mitad que se LEE ────────────────────────────────────────────────────
+//
+// whatsapp_inbox#65 puso en el panel el MOVIMIENTO que pide cada estado («cambia el texto y vuelve
+// a enviarla»). Para una plantilla rechazada eso no basta: Meta dice POR QUÉ, y sin ese motivo el
+// dueño tiene que irse a WhatsApp Manager a averiguarlo — que es exactamente el viaje que esta
+// pantalla existe para ahorrar.
+describe('el panel dice POR QUÉ la rechazó Meta (whatsapp_inbox#87)', () => {
+  const rechazada = {
+    ...PLANTILLA, meta_status: 'rejected', meta_rejected_reason: 'INVALID_FORMAT',
+    body: '', header: '', footer: '', variables: '[]',
+  };
+
+  async function abrir(row: Record<string, unknown>) {
+    const el = await montar();
+    const t = tabla(el)!;
+    t.open = () => {};
+    t.close = () => {};
+    (el as unknown as { startEdit: (r: Record<string, unknown>) => void }).startEdit(row as never);
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    return el;
+  }
+
+  it('el motivo se pinta junto al qué-hacer', async () => {
+    const el = await abrir(rechazada);
+    const bloque = el.shadowRoot.querySelector('form[slot="create"] .meta');
+    expect(bloque?.textContent, 'el panel dice que la rechazaron pero no por qué').toContain(
+      'INVALID_FORMAT',
+    );
+    expect(
+      bloque?.textContent,
+      'el motivo aparece sin decir de quién es: un código suelto no se entiende',
+    ).toContain('ui.metaRejectedReason');
+  });
+
+  it('sin motivo no se pinta una línea vacía', async () => {
+    const el = await abrir({ ...rechazada, meta_rejected_reason: '' });
+    expect(
+      el.shadowRoot.querySelector('form[slot="create"] .meta')?.textContent,
+    ).not.toContain('ui.metaRejectedReason');
+  });
+
+  it('el motivo de una plantilla NO se queda pegado a la siguiente que se abre', async () => {
+    const el = await abrir(rechazada);
+    (el as unknown as { startEdit: (r: Record<string, unknown>) => void }).startEdit({
+      ...PLANTILLA, meta_status: 'approved', meta_rejected_reason: '',
+    } as never);
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    expect(
+      el.shadowRoot.querySelector('form[slot="create"] .meta')?.textContent,
+      'la plantilla aprobada enseña el motivo de rechazo de la anterior',
+    ).not.toContain('INVALID_FORMAT');
   });
 });
