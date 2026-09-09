@@ -3518,7 +3518,7 @@ var es_default = {
   },
   billing: {
     quota: {
-      conversations_per_month: "conversaciones al mes"
+      billable_messages_per_month: "mensajes al mes"
     },
     tiers: {
       free: "Gratis",
@@ -3719,7 +3719,7 @@ var en_default = {
   },
   billing: {
     quota: {
-      conversations_per_month: "conversations per month"
+      billable_messages_per_month: "messages per month"
     },
     tiers: {
       free: "Free",
