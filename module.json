@@ -673,11 +673,11 @@
   "billing": {
     "tier": "premium",
     "type": "subscription",
-    "trial_days": 15,
+    "trial_days": 0,
     "tiers": [
       {
         "slug": "free",
-        "name": "WhatsApp Free",
+        "name": "Free",
         "price": 0,
         "interval": "month",
         "quota": {
@@ -685,32 +685,30 @@
         }
       },
       {
-        "slug": "starter",
-        "name": "WhatsApp Starter",
-        "price": 14.99,
+        "slug": "basic",
+        "name": "Basic",
+        "price": 0,
         "interval": "month",
         "quota": {
-          "conversations_per_month": 200
+          "conversations_per_month": 150
         }
       },
       {
-        "slug": "business",
-        "name": "WhatsApp Business",
-        "price": 59.99,
+        "slug": "pro",
+        "name": "Pro",
+        "price": 0,
+        "interval": "month",
+        "quota": {
+          "conversations_per_month": 500
+        }
+      },
+      {
+        "slug": "enterprise",
+        "name": "Enterprise",
+        "price": 0,
         "interval": "month",
         "quota": {
           "conversations_per_month": 800
-        }
-      },
-      {
-        "slug": "flex",
-        "name": "WhatsApp Flex",
-        "price": 19.99,
-        "interval": "month",
-        "metered": true,
-        "overage_price": 0.075,
-        "quota": {
-          "conversations_per_month": 270
         }
       }
     ]
