@@ -16,6 +16,16 @@ import {
 import type { MetaTemplateView } from '../../lib/meta-template-status';
 const CATALOG: Record<string, unknown> = { es: esLocale, en: enLocale };
 
+/** One template as the door describes it: Meta's own verdict, in the SaaS's field names. The door
+ *  is a passthrough, so re-shaping it here would be a second place to keep in step with Meta. */
+interface MetaTemplate {
+  name?: unknown;
+  language?: unknown;
+  status?: unknown;
+  rejected_reason?: unknown;
+  meta_id?: unknown;
+}
+
 /** The door to the business's templates at Meta (hub#1682): the ONLY way a module reaches them,
  *  and it is module-scoped — `forModule(...)`, so the runtime can check this module's `notify`
  *  capability and its `whatsapp` channel before letting anything through. */
@@ -25,11 +35,15 @@ interface WhatsappTemplatesDoor {
     meta_id?: unknown;
     rejected_reason?: unknown;
   }>;
+  /** Every template of this business with the verdict Meta gives it NOW, plus `stale` when the
+   *  SaaS could not reach Meta and answered from what it had stored. */
+  list(): Promise<{ templates?: unknown; stale?: unknown }>;
 }
 
 interface ErploraClientLike extends ListClient {
   query<T = unknown>(name: string, params?: Record<string, unknown>): Promise<T>;
   queryPage<R = unknown>(name: string, params: ListParams): Promise<ListPage<R>>;
+  queryAll<R = unknown>(name: string, params?: ListParams): Promise<R[]>;
   command<T = unknown>(name: string, payload?: Record<string, unknown>): Promise<T>;
   forModule(id: string): { whatsappTemplates: WhatsappTemplatesDoor };
   on(event: string, cb: (payload: unknown) => void): () => void;
@@ -50,7 +64,23 @@ interface Template {
   /** Meta's own reason code for a refusal (`INVALID_FORMAT`, `ABUSIVE_CONTENT`…), `''` otherwise.
    *  Projected by `queries/templates_list.sql` since whatsapp_inbox#87. */
   meta_rejected_reason: string;
+  /** Meta's id for this template, `''` while Meta has never seen it. It is what makes
+   *  `meta_status` project as a verdict instead of as `not_sent`. */
+  meta_template_id: string;
   is_active: number;
+}
+
+/**
+ * How Meta names a template: by NAME **and** LANGUAGE (whatsapp_inbox#134).
+ *
+ * The two are one identity at Meta — `recordatorio_cita` in `es` and in `en` are reviewed apart and
+ * can hold opposite verdicts, which is why `remove(name)` at the door drops every language of a
+ * name at once and the list keeps them as separate rows. Matching on the name alone would put the
+ * English refusal on the Spanish row, and the owner would go fix a text Meta never complained about.
+ */
+function metaKey(name: unknown, language: unknown): string {
+  const word = (value: unknown): string => String(value ?? '').trim().toLowerCase();
+  return `${word(name)}\u0000${word(language)}`;
 }
 
 /** The seven fields Meta REVIEWS. `is_active` is deliberately not among them: it is this hub's own
@@ -139,6 +169,11 @@ export class ErpWhatsappInboxTemplates extends LitElement {
 
   /** The template whose delete is awaiting confirmation, in the page. */
   @state() pendingDelete: Template | null = null;
+
+  /** What went wrong while putting Meta's verdicts up to date, in one sentence (whatsapp_inbox#134).
+   *  `''` when the tab and Meta agree. It is NOT `formError`: nothing the owner did failed, and the
+   *  list on screen is still worth reading — it is just not guaranteed to be today's. */
+  @state() metaSyncNotice = '';
 
   /** Meta's verdict on the template being edited, and the move it asks for. `null` while the panel
    *  is an ADD: there is no verdict on a template that does not exist yet. */
@@ -243,6 +278,99 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     } catch {
       /* sin SDK (preview) → sin reactividad en vivo */
     }
+    await this.refreshMetaVerdicts();
+  }
+
+  /**
+   * Put Meta's CURRENT verdict on the rows, once, as the tab opens (whatsapp_inbox#134).
+   *
+   * Meta answers a template minutes — sometimes hours — after it is sent, and until this existed
+   * the answer never reached the tab: the row kept the verdict it had when it was saved, so a
+   * template Meta had already approved went on reading «En revisión» and the owner had to go to
+   * WhatsApp Manager to find out, which is the one errand this tab exists to save.
+   *
+   * 🔴 **On opening, NEVER on a timer.** The SaaS refreshes against Meta on every read of that door
+   * and the path carries no throttle of its own (hub#1610, ERPlora/saas#1905): an interval here
+   * would be one call to Meta per open tab per tick. `connectedCallback` is exactly «the tab
+   * opened», and `tests/meta_refresh_is_not_a_poll.contract.test.py` is what keeps it that way.
+   *
+   * Nothing in here can cost the owner the list: every leg is guarded and the worst outcome is the
+   * rows this hub already had, with a line saying they may have moved.
+   */
+  private async refreshMetaVerdicts(): Promise<void> {
+    this.metaSyncNotice = '';
+    let answer: { templates?: unknown; stale?: unknown };
+    let rows: Template[];
+    try {
+      answer = await erplora().forModule('whatsapp_inbox').whatsappTemplates.list();
+      // EVERY row, not the page on screen: the list is server-side paginated and a business can
+      // hold more templates than fit in one page. Refreshing only what is visible would leave the
+      // very same “stuck on «En revisión»” bug one page over, where nobody would think to look.
+      rows = await erplora().queryAll<Template>('whatsapp_inbox.templates.list');
+    } catch {
+      // The door said no (no WhatsApp number, capability not granted, SaaS unreachable…) or the
+      // list could not be read. Said out loud: a silent failure here leaves the owner believing
+      // the verdicts on screen are today's, which is the whole defect.
+      this.metaSyncNotice = erplora().t(CATALOG, 'ui.metaSyncUnavailable');
+      return;
+    }
+    // `stale` = the SaaS could not reach Meta and answered from store. Those verdicts are still the
+    // freshest anyone has, so they are written; what is not done is presenting them as the present.
+    if (answer?.stale === true) this.metaSyncNotice = erplora().t(CATALOG, 'ui.metaSyncUnavailable');
+
+    const atMeta = new Map<string, MetaTemplate>();
+    const listed = Array.isArray(answer?.templates) ? (answer.templates as MetaTemplate[]) : [];
+    for (const template of listed) atMeta.set(metaKey(template?.name, template?.language), template);
+
+    const text = (value: unknown): string => (typeof value === 'string' ? value : '');
+    let written = 0;
+    for (const row of rows) {
+      const verdict = atMeta.get(metaKey(row.name, row.language));
+      // A row Meta does not mention is left EXACTLY as it is. Absence is not a verdict — it can be
+      // a template deleted from WhatsApp Manager or one this hub never sent — and inventing a
+      // status would put a word in Meta's mouth. Painting that case is whatsapp_inbox#141.
+      if (!verdict) continue;
+      const status = text(verdict.status).trim();
+      if (!status) continue; // nothing to record; `record_meta_answer` refuses an empty verdict too
+      // A payload without an id never ERASES the one this hub already knows: that would drop the
+      // row back to `not_sent` and hide a template Meta is holding.
+      const metaId = text(verdict.meta_id).trim() || text(row.meta_template_id);
+      const reason = text(verdict.rejected_reason);
+      // Compared against what the LIST shows, which is the projection (`not_sent` without an id,
+      // the verdict lowercased with one). A write that would repaint the row identically is not a
+      // write: it is a round trip per template on every open.
+      const projected = metaId ? status.toLowerCase() : 'not_sent';
+      if (
+        projected === text(row.meta_status) &&
+        reason === text(row.meta_rejected_reason) &&
+        metaId === text(row.meta_template_id)
+      ) {
+        continue;
+      }
+      try {
+        await erplora().command('whatsapp_inbox.templates.record_meta_answer', {
+          template_id: row.id,
+          meta_template_id: metaId,
+          meta_status: status,
+          meta_rejected_reason: reason,
+          // The seven fields Meta reviewed travel with the answer: the command only writes if the
+          // row still holds them, so a verdict never lands on a text the owner has since changed.
+          name: row.name,
+          language: row.language,
+          category: row.category,
+          header: row.header,
+          body: row.body,
+          footer: row.footer,
+          variables: row.variables,
+        });
+        written += 1;
+      } catch (e) {
+        // Meta DID answer; it is this hub that could not store it. Same reader as the save path, so
+        // the owner gets this module's sentence and not a raw code.
+        this.metaSyncNotice = domainErrorText(e, 'ui.errUpdateTemplate');
+      }
+    }
+    if (written) await this.ctrl.load();
   }
 
   disconnectedCallback() {
@@ -487,6 +615,9 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     return html`<div class="page">
         ${this.formError ? html`<p class="err">${this.formError}</p>` : nothing}
         ${this.ctrl?.error ? html`<p class="err">${this.ctrl.error}</p>` : nothing}
+        ${this.metaSyncNotice
+          ? html`<section class="panel"><p>${this.metaSyncNotice}</p></section>`
+          : nothing}
         ${this.renderDeleteConfirm()}
         <ok-data-table .serverSide=${true} .fill=${true} .primaryAction=${{ label: t('ui.add'), icon: 'add' }} @primaryAction=${() => this.openCreate()} .views=${true} .actions=${this.rowActions} .rowClickable=${true} .cardTitle=${(row: Record<string, unknown>) => String(row.name ?? '—')} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? 'desc'} .searchable=${true} .searchPlaceholder=${t('ui.searchTemplates')} .emptyMessage=${this.ctrl?.loading ? t('ui.loading') : t('ui.emptyTemplates')} @rowAction=${(e: CustomEvent<{ actionId: string; row: Record<string, unknown> }>) => this.onRowAction(e)} @rowClick=${(e: CustomEvent<{ row: Record<string, unknown> }>) => this.onRowAction({ detail: { actionId: 'edit', row: e.detail.row } } as CustomEvent<{ actionId: string; row: Record<string, unknown> }>)} @pageChange=${(e: CustomEvent<number>) => this.ctrl.setPage(e.detail)} @pageSizeChange=${(e: CustomEvent<number>) => this.ctrl.setPageSize(e.detail)} @sortChange=${(e: CustomEvent<{ sort: string; dir: 'asc' | 'desc' }>) => this.ctrl.setSort(e.detail.sort, e.detail.dir)} @searchChange=${(e: CustomEvent<string>) => this.ctrl.setSearch(e.detail)} @filterChange=${(e: CustomEvent<{ col: string; value: unknown }>) => this.ctrl.setFilter(e.detail.col, e.detail.value)}>
           <!-- Alta: se proyecta SIEMPRE (aunque el panel esté cerrado). Si solo se renderizara con el
