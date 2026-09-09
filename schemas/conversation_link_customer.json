@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "whatsapp_inbox.conversations.link_customer",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["wa_contact_id", "customer_id"],
+  "properties": {
+    "wa_contact_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "WhatsApp contact the thread belongs to — the phone the message came from"
+    },
+    "customer_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Customer already resolved against this hub. Never blank: '' would erase the link"
+    }
+  }
+}

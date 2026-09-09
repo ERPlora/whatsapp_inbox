@@ -368,6 +368,23 @@
         "description": "Assigns a WhatsApp conversation to an agent or team"
       }
     },
+    "whatsapp_inbox.conversations.link_customer": {
+      "permission": "whatsapp_inbox.manage_settings",
+      "transaction": true,
+      "sql": [
+        "commands/conversation_link_customer.sql"
+      ],
+      "schema": "schemas/conversation_link_customer.json",
+      "expect_rows": {
+        "op": "min",
+        "n": 1,
+        "error": "whatsapp_inbox.conversation_not_found",
+        "message": "That conversation does not exist in this business."
+      },
+      "ai": {
+        "description": "Remembers which customer a WhatsApp conversation belongs to, so the inbox can be filtered by her and every request read from the thread is born carrying her. Identified by the WhatsApp contact the messages come from"
+      }
+    },
     "whatsapp_inbox.requests.approve": {
       "permission": "whatsapp_inbox.change_request",
       "transaction": true,

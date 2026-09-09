@@ -292,7 +292,11 @@ def run_command(db, command, payload, prefix):
     bound.setdefault("current_user_id", "u1")
     bound.setdefault("now", "2026-09-09T09:00:00+00:00")
     bound.setdefault("new_id", str(uuid.uuid4()))
-    statements = ["BEGIN;"]
+    # `\set QUIET off` is what makes the row count MEASURABLE: the shared harness runs psql with
+    # `-q`, which swallows the `UPDATE n` tags, and without them every command looks like it wrote
+    # nothing — the tenancy checks below would then pass by accident, on a door that writes
+    # everywhere.
+    statements = ["\\set QUIET off", "BEGIN;"]
     for i, rel in enumerate(files):
         sql, names = translate((MODULE_DIR / rel).read_text())
         name = f"{prefix}_{i}"
@@ -309,10 +313,16 @@ def run_command(db, command, payload, prefix):
         error = " ".join(x for x in r.stderr.splitlines() if x.startswith("ERROR"))
         return f"`{command}` failed on Postgres: {error}", None
     affected = 0
+    counted = False
     for line in r.stdout.splitlines():
         parts = line.strip().split()
         if parts and parts[0] in ("UPDATE", "INSERT") and parts[-1].isdigit():
             affected += int(parts[-1])
+            counted = True
+    if not counted:
+        # Not "it wrote 0 rows": "nobody counted". Said out loud, because a counter that reads 0
+        # for every call turns every «expected 0 rows» check below into a green that measures air.
+        return f"`{command}` produced no row-count tag to read: {r.stdout!r}", None
     return None, affected
 
 

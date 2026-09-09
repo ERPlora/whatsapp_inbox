@@ -71,6 +71,10 @@
       "payload": {
         "channel": "customer"
       }
+    },
+    {
+      "kind": "command",
+      "value": "whatsapp_inbox.conversations.link_customer"
     }
   ]
 }
