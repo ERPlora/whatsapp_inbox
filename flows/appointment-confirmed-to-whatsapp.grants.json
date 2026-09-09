@@ -1,0 +1,26 @@
+{
+  "grants": [
+    {
+      "kind": "query",
+      "value": "appointments.appointments.get",
+      "payload": {
+        "appointment_id": "input.appointment_id"
+      }
+    },
+    {
+      "kind": "query",
+      "value": "whatsapp_inbox.conversations.list",
+      "payload": {
+        "f_contact_phone": "steps.read_appointment.customer_phone"
+      }
+    },
+    {
+      "kind": "notify",
+      "value": "whatsapp"
+    },
+    {
+      "kind": "recipient_query",
+      "value": "whatsapp_inbox.conversations.list#contact_phone"
+    }
+  ]
+}

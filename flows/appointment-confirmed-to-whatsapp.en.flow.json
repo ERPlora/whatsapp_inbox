@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "name": "Appointment confirmed → WhatsApp",
+  "triggers": [
+    {
+      "kind": "event",
+      "event": "appointments.appointment.confirmed",
+      "input": {
+        "appointment_id": "event.appointment_id"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "read_appointment",
+      "kind": "query",
+      "query": "appointments.appointments.get",
+      "params": {
+        "appointment_id": "input.appointment_id"
+      },
+      "result": "first",
+      "limit": 1
+    },
+    {
+      "id": "has_a_phone",
+      "kind": "condition",
+      "when": {
+        "steps.read_appointment.found": {
+          "eq": true
+        },
+        "steps.read_appointment.customer_phone": {
+          "neq": ""
+        }
+      }
+    },
+    {
+      "id": "reachable_on_whatsapp",
+      "kind": "query",
+      "query": "whatsapp_inbox.conversations.list",
+      "params": {
+        "f_contact_phone": "steps.read_appointment.customer_phone"
+      },
+      "result": "first",
+      "limit": 1
+    },
+    {
+      "id": "has_a_thread",
+      "kind": "condition",
+      "when": {
+        "steps.reachable_on_whatsapp.found": {
+          "eq": true
+        }
+      }
+    },
+    {
+      "id": "tell_the_customer",
+      "kind": "notify",
+      "channel": "whatsapp",
+      "to": {
+        "query": "whatsapp_inbox.conversations.list",
+        "params": {
+          "f_contact_phone": "steps.read_appointment.customer_phone"
+        },
+        "field": "contact_phone"
+      },
+      "template": "",
+      "vars": {
+        "text": "Confirmed! We'll see you for your {{steps.read_appointment.service_name}} with {{steps.read_appointment.staff_name}}."
+      }
+    }
+  ]
+}

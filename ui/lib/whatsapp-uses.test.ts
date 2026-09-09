@@ -483,3 +483,111 @@ describe('the switch writes the field the shipped recipe reads', () => {
     },
   );
 });
+
+/**
+ * **One card, several recipes — what «se activa junto con la de citas» has to keep true.**
+ *
+ * whatsapp_inbox#125: with «Las reviso yo antes» on, a customer books by WhatsApp, the recipe notes
+ * it as pending and tells her the salon will confirm shortly. The owner presses «Confirmar» in the
+ * diary and NOTHING reaches her. The fix is a second factory recipe of this module,
+ * `appointment-confirmed-to-whatsapp`, that the SAME card turns on: the notice is not a feature the
+ * owner picks, it is the other half of the promise she already consented to, so a second switch
+ * would be a way to leave it off by accident.
+ *
+ * That makes a card a LIST of families, and adds three failure modes the single-family shape could
+ * not have:
+ *
+ * 1. **A companion this module does not ship.** `activate` answers `flow.template_not_found`
+ *    halfway through and the card is left claiming something that was never installed.
+ * 2. **The same recipe claimed by two cards.** Two owners for one flow: turning one card off stops
+ *    the automation the other card still paints as running.
+ * 3. 🔴 **A companion whose floor is HIGHER than the one the card already demands.** This one only
+ *    exists because they travel together: `flow_template_floor_is_met` (hub#1611) decides per
+ *    FAMILY whether a recipe is offered, so on a hub that meets the card's floor but not the
+ *    companion's, the same tap turns the principal on and gets the companion refused — which is
+ *    exactly the silence of #125, now with a screen saying «Activo» over it. Measured against the
+ *    `requires.json` the module really ships, not against the intention.
+ */
+describe('a card turns on every recipe it promises, and can afford to', () => {
+  const shipped = new Set(
+    readdirSync(join(MODULE_ROOT, 'flows'))
+      .filter((f) => f.endsWith('.flow.json'))
+      .map((f) => f.replace(/\.[a-z]{2}\.flow\.json$/, '')),
+  );
+
+  /** The version floors one family declares, read off the file that travels to the hub. */
+  const floorsOf = (family: string): Record<string, string> => {
+    const path = join(MODULE_ROOT, 'flows', `${family}.requires.json`);
+    expect(
+      existsSync(path),
+      `\`${family}\` ships no requires.json, so its floor is whatever the hub happens to have`,
+    ).toBe(true);
+    const parsed = JSON.parse(readFileSync(path, 'utf8')) as { modules?: Record<string, string> };
+    return parsed.modules ?? {};
+  };
+
+  const cmp = (a: string, b: string) => {
+    const [pa, pb] = [a, b].map((v) => v.split('.').map(Number));
+    for (let i = 0; i < Math.max(pa.length, pb.length); i += 1) {
+      const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+      if (d !== 0) return d < 0 ? -1 : 1;
+    }
+    return 0;
+  };
+
+  /**
+   * The anchor, by name. Without it every assertion below iterates an empty list and passes while
+   * the customer keeps waiting for a message that is not coming — the failure this issue is about.
+   */
+  it('the appointments card also turns on the confirmation notice (whatsapp_inbox#125)', () => {
+    const use = WHATSAPP_USES.find((u) => u.family === 'appointment-from-whatsapp');
+    expect(use, 'the card this issue is about is not offered at all').toBeTruthy();
+    expect(
+      use!.companions,
+      'the salon presses «Confirmar» and nothing reaches the customer: the notice is not turned on ' +
+        'with the booking recipe',
+    ).toContain('appointment-confirmed-to-whatsapp');
+  });
+
+  it('every companion is a family this module really ships', () => {
+    for (const use of WHATSAPP_USES) {
+      for (const companion of use.companions) {
+        expect(
+          [...shipped],
+          `\`${companion}\` is not shipped in flows/, so the tap answers \`flow.template_not_found\` ` +
+            'after having turned the card on',
+        ).toContain(companion);
+      }
+    }
+  });
+
+  it('no recipe is claimed twice — one flow, one card', () => {
+    const claimed = WHATSAPP_USES.flatMap((u) => [u.family, ...u.companions]);
+    expect(
+      new Set(claimed).size,
+      'two cards share a recipe: turning one off stops what the other paints as running',
+    ).toBe(claimed.length);
+  });
+
+  it('a companion never demands a NEWER neighbour than the card that carries it', () => {
+    for (const use of WHATSAPP_USES) {
+      const cardFloors = floorsOf(use.family);
+      for (const companion of use.companions) {
+        for (const [module, floor] of Object.entries(floorsOf(companion))) {
+          const carried = cardFloors[module];
+          expect(
+            carried,
+            `\`${companion}\` needs ${module}, and the card that carries it does not ask for it at ` +
+              'all: a hub without it takes the tap and refuses half of it',
+          ).toBeTruthy();
+          expect(
+            cmp(floor, carried ?? '0'),
+            `\`${companion}\` needs ${module} >= ${floor} but the card only demands ${carried}: on a ` +
+              'hub in between, the tap turns the card on and the notice is refused — the silence of ' +
+              'whatsapp_inbox#125 under a screen that reads «Activo»',
+          ).toBeLessThanOrEqual(0);
+        }
+      }
+    }
+  });
+});
