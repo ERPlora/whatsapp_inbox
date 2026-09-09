@@ -1375,6 +1375,71 @@ def sent_payload_fields():
     return out
 
 
+def git_in(module_dir, *args):
+    """`git -C <module_dir> …` — `(stdout, None)` or `(None, reason)`, never a raised exception.
+
+    A neighbour that is not a checkout, or a `git` that is not installed, has to come back as a
+    REASON this battery prints and skips over: raising here would turn «I could not look at the
+    past» into a red that reads exactly like «the floor is wrong», which are opposite answers.
+    """
+    try:
+        done = subprocess.run(
+            ("git", "-C", str(module_dir)) + args,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError) as e:
+        return None, f"`git` could not be run ({e})"
+    if done.returncode != 0:
+        return None, (done.stderr.strip().splitlines() or ["git failed"])[0]
+    return done.stdout, None
+
+
+def release_commit(module_dir, version):
+    """The commit whose tree the marketplace published AS `version` — `(sha, None)` or `(None, why)`.
+
+    Read out of the neighbour's own git history, because that is the only copy of the past there
+    is: the module repos carry no tags at all (`git tag` is empty in every one of them), so a
+    release is found as the commit whose `module.json` declares exactly that version.
+
+    🔴 **The FIRST commit to declare it, not the last.** A version's zip is uploaded CREATE-ONLY
+    (`modules/{id}/v{version}.zip`), so the tree that becomes `vX` is the one pushed when `vX` was
+    first declared — the `chore(release): vX` commit — and everything merged AFTERWARDS while the
+    manifest still reads `vX` never reaches that zip at all. Measured on `appointments` while
+    closing whatsapp_inbox#125: `f213ade` is `chore(release): v1.1.25` and does NOT declare
+    `appointments.appointment.confirmed`; `39942c2` (appointments#40) adds the declaration with the
+    manifest still reading 1.1.25, so it shipped in **1.1.26** (`f3426cd`) and never in 1.1.25.
+    Reading the newest commit at a version would answer «1.1.25 declares it» about a zip that does
+    not, which is the exact reading this whole layer exists to distrust.
+
+    ⚠️ `-S` answers with the commits where the count of the string CHANGED, which is the one that
+    added the version and the one that bumped it away — and the newest is usually the second. So
+    every candidate is opened and only the one whose manifest really reads that version answers.
+    Taking the first sha reads the release ABOVE the floor (measured by hand: `-S '"version":
+    "1.1.72"' -n1` on `appointments/` answers `7c1c7f9`, which IS 1.1.73).
+    """
+    out, why = git_in(module_dir, "rev-parse", "--git-dir")
+    if out is None:
+        return None, f"{module_dir.name}/ is not a git checkout ({why})"
+    out, why = git_in(
+        module_dir, "log", "--format=%H", "-S", f'"version": "{version}"', "--", "module.json"
+    )
+    if out is None:
+        return None, f"the history of {module_dir.name}/module.json could not be read ({why})"
+    for sha in out.split():
+        blob, _ = git_in(module_dir, "show", f"{sha}:module.json")
+        if blob is None:
+            continue
+        try:
+            if (json.loads(blob) or {}).get("version") != version:
+                continue
+        except ValueError:
+            continue
+        return sha, None
+    return None, f"no commit of {module_dir.name}/ declares version {version}"
+
+
 def schema_at_version(module_dir, version, rel):
     """The `properties` a command's payload schema declared AT a released version of its module.
 
@@ -1392,46 +1457,42 @@ def schema_at_version(module_dir, version, rel):
     Returns `(properties, None)` or `(None, reason)` — never a quiet empty set, because «the field
     was not there» and «I could not look» are opposite answers and only one of them is a bug.
     """
+    sha, why = release_commit(module_dir, version)
+    if sha is None:
+        return None, why
+    blob, why = git_in(module_dir, "show", f"{sha}:{rel}")
+    if blob is None:
+        return None, f"{module_dir.name}/{rel} is not in the tree of {version} ({why})"
+    try:
+        return set((json.loads(blob).get("properties") or {}).keys()), None
+    except ValueError as e:
+        return None, f"{module_dir.name}/{rel} at {version} is not readable JSON ({e})"
 
-    def git(*args):
-        try:
-            done = subprocess.run(
-                ("git", "-C", str(module_dir)) + args,
-                capture_output=True,
-                text=True,
-                timeout=60,
-            )
-        except (OSError, subprocess.SubprocessError) as e:
-            return None, f"`git` could not be run ({e})"
-        if done.returncode != 0:
-            return None, (done.stderr.strip().splitlines() or ["git failed"])[0]
-        return done.stdout, None
 
-    out, why = git("rev-parse", "--git-dir")
-    if out is None:
-        return None, f"{module_dir.name}/ is not a git checkout ({why})"
-    out, why = git(
-        "log", "--format=%H", "-S", f'"version": "{version}"', "--", "module.json"
-    )
-    if out is None:
-        return None, f"the history of {module_dir.name}/module.json could not be read ({why})"
-    for sha in out.split():
-        blob, _ = git("show", f"{sha}:module.json")
-        if blob is None:
-            continue
-        try:
-            if (json.loads(blob) or {}).get("version") != version:
-                continue
-        except ValueError:
-            continue
-        blob, why = git("show", f"{sha}:{rel}")
-        if blob is None:
-            return None, f"{module_dir.name}/{rel} is not in the tree of {version} ({why})"
-        try:
-            return set((json.loads(blob).get("properties") or {}).keys()), None
-        except ValueError as e:
-            return None, f"{module_dir.name}/{rel} at {version} is not readable JSON ({e})"
-    return None, f"no commit of {module_dir.name}/ declares version {version}"
+def emits_at_version(module_dir, version):
+    """The events a neighbour DECLARED it emits in the tree published as `version`.
+
+    The twin of {@link schema_at_version} for the other half of a template: not what it SENDS but
+    what it WAKES UP for. Read from the same released tree and for the same reason — the floor
+    travels to the hub (hub#1611) and decides whether the recipe is OFFERED, so what matters is
+    what that published zip declared, never what the checkout on this machine declares today.
+
+    ⚠️ A module that declares NO events answers with an empty set, not with a reason: «it emitted
+    nothing» is an answer, and the rule that reads this has to be able to fail on it. Only «I could
+    not look» comes back as a reason, because a floor nobody could read and a floor that is high
+    enough look identical from here.
+    """
+    sha, why = release_commit(module_dir, version)
+    if sha is None:
+        return None, why
+    blob, why = git_in(module_dir, "show", f"{sha}:module.json")
+    if blob is None:
+        return None, f"{module_dir.name}/module.json is not in the tree of {version} ({why})"
+    try:
+        emits = ((json.loads(blob) or {}).get("events") or {}).get("emits")
+    except ValueError as e:
+        return None, f"{module_dir.name}/module.json at {version} is not readable JSON ({e})"
+    return {e for e in emits if isinstance(e, str)} if isinstance(emits, list) else set(), None
 
 
 def floor_payload_properties(floors, commands_def, resolved):
@@ -1503,6 +1564,75 @@ def floor_field_problems(name, doc, floor_props):
                     f"`invalid_payload` to every one of these calls — raise `modules` in "
                     f"`{name.split('.')[0]}.requires.json` to the version that introduced it"
                 )
+    return problems
+
+
+def floor_emitted_events(floors, resolved):
+    """`module id -> {events it DECLARED it emits}` AS OF the floor this family declares.
+
+    The twin of {@link floor_payload_properties} for the WAKE-UP half. Returns the map and the
+    floors it could not read, so `main()` can print them as skips: an unreadable floor and a floor
+    that is high enough look identical from here, and only one of them is a bug.
+    """
+    out, skipped = {}, []
+    for module_id, floor in sorted(floors.items()):
+        target = resolved.get(module_id)
+        if target is None:
+            continue  # not in the workspace: `main()` already says that module was not verified
+        module_dir, _ = target
+        emits, why = emits_at_version(module_dir, floor)
+        if emits is None:
+            skipped.append(
+                f"what `{module_id}` declared it emits as of the declared floor {floor} could not "
+                f"be read ({why}) — whether that floor is high enough for the event these "
+                f"templates WAIT ON was NOT verified"
+            )
+            continue
+        out[module_id] = emits
+    return out, skipped
+
+
+def floor_trigger_problems(name, doc, floor_emits):
+    """The event a family waits on was ALREADY DECLARED by its neighbour at the declared floor.
+
+    The mirror of {@link floor_field_problems}: that rule holds the floor to what these templates
+    SEND, this one to what wakes them up. Both exist because the floor TRAVELS to the hub since
+    hub#1611 and `flow_template_floor_is_met` decides with it whether a recipe is OFFERED at all —
+    so a floor below the release that started declaring the event hands the recipe to a hub where
+    the trigger matches nothing and the automation never runs once.
+
+    🔴 And it fails the SAME WAY the bug it was born from does, which is why it is worth a rule
+    instead of a careful reading. `appointments.appointment.confirmed` has been emitted by
+    `appointments.appointments.confirm` since the module's first commit, but the module did not
+    DECLARE it in `events.emits` until appointments#40 — and what a neighbour may consume is what
+    is declared, not what happens by ricochet. A recipe offered to a hub below that release is a
+    salon pressing «Confirmar» and no message leaving: exactly the silence of whatsapp_inbox#125,
+    now with a settings card reading «Activo» over it. Nothing else here catches it — every other
+    layer resolves the neighbour against the CHECKOUT on this machine, which is newer, so this
+    battery printed `RESOLVED appointments@1.1.73 (needs >= 1.1.25)` and went green over a floor
+    one release too low.
+
+    Silent by design on: a trigger that is not an event, an event whose owner this family pins no
+    floor for (`hub.*` is the core, not a neighbour), and a floor `main()` could not read.
+    """
+    problems = []
+    for trigger in doc.get("triggers") or []:
+        if not isinstance(trigger, dict) or trigger.get("kind") != "event":
+            continue
+        event = trigger.get("event")
+        if not isinstance(event, str) or "." not in event:
+            continue  # shapeless: `family_trigger_problems` is the rule that judges that
+        declared = floor_emits.get(event.split(".", 1)[0])
+        if declared is None:
+            continue  # unfloored or unreadable: `main()` said so out loud
+        if event not in declared:
+            problems.append(
+                f"{name} wakes up on `{event}`, and at the floor this family declares its owner "
+                f"declared it emits {sorted(declared) or 'nothing at all'}: the floor is below the "
+                f"release that started DECLARING that event, so the hub OFFERS this recipe to a "
+                f"copy where the trigger matches nothing and it never runs once — raise `modules` "
+                f"in `{name.split('.')[0]}.requires.json` to the version that declared it"
+            )
     return problems
 
 
@@ -3232,6 +3362,7 @@ DOCUMENT_RULES = (
     identified_cancellation_problems,
     identity_field_problems,
     floor_field_problems,
+    floor_trigger_problems,
     silence_problems,
     mute_refusal_problems,
     unanswered_ending_problems,
@@ -3267,6 +3398,7 @@ SELF_CHECKED_RULES = (
     identified_cancellation_problems,
     identity_field_problems,
     floor_field_problems,
+    floor_trigger_problems,
     silence_problems,
     mute_refusal_problems,
     unanswered_ending_problems,
@@ -6048,6 +6180,75 @@ _FLOOR_TAKES_BOTH = {
 }
 _FLOOR_TAKES_NEITHER = {MOVE_COMMAND: {"appointment_id", "start_datetime"}}
 
+CONFIRMED_EVENT = "appointments.appointment.confirmed"
+
+
+def _woken_by(*events):
+    """A document that wakes up on these events, and on nothing else."""
+    return {"triggers": [{"kind": "event", "event": e} for e in events], "steps": []}
+
+
+# What `appointments` DECLARED it emits at each of the two releases that matter here — measured on
+# its own history while closing whatsapp_inbox#125, not invented: `f213ade` is
+# `chore(release): v1.1.25` and its `module.json` has no `events` key at all, and `f3426cd`
+# (v1.1.26) is the first published tree that lists the event, because appointments#40 landed with
+# the manifest still reading 1.1.25 and a version's zip is written once.
+_EMITS_1_1_25 = {"appointments": set()}
+_EMITS_1_1_26 = {
+    "appointments": {CONFIRMED_EVENT, "appointments.appointment.cancelled"}
+}
+
+FLOOR_TRIGGER_CASES = [
+    (
+        "the floor already declares the event this family waits on",
+        _woken_by(CONFIRMED_EVENT),
+        _EMITS_1_1_26,
+        0,
+    ),
+    (
+        "🔴 whatsapp_inbox#125 as it was first written: the floor is appointments 1.1.25, whose "
+        "published manifest declares no events at all, so the salon presses «Confirmar» and the "
+        "trigger matches nothing — the very silence the recipe was written to end",
+        _woken_by(CONFIRMED_EVENT),
+        _EMITS_1_1_25,
+        1,
+    ),
+    (
+        "a floor that declares OTHER events but not this one — «it emits something» is not «it "
+        "emits this», and reading the set as a truthy flag would call that green",
+        _woken_by(CONFIRMED_EVENT),
+        {"appointments": {"appointments.appointment.cancelled"}},
+        1,
+    ),
+    (
+        "the event's owner is the core, which no `requires.json` pins a floor for: nothing is "
+        "declared about it, so nothing is demanded of it",
+        _woken_by("hub.whatsapp.message_received"),
+        _EMITS_1_1_25,
+        0,
+    ),
+    (
+        "the floor could not be read — `main()` skipped it out loud, and guessing here would be "
+        "this rule inventing a floor it never saw",
+        _woken_by(CONFIRMED_EVENT),
+        {},
+        0,
+    ),
+    (
+        "a trigger that is not an event has no owner to hold to a floor",
+        {"triggers": [{"kind": "schedule", "cron": "0 9 * * *"}], "steps": []},
+        _EMITS_1_1_25,
+        0,
+    ),
+    (
+        "two triggers and only one of them below the floor: the sound one must not cover the "
+        "other, which is how a rule that stops at the first trigger reads",
+        _woken_by("appointments.appointment.cancelled", CONFIRMED_EVENT),
+        {"appointments": {"appointments.appointment.cancelled"}},
+        1,
+    ),
+]
+
 FLOOR_CASES = [
     (
         "the floor already takes every field these templates send",
@@ -7077,6 +7278,14 @@ def self_check():
                 f"{label}: expected {expected} problem(s), got {len(got)}: {got}"
             )
     problems += _floor_reading_problems()
+    for label, doc, floor_emits, expected in FLOOR_TRIGGER_CASES:
+        got = floor_trigger_problems("(self-check)", doc, floor_emits)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «the floor already declares the event» rule is wrong — "
+                f"{label}: expected {expected} problem(s), got {len(got)}: {got}"
+            )
+
     for label, name, doc, expected in POLICY_CASES:
         got = policy_problems(name, doc, _FIXTURE_COMMANDS, _FIXTURE_READS)
         if len(got) != expected:
@@ -7233,6 +7442,7 @@ def main():
     # …and what each family's declared FLOOR really takes, read once per `requires.json` because it
     # walks the neighbour's git history and both languages of a family share the same floor.
     floor_props_by_family = {}
+    floor_emits_by_family = {}
 
     for path in docs:
         doc = json.loads(path.read_text())
@@ -7384,6 +7594,20 @@ def main():
                 ledger, floor_field_problems, path.name, doc, floor_props_by_family[fpath]
             )
 
+        # 3a-vi-quinquies) …and the neighbour ALREADY DECLARED the event this family waits on at
+        # that same floor (whatsapp_inbox#125). The twin above holds the floor to what the
+        # templates SEND; this one to what wakes them up, which is the half that decides whether
+        # the automation ever runs at all.
+        if resolved is not None:
+            fpath = floors_of(path)
+            if fpath not in floor_emits_by_family:
+                declared = (json.loads(fpath.read_text()) or {}).get("modules") or {} if fpath.is_file() else {}
+                floor_emits_by_family[fpath], emit_skips = floor_emitted_events(declared, resolved)
+                skipped += [f"{fpath.name}: {why}" for why in emit_skips]
+            problems += applied(
+                ledger, floor_trigger_problems, path.name, doc, floor_emits_by_family[fpath]
+            )
+
         # 3b) Every parameter is a word the query it addresses actually knows.
         #
         # A name that exists is not a name that filters. `whatsapp_inbox.conversations.list`
@@ -7455,6 +7679,7 @@ def main():
             enum_value_problems.__name__,
             identity_field_problems.__name__,
             floor_field_problems.__name__,
+            floor_trigger_problems.__name__,
             parking_producer_problems.__name__,
         }
         if commands_def is None
