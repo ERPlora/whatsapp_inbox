@@ -100,6 +100,10 @@ UNATTENDED_FAMILIES = frozenset(
     {
         "appointment-from-whatsapp",
         "reservation-from-whatsapp",
+        # whatsapp_inbox#125. It books nothing, but it SENDS with nobody watching, which is what
+        # this table is read for: a family missing from it is one `policy_problems` would start
+        # calling a defect the day somebody gave it a write.
+        "appointment-confirmed-to-whatsapp",
     }
 )
 
@@ -142,6 +146,172 @@ def unattended_ledger_problems(name, doc, families):
             f"{name}: `UNATTENDED_FAMILIES` names `{family}` and no document in `flows/` belongs "
             f"to it. The row makes every rule keyed off it vacuously green, and the business it "
             f"was written for has no recipe to install"
+        )
+    return problems
+
+
+# What each family WAITS FOR, as a ledger (whatsapp_inbox#125).
+#
+# This used to be one line at the bottom of `main()`: every document had to trigger on
+# `hub.whatsapp.message_received`, and the reason given was right as far as it went — «a template
+# that listens to something else is a different product wearing the same file name». What made it
+# stop working is that this module now ships a recipe that legitimately waits on something else:
+# the salon accepting an appointment in the diary (whatsapp_inbox#125). A blanket check has exactly
+# two endings there and both are bad — it fails a correct document, or somebody deletes it and
+# every document is then free to listen to anything at all.
+#
+# So the demand is written PER FAMILY instead of once for all of them, and it is anchored in BOTH
+# directions like `UNATTENDED_FAMILIES`: a family in `flows/` with no row is a recipe nothing holds
+# to its trigger, and a row with no family is a promise nothing keeps.
+FAMILY_TRIGGERS = {
+    "appointment-from-whatsapp": "hub.whatsapp.message_received",
+    "reservation-from-whatsapp": "hub.whatsapp.message_received",
+    # whatsapp_inbox#125. Not a message coming IN — the diary saying the salon accepted one. It is
+    # the other half of `appointment-from-whatsapp`: that recipe tells a customer whose appointment
+    # was born `pending` that «the salon will confirm shortly», and until this one shipped nothing
+    # ever did. She was left watching a chat that had gone quiet for good.
+    "appointment-confirmed-to-whatsapp": "appointments.appointment.confirmed",
+}
+
+
+def family_trigger_problems(name, doc, families):
+    """Each family waits for what its row says, and every family has a row — read both ways."""
+    problems = []
+    for family in sorted(families - set(FAMILY_TRIGGERS)):
+        problems.append(
+            f"{name}: `flows/` ships the family `{family}` and `FAMILY_TRIGGERS` does not name "
+            f"it, so nothing here says what it is allowed to wake up for. A recipe that quietly "
+            f"changes the event it listens to is a different product wearing the same file name, "
+            f"and the owner who turned the card on is never told. Name it, or take it out"
+        )
+    for family in sorted(set(FAMILY_TRIGGERS) - families):
+        problems.append(
+            f"{name}: `FAMILY_TRIGGERS` names `{family}` and no document in `flows/` belongs to "
+            f"it: the row guards nothing and reads as if it did"
+        )
+
+    want = FAMILY_TRIGGERS.get(family_of(name))
+    if want is None:
+        return problems  # already reported above; judging it against nothing would say nothing
+    events = {t.get("event") for t in doc.get("triggers", []) if t.get("kind") == "event"}
+    if events != {want}:
+        problems.append(
+            f"{name} wakes up for {sorted(e for e in events if e)} and its family is declared to "
+            f"wait on `{want}`. A document that listens to something else does not fail: it runs "
+            f"at a moment nobody designed it for, spending the same grants over the wrong data — "
+            f"and one that listens to something MORE runs twice"
+        )
+    return problems
+
+
+# The chain whatsapp_inbox#125 is about: the salon accepts an appointment in the diary, and the
+# customer has to hear about it on the phone she wrote from.
+CONFIRMATION_TRIGGER = "appointments.appointment.confirmed"
+APPOINTMENT_READ = "appointments.appointments.get"
+CONVERSATIONS_READ = "whatsapp_inbox.conversations.list"
+CONFIRMED_ID = "input.appointment_id"
+# The one field of the diary that says where to write to her, and the filter that carries it.
+DIARY_PHONE = "customer_phone"
+PHONE_FILTER = "f_contact_phone"
+
+
+def confirmation_notice_problems(name, doc):
+    """The salon confirms, and the CUSTOMER is told — to the number the DIARY holds.
+
+    Four marks, and each one is a way the same silence comes back.
+
+    1. **Something is actually sent.** This is whatsapp_inbox#125 word for word: the salon taps
+       «Confirm» in the Agenda and nothing reaches her. A family that wakes on the confirmation
+       and sends no `notify` is the bug with a file around it.
+    2. **The appointment is READ first.** The event carries `appointment_id` and nothing else
+       (`commands.rs` posts the command's own binds to the outbox, and `appointment_id.json` is
+       `additionalProperties: false` with that one property), so the phone number does not travel
+       with it. It lives in the diary, and the only step that can fetch it is a `kind: query` on
+       `appointments.appointments.get`.
+    3. **She is addressed by THAT phone.** The number the appointment was booked under is the one
+       the salon holds for her; anything else is a guess about who this run is about.
+    4. 🔴 **And the run stops when the diary has no phone for her.** `contact_phone` is declared
+       `op: like` (`module.json`), so an EMPTY value goes out as `%%` and matches every
+       conversation in the inbox — the lookup answers `found: true` and the first stranger in the
+       list is either written to or, if the kernel notices the ambiguity, the run dies with
+       `flow.recipient_ambiguous` for a reason nobody can read. A guard that only asks `found` is
+       green over both. The `neq: ""` is what makes «we have no number for her» end the run
+       quietly, which is the flow working, and it is the only thing standing between a walk-in
+       booked by phone and a confirmation sent to somebody else's chat.
+    """
+    if CONFIRMATION_TRIGGER not in {
+        t.get("event") for t in doc.get("triggers", []) if t.get("kind") == "event"
+    }:
+        # A document that waits on something else is not this rule's business. Said here rather
+        # than falling out of the loops below, where «no notify» and «not this family» would be
+        # the same expression and only one of them is a defect.
+        return []
+
+    steps = doc.get("steps", [])
+    problems = []
+
+    readers = [
+        s
+        for s in steps
+        if s.get("kind") == "query" and s.get("query") == APPOINTMENT_READ
+    ]
+    if not readers:
+        problems.append(
+            f"{name} wakes up when the salon confirms an appointment and no `kind: query` step "
+            f"reads `{APPOINTMENT_READ}`: the event carries `appointment_id` and nothing else, so "
+            f"the customer's phone number, the service and the professional are not in this run "
+            f"at all. There is nothing to write to her with, and nothing to write to her"
+        )
+    for reader in readers:
+        params = reader.get("params") or {}
+        if params.get("appointment_id") != CONFIRMED_ID:
+            problems.append(
+                f"{name} step `{reader.get('id')}` reads `{APPOINTMENT_READ}` with "
+                f"`appointment_id` = {params.get('appointment_id')!r} instead of "
+                f"`{CONFIRMED_ID}`: the appointment this run is about is the one the event named, "
+                f"and any other id is a different customer's diary read out to whoever this run "
+                f"reaches"
+            )
+
+    notifies = [s for s in steps if s.get("kind") == "notify"]
+    if not notifies:
+        problems.append(
+            f"{name} wakes up when the salon confirms an appointment and never sends anything: "
+            f"that IS whatsapp_inbox#125 — she asked on WhatsApp, was told the salon would "
+            f"confirm shortly, the salon confirmed, and the chat stayed quiet. A recipe that "
+            f"listens and says nothing is worse than no recipe: the card reads «on»"
+        )
+
+    phones = {f"steps.{r.get('id')}.{DIARY_PHONE}" for r in readers}
+    for notify in notifies:
+        to = notify.get("to") or {}
+        sent = (to.get("params") or {}).get(PHONE_FILTER)
+        if to.get("query") != CONVERSATIONS_READ or sent not in phones:
+            problems.append(
+                f"{name} step `{notify.get('id')}` addresses its message through "
+                f"`{to.get('query')}` / `{PHONE_FILTER}` = {sent!r}, and not through "
+                f"`{CONVERSATIONS_READ}` keyed on {sorted(phones) or 'the appointment read'}: the "
+                f"number the appointment was booked under is the only one in this run the salon "
+                f"vouched for. Anything else picks the conversation by something the salon never "
+                f"said was hers"
+            )
+
+    guarded = {
+        path
+        for step in steps
+        if step.get("kind") == "condition"
+        for path, clause in (step.get("when") or {}).items()
+        if isinstance(clause, dict) and clause.get("neq") == ""
+    }
+    for path in sorted(phones - guarded):
+        problems.append(
+            f"{name} sends to `{PHONE_FILTER}` = `{path}` and no `condition` step demands "
+            f"`{{\"{path}\": {{\"neq\": \"\"}}}}`: `contact_phone` is declared `op: like`, "
+            f"so an appointment the salon booked over the counter — no phone on the card — goes "
+            f"out as `%%` and matches EVERY conversation in the inbox. The lookup answers "
+            f"`found: true` and the confirmation is delivered to a stranger, or the run dies with "
+            f"`flow.recipient_ambiguous` and nobody can read why. Asking `found` alone is green "
+            f"over both"
         )
     return problems
 
@@ -2055,6 +2225,10 @@ PINNED_INSTRUCTIONS = {
             },
         ),
     ),
+    # whatsapp_inbox#125. It carries no prompt at all — there is no model in it — so the honest
+    # row is the empty one the rule itself asks for, rather than a name left out that reads as an
+    # oversight.
+    "appointment-confirmed-to-whatsapp": (),
     "reservation-from-whatsapp": (
         (
             "never a blocked day, never a window without room",
@@ -3052,6 +3226,8 @@ def parking_producer_problems(name, doc, commands_def, read_perms):
 
 
 DOCUMENT_RULES = (
+    family_trigger_problems,
+    confirmation_notice_problems,
     policy_problems,
     identified_cancellation_problems,
     identity_field_problems,
@@ -3085,6 +3261,8 @@ DOCUMENT_RULES = (
 # (whatsapp_inbox#61, mutant P4). Every rule `self_check()` proves has to be one `main()` is
 # REQUIRED to apply, and that is asserted rather than assumed.
 SELF_CHECKED_RULES = (
+    family_trigger_problems,
+    confirmation_notice_problems,
     policy_problems,
     identified_cancellation_problems,
     identity_field_problems,
@@ -3225,6 +3403,15 @@ def structural_shape(doc):
                 "on_expire": s.get("on_expire"),
                 "on_error": s.get("on_error"),
                 "command": s.get("command"),
+                # The machinery of a `kind: query` step (hub#954), which was missing here until
+                # whatsapp_inbox#125 — and it matters now because that family is made almost
+                # entirely of reads: with these four left out, the Spanish document could point
+                # its read at another query, key it on another field, or ask for `count` instead
+                # of `first`, and this guard would call the two documents the same automation.
+                "query": s.get("query"),
+                "params": s.get("params"),
+                "result": s.get("result"),
+                "limit": s.get("limit"),
                 "when": s.get("when"),
                 "seconds": s.get("seconds"),
                 # The two keys that carry words AND machinery (hub#1633/#1639), compared with the
@@ -5682,10 +5869,10 @@ QUERY_PIN_CASES = [
 # tests of `missing_instruction_problems`. The families are handed in for the same reason the pins
 # are in `PIN_CASES`: half of what the rule judges is not in the document, and a row has to be able
 # to describe a `flows/` folder that does not exist here.
-_SHIPPED_FAMILIES = {
-    "appointment-from-whatsapp",
-    "reservation-from-whatsapp",
-}
+# The healthy tree, read out of the table under test rather than written down a second time:
+# a literal copy here silently stopped being «what ships» the day a third recipe was added
+# (whatsapp_inbox#125), and then every case below judged the rule against a world of two.
+_SHIPPED_FAMILIES = set(PINNED_INSTRUCTIONS)
 _RESERVATION_EN = "reservation-from-whatsapp.en.flow.json"
 _RESERVATION_ES = "reservation-from-whatsapp.es.flow.json"
 _APPOINTMENT_ES = "appointment-from-whatsapp.es.flow.json"
@@ -6477,6 +6664,190 @@ def booking_tables_disagreement_problems():
     return problems
 
 
+_TRIGGER_FAMILIES = set(FAMILY_TRIGGERS)
+_CONFIRMED_DOC = "appointment-confirmed-to-whatsapp.en.flow.json"
+
+
+def _waiting(*events):
+    """A document that wakes up for exactly these events, and carries nothing else."""
+    return {"triggers": [{"kind": "event", "event": e} for e in events], "steps": []}
+
+
+TRIGGER_CASES = [
+    (
+        "the family waits on what its row says, which is the healthy tree",
+        _CONFIRMED_DOC,
+        _waiting(CONFIRMATION_TRIGGER),
+        _TRIGGER_FAMILIES,
+        0,
+    ),
+    (
+        "🔴 the document was repointed at another event and kept its file name: it still installs, "
+        "the card still reads «on», and it now runs at a moment nobody designed it for — spending "
+        "the same grants over data that means something else",
+        _CONFIRMED_DOC,
+        _waiting("appointments.appointment.cancelled"),
+        _TRIGGER_FAMILIES,
+        1,
+    ),
+    (
+        "🔴 and the shape a merge leaves behind: the right event AND another one. Every rule that "
+        "reads the trigger is happy, because the one it wanted is in there — and the recipe fires "
+        "TWICE, so the customer is told her appointment was confirmed when it was cancelled",
+        _CONFIRMED_DOC,
+        _waiting(CONFIRMATION_TRIGGER, "appointments.appointment.updated"),
+        _TRIGGER_FAMILIES,
+        1,
+    ),
+    (
+        "🔴 no trigger at all: the document saves, the card turns on and nothing ever wakes it. "
+        "That is the silence of whatsapp_inbox#125 with a green battery over it",
+        _CONFIRMED_DOC,
+        _waiting(),
+        _TRIGGER_FAMILIES,
+        1,
+    ),
+    (
+        "🔴 a family SHIPS and the table does not name it: nothing says what that recipe may wake "
+        "up for, which is the blanket check being deleted one family at a time",
+        _CONFIRMED_DOC,
+        _waiting(CONFIRMATION_TRIGGER),
+        _TRIGGER_FAMILIES | {"order-from-whatsapp"},
+        1,
+    ),
+    (
+        "🔴 and the mirror a rename leaves: a row pointing at a family nothing ships, guarding "
+        "nothing while reading as if it did",
+        _CONFIRMED_DOC,
+        _waiting(CONFIRMATION_TRIGGER),
+        _TRIGGER_FAMILIES - {"reservation-from-whatsapp"},
+        1,
+    ),
+]
+
+
+def _confirmation(
+    read=True,
+    read_id="read_appointment",
+    appointment_id=CONFIRMED_ID,
+    guard=True,
+    notify=True,
+    notify_to=None,
+):
+    """The whatsapp_inbox#125 recipe, with one screw loosened at a time."""
+    phone = f"steps.{read_id}.{DIARY_PHONE}"
+    steps = []
+    if read:
+        steps.append(
+            {
+                "id": read_id,
+                "kind": "query",
+                "query": APPOINTMENT_READ,
+                "params": {"appointment_id": appointment_id},
+                "result": "first",
+                "limit": 1,
+            }
+        )
+    steps.append(
+        {
+            "id": "reachable_on_whatsapp",
+            "kind": "query",
+            "query": CONVERSATIONS_READ,
+            "params": {PHONE_FILTER: phone},
+            "result": "first",
+            "limit": 1,
+        }
+    )
+    when = {"steps.reachable_on_whatsapp.found": {"eq": True}}
+    if guard:
+        when[phone] = {"neq": ""}
+    steps.append({"id": "has_a_thread", "kind": "condition", "when": when})
+    if notify:
+        steps.append(
+            {
+                "id": "tell_the_customer",
+                "kind": "notify",
+                "channel": "whatsapp",
+                "to": {
+                    "query": CONVERSATIONS_READ,
+                    "params": {PHONE_FILTER: notify_to or phone},
+                    "field": "contact_phone",
+                },
+                "template": "",
+                "vars": {"text": "Confirmed!"},
+            }
+        )
+    return {
+        "schema_version": 1,
+        "triggers": [
+            {
+                "kind": "event",
+                "event": CONFIRMATION_TRIGGER,
+                "input": {"appointment_id": "event.appointment_id"},
+            }
+        ],
+        "steps": steps,
+    }
+
+
+CONFIRMATION_CASES = [
+    (
+        "the salon confirms, the diary is read and she is told on the number it holds",
+        _CONFIRMED_DOC,
+        _confirmation(),
+        0,
+    ),
+    (
+        "a family that waits on an incoming message is not this rule's business: judging it would "
+        "report every WhatsApp recipe for not reading a diary it has no reason to read",
+        "appointment-from-whatsapp.en.flow.json",
+        {"triggers": [{"kind": "event", "event": WHATSAPP_EVENT}], "steps": []},
+        0,
+    ),
+    (
+        "🔴 whatsapp_inbox#125 word for word: it wakes up when the salon confirms and sends "
+        "NOTHING. She asked on WhatsApp, was told the salon would confirm shortly, the salon "
+        "confirmed — and the chat stayed quiet, with the card reading «on»",
+        _CONFIRMED_DOC,
+        _confirmation(notify=False),
+        1,
+    ),
+    (
+        "🔴 the guard that keeps an EMPTY phone out of the lookup is gone, leaving `found` on its "
+        "own. `contact_phone` is `op: like`, so a walk-in booked over the counter with no number "
+        "on her card goes out as `%%`, matches every conversation in the inbox and answers "
+        "`found: true`: the confirmation is delivered to a stranger, or the run dies with "
+        "`flow.recipient_ambiguous` and nobody can read why",
+        _CONFIRMED_DOC,
+        _confirmation(guard=False),
+        1,
+    ),
+    (
+        "🔴 the message is addressed by the conversation's OWN answer instead of by the diary: "
+        "circular, and it picks whoever the lookup happened to find first",
+        _CONFIRMED_DOC,
+        _confirmation(notify_to="steps.reachable_on_whatsapp.contact_phone"),
+        1,
+    ),
+    (
+        "🔴 the diary is never read: the event carries `appointment_id` and nothing else, so there "
+        "is no phone, no service and no professional in this run — nothing to write with, and "
+        "nowhere to write it (two marks, because the notify is then keyed on a value no step "
+        "produces)",
+        _CONFIRMED_DOC,
+        _confirmation(read=False),
+        2,
+    ),
+    (
+        "🔴 the diary is read for an appointment the event did not name: another customer's hour, "
+        "professional and phone number, read out to whoever this run reaches",
+        _CONFIRMED_DOC,
+        _confirmation(appointment_id="input.customer_id"),
+        1,
+    ),
+]
+
+
 def self_check():
     """The mutants of the rules above, run every time, before any real document is opened."""
     problems = booking_tables_disagreement_problems()
@@ -6612,6 +6983,20 @@ def self_check():
                         f"«the narrow value lives in the grant» rules silent on every real "
                         f"document, and nothing else here would notice"
                     )
+    for label, name, doc, families, expected in TRIGGER_CASES:
+        got = family_trigger_problems(name, doc, families)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «each family waits for what its row says» rule is wrong — "
+                f"{label}: expected {expected} problem(s), got {len(got)}: {got}"
+            )
+    for label, name, doc, expected in CONFIRMATION_CASES:
+        got = confirmation_notice_problems(name, doc)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «the salon confirms and she is told» rule is wrong — "
+                f"{label}: expected {expected} problem(s), got {len(got)}: {got}"
+            )
     for label, name, doc, families, expected in INSTRUCTION_CASES:
         got = missing_instruction_problems(name, doc, families)
         if len(got) != expected:
@@ -7050,14 +7435,16 @@ def main():
             )
 
         # The trigger this whole issue is about: a template that listens to something else is a
-        # different product wearing the same file name.
-        events = {
-            t.get("event") for t in doc.get("triggers", []) if t.get("kind") == "event"
-        }
-        if "hub.whatsapp.message_received" not in events:
-            problems.append(
-                f"{path.name} does not trigger on `hub.whatsapp.message_received`: {sorted(events)}"
-            )
+        # different product wearing the same file name. Per FAMILY since whatsapp_inbox#125 —
+        # this module now ships one recipe that legitimately waits on the diary instead of on an
+        # incoming message, and a blanket demand could only fail it or be deleted.
+        problems += applied(
+            ledger, family_trigger_problems, path.name, doc, shipped_families
+        )
+
+        # …and that recipe really closes the loop it was written for: the salon confirms and the
+        # customer is told, on the number the DIARY holds for her (whatsapp_inbox#125).
+        problems += applied(ledger, confirmation_notice_problems, path.name, doc)
 
     # 3c) …and every rule above actually MET every document that reached this far. Waived only for
     # the layer that was skipped out loud (no manifests next door → no `policy_problems`).
