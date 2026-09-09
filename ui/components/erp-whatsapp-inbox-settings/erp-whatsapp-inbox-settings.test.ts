@@ -49,6 +49,13 @@ interface Hub {
   /** What the kernel already built from each family. Absent key = `null` (nothing built yet). */
   built?: Record<string, Installed>;
   /**
+   * Families this hub does NOT list at all — the recipe's version floor is not met next door, so
+   * `flow_templates()` filters it out (hub#1611). Different from {@link Hub.built} being `null`,
+   * which is «offered and nothing built from it yet», and the difference is the whole of
+   * whatsapp_inbox#137: a family that is not listed has no `activate` to honour.
+   */
+  unlisted?: string[];
+  /**
    * A hub from before hub#1677: the SDK method is not there at all. That is the version probe the
    * SDK's own docstring prescribes, and it is why the card can say «update the hub» instead of
    * painting a button that answers 404.
@@ -88,7 +95,10 @@ function mountWith(hub: Hub = {}) {
     // The kernel serves this module its OWN families and nothing else (hub#1677) — the companions
     // a card carries included: they are recipes of this module too, so the listing answers for
     // them, and what the card paints stays the answer of the hub and not of the write.
-    return WHATSAPP_USES.flatMap((use) => [use.family, ...use.companions]).map((family) => ({
+    const unlisted = new Set(hub.unlisted ?? []);
+    return WHATSAPP_USES.flatMap((use) => [use.family, ...use.companions])
+      .filter((family) => !unlisted.has(family))
+      .map((family) => ({
       module: MODULE_ID,
       family,
       documents: {},
@@ -473,6 +483,45 @@ describe('a failure is read on the card, never swallowed', () => {
     expect(text(el)).toContain(esLocale.ui.errActivate);
     expect(pick(el, `state-${APPOINTMENTS.family}`)).toBeNull();
     expect(pick(el, `activate-${APPOINTMENTS.family}`), 'left her no way to try again').not.toBeNull();
+  });
+
+  /**
+   * **A card is only honest if the hub offers the recipe behind it** (whatsapp_inbox#137).
+   *
+   * The card is picked by whether the booking module is INSTALLED, but what makes «Activar» work is
+   * whether the hub OFFERS the family — and those two answers part company exactly when the
+   * neighbour is older than the floor the recipe declares (`flow_template_floor_problem`,
+   * hub#1611). On a hub in that window the owner is shown a card whose button answers
+   * `flow.template_not_found`, and whose switch, if she ever got that far, refuses every change.
+   *
+   * The listing is the hub's own answer to «what can be turned on here», so it is what the card
+   * follows. `templatesFailed` and `hubTooOld` are answered above and never reach this: «I could
+   * not find out» must not read as «not offered».
+   */
+  it('a family this hub does not offer is not painted: its «Activar» could never be honoured', async () => {
+    mountWith({ unlisted: [APPOINTMENTS.family] });
+    const el = await mount();
+    expect(
+      pick(el, `activate-${APPOINTMENTS.family}`),
+      'offered «Activar» for a recipe this hub does not list: the tap answers `flow.template_not_found`',
+    ).toBeNull();
+    // The positive, in the same mount: the card the hub DOES list is still there, so this is
+    // measuring the listing and not an empty screen.
+    expect(
+      pick(el, `activate-${RESERVATIONS.family}`),
+      'hid the card of a family the hub does list',
+    ).not.toBeNull();
+  });
+
+  it('booking module installed but its recipe not offered: it says to update, not to install', async () => {
+    mountWith({ unlisted: [APPOINTMENTS.family, RESERVATIONS.family] });
+    const el = await mount();
+    expect(
+      text(el),
+      'told a salon that HAS Citas to install a booking module: the fix is an update, and she would ' +
+        'look for a module she is already paying for',
+    ).not.toContain(esLocale.ui.usesNeedBookingModule);
+    expect(text(el)).toContain(esLocale.ui.usesNeedNewerBookingModule);
   });
 
   it('no booking module at all: it says which app to install, and how to get there', async () => {
@@ -870,7 +919,7 @@ describe('every sentence of this screen ships in both languages, translated', ()
     'stepNumber', 'stepUses', 'helpConnectScanQr', 'helpConnectNeedsNewerHub',
     'activate', 'notNow', 'turnOff', 'stateOn', 'stateOff',
     'advancedInAutomations', 'advancedMetaTemplates',
-    'usesNeedsNewerHub', 'usesNeedBookingModule', 'usesGoToApps',
+    'usesNeedsNewerHub', 'usesNeedBookingModule', 'usesNeedNewerBookingModule', 'usesGoToApps',
     'activateForbidden', 'errActivate', 'errTemplates',
     // Derived, never listed: every sentence a card owns — its name, its summary, its consent, its
     // «text your number» line AND the four words of its switch — comes off the use itself, so a
