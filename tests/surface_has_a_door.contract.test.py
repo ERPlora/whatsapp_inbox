@@ -29,6 +29,11 @@ The doors that are NOT a screen are recognised as what they are, not waved throu
     screen belongs to the Hub, not to us: the module DECLARES the name and the shell resolves it
     (whatsapp_inbox#131). Declaring it IS the door, and getting the name wrong is caught by the
     manifest's own schema, not here.
+  * a command a RECIPE of ours calls — `flows/*.flow.json` ships with the module (hub#1654) and its
+    `command` steps are run by the flow executor, which is a caller as real as a button. It counts
+    only when the family's `<family>.grants.json` grants it too: a step without its grant is
+    refused at run time (`flows/grants.rs::check_command_grant`), so the step ALONE is a door that
+    does not open (whatsapp_inbox#133).
   * an `internal: true` command, or one prefixed `_`, which no caller outside the module may reach.
 
 Usage: tests/surface_has_a_door.contract.test.py   (exit 0 = green). No Postgres, no Docker.
@@ -93,6 +98,30 @@ def handler_intentions():
     """Command names a WASM handler returns as intentions — the runtime is their caller."""
     source = (MODULE_DIR / "handler/src/lib.rs").read_text()
     return set(re.findall(r'"(whatsapp_inbox\.[a-z0-9_.]+)"', source))
+
+
+def recipe_callers():
+    """Commands our own shipped recipes call — the flow executor is their caller.
+
+    Both halves are required. The `command` step names it, and the family's grants file has to
+    grant it: the executor checks the grant before it runs the step, so a step whose grant is
+    missing links nothing and would otherwise read here as a door that opens.
+    """
+    called = set()
+    for recipe in sorted((MODULE_DIR / "flows").glob("*.flow.json")):
+        family = recipe.name.split(".")[0]
+        grants_path = MODULE_DIR / "flows" / f"{family}.grants.json"
+        if not grants_path.exists():
+            continue
+        granted = {
+            g.get("value")
+            for g in json.loads(grants_path.read_text()).get("grants", [])
+            if g.get("kind") == "command"
+        }
+        for step in json.loads(recipe.read_text()).get("steps", []):
+            if step.get("kind") == "command" and step.get("command") in granted:
+                called.add(step["command"])
+    return called
 
 
 def listener_targets():
@@ -186,7 +215,9 @@ KIND_LABEL = {"queries": "query", "commands": "command"}
 
 def check_every_public_name_has_a_caller():
     problems = []
-    callers = consumed() | handler_intentions() | listener_targets() | shell_doors()
+    callers = (
+        consumed() | handler_intentions() | listener_targets() | shell_doors() | recipe_callers()
+    )
     for kind, name in public_names():
         if name in callers or name in PENDING:
             continue
@@ -202,7 +233,9 @@ def check_every_public_name_has_a_caller():
 def check_pending_is_still_pending():
     """A `PENDING` entry that got its screen is stale bookkeeping: it must come out."""
     problems = []
-    callers = consumed() | handler_intentions() | listener_targets() | shell_doors()
+    callers = (
+        consumed() | handler_intentions() | listener_targets() | shell_doors() | recipe_callers()
+    )
     declared = {name for _kind, name in public_names()}
     for name, reason in PENDING.items():
         if name not in declared:

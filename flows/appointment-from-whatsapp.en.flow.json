@@ -102,6 +102,16 @@
       "limit": 1
     },
     {
+      "id": "remember_the_customer",
+      "kind": "command",
+      "command": "whatsapp_inbox.conversations.link_customer",
+      "payload": {
+        "wa_contact_id": "{{input.from}}",
+        "customer_id": "{{steps.resolve_customer.id}}"
+      },
+      "on_error": "continue"
+    },
+    {
       "id": "booking_policy",
       "kind": "query",
       "query": "appointments.settings.get",

@@ -35,6 +35,10 @@
     {
       "kind": "command",
       "value": "reservations.waitlist.create"
+    },
+    {
+      "kind": "command",
+      "value": "whatsapp_inbox.conversations.link_customer"
     }
   ]
 }
