@@ -3628,7 +3628,7 @@ var es_default = {
     labelLinkedObject: "Registro creado",
     errLoadRequest: "No se ha podido cargar la petici\xF3n",
     useAppointmentsName: "Reservar citas",
-    useAppointmentsSummary: "Una clienta pide cita por WhatsApp, el asistente le ofrece las horas que de verdad tienes libres y le reserva la que elija; luego le dice que ya est\xE1.",
+    useAppointmentsSummary: "Una clienta pide cita por WhatsApp, el asistente le ofrece las horas que de verdad tienes libres y le reserva la que elija; luego le dice que ya est\xE1, y le avisa cuando t\xFA confirmas su cita.",
     usesGoToApps: "Ver aplicaciones",
     stepNumber: "Tu n\xFAmero",
     stepUses: "\xBFPara qu\xE9 lo usas?",
@@ -3649,7 +3649,7 @@ var es_default = {
     errActivate: "No se pudo activar. No se ha cambiado nada: int\xE9ntalo otra vez.",
     errTemplates: "No hemos podido saber qu\xE9 hay activo ahora mismo. Vuelve a cargar la pantalla.",
     errPolicy: "No se pudo guardar c\xF3mo se confirman las citas. Int\xE9ntalo otra vez.",
-    useAppointmentsConsent: "WhatsApp contestar\xE1 solo: lee tu agenda, ofrece los huecos libres, reserva, mueve o anula la cita de la clienta que escribe y le contesta. No puede tocar las citas de nadie m\xE1s. \xBFLo activas?",
+    useAppointmentsConsent: "WhatsApp contestar\xE1 solo: lee tu agenda, ofrece los huecos libres, reserva, mueve o anula la cita de la clienta que escribe y le contesta; y le avisa cuando confirmas su cita. No puede tocar las citas de nadie m\xE1s. \xBFLo activas?",
     useAppointmentsDone: "Listo. Escr\xEDbete desde otro m\xF3vil: \u201Cquiero cita ma\xF1ana\u201D."
   },
   errors: {
@@ -3790,7 +3790,7 @@ var en_default = {
     labelLinkedObject: "Created record",
     errLoadRequest: "Could not load the request",
     useAppointmentsName: "Book appointments",
-    useAppointmentsSummary: "A customer asks for an appointment on WhatsApp, the assistant offers the hours you actually have free, and books the one they pick \u2014 then tells them it is done.",
+    useAppointmentsSummary: "A customer asks for an appointment on WhatsApp, the assistant offers the hours you actually have free, and books the one they pick \u2014 then tells them it is done, and tells them when you confirm their appointment.",
     usesGoToApps: "See apps",
     stepNumber: "Your number",
     stepUses: "What do you use it for?",
@@ -3811,7 +3811,7 @@ var en_default = {
     errActivate: "It could not be turned on. Nothing was changed \u2014 try again.",
     errTemplates: "We could not find out what is already turned on. Reload the screen.",
     errPolicy: "We could not save how bookings are confirmed. Try again.",
-    useAppointmentsConsent: "WhatsApp will answer on its own: it reads your diary, offers free slots, books, moves or cancels the appointment of the customer who writes, and replies to them. It cannot touch anyone else\u2019s appointments. Turn it on?",
+    useAppointmentsConsent: "WhatsApp will answer on its own: it reads your diary, offers free slots, books, moves or cancels the appointment of the customer who writes, and replies to them; and it tells them when you confirm their appointment. It cannot touch anyone else\u2019s appointments. Turn it on?",
     useAppointmentsDone: "Done. Text your number from another phone: \u201CI\u2019d like an appointment tomorrow\u201D."
   },
   errors: {
@@ -4788,6 +4788,10 @@ var MODULE_ID = "whatsapp_inbox";
 var WHATSAPP_USES = [
   {
     family: "appointment-from-whatsapp",
+    // The notice the salon's «Confirmar» owes the customer (whatsapp_inbox#125). Its floor is
+    // `appointments` 1.1.25, well under the 1.1.73 this card already demands, so no hub can accept
+    // the booking recipe and refuse this one.
+    companions: ["appointment-confirmed-to-whatsapp"],
     module: "appointments",
     witness: "appointments.settings.get",
     probe: (client) => client.queryOptional("appointments.settings.get"),
@@ -4948,19 +4952,30 @@ var ErpWhatsappInboxSettings = class extends i3 {
     window.dispatchEvent(new PopStateEvent("popstate"));
   }
   /**
-   * Turns the family on through the kernel and re-reads the listing.
+   * Turns on everything the card promised — its own recipe and the companions that finish the
+   * sentence the owner consented to (whatsapp_inbox#125) — and re-reads the listing.
    *
    * The listing is authoritative on purpose: the door answers with the flow it built, but what the
    * card paints is what the hub says is there. Trusting the write would make a card that reads
    * «Activo» over a flow that a later refusal never created.
+   *
+   * **The card's own recipe goes first, and a half-done activation is undone.** One switch cannot
+   * paint two answers: left half on, the card would read «Activo» while the customer keeps waiting
+   * for the confirmation that never leaves — the very silence of #125, now with a screen saying it
+   * works, and no way offered to retry the half that failed. Undoing puts the card back where the
+   * owner can press «Activar» again, and the refresh below still paints whatever really survived.
    */
   async activate(use) {
     const flows = door();
     if (!flows?.activateTemplate) return;
     this.busy = use.family;
     this.cardError = { ...this.cardError, [use.family]: null };
+    const turnedOn = [];
     try {
-      await flows.activateTemplate(use.family);
+      for (const family of [use.family, ...use.companions]) {
+        await flows.activateTemplate(family);
+        turnedOn.push(family);
+      }
       this.asking = "";
       await this.refresh(flows);
       this.justActivated = use.family;
@@ -4968,21 +4983,50 @@ var ErpWhatsappInboxSettings = class extends i3 {
     } catch (e5) {
       this.asking = "";
       this.cardError = { ...this.cardError, [use.family]: activationError(e5) };
+      await this.undo(flows, turnedOn);
+      await this.refresh(flows);
     } finally {
       this.busy = "";
     }
   }
+  /**
+   * Stops what a failed activation had already started, the card's own recipe LAST for the same
+   * reason {@link deactivate} does it in that order.
+   *
+   * A rollback that fails is not swallowed: the card keeps the error that started this, the console
+   * carries the second one, and the refresh that follows paints what is really still running —
+   * «Activo» over the half that survived, never a silent «off» with an automation behind it.
+   */
+  async undo(flows, turnedOn) {
+    for (const family of [...turnedOn].reverse()) {
+      try {
+        await flows.deactivateTemplate?.(family);
+      } catch (e5) {
+        console.warn(`[${MODULE_ID}] could not undo a half-done activation of ${family}`, e5);
+      }
+    }
+  }
+  /**
+   * Stops everything the card promised — the companions FIRST, its own recipe LAST.
+   *
+   * The order is the guarantee, not a detail: turning the card's recipe off first would leave the
+   * hub texting customers behind a card that already reads «Desactivada», an automation running
+   * where the owner was told there is none. Failing halfway lands on the same rule — the refresh
+   * repaints from the hub, so what is still running still reads as running.
+   */
   async deactivate(use) {
     const flows = door();
     if (!flows?.deactivateTemplate) return;
     this.busy = use.family;
     this.cardError = { ...this.cardError, [use.family]: null };
     try {
+      for (const family of [...use.companions].reverse()) await flows.deactivateTemplate(family);
       await flows.deactivateTemplate(use.family);
       this.justActivated = "";
       await this.refresh(flows);
     } catch (e5) {
       this.cardError = { ...this.cardError, [use.family]: activationError(e5) };
+      await this.refresh(flows);
     } finally {
       this.busy = "";
     }
