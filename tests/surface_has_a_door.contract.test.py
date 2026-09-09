@@ -24,6 +24,11 @@ memory:
 The doors that are NOT a screen are recognised as what they are, not waved through:
   * a command named by `events.listen` — the relay calls it,
   * a command a WASM handler returns as an intention — the runtime calls it,
+  * a query the manifest hands to the SHELL to call — `billing.usage.query`, `widgets.*.query`,
+    `protects[].settings_query` / `.guard_query`. These have no Web Component of ours because the
+    screen belongs to the Hub, not to us: the module DECLARES the name and the shell resolves it
+    (whatsapp_inbox#131). Declaring it IS the door, and getting the name wrong is caught by the
+    manifest's own schema, not here.
   * an `internal: true` command, or one prefixed `_`, which no caller outside the module may reach.
 
 Usage: tests/surface_has_a_door.contract.test.py   (exit 0 = green). No Postgres, no Docker.
@@ -67,12 +72,6 @@ PENDING = {
         "whatsapp_inbox#127 — and the quota half of that is already `_quota.set`'s job, which is "
         "why `settings_quota_owner.pg.test.py` exists"
     ),
-    "whatsapp_inbox.usage.get": (
-        "the month counter moves from the channel's settings to the shell's Plan tab (ADR-0470, "
-        "«contadores (pestaña Plan del shell)»), and that tab does not read it yet — measured the "
-        "08/09: no caller in `hub@origin/develop` under `apps/` or `crates/`. Tracked in "
-        "whatsapp_inbox#131; #127 keeps the query alive on purpose for it"
-    ),
 }
 
 
@@ -101,6 +100,32 @@ def listener_targets():
         spec["command"]
         for spec in MANIFEST.get("events", {}).get("listen", {}).values()
     }
+
+
+def shell_doors():
+    """Query names the manifest hands to the Hub's SHELL, which is their caller.
+
+    The shell reads the raw `module.json` and resolves these by name; the module ships no Web
+    Component for them on purpose, because the screen is the Hub's (the «Plan» tab is synthetic —
+    `ModuleView.vue`, id `__plan__`). Without this, declaring the counter would leave
+    `usage.get` looking as unreachable as it did when nothing pointed at it at all.
+    """
+    doors = set()
+
+    usage = MANIFEST.get("billing", {}).get("usage")
+    if usage and usage.get("query"):
+        doors.add(usage["query"])
+
+    for widget in MANIFEST.get("widgets", {}).values():
+        if widget.get("query"):
+            doors.add(widget["query"])
+
+    for guard in MANIFEST.get("protects", []):
+        for field in ("settings_query", "guard_query"):
+            if guard.get(field):
+                doors.add(guard[field])
+
+    return doors
 
 
 def public_names():
@@ -161,7 +186,7 @@ KIND_LABEL = {"queries": "query", "commands": "command"}
 
 def check_every_public_name_has_a_caller():
     problems = []
-    callers = consumed() | handler_intentions() | listener_targets()
+    callers = consumed() | handler_intentions() | listener_targets() | shell_doors()
     for kind, name in public_names():
         if name in callers or name in PENDING:
             continue
@@ -177,7 +202,7 @@ def check_every_public_name_has_a_caller():
 def check_pending_is_still_pending():
     """A `PENDING` entry that got its screen is stale bookkeeping: it must come out."""
     problems = []
-    callers = consumed() | handler_intentions() | listener_targets()
+    callers = consumed() | handler_intentions() | listener_targets() | shell_doors()
     declared = {name for _kind, name in public_names()}
     for name, reason in PENDING.items():
         if name not in declared:

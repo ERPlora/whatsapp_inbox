@@ -711,6 +711,12 @@
           "conversations_per_month": 800
         }
       }
-    ]
+    ],
+    "usage": {
+      "query": "whatsapp_inbox.usage.get",
+      "metric": "conversations_per_month",
+      "used": "inbound_this_month",
+      "limit": "monthly_limit"
+    }
   }
 }
