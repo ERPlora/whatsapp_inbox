@@ -52,6 +52,13 @@ LADDER_QUOTAS = {"free": 30, "basic": 150, "pro": 500, "enterprise": 800}
 #: The metric the quotas are counted in. Named here so a rename cannot slip the numbers past us.
 QUOTA_METRIC = "conversations_per_month"
 
+#: Source language of the strings (ADR-0055). The other catalogues are its translation.
+SOURCE_LANGUAGE = "en"
+
+#: The only level whose name is a WORD and not a brand: `Free` is `Gratis` to the person reading it.
+#: `Basic`, `Pro` and `Enterprise` are the same in every language on purpose (ADR-0474 §4).
+TRANSLATED_LEVEL = "free"
+
 
 def locale_files():
     return sorted(LOCALES_DIR.glob("*.json"))
@@ -170,6 +177,37 @@ def check_every_level_is_named_in_every_language():
     return problems
 
 
+def check_the_one_level_that_is_a_word_is_translated():
+    """`free` is the only rung whose name has to change language, and it is the rung the whole
+    catalogue exists for: without it the plan tab already read `Free`, in English, off the manifest.
+    Presence is not enough here — copying the English word into `es.json` leaves the screen exactly
+    as broken as leaving the key out, and passes every other check in this file."""
+    problems = []
+    if TRANSLATED_LEVEL not in [tier.get("slug") for tier in TIERS]:
+        return problems  # the ladder check already reports a manifest without it
+    source = None
+    for path in locale_files():
+        if path.stem == SOURCE_LANGUAGE:
+            source = json.loads(path.read_text()).get("billing", {}).get("tiers", {}).get(
+                TRANSLATED_LEVEL
+            )
+    if source is None:
+        return problems  # a missing source name is already reported above
+    for path in locale_files():
+        if path.stem == SOURCE_LANGUAGE:
+            continue
+        name = json.loads(path.read_text()).get("billing", {}).get("tiers", {}).get(
+            TRANSLATED_LEVEL
+        )
+        if name is not None and str(name).strip() == str(source).strip():
+            problems.append(
+                f"{path.name}: the level `{TRANSLATED_LEVEL}` is still called `{source}` — the "
+                f"same word as {SOURCE_LANGUAGE}.json, so nobody translated it and the plan screen "
+                f"reads in English on a {path.stem} hub, which is what this catalogue exists to fix"
+            )
+    return problems
+
+
 def main():
     if not LOCALES_DIR.is_dir():
         print("FAIL  the module ships no locales/ directory")
@@ -185,6 +223,7 @@ def main():
     problems += check_no_level_is_sold_on_its_own()
     problems += check_the_quotas_are_the_ones_the_margin_rule_allows()
     problems += check_every_level_is_named_in_every_language()
+    problems += check_the_one_level_that_is_a_word_is_translated()
 
     for problem in problems:
         print(f"FAIL  {problem}")
