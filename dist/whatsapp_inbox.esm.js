@@ -3519,6 +3519,12 @@ var es_default = {
   billing: {
     quota: {
       conversations_per_month: "conversaciones al mes"
+    },
+    tiers: {
+      free: "Gratis",
+      basic: "Basic",
+      pro: "Pro",
+      enterprise: "Enterprise"
     }
   },
   ui: {
@@ -3714,6 +3720,12 @@ var en_default = {
   billing: {
     quota: {
       conversations_per_month: "conversations per month"
+    },
+    tiers: {
+      free: "Free",
+      basic: "Basic",
+      pro: "Pro",
+      enterprise: "Enterprise"
     }
   },
   ui: {
