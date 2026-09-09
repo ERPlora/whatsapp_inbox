@@ -14,7 +14,7 @@
   },
   "billing": {
     "quota": {
-      "conversations_per_month": "conversaciones al mes"
+      "billable_messages_per_month": "mensajes al mes"
     },
     "tiers": {
       "free": "Gratis",

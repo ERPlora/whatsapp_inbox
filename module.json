@@ -681,7 +681,7 @@
         "price": 0,
         "interval": "month",
         "quota": {
-          "conversations_per_month": 30
+          "billable_messages_per_month": 30
         }
       },
       {
@@ -690,7 +690,7 @@
         "price": 0,
         "interval": "month",
         "quota": {
-          "conversations_per_month": 150
+          "billable_messages_per_month": 150
         }
       },
       {
@@ -699,7 +699,7 @@
         "price": 0,
         "interval": "month",
         "quota": {
-          "conversations_per_month": 500
+          "billable_messages_per_month": 500
         }
       },
       {
@@ -708,13 +708,13 @@
         "price": 0,
         "interval": "month",
         "quota": {
-          "conversations_per_month": 800
+          "billable_messages_per_month": 800
         }
       }
     ],
     "usage": {
       "query": "whatsapp_inbox.usage.get",
-      "metric": "conversations_per_month",
+      "metric": "billable_messages_per_month",
       "used": "inbound_this_month",
       "limit": "monthly_limit"
     }

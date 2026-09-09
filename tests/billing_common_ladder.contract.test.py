@@ -50,7 +50,7 @@ COMMON_LADDER = ["free", "basic", "pro", "enterprise"]
 LADDER_QUOTAS = {"free": 30, "basic": 150, "pro": 500, "enterprise": 800}
 
 #: The metric the quotas are counted in. Named here so a rename cannot slip the numbers past us.
-QUOTA_METRIC = "conversations_per_month"
+QUOTA_METRIC = "billable_messages_per_month"
 
 #: Source language of the strings (ADR-0055). The other catalogues are its translation.
 SOURCE_LANGUAGE = "en"
