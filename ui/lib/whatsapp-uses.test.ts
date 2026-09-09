@@ -577,6 +577,30 @@ describe('the release reader the floor guard relies on', () => {
       'the reader answers «it is there» about a tree that predates the command: it cannot say no',
     ).not.toContain('appointments.settings.set_auto_confirm_online');
   });
+
+  /**
+   * 🔴 **«There is no checkout» and «I read the history and that release is not in it» are OPPOSITE
+   * answers, and only the first may skip.** The day they collapse, a neighbour parked a few releases
+   * back makes the floor guard below skip ITSELF green on exactly the versions it exists to check —
+   * measured while writing #137: a bare `git log` walked the sibling's HEAD, three releases behind,
+   * answered «no such release» about trees that had been published for days, and the file reported
+   * every test passing. The version asked for here can never be published, so the reader is forced
+   * all the way to the second answer.
+   */
+  it('a release that is not in the history is a hard red, never a quiet skip', () => {
+    if (manifestAtRelease('appointments', '1.1.76').kind === 'absent') {
+      console.warn('SKIPPED: no appointments checkout next door (module-toolkit#211)');
+      return;
+    }
+    expect(
+      manifestAtRelease('appointments', '9.9.9').kind,
+      'a release the reader could not find reads as «nothing to read here», so the floor guard skips',
+    ).toBe('unreadable');
+    expect(
+      () => manifestAtReleaseOrSkip('appointments', '9.9.9'),
+      'the floor guard is handed a quiet null instead of a failure, and goes green without measuring',
+    ).toThrow(/9\.9\.9/);
+  });
 });
 
 /**
