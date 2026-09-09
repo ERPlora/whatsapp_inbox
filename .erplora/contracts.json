@@ -12,7 +12,8 @@
     ],
     "optional_queries": [
       "appointments.settings.get",
-      "flows.drafts.list"
+      "flows.drafts.list",
+      "reservations.settings.get"
     ],
     "commands": [
       "whatsapp_inbox.conversations.assign",
@@ -26,7 +27,8 @@
       "whatsapp_inbox.templates.update"
     ],
     "optional_commands": [
-      "appointments.settings.set_auto_confirm_online"
+      "appointments.settings.set_auto_confirm_online",
+      "reservations.settings.set_auto_confirm"
     ],
     "events": [
       "appointments.booking_request.failed",

@@ -3638,9 +3638,10 @@ var es_default = {
     turnOff: "Desactivar",
     stateOn: "Activo",
     stateOff: "Desactivada",
-    policyAuto: "Las citas se confirman solas",
     policyReview: "Las reviso yo antes",
-    helpPolicyReview: "Cada cita nueva te espera en la Agenda con \u201CConfirmar\u201D; a la clienta le decimos que se la confirmas en breve.",
+    useAppointmentsPolicyAuto: "Las citas se confirman solas",
+    useAppointmentsPolicyReviewHelp: "Cada cita nueva te espera en la Agenda con \u201CConfirmar\u201D; a la clienta le decimos que se la confirmas en breve.",
+    useAppointmentsPolicyError: "No se pudo guardar c\xF3mo se confirman las citas. Int\xE9ntalo otra vez.",
     advancedInAutomations: "Ajustes avanzados en Automatizaciones",
     advancedMetaTemplates: "Plantillas de Meta",
     usesNeedsNewerHub: "Este hub es demasiado antiguo para activarlo desde aqu\xED. Actualiza el hub.",
@@ -3648,9 +3649,15 @@ var es_default = {
     activateForbidden: "Solo un due\xF1o o un administrador puede activarlo.",
     errActivate: "No se pudo activar. No se ha cambiado nada: int\xE9ntalo otra vez.",
     errTemplates: "No hemos podido saber qu\xE9 hay activo ahora mismo. Vuelve a cargar la pantalla.",
-    errPolicy: "No se pudo guardar c\xF3mo se confirman las citas. Int\xE9ntalo otra vez.",
     useAppointmentsConsent: "WhatsApp contestar\xE1 solo: lee tu agenda, ofrece los huecos libres, reserva, mueve o anula la cita de la clienta que escribe y le contesta; y le avisa cuando confirmas su cita. No puede tocar las citas de nadie m\xE1s. \xBFLo activas?",
     useAppointmentsDone: "Listo. Escr\xEDbete desde otro m\xF3vil: \u201Cquiero cita ma\xF1ana\u201D.",
+    useReservationsName: "Reservar mesa",
+    useReservationsSummary: "Un cliente pide mesa por WhatsApp, el asistente le ofrece las horas que de verdad tienes libres y le reserva la que elija; luego le dice que ya est\xE1.",
+    useReservationsConsent: "WhatsApp contestar\xE1 solo: mira las mesas libres, reserva la mesa de quien escribe y le contesta. \xBFLo activas?",
+    useReservationsDone: "Listo. Escr\xEDbete desde otro m\xF3vil: \u201Cquiero mesa para dos ma\xF1ana\u201D.",
+    useReservationsPolicyAuto: "Las reservas se confirman solas",
+    useReservationsPolicyReviewHelp: "Cada reserva nueva te espera en Reservas con \u201CConfirmar\u201D; al cliente le decimos que se la confirmas en breve.",
+    useReservationsPolicyError: "No se pudo guardar c\xF3mo se confirman las reservas. Int\xE9ntalo otra vez.",
     doorRefusalUnknown: "No se ha podido registrar la plantilla en Meta, y el motivo es uno que esta pantalla a\xFAn no conoce ({code}). Queda guardada aqu\xED: busca ese c\xF3digo en WhatsApp Manager o envi\xE1selo a soporte.",
     doorRefusalNoCode: "No se ha podido registrar la plantilla en Meta. Queda guardada aqu\xED: prueba a guardarla otra vez dentro de un rato.",
     metaRejectedReason: "Motivo de Meta: {reason}",
@@ -3824,9 +3831,10 @@ var en_default = {
     turnOff: "Turn off",
     stateOn: "On",
     stateOff: "Off",
-    policyAuto: "Bookings are confirmed automatically",
     policyReview: "I review them first",
-    helpPolicyReview: "Each new booking waits for you in the Diary with \u201CConfirm\u201D; the customer is told you will confirm shortly.",
+    useAppointmentsPolicyAuto: "Bookings are confirmed automatically",
+    useAppointmentsPolicyReviewHelp: "Each new booking waits for you in the Diary with \u201CConfirm\u201D; the customer is told you will confirm shortly.",
+    useAppointmentsPolicyError: "We could not save how appointments are confirmed. Try again.",
     advancedInAutomations: "Advanced settings in Automations",
     advancedMetaTemplates: "Meta templates",
     usesNeedsNewerHub: "This hub is too old to turn this on from here. Update the hub.",
@@ -3834,9 +3842,15 @@ var en_default = {
     activateForbidden: "Only an owner or an administrator can turn this on.",
     errActivate: "It could not be turned on. Nothing was changed \u2014 try again.",
     errTemplates: "We could not find out what is already turned on. Reload the screen.",
-    errPolicy: "We could not save how bookings are confirmed. Try again.",
     useAppointmentsConsent: "WhatsApp will answer on its own: it reads your diary, offers free slots, books, moves or cancels the appointment of the customer who writes, and replies to them; and it tells them when you confirm their appointment. It cannot touch anyone else\u2019s appointments. Turn it on?",
     useAppointmentsDone: "Done. Text your number from another phone: \u201CI\u2019d like an appointment tomorrow\u201D.",
+    useReservationsName: "Book a table",
+    useReservationsSummary: "A guest asks for a table on WhatsApp, the assistant checks the times you really have free, and books the one they pick \u2014 then tells them it is done.",
+    useReservationsConsent: "WhatsApp will answer on its own: it checks free tables, books a table for whoever writes, and replies to them. Turn it on?",
+    useReservationsDone: "Done. Text your number from another phone: \u201CI\u2019d like a table for two tomorrow\u201D.",
+    useReservationsPolicyAuto: "Bookings are confirmed automatically",
+    useReservationsPolicyReviewHelp: "Each new booking waits for you in Reservations with \u201CConfirm\u201D; the guest is told you will confirm shortly.",
+    useReservationsPolicyError: "We could not save how table bookings are confirmed. Try again.",
     doorRefusalUnknown: "The template could not be registered with Meta, and the reason is one this screen does not know yet ({code}). It is saved here: look that code up in WhatsApp Manager or send it to support.",
     doorRefusalNoCode: "The template could not be registered with Meta. It is saved here: try saving it again in a moment.",
     metaRejectedReason: "Meta's reason: {reason}",
@@ -4847,6 +4861,12 @@ var WHATSAPP_USES = [
       read: "appointments.settings.get",
       write: "appointments.settings.set_auto_confirm_online",
       field: "auto_confirm_online",
+      ask: (client) => client.queryOptional("appointments.settings.get"),
+      set: (client, on) => client.commandOptional("appointments.settings.set_auto_confirm_online", { auto_confirm_online: on }),
+      autoKey: "ui.useAppointmentsPolicyAuto",
+      reviewKey: "ui.policyReview",
+      reviewHelpKey: "ui.useAppointmentsPolicyReviewHelp",
+      errorKey: "ui.useAppointmentsPolicyError",
       // Appointments creates the row with the column ON, and it is what the market does: Square,
       // Cal.com and SimplyBook all default to booking without review.
       defaultOn: true
@@ -4856,10 +4876,46 @@ var WHATSAPP_USES = [
     summaryKey: "ui.useAppointmentsSummary",
     consentKey: "ui.useAppointmentsConsent",
     doneKey: "ui.useAppointmentsDone"
+  },
+  {
+    // whatsapp_inbox#126: a restaurant with Reservations connected its number and was offered
+    // «Reservar citas», which is not what it does — while `reservation-from-whatsapp` had been
+    // shipped in `flows/` all along. Same card, same one tap, same one decision; the only thing
+    // that changes is whose diary it is.
+    family: "reservation-from-whatsapp",
+    // Reservations ships no notice-on-confirm recipe — the half of the sentence #125 had to carry
+    // for the salon does not exist here — so this card promises exactly one thing and carries it.
+    companions: [],
+    module: "reservations",
+    witness: "reservations.settings.get",
+    probe: (client) => client.queryOptional("reservations.settings.get"),
+    policy: {
+      read: "reservations.settings.get",
+      write: "reservations.settings.set_auto_confirm",
+      field: "auto_confirm",
+      ask: (client) => client.queryOptional("reservations.settings.get"),
+      set: (client, on) => client.commandOptional("reservations.settings.set_auto_confirm", { auto_confirm: on }),
+      autoKey: "ui.useReservationsPolicyAuto",
+      reviewKey: "ui.policyReview",
+      reviewHelpKey: "ui.useReservationsPolicyReviewHelp",
+      errorKey: "ui.useReservationsPolicyError",
+      // 🔴 The OPPOSITE of Appointments, and it is measured, not mirrored: Reservations creates the
+      // column `auto_confirm INTEGER NOT NULL DEFAULT 0` (`migrations/postgres/001_init.sql`), so a
+      // restaurant that never opened its settings is REVIEWING every table. Copying `true` from the
+      // card above would paint «se confirman solas» over a hub that holds every booking for the
+      // owner — and the guard at the end of `whatsapp-uses.test.ts` reads that DEFAULT off
+      // `origin/main` in both directions, so neither side can drift alone.
+      defaultOn: false
+    },
+    icon: "restaurant-outline",
+    nameKey: "ui.useReservationsName",
+    summaryKey: "ui.useReservationsSummary",
+    consentKey: "ui.useReservationsConsent",
+    doneKey: "ui.useReservationsDone"
   }
 ];
-var readBookingPolicy = (client, _use) => client.queryOptional("appointments.settings.get");
-var writeBookingPolicy = (client, use, on) => client.commandOptional("appointments.settings.set_auto_confirm_online", { [use.policy.field]: on });
+var readBookingPolicy = (client, use) => use.policy.ask(client);
+var writeBookingPolicy = (client, use, on) => use.policy.set(client, on);
 function bookingPolicyOn(answer, use) {
   const row = Array.isArray(answer) ? answer[0] : answer;
   if (row === null || typeof row !== "object") return use.policy.defaultOn;
@@ -5200,7 +5256,14 @@ var ErpWhatsappInboxSettings = class extends i3 {
       </div>
     `;
   }
-  /** Step 3 — the one decision, and it is the diary's. Only once there is something taking bookings. */
+  /**
+   * Step 3 — the one decision, and it is the diary's. Only once there is something taking bookings.
+   *
+   * **Every sentence here comes off the use, not off this method** (whatsapp_inbox#126). A salon
+   * reviews «citas» in the Agenda and a restaurant reviews «reservas» in Reservas: with the strings
+   * pinned in the markup, the second card told a bar its TABLES waited in a diary it does not have,
+   * and blamed a failed save on appointments it never takes.
+   */
   renderPolicy(use) {
     const auto = this.policy[use.family] ?? use.policy.defaultOn;
     return b2`
@@ -5209,11 +5272,11 @@ var ErpWhatsappInboxSettings = class extends i3 {
         .value=${auto ? "auto" : "review"}
         @ionChange=${(e5) => this.setPolicy(use, e5.detail?.value !== "review")}
       >
-        <ion-segment-button value="auto"><ion-label>${this.t("ui.policyAuto")}</ion-label></ion-segment-button>
-        <ion-segment-button value="review"><ion-label>${this.t("ui.policyReview")}</ion-label></ion-segment-button>
+        <ion-segment-button value="auto"><ion-label>${this.t(use.policy.autoKey)}</ion-label></ion-segment-button>
+        <ion-segment-button value="review"><ion-label>${this.t(use.policy.reviewKey)}</ion-label></ion-segment-button>
       </ion-segment>
-      ${auto ? A : b2`<p class="help">${this.t("ui.helpPolicyReview")}</p>`}
-      ${this.policyFailed[use.family] ? b2`<ok-inline-feedback tone="danger">${this.t("ui.errPolicy")}</ok-inline-feedback>` : A}
+      ${auto ? A : b2`<p class="help">${this.t(use.policy.reviewHelpKey)}</p>`}
+      ${this.policyFailed[use.family] ? b2`<ok-inline-feedback tone="danger">${this.t(use.policy.errorKey)}</ok-inline-feedback>` : A}
     `;
   }
   /**
