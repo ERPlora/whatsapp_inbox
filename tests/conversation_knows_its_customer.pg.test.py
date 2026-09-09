@@ -193,6 +193,21 @@ def check_schema_refuses_a_blank_customer(jsonschema):
                 f"`{rel}` accepts {name} ({payload!r}) — a recipe whose customer step resolved "
                 "nobody would erase the link instead of writing one"
             )
+
+    # The payload is CLOSED, and that is its own check: every case above is refused by `required`,
+    # so not one of them would notice `additionalProperties` being flipped to true. A caller cannot
+    # smuggle extra binds — `:hub_id` is the one that would matter, and the runtime already
+    # overwrites it after cloning the payload (`dispatch.rs::system_params`: "a caller that stuffs
+    # it into its own payload loses it"). So this is not the guard that stops a cross-hub write; it
+    # is the module's half of it, and the only thing standing between a future edit and a command
+    # that accepts whatever it is handed.
+    smuggled = {"wa_contact_id": CONTACT, "customer_id": CUSTOMER, "hub_id": OTHER_HUB}
+    if not list(validator.iter_errors(smuggled)):
+        problems.append(
+            f"`{rel}` is not a closed payload: it accepts an extra `hub_id` ({smuggled!r}). "
+            "Set `additionalProperties: false` — a command schema that takes anything is how a "
+            "caller starts binding names the module never meant to expose"
+        )
     return problems
 
 
