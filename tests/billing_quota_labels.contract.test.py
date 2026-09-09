@@ -2,13 +2,13 @@
 """Every quota metric this module sells has to be readable in every language it ships (hub#1604).
 
 `billing.tiers[].quota` is a dict of `{ metric: limit }` and the metric is an identifier we write:
-`conversations_per_month`. The hub's «Plan» tab paints it, and until hub#1604 it painted it by
+`billable_messages_per_month`. The hub's «Plan» tab paints it, and until hub#1604 it painted it by
 swapping the underscores for spaces — so a salon owner on a Spanish hub read «Incluye 30
 conversations per month», half the sentence in her language and half not, on the screen where she
 decides how much to spend every month.
 
 The shell cannot fix that on its own: only whoever wrote the manifest knows what
-`conversations_per_month` means in Spanish. So the words live here, in `locales/<lang>.json` under
+`billable_messages_per_month` means in Spanish. So the words live here, in `locales/<lang>.json` under
 `billing.quota.<metric>` — the same place the module already translates its navigation, its widgets
 and the fields of its settings screen (hub#1094).
 
@@ -18,7 +18,7 @@ English rather than breaking — which is exactly why nobody would notice, and e
 exists.
 
 `billing.usage.metric` names the SAME key space from the other side (whatsapp_inbox#131): it says
-which of those quotas the month counter is counting, so the shell can write «12 of 30 conversations
+which of those quotas the month counter is counting, so the shell can write «12 of 30 messages
 per month» with the unit in the customer's language. It is checked here for both reasons — its label
 has to exist like any other, and the metric has to be one the tiers actually sell, or the counter
 sits under a cap nobody bought.
