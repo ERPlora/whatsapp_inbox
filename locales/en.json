@@ -141,6 +141,7 @@
     "advancedMetaTemplates": "Meta templates",
     "usesNeedsNewerHub": "This hub is too old to turn this on from here. Update the hub.",
     "usesNeedBookingModule": "Install Appointments or Reservations so WhatsApp can book on its own",
+    "usesNeedNewerBookingModule": "Update Appointments or Reservations so WhatsApp can book on its own",
     "activateForbidden": "Only an owner or an administrator can turn this on.",
     "errActivate": "It could not be turned on. Nothing was changed — try again.",
     "errTemplates": "We could not find out what is already turned on. Reload the screen.",

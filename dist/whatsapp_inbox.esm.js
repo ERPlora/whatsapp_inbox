@@ -3646,6 +3646,7 @@ var es_default = {
     advancedMetaTemplates: "Plantillas de Meta",
     usesNeedsNewerHub: "Este hub es demasiado antiguo para activarlo desde aqu\xED. Actualiza el hub.",
     usesNeedBookingModule: "Instala Citas o Reservas para que WhatsApp reserve solo",
+    usesNeedNewerBookingModule: "Actualiza Citas o Reservas para que WhatsApp reserve solo",
     activateForbidden: "Solo un due\xF1o o un administrador puede activarlo.",
     errActivate: "No se pudo activar. No se ha cambiado nada: int\xE9ntalo otra vez.",
     errTemplates: "No hemos podido saber qu\xE9 hay activo ahora mismo. Vuelve a cargar la pantalla.",
@@ -3840,6 +3841,7 @@ var en_default = {
     advancedMetaTemplates: "Meta templates",
     usesNeedsNewerHub: "This hub is too old to turn this on from here. Update the hub.",
     usesNeedBookingModule: "Install Appointments or Reservations so WhatsApp can book on its own",
+    usesNeedNewerBookingModule: "Update Appointments or Reservations so WhatsApp can book on its own",
     activateForbidden: "Only an owner or an administrator can turn this on.",
     errActivate: "It could not be turned on. Nothing was changed \u2014 try again.",
     errTemplates: "We could not find out what is already turned on. Reload the screen.",
@@ -5188,10 +5190,12 @@ var ErpWhatsappInboxSettings = class extends i3 {
       return b2`${heading}
         <ok-inline-feedback tone="danger">${this.t("ui.errTemplates")}</ok-inline-feedback>`;
     }
-    const available = WHATSAPP_USES.filter((use) => !this.missing.has(use.module));
+    const installed = WHATSAPP_USES.filter((use) => !this.missing.has(use.module));
+    const available = installed.filter((use) => this.built[use.family] !== void 0);
     if (available.length === 0) {
+      const why = installed.length === 0 ? "ui.usesNeedBookingModule" : "ui.usesNeedNewerBookingModule";
       return b2`${heading}
-        <ok-inline-feedback tone="warning">${this.t("ui.usesNeedBookingModule")}</ok-inline-feedback>
+        <ok-inline-feedback tone="warning">${this.t(why)}</ok-inline-feedback>
         <ion-button data-testid="uses-go-to-apps" size="small" @click=${() => this.go(APPS_PATH)}>
           ${this.t("ui.usesGoToApps")}
         </ion-button>`;

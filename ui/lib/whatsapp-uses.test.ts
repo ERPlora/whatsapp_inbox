@@ -470,6 +470,150 @@ describe('every name this screen borrows is one its module really publishes', ()
   });
 });
 
+/**
+ * The tree the marketplace published AS `version`, or `null` when there is nothing next door to
+ * read. Same «never the working tree» rule as {@link fromOriginMain}, one or more releases back.
+ *
+ * 🔴 **The FIRST commit to declare the version, not the newest.** A version's zip is uploaded
+ * CREATE-ONLY (`modules/{id}/v{version}.zip`), so the tree that becomes `vX` is the one pushed when
+ * `vX` was first declared, and everything merged AFTERWARDS while the manifest still reads `vX`
+ * never reaches that zip. `-S` answers with both the commit that added the version and the one that
+ * bumped it away, newest first, so every candidate is opened and only the one whose manifest really
+ * reads that version answers — taking the first sha reads the release ABOVE the floor, which is the
+ * exact reading this guard exists to distrust. Same algorithm as `release_commit` in
+ * `tests/flow_templates.test.py`, which reads the other half of a floor.
+ */
+function manifestAtRelease(moduleId: string, version: string): ReleaseRead {
+  const neighbour = join(MODULE_ROOT, '..', moduleId);
+  if (!existsSync(join(neighbour, '.git'))) {
+    return { kind: 'absent', detail: `no ${moduleId} checkout next door (module-toolkit#211)` };
+  }
+  let shas: string[];
+  try {
+    shas = execFileSync(
+      'git',
+      // 🔴 `origin/main`, never the checkout's HEAD. The sibling `appointments` was parked on the
+      // tree of 1.1.73 the day this was written, so a bare `git log` walks the ancestry of THAT and
+      // answers «there is no such release» about three that had been published for days — and this
+      // guard skipped itself green on exactly the versions it exists to check. Measured: it did.
+      ['-C', neighbour, 'log', 'origin/main', '--format=%H', '-S', `"version": "${version}"`, '--', 'module.json'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+    )
+      .trim()
+      .split('\n')
+      .filter(Boolean);
+  } catch (e) {
+    return { kind: 'unreadable', detail: `the history of ${moduleId}/module.json could not be read (${String(e)})` };
+  }
+  for (const sha of shas) {
+    let parsed: PublishedManifest;
+    try {
+      parsed = JSON.parse(
+        execFileSync('git', ['-C', neighbour, 'show', `${sha}:module.json`], {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+        }),
+      ) as PublishedManifest;
+    } catch {
+      continue;
+    }
+    if (parsed.version === version) return { kind: 'read', manifest: parsed };
+  }
+  return { kind: 'unreadable', detail: `no commit on origin/main of ${moduleId} declares version ${version}` };
+}
+
+/**
+ * «There is nothing next door to read» and «I read it and that release is not there» are OPPOSITE
+ * answers, and only the first may skip. Collapsing them is how a guard goes quiet on exactly the
+ * repos it is meant to watch.
+ */
+type ReleaseRead =
+  | { kind: 'read'; manifest: PublishedManifest }
+  | { kind: 'absent'; detail: string }
+  | { kind: 'unreadable'; detail: string };
+
+/** The manifest, `null` to skip out loud, or a thrown failure saying which «no» this was. */
+function manifestAtReleaseOrSkip(moduleId: string, version: string): PublishedManifest | null {
+  const read = manifestAtRelease(moduleId, version);
+  if (read.kind === 'absent') {
+    console.warn(`SKIPPED: ${read.detail}`);
+    return null;
+  }
+  if (read.kind === 'unreadable') throw new Error(read.detail);
+  return read.manifest;
+}
+
+interface PublishedManifest {
+  version?: string;
+  commands?: Record<string, unknown>;
+  queries?: Record<string, unknown>;
+}
+
+/** The floor `flows/<family>.requires.json` declares for `moduleId` — this repo's own file. */
+function floorOf(family: string, moduleId: string): string | undefined {
+  const raw = readFileSync(join(MODULE_ROOT, 'flows', `${family}.requires.json`), 'utf8');
+  return ((JSON.parse(raw) as { modules?: Record<string, string> }).modules ?? {})[moduleId];
+}
+
+/**
+ * **The reader has to be able to answer NO.** A guard built on «could not look» reads exactly like
+ * a guard on a floor that is high enough, and only one of them is a bug. Anchored on a pair of
+ * published trees that cannot change — a release is immutable and force-push is forbidden — so it
+ * sees the command appear and, one release earlier, sees it absent.
+ */
+describe('the release reader the floor guard relies on', () => {
+  it('reads the tree asked for, and sees a command that is not there yet', () => {
+    const before = manifestAtReleaseOrSkip('appointments', '1.1.75');
+    const after = manifestAtReleaseOrSkip('appointments', '1.1.76');
+    if (before === null || after === null) {
+      console.warn('SKIPPED: no appointments checkout next door (module-toolkit#211)');
+      return;
+    }
+    expect(before.version, 'read the tree of another release').toBe('1.1.75');
+    expect(after.version, 'read the tree of another release').toBe('1.1.76');
+    expect(Object.keys(after.commands ?? {})).toContain('appointments.settings.set_auto_confirm_online');
+    expect(
+      Object.keys(before.commands ?? {}),
+      'the reader answers «it is there» about a tree that predates the command: it cannot say no',
+    ).not.toContain('appointments.settings.set_auto_confirm_online');
+  });
+});
+
+/**
+ * **The switch has to work on the OLDEST hub the card is offered to** (whatsapp_inbox#137).
+ *
+ * The floor in `flows/<family>.requires.json` travels to the hub (hub#1611) and is what decides
+ * whether the recipe is OFFERED — and the card paints its one decision as soon as the recipe is
+ * running. So a floor that is lower than the release which first published the narrow command
+ * leaves a window of versions where the recipe is offered, activates, works, and the switch under
+ * it refuses every change: `writeBookingPolicy` goes out through `commandOptional` against a module
+ * that does not declare that command yet, and the card paints `ui.use<Module>PolicyError`.
+ *
+ * The sibling guard above asks the neighbour's manifest on `origin/main`, which is today's answer
+ * and therefore always the kindest one; this asks the tree published AS the floor, which is the
+ * oldest hub that will ever see the card. Both are needed: a command that exists today but not at
+ * the floor passes the first and fails this one, which is exactly the bug #137 reported.
+ */
+describe('the one decision this screen owns exists at the floor its recipe declares', () => {
+  const uses = WHATSAPP_USES.map((u) => [u.family, u.module, u.policy.write] as const);
+
+  it.each(uses)('%s: %s already publishes %s at the floor the recipe declares', (family, moduleId, command) => {
+    const floor = floorOf(family, moduleId);
+    expect(floor, `flows/${family}.requires.json declares no floor for \`${moduleId}\``).toBeTruthy();
+    const manifest = manifestAtReleaseOrSkip(moduleId, floor!);
+    if (manifest === null) return;
+    expect(manifest.version, `read the manifest of another release, not of the floor ${floor}`).toBe(floor);
+    expect(Object.keys(manifest.commands ?? {}).length, 'read no commands at all: the parser, not the manifest, is what broke')
+      .toBeGreaterThan(0);
+    expect(
+      Object.keys(manifest.commands ?? {}),
+      `\`${command}\` is not a command of ${moduleId} ${floor}, the OLDEST version this recipe is ` +
+        'offered to: on those hubs the card activates, works, and the switch under it refuses every ' +
+        'change the owner makes. Raise the floor to the release that publishes the command',
+    ).toContain(command);
+  });
+});
+
 describe('every witness can be asked bare', () => {
   const witnesses = [
     ...WHATSAPP_USES.map((u) => [u.module, u.witness] as const),

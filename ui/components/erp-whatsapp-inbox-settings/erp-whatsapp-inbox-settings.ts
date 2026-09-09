@@ -392,10 +392,21 @@ class ErpWhatsappInboxSettings extends LitElement {
         <ok-inline-feedback tone="danger">${this.t('ui.errTemplates')}</ok-inline-feedback>`;
     }
 
-    const available = WHATSAPP_USES.filter((use) => !this.missing.has(use.module));
+    // Two questions, and they are NOT the same one (whatsapp_inbox#137). Having the module is what
+    // makes a use conceivable; the hub LISTING the family is what makes «Activar» honourable, and
+    // they part company exactly when the neighbour is older than the floor the recipe declares
+    // (`flow_template_floor_problem`, hub#1611): the module answers its witness, so the card is
+    // painted, and the tap answers `flow.template_not_found`. The listing is the hub's own answer
+    // to «what can be turned on here», so it is the one the card follows.
+    const installed = WHATSAPP_USES.filter((use) => !this.missing.has(use.module));
+    const available = installed.filter((use) => this.built[use.family] !== undefined);
     if (available.length === 0) {
+      // «Install one» and «update the one you have» send the owner to the same screen and are not
+      // the same sentence: telling a salon that is already paying for Citas to install a booking
+      // module sends her looking for something she owns.
+      const why = installed.length === 0 ? 'ui.usesNeedBookingModule' : 'ui.usesNeedNewerBookingModule';
       return html`${heading}
-        <ok-inline-feedback tone="warning">${this.t('ui.usesNeedBookingModule')}</ok-inline-feedback>
+        <ok-inline-feedback tone="warning">${this.t(why)}</ok-inline-feedback>
         <ion-button data-testid="uses-go-to-apps" size="small" @click=${() => this.go(APPS_PATH)}>
           ${this.t('ui.usesGoToApps')}
         </ion-button>`;

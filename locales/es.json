@@ -142,6 +142,7 @@
     "advancedMetaTemplates": "Plantillas de Meta",
     "usesNeedsNewerHub": "Este hub es demasiado antiguo para activarlo desde aquí. Actualiza el hub.",
     "usesNeedBookingModule": "Instala Citas o Reservas para que WhatsApp reserve solo",
+    "usesNeedNewerBookingModule": "Actualiza Citas o Reservas para que WhatsApp reserve solo",
     "activateForbidden": "Solo un dueño o un administrador puede activarlo.",
     "errActivate": "No se pudo activar. No se ha cambiado nada: inténtalo otra vez.",
     "errTemplates": "No hemos podido saber qué hay activo ahora mismo. Vuelve a cargar la pantalla.",
