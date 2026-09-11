@@ -1425,6 +1425,7 @@ var rawClose = '<svg viewBox="0 0 512 512" width="1.2em" height="1.2em" ><path f
 var rawCloseOutline = '<svg viewBox="0 0 512 512" width="1.2em" height="1.2em" ><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="32" d="M368 368L144 144m224 0L144 368"/></svg>';
 var rawCloudUploadOutline = '<svg viewBox="0 0 512 512" width="1.2em" height="1.2em" ><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="32" d="M320 367.79h76c55 0 100-29.21 100-83.6s-53-81.47-96-83.6c-8.89-85.06-71-136.8-144-136.8c-69 0-113.44 45.79-128 91.2c-60 5.7-112 43.88-112 106.4s54 106.4 120 106.4h56"/><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="32" d="m320 255.79l-64-64l-64 64m64 192.42V207.79"/></svg>';
 var rawCreateOutline = '<svg viewBox="0 0 512 512" width="1.2em" height="1.2em" ><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="32" d="M384 224v184a40 40 0 0 1-40 40H104a40 40 0 0 1-40-40V168a40 40 0 0 1 40-40h167.48"/><path fill="currentColor" d="M459.94 53.25a16.06 16.06 0 0 0-23.22-.56L424.35 65a8 8 0 0 0 0 11.31l11.34 11.32a8 8 0 0 0 11.34 0l12.06-12c6.1-6.09 6.67-16.01.85-22.38M399.34 90L218.82 270.2a9 9 0 0 0-2.31 3.93L208.16 299a3.91 3.91 0 0 0 4.86 4.86l24.85-8.35a9 9 0 0 0 3.93-2.31L422 112.66a9 9 0 0 0 0-12.66l-9.95-10a9 9 0 0 0-12.71 0"/></svg>';
+var rawContractOutline = '<svg viewBox="0 0 512 512" width="1.2em" height="1.2em" ><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="32" d="M304 416V304h112m-101.8 10.23L432 432M208 96v112H96m101.8-10.23L80 80m336 128H304V96m10.23 101.8L432 80M96 304h112v112m-10.23-101.8L80 432"/></svg>';
 var rawDocumentAttachOutline = '<svg viewBox="0 0 512 512" width="1.2em" height="1.2em" ><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="32" d="M208 64h66.75a32 32 0 0 1 22.62 9.37l141.26 141.26a32 32 0 0 1 9.37 22.62V432a48 48 0 0 1-48 48H192a48 48 0 0 1-48-48V304"/><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="32" d="M288 72v120a32 32 0 0 0 32 32h120"/><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-miterlimit="10" stroke-width="32" d="M160 80v152a23.69 23.69 0 0 1-24 24c-12 0-24-9.1-24-24V88c0-30.59 16.57-56 48-56s48 24.8 48 55.38v138.75c0 43-27.82 77.87-72 77.87s-72-34.86-72-77.87V144"/></svg>';
 var rawDocumentOutline = '<svg viewBox="0 0 512 512" width="1.2em" height="1.2em" ><path fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="32" d="M416 221.25V416a48 48 0 0 1-48 48H144a48 48 0 0 1-48-48V96a48 48 0 0 1 48-48h98.75a32 32 0 0 1 22.62 9.37l141.26 141.26a32 32 0 0 1 9.37 22.62Z"/><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="32" d="M256 56v120a32 32 0 0 0 32 32h120"/></svg>';
 var rawDocumentTextOutline = '<svg viewBox="0 0 512 512" width="1.2em" height="1.2em" ><path fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="32" d="M416 221.25V416a48 48 0 0 1-48 48H144a48 48 0 0 1-48-48V96a48 48 0 0 1 48-48h98.75a32 32 0 0 1 22.62 9.37l141.26 141.26a32 32 0 0 1 9.37 22.62Z"/><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="32" d="M256 56v120a32 32 0 0 0 32 32h120m-232 80h160m-160 80h160"/></svg>';
@@ -1474,6 +1475,7 @@ var iconCloseOutline = bake(rawCloseOutline);
 var iconCloudUploadOutline = bake(rawCloudUploadOutline);
 var iconCreateOutline = bake(rawCreateOutline);
 var iconDocumentAttachOutline = bake(rawDocumentAttachOutline);
+var iconContractOutline = bake(rawContractOutline);
 var iconDocumentOutline = bake(rawDocumentOutline);
 var iconDocumentTextOutline = bake(rawDocumentTextOutline);
 var iconDownloadOutline = bake(rawDownloadOutline);
@@ -1520,6 +1522,7 @@ var BY_NAME = {
   "cloud-upload-outline": iconCloudUploadOutline,
   "create-outline": iconCreateOutline,
   "document-attach-outline": iconDocumentAttachOutline,
+  "contract-outline": iconContractOutline,
   "document-outline": iconDocumentOutline,
   "document-text-outline": iconDocumentTextOutline,
   "download-outline": iconDownloadOutline,
@@ -1612,6 +1615,16 @@ var __decorateClass2 = (decorators, target, key, kind) => {
   if (result) __defProp2(target, key, result);
   return result;
 };
+function decideRowActionsFit(input) {
+  const { containerWidth, contentWidth, collapsed, decidedAtWidth } = input;
+  if (!(containerWidth > 0)) return { collapsed, decidedAtWidth };
+  if (containerWidth !== decidedAtWidth) {
+    if (collapsed) return { collapsed: false, decidedAtWidth: containerWidth };
+    return { collapsed: contentWidth > containerWidth, decidedAtWidth: containerWidth };
+  }
+  if (!collapsed && contentWidth > containerWidth) return { collapsed: true, decidedAtWidth };
+  return { collapsed, decidedAtWidth };
+}
 var DEFAULT_LABELS = {
   search: "Search\u2026",
   empty: "No results",
@@ -1731,14 +1744,22 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     this.viewChosenByUser = false;
     this.isMobile = false;
     this.xOverflow = false;
+    this.actionsTrackPx = 0;
+    this.rowActionsCollapsed = false;
+    this.fitDecidedAtWidth = -1;
+    this.rowMenuOpen = false;
     this.hiddenKeys = /* @__PURE__ */ new Set();
     this.internalSelection = /* @__PURE__ */ new Set();
     this.menuOpen = false;
     this.onLocaleChanged = () => this.requestUpdate();
-    this.onWindowResize = () => this.measureXOverflow();
+    this.onWindowResize = () => {
+      this.measureXOverflow();
+      this.measureRowActionsFit();
+    };
     this.onSearch = (ev) => {
       const value = ev.target.value ?? "";
       if (this.serverSide) {
+        this.q = value;
         this.emit("searchChange", value);
       } else {
         this.q = value;
@@ -1883,8 +1904,13 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     .primary-btn { --background: var(--primary); --color: var(--primary-contrast); }
     /* #76 — El alta en MÓVIL: botón primario CON etiqueta y área táctil de 44px, en vez del «+»
        icónico de 36px al final de la barra. Fresha/Square/Shopify POS ponen la acción primaria
-       de la lista como botón visible con texto (o FAB), nunca como icono anónimo. */
-    .add-btn { min-height: 44px; --border-radius: 10px; --padding-start: 0.9rem; --padding-end: 1rem; margin: 0; font-weight: 600; }
+       de la lista como botón visible con texto (o FAB), nunca como icono anónimo.
+       #113 — Y en ESCRITORIO igual: Odoo («New»), Business Central, Shopify («Add product»),
+       WooCommerce, Lightspeed y Fresha rotulan y rellenan la acción principal de un listado; NN/g
+       reserva el botón sin rótulo para lo universal (buscar, cerrar). Aquí solo cambia la ALTURA:
+       36px para alinear con .toolbtn y el buscador, y los 44px táctiles vuelven abajo con el
+       resto de objetivos de puntero grueso. */
+    .add-btn { min-height: 36px; --border-radius: 10px; --padding-start: 0.9rem; --padding-end: 1rem; margin: 0; font-weight: 600; }
     .add-btn ion-icon { margin-inline-end: 0.35rem; }
 
     /* Selects de la toolbar: fondo + borde visibles (como el buscador y la pastilla de fechas) para
@@ -1924,7 +1950,14 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     .scroll::-webkit-scrollbar-track { background: transparent; }
     .scroll::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--color) 25%, transparent); border-radius: 6px; }
     .scroll::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--color) 40%, transparent); }
-    .grid { min-width: max-content; font-size: 14px; }
+    /* #120 - The grid floor is the SUM OF THE COLUMN MINIMUMS (min-content), not its maximum
+       size. With max-content the grid sizes itself to what the widest column asks for and, in
+       doing so, every 1fr track ends up as wide AS THAT ONE: at 834px each column measured
+       148.86px for content asking between 10px (a "4") and 100px ("Familia Perez"). The table
+       always overflowed and the pinned actions column sat on top of Pax and Estado. With
+       min-content the grid fits its container as long as the minimums fit, and 1fr shares out the
+       leftover space; horizontal scroll shows up only when not even the minimums fit. */
+    .grid { min-width: min-content; font-size: 14px; }
     .grow { display: grid; align-items: center; gap: 0.5rem; padding: 0 1rem; }
     .ghead { position: sticky; top: 0; z-index: 2; border-bottom: 1px solid var(--border-color);
       background: var(--header-background); padding-top: 0.55rem; padding-bottom: 0.55rem; }
@@ -1932,17 +1965,24 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     .gcell > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .gcell.right { justify-content: flex-end; text-align: right; }
     .gcell.center { justify-content: center; text-align: center; }
-    /* #67 — COLUMNA DE ACCIONES FIJADA. Con seis columnas o más la rejilla desborda por diseño
-       (min-width: max-content) y el botón que abre el registro se iba fuera de la pantalla: a
-       1440px quedaba a 335px del borde, sin nada que lo delatara. Se queda pegada al borde
-       derecho, como en Zendesk/Freshdesk/Shopify. Con background:inherit la hereda de la fila (que
-       por eso es opaca), así conserva hover y selección sin que se lea nada por debajo. */
+    /* #67 - PINNED ACTIONS COLUMN. When the grid overflows (since #120 only when not even the
+       column minimums fit; before that it happened with six columns and room to spare) the button
+       that opens the record went off screen: at 1440px it sat 335px past the edge with nothing to
+       give it away. It stays stuck to the right edge, like Zendesk/Freshdesk/Shopify. With
+       background:inherit it takes the row background (which is opaque for this very reason), so it
+       keeps hover and selection without anything showing through. */
     .gcell.actions-col { position: sticky; right: 0; z-index: 1; background: inherit;
       margin-right: -1rem; padding-right: 1rem; }
     /* La sombra solo aparece cuando de verdad hay algo escondido a la izquierda (clase x-overflow);
        si la tabla cabe entera no se pinta nada. */
     .scroll.x-overflow .gcell.actions-col { box-shadow: -10px 0 10px -10px color-mix(in srgb, var(--color) 45%, transparent); }
-    .ghead .gcell.actions-col { z-index: 3; }
+    /* #120 - The pinned header has to be OPAQUE. background:inherit took --header-background,
+       which is a 4% alpha TINT (measured rgba(24,24,27,0.04)): when the grid overflows the
+       "Acciones" header went see-through and "PAX" and "ESTADO" could be read through it - the
+       "PAXCIONESTAD" of the issue. It now sits on the opaque table background with the tint laid
+       back on top, the same way .grow-data:hover does. */
+    .ghead .gcell.actions-col { z-index: 3;
+      background: linear-gradient(var(--header-background), var(--header-background)), var(--background); }
     .gh { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-muted); }
     .gh.sortable { cursor: pointer; user-select: none; white-space: nowrap; transition: background-color var(--ok-transition, 150ms ease), color var(--ok-transition, 150ms ease), box-shadow var(--ok-transition, 150ms ease), transform 120ms ease; }
     @media (hover: hover) {
@@ -2012,11 +2052,23 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     .empty .empty-ic { display: grid; place-items: center; width: 3.25rem; height: 3.25rem; border-radius: 999px; background: var(--header-background); font-size: 26px; }
 
     .actions { display: flex; gap: 0.25rem; justify-content: flex-end; }
+    /* #121 - The buttons NEVER shrink. Their track is pinned to the width measured here
+       (the scrollWidth of .actions); if they could shrink, a narrow track would shrink the
+       measurement, which would shrink the track again. flex: 0 0 auto is what makes the
+       measurement a property of the CONTENT instead of a property of the current layout. */
+    .actions ion-button { flex: 0 0 auto; }
+    /* #122 - Header of the actions column while the buttons are folded into the menu. "ACCIONES"
+       measures 62.83px and the folded track is 44px: painted, it spills out of its own cell and
+       over "Estado" - the very thing the issue is about. The column keeps its name for assistive
+       tech and paints nothing. */
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+      clip-path: inset(50%); white-space: nowrap; border: 0; }
     /* Las acciones de fila son icon-only y de tamaño small en escritorio. En tablet/móvil se
      * amplía el host completo (no solo el icono) para que el área táctil alcance 44×44 px. */
     @media (pointer: coarse), (max-width: 834px) {
       .actions ion-button { min-width: 44px; min-height: 44px; margin: 0; }
       .toolbtn { width: 44px; height: 44px; }
+      .add-btn { min-height: 44px; }
       .pager .nav ion-button { min-width: 44px; min-height: 44px; margin: 0; }
     }
     /* Spinner de acción en curso (loading): contenido dentro del ion-button small (Ionic lo fija
@@ -2078,12 +2130,45 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     const overflow = !!scroll && scroll.scrollWidth > scroll.clientWidth;
     if (this.xOverflow !== overflow) this.xOverflow = overflow;
   }
+  /** #121 — Ancho natural de los botones de acción de una fila, para clavar su pista en px.
+   *
+   * Se lee del `scrollWidth` de `.actions`, que es el ancho de SU CONTENIDO: como los botones
+   * llevan `flex: 0 0 auto` nunca se encogen, así que la medida no depende de lo ancha que sea la
+   * pista en ese momento. Eso es lo que la hace estable: clavar la pista al ancho natural no
+   * cambia el ancho natural, así que la siguiente medida sale igual y no hay bucle. */
+  measureActionsTrack() {
+    if (!this.actions.length) {
+      if (this.actionsTrackPx !== 0) this.actionsTrackPx = 0;
+      return;
+    }
+    const el = this.renderRoot?.querySelector?.(".grow-data .gcell.actions-col .actions");
+    const width = el ? Math.ceil(el.scrollWidth) : 0;
+    if (width > 0 && width !== this.actionsTrackPx) this.actionsTrackPx = width;
+  }
+  /** #122 — Decide si los botones de acción de la fila caben o se pliegan en el menú «⋮».
+   *  El criterio y la garantía de que no oscila viven en `decideRowActionsFit`. */
+  measureRowActionsFit() {
+    const scroll = this.renderRoot?.querySelector?.(".scroll");
+    if (!scroll) return;
+    const next = decideRowActionsFit({
+      containerWidth: scroll.clientWidth,
+      contentWidth: scroll.scrollWidth,
+      collapsed: this.rowActionsCollapsed,
+      decidedAtWidth: this.fitDecidedAtWidth
+    });
+    this.fitDecidedAtWidth = next.decidedAtWidth;
+    if (this.rowActionsCollapsed !== next.collapsed) this.rowActionsCollapsed = next.collapsed;
+  }
   /** Engancha el observador al contenedor de scroll del render actual (cambia entre vistas). */
   observeXOverflow() {
     if (typeof ResizeObserver === "undefined") return;
     const scroll = this.renderRoot?.querySelector?.(".scroll");
     if (!scroll) return;
-    this.xObserver ??= new ResizeObserver(() => this.measureXOverflow());
+    this.xObserver ??= new ResizeObserver(() => {
+      this.measureXOverflow();
+      this.measureActionsTrack();
+      this.measureRowActionsFit();
+    });
     this.xObserver.disconnect();
     this.xObserver.observe(scroll);
     const grid = scroll.querySelector(".grid");
@@ -2092,6 +2177,11 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
   updated(changed) {
     this.observeXOverflow();
     this.measureXOverflow();
+    if (changed.has("columns") || changed.has("actions") || changed.has("hiddenKeys") || changed.has("selectable")) {
+      this.fitDecidedAtWidth = -1;
+    }
+    this.measureActionsTrack();
+    this.measureRowActionsFit();
     if (changed.has("panel")) this.syncSheetTop();
   }
   /** #75 — Where the mobile sheet starts. `position: fixed; inset: 0` painted it from y=0 and the
@@ -2533,6 +2623,54 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     this.menuEv = ev;
     this.menuOpen = true;
   }
+  /** #122 — Abre el menú «⋮» de UNA fila. Un solo popover para toda la tabla (uno por fila serían
+   *  tantos como filas), anclado por evento porque `trigger` no resuelve dentro de Shadow DOM. */
+  openRowMenu(ev, row) {
+    ev.stopPropagation();
+    this.rowMenuEv = ev;
+    this.rowMenuRow = row;
+    this.rowMenuOpen = true;
+  }
+  /** #122 — Las mismas acciones de la fila, como lista. Respeta `disabled`/`loading` por fila: una
+   *  acción que no se puede pulsar en su botón tampoco se puede pulsar aquí. */
+  renderRowMenu() {
+    const row = this.rowMenuRow;
+    if (!this.actions.length || !row) return A;
+    return b2`
+      <ion-popover
+        class="row-menu"
+        .isOpen=${this.rowMenuOpen}
+        .event=${this.rowMenuEv}
+        dismiss-on-select="true"
+        @didDismiss=${() => this.rowMenuOpen = false}
+      >
+        <ion-content>
+          <ion-list lines="none">
+            ${this.actions.map((a3) => {
+      const disabled = a3.loading?.(row) === true || a3.disabled?.(row) === true;
+      const label = typeof a3.label === "function" ? a3.label(row) : a3.label;
+      return b2`
+                <ion-item
+                  button
+                  ?disabled=${disabled}
+                  aria-disabled=${disabled ? "true" : A}
+                  .detail=${false}
+                  @click=${() => {
+        if (disabled) return;
+        this.rowMenuOpen = false;
+        this.emit("rowAction", { actionId: a3.id, row });
+      }}
+                >
+                  ${a3.icon ? b2`<ion-icon slot="start" .icon=${okIcon(a3.icon)} color=${a3.color ?? A}></ion-icon>` : A}
+                  <ion-label color=${a3.color ?? A}>${label}</ion-label>
+                </ion-item>
+              `;
+    })}
+          </ion-list>
+        </ion-content>
+      </ion-popover>
+    `;
+  }
   // Aplica la vista inicial declarada (`default-view`) una sola vez, tras el primer render. Es la
   // forma robusta de arrancar en tarjetas sin depender de fijar `viewMode` por referencia (que
   // falla si la tabla monta detrás de un `v-if`/loading y el ref aún es null).
@@ -2554,6 +2692,13 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
   willUpdate(changed) {
     this.applyInitialView();
     if (changed.has("filterValues")) this.serverFilters = { ...this.filterValues ?? {} };
+    if (changed.has("search") && this.search !== void 0) {
+      this.q = this.search;
+      if (!this.serverSide) {
+        this.clientPage = 0;
+        this.mobileShown = 0;
+      }
+    }
     if (!this.serverSide && changed.has("rows") && this.mobileShown !== 0) this.mobileShown = 0;
   }
   applyInitialView() {
@@ -2710,8 +2855,27 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     `;
   }
   // Botones de acción de una fila (compartido por vista tabla y tarjetas).
-  actionButtons(row) {
+  // `collapsible` = la vista lista, la única que puede quedarse sin ancho (#122). Las tarjetas
+  // tienen su propia fila de acciones a lo ancho de la tarjeta y ahí siempre caben.
+  actionButtons(row, collapsible = false) {
     if (!this.actions.length) return A;
+    if (collapsible && this.rowActionsCollapsed) {
+      return b2`
+        <div class="actions">
+          <ion-button
+            size="small"
+            fill="clear"
+            color="medium"
+            aria-label=${this.t.moreActions}
+            title=${this.t.moreActions}
+            aria-haspopup="menu"
+            @click=${(e5) => this.openRowMenu(e5, row)}
+          >
+            <ion-icon slot="icon-only" .icon=${okIcon(iconEllipsisVertical)}></ion-icon>
+          </ion-button>
+        </div>
+      `;
+    }
     return b2`
       <div class="actions">
         ${this.actions.map(
@@ -2752,8 +2916,22 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
   gridTemplate() {
     return [
       this.selectable ? "2.75rem" : null,
-      ...this.visibleColumns.map((c5) => c5.width ?? "minmax(8rem,1fr)"),
-      this.actions.length ? "auto" : null
+      // #120 - 5.5rem (88px) is the narrowest a data column can be and stay readable: ~11
+      // characters at 14px, plus the ellipsis `.gcell > span` already applies. With the previous
+      // floor (8rem = 128px) the six columns of a bookings list did not fit the counter tablet
+      // (128x6 + 188 for actions + gaps = 1036px against 834) and the pinned column ended up on
+      // top of the data. With 5.5rem they fit (796px) and `1fr` stretches them to 94px each.
+      ...this.visibleColumns.map((c5) => c5.width ?? "minmax(5.5rem,1fr)"),
+      // #121 - a LENGTH, not `max-content`. The header and every row are separate grids that
+      // share this string, and a content-sized track is not a length: each grid resolves it
+      // against ITS OWN content - the word "ACCIONES" (62.83px) in the header, four buttons
+      // (188px) in the row. The leftover the `1fr` columns share then differed between the two,
+      // and the header slid right, up to 125px by the last column (measured at 834px).
+      // `actionsTrackPx` is the width of the buttons MEASURED on screen, so it also keeps #120's
+      // contract: the track never shrinks under its content (an `auto` track collapsed to 16px
+      // and the buttons spilled over the neighbouring column). Until the first measurement lands
+      // - one frame - `max-content` reserves the same room it always did.
+      this.actions.length ? this.actionsTrackPx > 0 ? `${this.actionsTrackPx}px` : "max-content" : null
     ].filter(Boolean).join(" ");
   }
   /** Lista de páginas a mostrar en el pager numerado (1-based): primera, última, vecinas de la
@@ -2809,7 +2987,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
         this.mobileShown = 0;
       }
     };
-    const searchbar = this.serverSide ? b2`<ion-searchbar class="ion-no-border" placeholder=${this.effSearchPlaceholder} debounce="250" @ionInput=${this.onSearch}></ion-searchbar>` : b2`<ion-searchbar class="ion-no-border" .value=${this.q} placeholder=${this.effSearchPlaceholder} debounce="250" @ionInput=${this.onSearch}></ion-searchbar>`;
+    const searchbar = b2`<ion-searchbar class="ion-no-border" .value=${this.q} placeholder=${this.effSearchPlaceholder} debounce="250" @ionInput=${this.onSearch}></ion-searchbar>`;
     const selCount = this.selection.size;
     const showTopbar = !!this.title || this.hasSearch || this.viewToggle || this.effColumnPicker || this.effExport || this.effImport || this.hasFilterRow || this.addable || !!this.primaryAction;
     return b2`
@@ -2857,24 +3035,19 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
                           <input class="tk-file" type="file" accept=".csv,text/csv" hidden @change=${(e5) => this.onImportFile(e5)} />
                         ` : A}
                     ${this.effExport ? this.toolButton("download-outline", false, () => this.exportCsv(), this.t.exportCsv) : A}
-                    ${this.addable ? this.isMobile ? b2`
-                            <ion-button class="primary-btn add-btn" size="small" @click=${() => this.toggle("create")}>
-                              <ion-icon slot="start" .icon=${okIcon("add")}></ion-icon>${this.t.add}
-                            </ion-button>
-                          ` : this.toolButton("add", this.panel === "create", () => this.toggle("create"), this.t.add) : A}
+                    <!-- #113 — Mismo botón en los dos viewports: la acción principal de la pantalla
+                         se lee, no se adivina. En escritorio era un «+» de 36px idéntico a los
+                         iconos de vista/filtrar/exportar, y era el último de cuatro. -->
+                    ${this.addable ? b2`
+                          <ion-button class="primary-btn add-btn" size="small" @click=${() => this.toggle("create")}>
+                            <ion-icon slot="start" .icon=${okIcon("add")}></ion-icon>${this.t.add}
+                          </ion-button>
+                        ` : A}
                     ${this.renderOverflowMenu()}
-                    ${this.primaryAction ? this.isMobile ? b2`
-                            <ion-button class="primary-btn add-btn" size="small" @click=${() => this.emit("primaryAction", {})}>
-                              <ion-icon slot="start" .icon=${okIcon(this.primaryAction.icon ?? "add")}></ion-icon>${this.primaryAction.label}
-                            </ion-button>
-                          ` : b2`
-                          <ion-button
-                            class="primary-btn"
-                            size="small"
-                            title=${this.primaryAction.label}
-                            aria-label=${this.primaryAction.label}
-                            @click=${() => this.emit("primaryAction", {})}
-                          ><ion-icon slot="icon-only" .icon=${okIcon(this.primaryAction.icon ?? "add")}></ion-icon></ion-button>
+                    ${this.primaryAction ? b2`
+                          <ion-button class="primary-btn add-btn" size="small" @click=${() => this.emit("primaryAction", {})}>
+                            <ion-icon slot="start" .icon=${okIcon(this.primaryAction.icon ?? "add")}></ion-icon>${this.primaryAction.label}
+                          </ion-button>
                         ` : A}
                     <!-- El módulo proyecta aquí acciones globales adicionales. -->
                     <slot name="toolbar"></slot>
@@ -3023,7 +3196,9 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
                 </div>
               `;
     })}
-            ${this.actions.length ? b2`<div class="gcell gh right actions-col" role="columnheader">${this.t.actions}</div>` : A}
+            ${this.actions.length ? b2`<div class="gcell gh right actions-col" role="columnheader">
+                  ${this.rowActionsCollapsed ? b2`<span class="sr-only">${this.t.actions}</span>` : b2`<span>${this.t.actions}</span>`}
+                </div>` : A}
           </div>
 
           <!-- Filas -->
@@ -3046,13 +3221,14 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
                   ${cols.map(
           (c5) => b2`<div class=${`gcell ${alignCls(c5.align)}${c5.pinned === "end" ? " actions-col" : ""}`} role="cell">${c5.render ? c5.render(row) : b2`<span>${this.cell(c5, row)}</span>`}</div>`
         )}
-                  ${this.actions.length ? b2`<div class="gcell right actions-col" role="cell" @click=${(e5) => e5.stopPropagation()}>${this.actionButtons(row)}</div>` : A}
+                  ${this.actions.length ? b2`<div class="gcell right actions-col" role="cell" @click=${(e5) => e5.stopPropagation()}>${this.actionButtons(row, true)}</div>` : A}
                 </div>
               `;
       }
     )}
         </div>
       </div>
+      ${this.renderRowMenu()}
     `;
   }
   renderCards(visible) {
@@ -3158,6 +3334,9 @@ __decorateClass2([
 ], _OkDataTable.prototype, "searchable");
 __decorateClass2([
   n4({ type: String })
+], _OkDataTable.prototype, "search");
+__decorateClass2([
+  n4({ type: String })
 ], _OkDataTable.prototype, "sort");
 __decorateClass2([
   n4({ attribute: "sort-dir" })
@@ -3252,6 +3431,15 @@ __decorateClass2([
 __decorateClass2([
   r5()
 ], _OkDataTable.prototype, "xOverflow");
+__decorateClass2([
+  r5()
+], _OkDataTable.prototype, "actionsTrackPx");
+__decorateClass2([
+  r5()
+], _OkDataTable.prototype, "rowActionsCollapsed");
+__decorateClass2([
+  r5()
+], _OkDataTable.prototype, "rowMenuOpen");
 __decorateClass2([
   r5()
 ], _OkDataTable.prototype, "hiddenKeys");
@@ -4139,17 +4327,17 @@ var ErpWhatsappInboxInbox = class extends i3 {
           ${c5.status === "closed" ? t5("ui.statusClosed") : t5("ui.statusActive")}
         </ok-status-pill>
         <span class="spacer"></span>
-        <ion-button size="small" fill="clear" @click=${() => this.closeDetail()}>${t5("ui.closeView")}</ion-button>
+        <ion-button data-testid="whatsapp-inbox-detail-close" size="small" fill="clear" @click=${() => this.closeDetail()}>${t5("ui.closeView")}</ion-button>
       </div>
-      ${this.detailError ? b2`<p class="err">${this.detailError}</p>` : A}
+      ${this.detailError ? b2`<p class="err" data-testid="whatsapp-inbox-detail-error">${this.detailError}</p>` : A}
       <div class="thread">
         ${this.messages.length ? this.messages.map((m4) => this.renderMessage(m4)) : b2`<p class="empty">${t5("ui.emptyThread")}</p>`}
       </div>
       ${can("whatsapp_inbox.manage_settings") ? b2`<div class="assign">
-            <ion-input mode="md" fill="outline" label-placement="floating" label=${t5("ui.assignedTo")}
+            <ion-input data-testid="whatsapp-inbox-assign-to" mode="md" fill="outline" label-placement="floating" label=${t5("ui.assignedTo")}
               placeholder=${t5("ui.assignPlaceholder")} .value=${this.assignTo}
               @ionInput=${(e5) => this.assignTo = e5.target.value ?? ""}></ion-input>
-            <ion-button size="small" ?disabled=${this.detailBusy} @click=${() => this.assign()}>
+            <ion-button data-testid="whatsapp-inbox-assign-submit" size="small" ?disabled=${this.detailBusy} @click=${() => this.assign()}>
               ${this.assignTo.trim() ? t5("ui.assign") : t5("ui.unassign")}
             </ion-button>
           </div>` : A}
@@ -4162,9 +4350,9 @@ var ErpWhatsappInboxInbox = class extends i3 {
         <header>
           <h2>${t5("ui.inboxTitle")}</h2>
         </header>
-        ${this.ctrl?.error ? b2`<p class="err">${this.ctrl.error}</p>` : A}
+        ${this.ctrl?.error ? b2`<p class="err" data-testid="whatsapp-inbox-load-error">${this.ctrl.error}</p>` : A}
         ${this.renderDetail()}
-        <ok-data-table .serverSide=${true} .views=${true} .fill=${true} .actions=${this.rowActions} .rowClickable=${true} .cardTitle=${(row) => String(row.contact_name ?? row.contact_phone ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "asc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchInbox")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyInbox")} @rowAction=${(e5) => this.onRowAction(e5)} @rowClick=${(e5) => this.onRowAction({ detail: { actionId: "open", row: e5.detail.row } })} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @pageSizeChange=${(e5) => this.ctrl.setPageSize(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}></ok-data-table>
+        <ok-data-table testid="whatsapp-inbox-table" .serverSide=${true} .views=${true} .fill=${true} .actions=${this.rowActions} .rowClickable=${true} .cardTitle=${(row) => String(row.contact_name ?? row.contact_phone ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "asc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchInbox")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyInbox")} @rowAction=${(e5) => this.onRowAction(e5)} @rowClick=${(e5) => this.onRowAction({ detail: { actionId: "open", row: e5.detail.row } })} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @pageSizeChange=${(e5) => this.ctrl.setPageSize(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}></ok-data-table>
       </div>`;
   }
 };
@@ -4746,9 +4934,9 @@ var ErpWhatsappInboxRequests = class extends i3 {
     const t5 = (k2) => erplora2().t(CATALOG2, k2);
     return b2`<section class="confirm">
       <p>${t5("ui.confirmDeleteRequest")} <strong>${this.pendingDelete.reference_number}</strong></p>
-      <ion-button size="small" color="danger" ?disabled=${this.busyId === this.pendingDelete.id}
+      <ion-button data-testid="whatsapp-requests-delete-confirm" size="small" color="danger" ?disabled=${this.busyId === this.pendingDelete.id}
         @click=${() => this.confirmDelete()}>${t5("ui.delete")}</ion-button>
-      <ion-button size="small" fill="clear" @click=${() => this.pendingDelete = null}>${t5("ui.cancel")}</ion-button>
+      <ion-button data-testid="whatsapp-requests-delete-cancel" size="small" fill="clear" @click=${() => this.pendingDelete = null}>${t5("ui.cancel")}</ion-button>
     </section>`;
   }
   /** The parsed payload, field by field. It is free JSON by design (the schema is dynamic), so it
@@ -4786,11 +4974,11 @@ var ErpWhatsappInboxRequests = class extends i3 {
       <h4>${t5("ui.labelParsedData")}</h4>
       ${this.renderParsed(r6.data)}
       ${r6.notes ? b2`<h4>${t5("ui.labelNotes")}</h4><p class="summary">${r6.notes}</p>` : A}
-      ${r6.failure_reason ? b2`<ok-inline-feedback tone="warning" heading=${t5("ui.bookingFailedTitle")}>
+      ${r6.failure_reason ? b2`<ok-inline-feedback data-testid="whatsapp-requests-detail-booking-failed" tone="warning" heading=${t5("ui.bookingFailedTitle")}>
         ${r6.failure_reason}
       </ok-inline-feedback>` : A}
       ${r6.linked_object_id ? b2`<p class="summary">${t5("ui.labelLinkedObject")}: ${r6.linked_module} · ${r6.linked_object_id}</p>` : A}
-      <ion-button size="small" fill="clear" @click=${() => {
+      <ion-button data-testid="whatsapp-requests-detail-close" size="small" fill="clear" @click=${() => {
       this.openRequest = null;
     }}>${t5("ui.closeView")}</ion-button>
     </section>`;
@@ -4800,7 +4988,7 @@ var ErpWhatsappInboxRequests = class extends i3 {
     const bookable = BOOKABLE_TYPES.has(r6.request_type) && this.canBook;
     const open = this.bookingFor === r6.id;
     return b2`<div class="pending-row">
-      ${r6.failure_reason ? b2`<ok-inline-feedback tone="warning" heading=${t5("ui.bookingFailedTitle")}>
+      ${r6.failure_reason ? b2`<ok-inline-feedback data-testid=${`whatsapp-requests-pending-failed-${r6.id}`} tone="warning" heading=${t5("ui.bookingFailedTitle")}>
         ${r6.failure_reason}
       </ok-inline-feedback>` : A}
       <div class="who">
@@ -4812,14 +5000,14 @@ var ErpWhatsappInboxRequests = class extends i3 {
       </div>
       ${r6.raw_summary ? b2`<p class="summary">${r6.raw_summary}</p>` : A}
       <div class="actions">
-        ${bookable ? b2`<ion-button size="small" ?disabled=${this.busyId === r6.id}
+        ${bookable ? b2`<ion-button data-testid=${`whatsapp-requests-pending-book-${r6.id}`} size="small" ?disabled=${this.busyId === r6.id}
               @click=${() => {
       this.bookingFor = open ? "" : r6.id;
     }}>
               ${open ? t5("ui.bookingClose") : r6.failure_reason ? t5("ui.bookingRetry") : t5("ui.bookingOpen")}
-            </ion-button>` : b2`<ion-button size="small" ?disabled=${this.busyId === r6.id}
+            </ion-button>` : b2`<ion-button data-testid=${`whatsapp-requests-pending-approve-${r6.id}`} size="small" ?disabled=${this.busyId === r6.id}
               @click=${() => this.approve(r6.id)}>${t5("ui.approve")}</ion-button>`}
-        <ion-button size="small" color="medium" ?disabled=${this.busyId === r6.id}
+        <ion-button data-testid=${`whatsapp-requests-pending-reject-${r6.id}`} size="small" color="medium" ?disabled=${this.busyId === r6.id}
           @click=${() => this.reject(r6.id)}>${t5("ui.reject")}</ion-button>
       </div>
       ${open ? b2`<div class="booking-slot"></div>` : A}
@@ -4832,15 +5020,15 @@ var ErpWhatsappInboxRequests = class extends i3 {
         <header>
           <h2>${t5("ui.requestsTitle")}</h2>
         </header>
-        ${this.formError ? b2`<p class="err">${this.formError}</p>` : A}
-        ${this.ctrl?.error ? b2`<p class="err">${this.ctrl.error}</p>` : A}
+        ${this.formError ? b2`<p class="err" data-testid="whatsapp-requests-form-error">${this.formError}</p>` : A}
+        ${this.ctrl?.error ? b2`<p class="err" data-testid="whatsapp-requests-load-error">${this.ctrl.error}</p>` : A}
         ${this.renderDeleteConfirm()}
         ${this.renderDetail()}
         ${pending.length > 0 ? b2`<div>
           <h3>${t5("ui.pendingReview")}</h3>
           ${pending.map((r6) => this.renderPending(r6))}
         </div>` : A}
-        <ok-data-table .serverSide=${true} .views=${true} .actions=${this.rowActions} .rowClickable=${true} .cardTitle=${(row) => String(row.reference_number ?? row.contact_name ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "desc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchRequests")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyRequests")} @rowAction=${(e5) => this.onRowAction(e5)} @rowClick=${(e5) => this.onRowAction({ detail: { actionId: "open", row: e5.detail.row } })} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @pageSizeChange=${(e5) => this.ctrl.setPageSize(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}></ok-data-table>
+        <ok-data-table testid="whatsapp-requests-table" .serverSide=${true} .views=${true} .actions=${this.rowActions} .rowClickable=${true} .cardTitle=${(row) => String(row.reference_number ?? row.contact_name ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "desc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchRequests")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyRequests")} @rowAction=${(e5) => this.onRowAction(e5)} @rowClick=${(e5) => this.onRowAction({ detail: { actionId: "open", row: e5.detail.row } })} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @pageSizeChange=${(e5) => this.ctrl.setPageSize(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}></ok-data-table>
       </div>`;
   }
 };
@@ -5184,7 +5372,7 @@ var ErpWhatsappInboxSettings = class extends i3 {
   renderConnect() {
     return b2`
       <h3>${this.t("ui.stepNumber")}</h3>
-      ${this.connectAvailable ? b2`<erp-whatsapp-connect></erp-whatsapp-connect>` : b2`<ok-inline-feedback tone="warning">${this.t("ui.helpConnectNeedsNewerHub")}</ok-inline-feedback>`}
+      ${this.connectAvailable ? b2`<erp-whatsapp-connect></erp-whatsapp-connect>` : b2`<ok-inline-feedback data-testid="whatsapp-settings-connect-needs-newer-hub" tone="warning">${this.t("ui.helpConnectNeedsNewerHub")}</ok-inline-feedback>`}
       <p class="help">${this.t("ui.helpConnectScanQr")}</p>
     `;
   }
@@ -5192,23 +5380,23 @@ var ErpWhatsappInboxSettings = class extends i3 {
   renderUses() {
     const heading = b2`<h3>${this.t("ui.stepUses")}</h3>`;
     if (!this.loaded) {
-      return b2`${heading}<ion-spinner name="crescent" data-testid="uses-loading"></ion-spinner>`;
+      return b2`${heading}<ion-spinner name="crescent" data-testid="whatsapp-settings-uses-loading"></ion-spinner>`;
     }
     if (this.hubTooOld) {
       return b2`${heading}
-        <ok-inline-feedback tone="warning">${this.t("ui.usesNeedsNewerHub")}</ok-inline-feedback>`;
+        <ok-inline-feedback data-testid="whatsapp-settings-uses-needs-newer-hub" tone="warning">${this.t("ui.usesNeedsNewerHub")}</ok-inline-feedback>`;
     }
     if (this.templatesFailed) {
       return b2`${heading}
-        <ok-inline-feedback tone="danger">${this.t("ui.errTemplates")}</ok-inline-feedback>`;
+        <ok-inline-feedback data-testid="whatsapp-settings-uses-error" tone="danger">${this.t("ui.errTemplates")}</ok-inline-feedback>`;
     }
     const installed = WHATSAPP_USES.filter((use) => !this.missing.has(use.module));
     const available = installed.filter((use) => this.built[use.family] !== void 0);
     if (available.length === 0) {
       const why = installed.length === 0 ? "ui.usesNeedBookingModule" : "ui.usesNeedNewerBookingModule";
       return b2`${heading}
-        <ok-inline-feedback tone="warning">${this.t(why)}</ok-inline-feedback>
-        <ion-button data-testid="uses-go-to-apps" size="small" @click=${() => this.go(APPS_PATH)}>
+        <ok-inline-feedback data-testid="whatsapp-settings-uses-need-module" tone="warning">${this.t(why)}</ok-inline-feedback>
+        <ion-button data-testid="whatsapp-settings-uses-go-to-apps" size="small" @click=${() => this.go(APPS_PATH)}>
           ${this.t("ui.usesGoToApps")}
         </ion-button>`;
     }
@@ -5223,7 +5411,7 @@ var ErpWhatsappInboxSettings = class extends i3 {
         <header>
           <ion-icon name=${use.icon} aria-hidden="true"></ion-icon>
           <h4>${this.t(use.nameKey)}</h4>
-          ${stateOf === "on" || stateOf === "paused" ? b2`<span class="state ${on ? "is-on" : ""}" data-testid=${`state-${use.family}`}
+          ${stateOf === "on" || stateOf === "paused" ? b2`<span class="state ${on ? "is-on" : ""}" data-testid=${`whatsapp-settings-state-${use.family}`}
                 >${this.t(on ? "ui.stateOn" : "ui.stateOff")}</span
               >` : A}
         </header>
@@ -5232,12 +5420,12 @@ var ErpWhatsappInboxSettings = class extends i3 {
         ${on ? b2`<ion-button
               size="small"
               fill="clear"
-              data-testid=${`deactivate-${use.family}`}
+              data-testid=${`whatsapp-settings-deactivate-${use.family}`}
               ?disabled=${this.busy === use.family}
               @click=${() => this.deactivate(use)}
             >${this.t("ui.turnOff")}</ion-button>` : b2`<ion-button
               size="small"
-              data-testid=${`activate-${use.family}`}
+              data-testid=${`whatsapp-settings-activate-${use.family}`}
               ?disabled=${this.busy === use.family}
               @click=${() => {
       this.asking = use.family;
@@ -5246,8 +5434,8 @@ var ErpWhatsappInboxSettings = class extends i3 {
             >${this.t("ui.activate")}</ion-button>`}
 
         ${this.asking === use.family ? this.renderConsent(use) : A}
-        ${error ? b2`<ok-inline-feedback tone="danger">${errorText(error, (k2) => this.t(k2))}</ok-inline-feedback>` : A}
-        ${on && this.justActivated === use.family ? b2`<p class="done">${this.t(use.doneKey)}</p>` : A}
+        ${error ? b2`<ok-inline-feedback data-testid=${`whatsapp-settings-card-error-${use.family}`} tone="danger">${errorText(error, (k2) => this.t(k2))}</ok-inline-feedback>` : A}
+        ${on && this.justActivated === use.family ? b2`<p class="done" data-testid=${`whatsapp-settings-activated-${use.family}`}>${this.t(use.doneKey)}</p>` : A}
         ${on ? this.renderPolicy(use) : A}
       </section>
     `;
@@ -5259,14 +5447,14 @@ var ErpWhatsappInboxSettings = class extends i3 {
         <p>${this.t(use.consentKey)}</p>
         <ion-button
           size="small"
-          data-testid=${`confirm-activate-${use.family}`}
+          data-testid=${`whatsapp-settings-confirm-activate-${use.family}`}
           ?disabled=${this.busy === use.family}
           @click=${() => this.activate(use)}
         >${this.t("ui.activate")}</ion-button>
         <ion-button
           size="small"
           fill="clear"
-          data-testid=${`cancel-activate-${use.family}`}
+          data-testid=${`whatsapp-settings-cancel-activate-${use.family}`}
           @click=${() => {
       this.asking = "";
     }}
@@ -5286,15 +5474,15 @@ var ErpWhatsappInboxSettings = class extends i3 {
     const auto = this.policy[use.family] ?? use.policy.defaultOn;
     return b2`
       <ion-segment
-        data-testid=${`policy-${use.family}`}
+        data-testid=${`whatsapp-settings-policy-${use.family}`}
         .value=${auto ? "auto" : "review"}
         @ionChange=${(e5) => this.setPolicy(use, e5.detail?.value !== "review")}
       >
-        <ion-segment-button value="auto"><ion-label>${this.t(use.policy.autoKey)}</ion-label></ion-segment-button>
-        <ion-segment-button value="review"><ion-label>${this.t(use.policy.reviewKey)}</ion-label></ion-segment-button>
+        <ion-segment-button data-testid=${`whatsapp-settings-policy-auto-${use.family}`} value="auto"><ion-label>${this.t(use.policy.autoKey)}</ion-label></ion-segment-button>
+        <ion-segment-button data-testid=${`whatsapp-settings-policy-review-${use.family}`} value="review"><ion-label>${this.t(use.policy.reviewKey)}</ion-label></ion-segment-button>
       </ion-segment>
       ${auto ? A : b2`<p class="help">${this.t(use.policy.reviewHelpKey)}</p>`}
-      ${this.policyFailed[use.family] ? b2`<ok-inline-feedback tone="danger">${this.t(use.policy.errorKey)}</ok-inline-feedback>` : A}
+      ${this.policyFailed[use.family] ? b2`<ok-inline-feedback data-testid=${`whatsapp-settings-policy-error-${use.family}`} tone="danger">${this.t(use.policy.errorKey)}</ok-inline-feedback>` : A}
     `;
   }
   /**
@@ -5310,7 +5498,7 @@ var ErpWhatsappInboxSettings = class extends i3 {
             <ion-button
               size="small"
               fill="clear"
-              data-testid="advanced-automations"
+              data-testid="whatsapp-settings-advanced-automations"
               @click=${() => this.go(AUTOMATIONS_PATH)}
             >${this.t("ui.advancedInAutomations")}</ion-button>
           </div>` : A}
@@ -5831,7 +6019,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     if (!this.editingMeta) return A;
     const t5 = (k2) => erplora4().t(CATALOG4, k2);
     const { state, labelKey, actionKey } = this.editingMeta;
-    return b2`<div class="meta" data-state=${state}>
+    return b2`<div class="meta" data-testid="whatsapp-templates-meta-verdict" data-state=${state}>
       <strong>${t5("ui.colMetaStatus")}: ${labelKey ? t5(labelKey) : this.editingMetaCode}</strong>
       <p>${t5(actionKey)}</p>
       ${this.editingMetaReason ? b2`<p>${erplora4().t(CATALOG4, "ui.metaRejectedReason", { reason: this.editingMetaReason })}</p>` : A}
@@ -5842,33 +6030,33 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     const t5 = (k2) => erplora4().t(CATALOG4, k2);
     return b2`<section class="panel">
       <p>${t5("ui.confirmDeleteTemplate")} <strong>${this.pendingDelete.name}</strong></p>
-      <ion-button size="small" color="danger" ?disabled=${this.saving}
+      <ion-button data-testid="whatsapp-templates-delete-confirm" size="small" color="danger" ?disabled=${this.saving}
         @click=${() => this.confirmDelete()}>${t5("ui.delete")}</ion-button>
-      <ion-button size="small" fill="clear" @click=${() => this.pendingDelete = null}>${t5("ui.cancel")}</ion-button>
+      <ion-button data-testid="whatsapp-templates-delete-cancel" size="small" fill="clear" @click=${() => this.pendingDelete = null}>${t5("ui.cancel")}</ion-button>
     </section>`;
   }
   render() {
     const t5 = (k2) => erplora4().t(CATALOG4, k2);
     return b2`<div class="page">
-        ${this.formError ? b2`<p class="err">${this.formError}</p>` : A}
-        ${this.ctrl?.error ? b2`<p class="err">${this.ctrl.error}</p>` : A}
-        ${this.metaSyncNotice ? b2`<section class="panel"><p>${this.metaSyncNotice}</p></section>` : A}
+        ${this.formError ? b2`<p class="err" data-testid="whatsapp-templates-form-error">${this.formError}</p>` : A}
+        ${this.ctrl?.error ? b2`<p class="err" data-testid="whatsapp-templates-load-error">${this.ctrl.error}</p>` : A}
+        ${this.metaSyncNotice ? b2`<section class="panel"><p data-testid="whatsapp-templates-meta-sync-notice">${this.metaSyncNotice}</p></section>` : A}
         ${this.renderDeleteConfirm()}
-        <ok-data-table .serverSide=${true} .fill=${true} .primaryAction=${{ label: t5("ui.add"), icon: "add" }} @primaryAction=${() => this.openCreate()} .views=${true} .actions=${this.rowActions} .rowClickable=${true} .cardTitle=${(row) => String(row.name ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "desc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchTemplates")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyTemplates")} @rowAction=${(e5) => this.onRowAction(e5)} @rowClick=${(e5) => this.onRowAction({ detail: { actionId: "edit", row: e5.detail.row } })} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @pageSizeChange=${(e5) => this.ctrl.setPageSize(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}>
+        <ok-data-table testid="whatsapp-templates-table" .serverSide=${true} .fill=${true} .primaryAction=${{ label: t5("ui.add"), icon: "add" }} @primaryAction=${() => this.openCreate()} .views=${true} .actions=${this.rowActions} .rowClickable=${true} .cardTitle=${(row) => String(row.name ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "desc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchTemplates")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyTemplates")} @rowAction=${(e5) => this.onRowAction(e5)} @rowClick=${(e5) => this.onRowAction({ detail: { actionId: "edit", row: e5.detail.row } })} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @pageSizeChange=${(e5) => this.ctrl.setPageSize(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}>
           <!-- Alta: se proyecta SIEMPRE (aunque el panel esté cerrado). Si solo se renderizara con el
                panel abierto, el «+» de la barra desplegaría un panel vacío. -->
-          <form slot="create" class="form" @submit=${(e5) => this.createTemplate(e5)}>
+          <form data-testid="whatsapp-templates-form" slot="create" class="form" @submit=${(e5) => this.createTemplate(e5)}>
             ${this.renderMetaVerdict()}
-            <ion-input mode="md" fill="outline" label-placement="floating" label=${t5("ui.colName")} .value=${this.newName} @ionInput=${(e5) => this.newName = e5.target.value}></ion-input>
-            <ion-input mode="md" fill="outline" label-placement="floating" label=${t5("ui.colLanguage")} placeholder=${t5("ui.placeholderLanguage")} .value=${this.newLanguage} @ionInput=${(e5) => this.newLanguage = e5.target.value}></ion-input>
-            <ion-select mode="md" fill="outline" label-placement="floating" label=${t5("ui.colCategory")} .value=${this.newCategory} @ionChange=${(e5) => this.newCategory = e5.target.value}>
+            <ion-input data-testid="whatsapp-templates-name" mode="md" fill="outline" label-placement="floating" label=${t5("ui.colName")} .value=${this.newName} @ionInput=${(e5) => this.newName = e5.target.value}></ion-input>
+            <ion-input data-testid="whatsapp-templates-language" mode="md" fill="outline" label-placement="floating" label=${t5("ui.colLanguage")} placeholder=${t5("ui.placeholderLanguage")} .value=${this.newLanguage} @ionInput=${(e5) => this.newLanguage = e5.target.value}></ion-input>
+            <ion-select data-testid="whatsapp-templates-category" mode="md" fill="outline" label-placement="floating" label=${t5("ui.colCategory")} .value=${this.newCategory} @ionChange=${(e5) => this.newCategory = e5.target.value}>
               <ion-select-option value="UTILITY">${t5("ui.categoryUtility")}</ion-select-option>
               <ion-select-option value="MARKETING">${t5("ui.categoryMarketing")}</ion-select-option>
               <ion-select-option value="AUTHENTICATION">${t5("ui.categoryAuthentication")}</ion-select-option>
             </ion-select>
-            <ion-textarea mode="md" fill="outline" label-placement="floating" label=${t5("ui.colBody")} placeholder=${t5("ui.placeholderBody")} .value=${this.newBody} @ionInput=${(e5) => this.newBody = e5.target.value}></ion-textarea>
-            <ion-button type="submit" ?disabled=${this.saving || !this.newName}>${this.saving ? t5("ui.saving") : this.editingId ? t5("ui.save") : t5("ui.add")}</ion-button>
-            ${this.editingId ? b2`<ion-button fill="clear" size="small" ?disabled=${this.saving}
+            <ion-textarea data-testid="whatsapp-templates-body" mode="md" fill="outline" label-placement="floating" label=${t5("ui.colBody")} placeholder=${t5("ui.placeholderBody")} .value=${this.newBody} @ionInput=${(e5) => this.newBody = e5.target.value}></ion-textarea>
+            <ion-button data-testid="whatsapp-templates-submit" type="submit" ?disabled=${this.saving || !this.newName}>${this.saving ? t5("ui.saving") : this.editingId ? t5("ui.save") : t5("ui.add")}</ion-button>
+            ${this.editingId ? b2`<ion-button data-testid="whatsapp-templates-cancel" fill="clear" size="small" ?disabled=${this.saving}
                   @click=${() => this.cancelEdit()}>${t5("ui.cancel")}</ion-button>` : A}
           </form>
         </ok-data-table>

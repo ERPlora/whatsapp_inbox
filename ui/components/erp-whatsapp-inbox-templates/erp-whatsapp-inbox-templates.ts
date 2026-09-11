@@ -590,7 +590,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     if (!this.editingMeta) return nothing;
     const t = (k: string): string => erplora().t(CATALOG, k);
     const { state, labelKey, actionKey } = this.editingMeta;
-    return html`<div class="meta" data-state=${state}>
+    return html`<div class="meta" data-testid="whatsapp-templates-meta-verdict" data-state=${state}>
       <strong>${t('ui.colMetaStatus')}: ${labelKey ? t(labelKey) : this.editingMetaCode}</strong>
       <p>${t(actionKey)}</p>
       ${this.editingMetaReason
@@ -604,37 +604,41 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     const t = (k: string): string => erplora().t(CATALOG, k);
     return html`<section class="panel">
       <p>${t('ui.confirmDeleteTemplate')} <strong>${this.pendingDelete.name}</strong></p>
-      <ion-button size="small" color="danger" ?disabled=${this.saving}
+      <ion-button data-testid="whatsapp-templates-delete-confirm" size="small" color="danger" ?disabled=${this.saving}
         @click=${() => this.confirmDelete()}>${t('ui.delete')}</ion-button>
-      <ion-button size="small" fill="clear" @click=${() => (this.pendingDelete = null)}>${t('ui.cancel')}</ion-button>
+      <ion-button data-testid="whatsapp-templates-delete-cancel" size="small" fill="clear" @click=${() => (this.pendingDelete = null)}>${t('ui.cancel')}</ion-button>
     </section>`;
   }
 
   render() {
     const t = (k: string): string => erplora().t(CATALOG, k);
     return html`<div class="page">
-        ${this.formError ? html`<p class="err">${this.formError}</p>` : nothing}
-        ${this.ctrl?.error ? html`<p class="err">${this.ctrl.error}</p>` : nothing}
+        ${this.formError
+          ? html`<p class="err" data-testid="whatsapp-templates-form-error">${this.formError}</p>`
+          : nothing}
+        ${this.ctrl?.error
+          ? html`<p class="err" data-testid="whatsapp-templates-load-error">${this.ctrl.error}</p>`
+          : nothing}
         ${this.metaSyncNotice
-          ? html`<section class="panel"><p>${this.metaSyncNotice}</p></section>`
+          ? html`<section class="panel"><p data-testid="whatsapp-templates-meta-sync-notice">${this.metaSyncNotice}</p></section>`
           : nothing}
         ${this.renderDeleteConfirm()}
-        <ok-data-table .serverSide=${true} .fill=${true} .primaryAction=${{ label: t('ui.add'), icon: 'add' }} @primaryAction=${() => this.openCreate()} .views=${true} .actions=${this.rowActions} .rowClickable=${true} .cardTitle=${(row: Record<string, unknown>) => String(row.name ?? '—')} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? 'desc'} .searchable=${true} .searchPlaceholder=${t('ui.searchTemplates')} .emptyMessage=${this.ctrl?.loading ? t('ui.loading') : t('ui.emptyTemplates')} @rowAction=${(e: CustomEvent<{ actionId: string; row: Record<string, unknown> }>) => this.onRowAction(e)} @rowClick=${(e: CustomEvent<{ row: Record<string, unknown> }>) => this.onRowAction({ detail: { actionId: 'edit', row: e.detail.row } } as CustomEvent<{ actionId: string; row: Record<string, unknown> }>)} @pageChange=${(e: CustomEvent<number>) => this.ctrl.setPage(e.detail)} @pageSizeChange=${(e: CustomEvent<number>) => this.ctrl.setPageSize(e.detail)} @sortChange=${(e: CustomEvent<{ sort: string; dir: 'asc' | 'desc' }>) => this.ctrl.setSort(e.detail.sort, e.detail.dir)} @searchChange=${(e: CustomEvent<string>) => this.ctrl.setSearch(e.detail)} @filterChange=${(e: CustomEvent<{ col: string; value: unknown }>) => this.ctrl.setFilter(e.detail.col, e.detail.value)}>
+        <ok-data-table testid="whatsapp-templates-table" .serverSide=${true} .fill=${true} .primaryAction=${{ label: t('ui.add'), icon: 'add' }} @primaryAction=${() => this.openCreate()} .views=${true} .actions=${this.rowActions} .rowClickable=${true} .cardTitle=${(row: Record<string, unknown>) => String(row.name ?? '—')} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? 'desc'} .searchable=${true} .searchPlaceholder=${t('ui.searchTemplates')} .emptyMessage=${this.ctrl?.loading ? t('ui.loading') : t('ui.emptyTemplates')} @rowAction=${(e: CustomEvent<{ actionId: string; row: Record<string, unknown> }>) => this.onRowAction(e)} @rowClick=${(e: CustomEvent<{ row: Record<string, unknown> }>) => this.onRowAction({ detail: { actionId: 'edit', row: e.detail.row } } as CustomEvent<{ actionId: string; row: Record<string, unknown> }>)} @pageChange=${(e: CustomEvent<number>) => this.ctrl.setPage(e.detail)} @pageSizeChange=${(e: CustomEvent<number>) => this.ctrl.setPageSize(e.detail)} @sortChange=${(e: CustomEvent<{ sort: string; dir: 'asc' | 'desc' }>) => this.ctrl.setSort(e.detail.sort, e.detail.dir)} @searchChange=${(e: CustomEvent<string>) => this.ctrl.setSearch(e.detail)} @filterChange=${(e: CustomEvent<{ col: string; value: unknown }>) => this.ctrl.setFilter(e.detail.col, e.detail.value)}>
           <!-- Alta: se proyecta SIEMPRE (aunque el panel esté cerrado). Si solo se renderizara con el
                panel abierto, el «+» de la barra desplegaría un panel vacío. -->
-          <form slot="create" class="form" @submit=${(e: Event) => this.createTemplate(e)}>
+          <form data-testid="whatsapp-templates-form" slot="create" class="form" @submit=${(e: Event) => this.createTemplate(e)}>
             ${this.renderMetaVerdict()}
-            <ion-input mode="md" fill="outline" label-placement="floating" label=${t('ui.colName')} .value=${this.newName} @ionInput=${(e: any) => (this.newName = e.target.value)}></ion-input>
-            <ion-input mode="md" fill="outline" label-placement="floating" label=${t('ui.colLanguage')} placeholder=${t('ui.placeholderLanguage')} .value=${this.newLanguage} @ionInput=${(e: any) => (this.newLanguage = e.target.value)}></ion-input>
-            <ion-select mode="md" fill="outline" label-placement="floating" label=${t('ui.colCategory')} .value=${this.newCategory} @ionChange=${(e: any) => (this.newCategory = e.target.value)}>
+            <ion-input data-testid="whatsapp-templates-name" mode="md" fill="outline" label-placement="floating" label=${t('ui.colName')} .value=${this.newName} @ionInput=${(e: any) => (this.newName = e.target.value)}></ion-input>
+            <ion-input data-testid="whatsapp-templates-language" mode="md" fill="outline" label-placement="floating" label=${t('ui.colLanguage')} placeholder=${t('ui.placeholderLanguage')} .value=${this.newLanguage} @ionInput=${(e: any) => (this.newLanguage = e.target.value)}></ion-input>
+            <ion-select data-testid="whatsapp-templates-category" mode="md" fill="outline" label-placement="floating" label=${t('ui.colCategory')} .value=${this.newCategory} @ionChange=${(e: any) => (this.newCategory = e.target.value)}>
               <ion-select-option value="UTILITY">${t('ui.categoryUtility')}</ion-select-option>
               <ion-select-option value="MARKETING">${t('ui.categoryMarketing')}</ion-select-option>
               <ion-select-option value="AUTHENTICATION">${t('ui.categoryAuthentication')}</ion-select-option>
             </ion-select>
-            <ion-textarea mode="md" fill="outline" label-placement="floating" label=${t('ui.colBody')} placeholder=${t('ui.placeholderBody')} .value=${this.newBody} @ionInput=${(e: any) => (this.newBody = e.target.value)}></ion-textarea>
-            <ion-button type="submit" ?disabled=${this.saving || !this.newName}>${this.saving ? t('ui.saving') : this.editingId ? t('ui.save') : t('ui.add')}</ion-button>
+            <ion-textarea data-testid="whatsapp-templates-body" mode="md" fill="outline" label-placement="floating" label=${t('ui.colBody')} placeholder=${t('ui.placeholderBody')} .value=${this.newBody} @ionInput=${(e: any) => (this.newBody = e.target.value)}></ion-textarea>
+            <ion-button data-testid="whatsapp-templates-submit" type="submit" ?disabled=${this.saving || !this.newName}>${this.saving ? t('ui.saving') : this.editingId ? t('ui.save') : t('ui.add')}</ion-button>
             ${this.editingId
-              ? html`<ion-button fill="clear" size="small" ?disabled=${this.saving}
+              ? html`<ion-button data-testid="whatsapp-templates-cancel" fill="clear" size="small" ?disabled=${this.saving}
                   @click=${() => this.cancelEdit()}>${t('ui.cancel')}</ion-button>`
               : nothing}
           </form>
