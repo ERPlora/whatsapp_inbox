@@ -85,6 +85,25 @@ MANIFEST = json.loads((MODULE_DIR / "module.json").read_text())
 # Sibling checkout of ERPlora/hub in the monorepo (`modules-workspace/modules/<id>` → root).
 HUB_CHECKOUT = MODULE_DIR.parent.parent.parent / "hub"
 
+# 🔴 THE TEMPLATES ARE NOT THE ONLY THING THAT RAISES THE FLOOR (module-toolkit#201).
+# `erplora build` makes a self-contained bundle: it inlines the OutfitKit of whoever built it, and
+# `dist/outfitkit.json` records which one. That version is a second, independent source of floor.
+# On a hub whose shell carries an OLDER OutfitKit the screens render with the shell's `ok-*`, not
+# with the ones this module was tested against (ADR-0133) — nothing fails, the screen is just
+# different from the one that was signed off, which is the worst shape a defect can take.
+#
+# The rule and the hub↔OutfitKit table belong to the toolkit (`validate-outfitkit-floor.mjs`), and
+# that table is derived from release DATES — the hub pins `^0.1.52` at every tag and resolves the
+# real version when the image is built, so there is NO file here, or in the hub, that can be
+# re-measured to prove it. That is why this is not a `KernelNeed`: it has no marker.
+#
+# What this test owns is narrower, and is what keeps the number from going bare: the floor may sit
+# above what the templates demand ONLY while the shipped stamp says so, and the (bake → floor) pair
+# is written down right here. Rebake against a different OutfitKit and this line stops matching the
+# artifact, so the floor has to be derived again instead of being inherited by accident.
+OUTFITKIT_STAMP = MODULE_DIR / "dist" / "outfitkit.json"
+OUTFITKIT_BAKE_FLOOR = ("0.1.70", (1, 1, 22))
+
 
 class KernelNeed(NamedTuple):
     """One kernel behaviour a template leans on, with the evidence for its release number."""
@@ -600,6 +619,35 @@ def predicate_self_check() -> None:
         )
 
 
+def outfitkit_floor() -> tuple[str | None, tuple[int, int, int] | None]:
+    """`(baked OutfitKit, the floor it demands)` read off the SHIPPED stamp.
+
+    `(None, None)` means the module ships no stamp — the state of everything published before
+    hub#1024, and «nothing to derive» rather than «nothing to check». A stamp that no longer
+    matches `OUTFITKIT_BAKE_FLOOR` returns `(baked, None)`: the floor is unknown until somebody
+    re-derives it, and guessing one here is how a wrong number would become permanent.
+    """
+    try:
+        baked = json.loads(OUTFITKIT_STAMP.read_text()).get("outfitkit")
+    except (OSError, ValueError):
+        baked = None
+    if not baked:
+        return None, None
+
+    recorded, floor = OUTFITKIT_BAKE_FLOOR
+    if baked != recorded:
+        failures.append(
+            f"`dist/{OUTFITKIT_STAMP.name}` says the bundle now inlines OutfitKit `{baked}`, but "
+            f"the floor written here was derived for `{recorded}`. The bundle is published AS IS "
+            f"and the shell's `ok-*` win over the inlined copy (ADR-0133), so a hub carrying an "
+            f"older OutfitKit renders these screens differently from how they were tested, "
+            f"silently. Re-derive the pair — `erplora validate` names the oldest hub that ships "
+            f"`{baked}` (module-toolkit#201) — and update `OUTFITKIT_BAKE_FLOOR`"
+        )
+        return baked, None
+    return baked, floor
+
+
 def main() -> int:
     print("· the manifest declares which hub this module needs (whatsapp_inbox#62)")
 
@@ -649,18 +697,44 @@ def main() -> int:
                 f"`compatibility.min_erplora_version` to {dotted(need.floor)} so the install is "
                 f"refused with `core_version_too_old` instead"
             )
+    # …and the bundle is a shipped file too: the OutfitKit it inlines demands its own floor.
+    baked, bake_floor = outfitkit_floor()
+    if bake_floor is not None and floor < bake_floor:
+        failures.append(
+            f"the bundle inlines OutfitKit `{baked}` — first carried by {dotted(bake_floor)} — and "
+            f"the manifest declares `{declared}`. On a hub between the two the module INSTALLS and "
+            f"the shell paints these screens with ITS OutfitKit instead of the one they were "
+            f"tested against (ADR-0133), with nothing said anywhere: raise "
+            f"`compatibility.min_erplora_version` to {dotted(bake_floor)} so the install is "
+            f"refused with `core_version_too_old` instead (module-toolkit#201)"
+        )
+
     if not failures:
         print(
             f"  ok: `{declared}` >= every floor the shipped files demand "
             f"({', '.join(sorted({dotted(n.floor) for n, _ in demanded}))})"
         )
+        if bake_floor is not None:
+            print(
+                f"  ok: `{declared}` >= the {dotted(bake_floor)} the inlined OutfitKit "
+                f"`{baked}` demands"
+            )
 
     # 4 · …and NOT ABOVE it either. Step 3 only pushes the floor UP, so every derivation going
     #     blind at once — a predicate that stops matching, a key renamed in the sidecars, a glob
     #     that no longer casts — leaves «>= everything demanded» trivially true and the declared
     #     number justified by nothing. Anchoring the table in BOTH directions is what makes the
     #     derivation load-bearing (`table-driven-guards-need-anchoring-in-both-directions`).
-    highest = max((need.floor for need, _ in demanded), default=None)
+    # The bake counts on this side too, or the check would read «nothing derives 1.1.22» while the
+    # stamp right next to it derives exactly that, and the only way to green would be to LOWER the
+    # floor below what the bundle needs — turning a guard against blind derivations into a push
+    # towards a wrong number.
+    highest = max(
+        (need.floor for need, _ in demanded),
+        default=None if bake_floor is None else bake_floor,
+    )
+    if highest is not None and bake_floor is not None:
+        highest = max(highest, bake_floor)
     if highest is not None and floor > highest:
         failures.append(
             f"the manifest declares `{declared}` but the shipped files only demand up to "
