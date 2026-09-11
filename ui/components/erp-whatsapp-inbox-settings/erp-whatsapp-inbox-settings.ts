@@ -366,7 +366,7 @@ class ErpWhatsappInboxSettings extends LitElement {
       <h3>${this.t('ui.stepNumber')}</h3>
       ${this.connectAvailable
         ? html`<erp-whatsapp-connect></erp-whatsapp-connect>`
-        : html`<ok-inline-feedback tone="warning">${this.t('ui.helpConnectNeedsNewerHub')}</ok-inline-feedback>`}
+        : html`<ok-inline-feedback data-testid="whatsapp-settings-connect-needs-newer-hub" tone="warning">${this.t('ui.helpConnectNeedsNewerHub')}</ok-inline-feedback>`}
       <p class="help">${this.t('ui.helpConnectScanQr')}</p>
     `;
   }
@@ -380,16 +380,16 @@ class ErpWhatsappInboxSettings extends LitElement {
     // every panel of the hub paints while it loads. A blank card under the heading reads as
     // «nothing here», which is the empty state one paint too early.
     if (!this.loaded) {
-      return html`${heading}<ion-spinner name="crescent" data-testid="uses-loading"></ion-spinner>`;
+      return html`${heading}<ion-spinner name="crescent" data-testid="whatsapp-settings-uses-loading"></ion-spinner>`;
     }
 
     if (this.hubTooOld) {
       return html`${heading}
-        <ok-inline-feedback tone="warning">${this.t('ui.usesNeedsNewerHub')}</ok-inline-feedback>`;
+        <ok-inline-feedback data-testid="whatsapp-settings-uses-needs-newer-hub" tone="warning">${this.t('ui.usesNeedsNewerHub')}</ok-inline-feedback>`;
     }
     if (this.templatesFailed) {
       return html`${heading}
-        <ok-inline-feedback tone="danger">${this.t('ui.errTemplates')}</ok-inline-feedback>`;
+        <ok-inline-feedback data-testid="whatsapp-settings-uses-error" tone="danger">${this.t('ui.errTemplates')}</ok-inline-feedback>`;
     }
 
     // Two questions, and they are NOT the same one (whatsapp_inbox#137). Having the module is what
@@ -406,8 +406,8 @@ class ErpWhatsappInboxSettings extends LitElement {
       // module sends her looking for something she owns.
       const why = installed.length === 0 ? 'ui.usesNeedBookingModule' : 'ui.usesNeedNewerBookingModule';
       return html`${heading}
-        <ok-inline-feedback tone="warning">${this.t(why)}</ok-inline-feedback>
-        <ion-button data-testid="uses-go-to-apps" size="small" @click=${() => this.go(APPS_PATH)}>
+        <ok-inline-feedback data-testid="whatsapp-settings-uses-need-module" tone="warning">${this.t(why)}</ok-inline-feedback>
+        <ion-button data-testid="whatsapp-settings-uses-go-to-apps" size="small" @click=${() => this.go(APPS_PATH)}>
           ${this.t('ui.usesGoToApps')}
         </ion-button>`;
     }
@@ -424,7 +424,7 @@ class ErpWhatsappInboxSettings extends LitElement {
           <ion-icon name=${use.icon} aria-hidden="true"></ion-icon>
           <h4>${this.t(use.nameKey)}</h4>
           ${stateOf === 'on' || stateOf === 'paused'
-            ? html`<span class="state ${on ? 'is-on' : ''}" data-testid=${`state-${use.family}`}
+            ? html`<span class="state ${on ? 'is-on' : ''}" data-testid=${`whatsapp-settings-state-${use.family}`}
                 >${this.t(on ? 'ui.stateOn' : 'ui.stateOff')}</span
               >`
             : nothing}
@@ -435,20 +435,20 @@ class ErpWhatsappInboxSettings extends LitElement {
           ? html`<ion-button
               size="small"
               fill="clear"
-              data-testid=${`deactivate-${use.family}`}
+              data-testid=${`whatsapp-settings-deactivate-${use.family}`}
               ?disabled=${this.busy === use.family}
               @click=${() => this.deactivate(use)}
             >${this.t('ui.turnOff')}</ion-button>`
           : html`<ion-button
               size="small"
-              data-testid=${`activate-${use.family}`}
+              data-testid=${`whatsapp-settings-activate-${use.family}`}
               ?disabled=${this.busy === use.family}
               @click=${() => { this.asking = use.family; this.cardError = { ...this.cardError, [use.family]: null }; }}
             >${this.t('ui.activate')}</ion-button>`}
 
         ${this.asking === use.family ? this.renderConsent(use) : nothing}
-        ${error ? html`<ok-inline-feedback tone="danger">${errorText(error, (k) => this.t(k))}</ok-inline-feedback>` : nothing}
-        ${on && this.justActivated === use.family ? html`<p class="done">${this.t(use.doneKey)}</p>` : nothing}
+        ${error ? html`<ok-inline-feedback data-testid=${`whatsapp-settings-card-error-${use.family}`} tone="danger">${errorText(error, (k) => this.t(k))}</ok-inline-feedback>` : nothing}
+        ${on && this.justActivated === use.family ? html`<p class="done" data-testid=${`whatsapp-settings-activated-${use.family}`}>${this.t(use.doneKey)}</p>` : nothing}
         ${on ? this.renderPolicy(use) : nothing}
       </section>
     `;
@@ -461,14 +461,14 @@ class ErpWhatsappInboxSettings extends LitElement {
         <p>${this.t(use.consentKey)}</p>
         <ion-button
           size="small"
-          data-testid=${`confirm-activate-${use.family}`}
+          data-testid=${`whatsapp-settings-confirm-activate-${use.family}`}
           ?disabled=${this.busy === use.family}
           @click=${() => this.activate(use)}
         >${this.t('ui.activate')}</ion-button>
         <ion-button
           size="small"
           fill="clear"
-          data-testid=${`cancel-activate-${use.family}`}
+          data-testid=${`whatsapp-settings-cancel-activate-${use.family}`}
           @click=${() => { this.asking = ''; }}
         >${this.t('ui.notNow')}</ion-button>
       </div>
@@ -487,16 +487,16 @@ class ErpWhatsappInboxSettings extends LitElement {
     const auto = this.policy[use.family] ?? use.policy.defaultOn;
     return html`
       <ion-segment
-        data-testid=${`policy-${use.family}`}
+        data-testid=${`whatsapp-settings-policy-${use.family}`}
         .value=${auto ? 'auto' : 'review'}
         @ionChange=${(e: CustomEvent<{ value?: string }>) => this.setPolicy(use, e.detail?.value !== 'review')}
       >
-        <ion-segment-button value="auto"><ion-label>${this.t(use.policy.autoKey)}</ion-label></ion-segment-button>
-        <ion-segment-button value="review"><ion-label>${this.t(use.policy.reviewKey)}</ion-label></ion-segment-button>
+        <ion-segment-button data-testid=${`whatsapp-settings-policy-auto-${use.family}`} value="auto"><ion-label>${this.t(use.policy.autoKey)}</ion-label></ion-segment-button>
+        <ion-segment-button data-testid=${`whatsapp-settings-policy-review-${use.family}`} value="review"><ion-label>${this.t(use.policy.reviewKey)}</ion-label></ion-segment-button>
       </ion-segment>
       ${auto ? nothing : html`<p class="help">${this.t(use.policy.reviewHelpKey)}</p>`}
       ${this.policyFailed[use.family]
-        ? html`<ok-inline-feedback tone="danger">${this.t(use.policy.errorKey)}</ok-inline-feedback>`
+        ? html`<ok-inline-feedback data-testid=${`whatsapp-settings-policy-error-${use.family}`} tone="danger">${this.t(use.policy.errorKey)}</ok-inline-feedback>`
         : nothing}
     `;
   }
@@ -515,7 +515,7 @@ class ErpWhatsappInboxSettings extends LitElement {
             <ion-button
               size="small"
               fill="clear"
-              data-testid="advanced-automations"
+              data-testid="whatsapp-settings-advanced-automations"
               @click=${() => this.go(AUTOMATIONS_PATH)}
             >${this.t('ui.advancedInAutomations')}</ion-button>
           </div>`

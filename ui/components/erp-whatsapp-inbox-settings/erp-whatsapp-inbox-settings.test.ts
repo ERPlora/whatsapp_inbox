@@ -270,15 +270,15 @@ describe('step 2 · one tap turns the recipe on, through the kernel and under th
   it('offers «Activar» when nothing has been built from the family yet', async () => {
     mountWith();
     const el = await mount();
-    expect(pick(el, 'uses-loading'), 'still says it is finding out after the kernel answered').toBeNull();
-    expect(pick(el, `activate-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.activate);
-    expect(pick(el, `deactivate-${APPOINTMENTS.family}`), 'offered «Desactivar» on a recipe that does not exist').toBeNull();
+    expect(pick(el, 'whatsapp-settings-uses-loading'), 'still says it is finding out after the kernel answered').toBeNull();
+    expect(pick(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.activate);
+    expect(pick(el, `whatsapp-settings-deactivate-${APPOINTMENTS.family}`), 'offered «Desactivar» on a recipe that does not exist').toBeNull();
   });
 
   it('the first tap activates NOTHING: it asks, in one sentence naming the consequence', async () => {
     mountWith();
     const el = await mount();
-    await tap(el, `activate-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`);
     expect(
       kernel.filter((k) => k.call === 'activate'),
       'turned the automation on without asking: the owner consented to nothing',
@@ -286,15 +286,15 @@ describe('step 2 · one tap turns the recipe on, through the kernel and under th
     expect(text(el), 'the consent sentence is not on screen').toContain(
       esLocale.ui[APPOINTMENTS.consentKey.split('.')[1] as keyof typeof esLocale.ui],
     );
-    expect(pick(el, `confirm-activate-${APPOINTMENTS.family}`), 'no way to say yes').not.toBeNull();
-    expect(pick(el, `cancel-activate-${APPOINTMENTS.family}`), 'no way to say «not now»').not.toBeNull();
+    expect(pick(el, `whatsapp-settings-confirm-activate-${APPOINTMENTS.family}`), 'no way to say yes').not.toBeNull();
+    expect(pick(el, `whatsapp-settings-cancel-activate-${APPOINTMENTS.family}`), 'no way to say «not now»').not.toBeNull();
   });
 
   it('consenting builds THAT family, once, and under this module\'s own scope', async () => {
     mountWith();
     const el = await mount();
-    await tap(el, `activate-${APPOINTMENTS.family}`);
-    await tap(el, `confirm-activate-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-confirm-activate-${APPOINTMENTS.family}`);
     expect(kernel.filter((k) => k.call === 'activate' && k.family === APPOINTMENTS.family)).toEqual([
       { call: 'activate', family: APPOINTMENTS.family, scopedTo: MODULE_ID },
     ]);
@@ -312,8 +312,8 @@ describe('step 2 · one tap turns the recipe on, through the kernel and under th
   it('one consent turns on the notice too — the card is the whole promise, not half', async () => {
     mountWith();
     const el = await mount();
-    await tap(el, `activate-${APPOINTMENTS.family}`);
-    await tap(el, `confirm-activate-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-confirm-activate-${APPOINTMENTS.family}`);
     expect(
       kernel.filter((k) => k.call === 'activate'),
       'the customer is still waiting for the message the salon thinks it sent',
@@ -327,8 +327,8 @@ describe('step 2 · one tap turns the recipe on, through the kernel and under th
     mountWith();
     const push = vi.spyOn(window.history, 'pushState');
     const el = await mount();
-    await tap(el, `activate-${APPOINTMENTS.family}`);
-    await tap(el, `confirm-activate-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-confirm-activate-${APPOINTMENTS.family}`);
     expect(
       push,
       'sent the owner somewhere else to finish: that trip is the whole complaint of this issue',
@@ -338,36 +338,36 @@ describe('step 2 · one tap turns the recipe on, through the kernel and under th
   it('after consenting the card reads «Activo» and offers to turn it off', async () => {
     mountWith();
     const el = await mount();
-    await tap(el, `activate-${APPOINTMENTS.family}`);
-    await tap(el, `confirm-activate-${APPOINTMENTS.family}`);
-    expect(pick(el, `state-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.stateOn);
-    expect(pick(el, `deactivate-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.turnOff);
-    expect(pick(el, `activate-${APPOINTMENTS.family}`), 'still offering to activate what is running').toBeNull();
+    await tap(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-confirm-activate-${APPOINTMENTS.family}`);
+    expect(pick(el, `whatsapp-settings-state-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.stateOn);
+    expect(pick(el, `whatsapp-settings-deactivate-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.turnOff);
+    expect(pick(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`), 'still offering to activate what is running').toBeNull();
   });
 
   it('and tells her how to see it work: text the number from another phone', async () => {
     mountWith();
     const el = await mount();
-    await tap(el, `activate-${APPOINTMENTS.family}`);
-    await tap(el, `confirm-activate-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-confirm-activate-${APPOINTMENTS.family}`);
     expect(text(el)).toContain(esLocale.ui[APPOINTMENTS.doneKey.split('.')[1] as keyof typeof esLocale.ui]);
   });
 
   it('«Ahora no» closes the panel and activates nothing', async () => {
     mountWith();
     const el = await mount();
-    await tap(el, `activate-${APPOINTMENTS.family}`);
-    await tap(el, `cancel-activate-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-cancel-activate-${APPOINTMENTS.family}`);
     expect(kernel.filter((k) => k.call === 'activate')).toEqual([]);
-    expect(pick(el, `confirm-activate-${APPOINTMENTS.family}`), 'the panel stayed open after «Ahora no»').toBeNull();
-    expect(pick(el, `activate-${APPOINTMENTS.family}`), 'lost the way back in').not.toBeNull();
+    expect(pick(el, `whatsapp-settings-confirm-activate-${APPOINTMENTS.family}`), 'the panel stayed open after «Ahora no»').toBeNull();
+    expect(pick(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`), 'lost the way back in').not.toBeNull();
   });
 
   it('a recipe built and paused says «Desactivada» and offers «Activar», not a second one', async () => {
     mountWith({ built: { [APPOINTMENTS.family]: { flow_id: 'f1', enabled: false } } });
     const el = await mount();
-    expect(pick(el, `state-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.stateOff);
-    expect(pick(el, `activate-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.activate);
+    expect(pick(el, `whatsapp-settings-state-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.stateOff);
+    expect(pick(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.activate);
   });
 
   /**
@@ -383,12 +383,12 @@ describe('step 2 · one tap turns the recipe on, through the kernel and under th
       ),
     });
     const el = await mount();
-    await tap(el, `deactivate-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-deactivate-${APPOINTMENTS.family}`);
     expect(kernel.filter((k) => k.call === 'deactivate')).toEqual([
       ...[...APPOINTMENTS.companions].reverse().map((family) => ({ call: 'deactivate', family, scopedTo: MODULE_ID })),
       { call: 'deactivate', family: APPOINTMENTS.family, scopedTo: MODULE_ID },
     ]);
-    expect(pick(el, `state-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.stateOff);
+    expect(pick(el, `whatsapp-settings-state-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.stateOff);
   });
 });
 
@@ -401,7 +401,7 @@ describe('a failure is read on the card, never swallowed', () => {
     const el = await mount();
     expect(text(el)).toContain(esLocale.ui.usesNeedsNewerHub);
     expect(
-      pick(el, `activate-${APPOINTMENTS.family}`),
+      pick(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`),
       'offered «Activar» on a hub with no activate route: it 404s the moment it is pressed',
     ).toBeNull();
   });
@@ -410,7 +410,7 @@ describe('a failure is read on the card, never swallowed', () => {
     mountWith({ noForModule: true });
     const el = await mount();
     expect(text(el)).toContain(esLocale.ui.usesNeedsNewerHub);
-    expect(pick(el, `activate-${APPOINTMENTS.family}`)).toBeNull();
+    expect(pick(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`)).toBeNull();
   });
 
   it('a listing that fails says so — it does not read as «nothing built yet»', async () => {
@@ -418,7 +418,7 @@ describe('a failure is read on the card, never swallowed', () => {
     const el = await mount();
     expect(text(el)).toContain(esLocale.ui.errTemplates);
     expect(
-      pick(el, `activate-${APPOINTMENTS.family}`),
+      pick(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`),
       'offered «Activar» while it could not find out what is already running: two automations answer the same message',
     ).toBeNull();
   });
@@ -426,10 +426,10 @@ describe('a failure is read on the card, never swallowed', () => {
   it('a discarded recipe (409) paints the hub\'s own reason, and nothing is activated', async () => {
     mountWith({ activateError: { code: 'template_floor_module_too_old', message: 'Este hub necesita Citas 1.2.0' } });
     const el = await mount();
-    await tap(el, `activate-${APPOINTMENTS.family}`);
-    await tap(el, `confirm-activate-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-confirm-activate-${APPOINTMENTS.family}`);
     expect(text(el), 'the reason the kernel gave was thrown away').toContain('Este hub necesita Citas 1.2.0');
-    expect(pick(el, `state-${APPOINTMENTS.family}`), 'claimed it is running after a refusal').toBeNull();
+    expect(pick(el, `whatsapp-settings-state-${APPOINTMENTS.family}`), 'claimed it is running after a refusal').toBeNull();
   });
 
   /**
@@ -444,8 +444,8 @@ describe('a failure is read on the card, never swallowed', () => {
     expect(companion, 'this card carries nothing, so the case below cannot happen').toBeTruthy();
     mountWith({ activateError: { code: '', message: '' }, activateErrorFamily: companion });
     const el = await mount();
-    await tap(el, `activate-${APPOINTMENTS.family}`);
-    await tap(el, `confirm-activate-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-confirm-activate-${APPOINTMENTS.family}`);
     expect(text(el), 'the failure was swallowed').toContain(esLocale.ui.errActivate);
     expect(
       kernel.filter((k) => k.call === 'deactivate').map((k) => k.family),
@@ -453,36 +453,36 @@ describe('a failure is read on the card, never swallowed', () => {
         'now under a screen that says it is working',
     ).toEqual([APPOINTMENTS.family]);
     expect(
-      pick(el, `state-${APPOINTMENTS.family}`)?.textContent?.trim(),
+      pick(el, `whatsapp-settings-state-${APPOINTMENTS.family}`)?.textContent?.trim(),
       'reads «Activo» over a promise only half installed',
     ).not.toBe(esLocale.ui.stateOn);
-    expect(pick(el, `activate-${APPOINTMENTS.family}`), 'left her no way to try again').not.toBeNull();
+    expect(pick(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`), 'left her no way to try again').not.toBeNull();
   });
 
   it('a session that is not an admin is told who can do it', async () => {
     mountWith({ activateError: { code: 'forbidden', message: 'se requiere rol owner/admin' } });
     const el = await mount();
-    await tap(el, `activate-${APPOINTMENTS.family}`);
-    await tap(el, `confirm-activate-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-confirm-activate-${APPOINTMENTS.family}`);
     expect(text(el)).toContain(esLocale.ui.activateForbidden);
   });
 
   it('an unauthenticated session gets the same sentence, not a raw code', async () => {
     mountWith({ activateError: { code: 'unauthorized', message: 'sesión inválida o caducada' } });
     const el = await mount();
-    await tap(el, `activate-${APPOINTMENTS.family}`);
-    await tap(el, `confirm-activate-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-confirm-activate-${APPOINTMENTS.family}`);
     expect(text(el)).toContain(esLocale.ui.activateForbidden);
   });
 
   it('a dropped network says the activation failed, and the card stays off', async () => {
     mountWith({ activateError: { code: '', message: '' } });
     const el = await mount();
-    await tap(el, `activate-${APPOINTMENTS.family}`);
-    await tap(el, `confirm-activate-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-confirm-activate-${APPOINTMENTS.family}`);
     expect(text(el)).toContain(esLocale.ui.errActivate);
-    expect(pick(el, `state-${APPOINTMENTS.family}`)).toBeNull();
-    expect(pick(el, `activate-${APPOINTMENTS.family}`), 'left her no way to try again').not.toBeNull();
+    expect(pick(el, `whatsapp-settings-state-${APPOINTMENTS.family}`)).toBeNull();
+    expect(pick(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`), 'left her no way to try again').not.toBeNull();
   });
 
   /**
@@ -502,13 +502,13 @@ describe('a failure is read on the card, never swallowed', () => {
     mountWith({ unlisted: [APPOINTMENTS.family] });
     const el = await mount();
     expect(
-      pick(el, `activate-${APPOINTMENTS.family}`),
+      pick(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`),
       'offered «Activar» for a recipe this hub does not list: the tap answers `flow.template_not_found`',
     ).toBeNull();
     // The positive, in the same mount: the card the hub DOES list is still there, so this is
     // measuring the listing and not an empty screen.
     expect(
-      pick(el, `activate-${RESERVATIONS.family}`),
+      pick(el, `whatsapp-settings-activate-${RESERVATIONS.family}`),
       'hid the card of a family the hub does list',
     ).not.toBeNull();
   });
@@ -528,9 +528,9 @@ describe('a failure is read on the card, never swallowed', () => {
     mountWith({ absent: ['appointments', 'reservations', 'flows'] });
     const el = await mount();
     expect(text(el)).toContain(esLocale.ui.usesNeedBookingModule);
-    expect(pick(el, `activate-${APPOINTMENTS.family}`), 'offered a use whose module is not installed').toBeNull();
+    expect(pick(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`), 'offered a use whose module is not installed').toBeNull();
     const push = vi.spyOn(window.history, 'pushState');
-    await tap(el, 'uses-go-to-apps');
+    await tap(el, 'whatsapp-settings-uses-go-to-apps');
     expect(push).toHaveBeenCalledWith({}, '', APPS_PATH);
   });
 
@@ -551,7 +551,7 @@ describe('a failure is read on the card, never swallowed', () => {
       'told the owner her channel is useless before the answers even arrived',
     ).not.toContain(esLocale.ui.usesNeedBookingModule);
     expect(
-      pick(el, `activate-${APPOINTMENTS.family}`),
+      pick(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`),
       'offered «Activar» before knowing whether the module behind it is even installed',
     ).toBeNull();
     // …and it SAYS it is still asking. Silence under the heading is the empty state one paint too
@@ -559,7 +559,7 @@ describe('a failure is read on the card, never swallowed', () => {
     // panel loads (`ModuleSettingsForm.vue`, `ModulePlanPanel.vue`) and what `sales` paints in its
     // own Web Component — the house pattern, not a new one.
     expect(
-      pick(el, 'uses-loading'),
+      pick(el, 'whatsapp-settings-uses-loading'),
       'nothing tells the owner the screen is still finding out: a blank card reads as «nothing here»',
     ).not.toBeNull();
 
@@ -567,7 +567,7 @@ describe('a failure is read on the card, never swallowed', () => {
     // half above is measuring an empty screen instead of a screen that is waiting.
     await settle(el);
     expect(text(el)).toContain(esLocale.ui.usesNeedBookingModule);
-    expect(pick(el, 'uses-loading'), 'the loading mark outlived the answer').toBeNull();
+    expect(pick(el, 'whatsapp-settings-uses-loading'), 'the loading mark outlived the answer').toBeNull();
   });
 });
 
@@ -581,7 +581,7 @@ describe('step 3 · «se confirman solas / las reviso yo» is a setting of the d
     mountWith();
     const el = await mount();
     expect(
-      pick(el, `policy-${APPOINTMENTS.family}`),
+      pick(el, `whatsapp-settings-policy-${APPOINTMENTS.family}`),
       'asked her how to confirm bookings that nothing is taking yet',
     ).toBeNull();
   });
@@ -589,7 +589,7 @@ describe('step 3 · «se confirman solas / las reviso yo» is a setting of the d
   it('defaults to «se confirman solas» on a hub that never configured the diary', async () => {
     mountWith({ built: running, appointmentsSettings: [] });
     const el = await mount();
-    const segment = pick(el, `policy-${APPOINTMENTS.family}`);
+    const segment = pick(el, `whatsapp-settings-policy-${APPOINTMENTS.family}`);
     expect(segment, 'the one decision is not on screen').not.toBeNull();
     expect(
       (segment as unknown as { value: string }).value,
@@ -600,13 +600,13 @@ describe('step 3 · «se confirman solas / las reviso yo» is a setting of the d
   it('reads the decision the salon already saved', async () => {
     mountWith({ built: running, appointmentsSettings: [{ auto_confirm_online: false }] });
     const el = await mount();
-    expect((pick(el, `policy-${APPOINTMENTS.family}`) as unknown as { value: string }).value).toBe('review');
+    expect((pick(el, `whatsapp-settings-policy-${APPOINTMENTS.family}`) as unknown as { value: string }).value).toBe('review');
   });
 
   it('choosing «las reviso yo» writes the NARROW command of the diary', async () => {
     mountWith({ built: running });
     const el = await mount();
-    const segment = pick(el, `policy-${APPOINTMENTS.family}`)!;
+    const segment = pick(el, `whatsapp-settings-policy-${APPOINTMENTS.family}`)!;
     segment.dispatchEvent(new CustomEvent('ionChange', { detail: { value: 'review' } }));
     await settle(el);
     expect(commands).toEqual([
@@ -617,7 +617,7 @@ describe('step 3 · «se confirman solas / las reviso yo» is a setting of the d
   it('and going back to automatic writes the same command the other way', async () => {
     mountWith({ built: running, appointmentsSettings: [{ auto_confirm_online: false }] });
     const el = await mount();
-    const segment = pick(el, `policy-${APPOINTMENTS.family}`)!;
+    const segment = pick(el, `whatsapp-settings-policy-${APPOINTMENTS.family}`)!;
     segment.dispatchEvent(new CustomEvent('ionChange', { detail: { value: 'auto' } }));
     await settle(el);
     expect(commands).toEqual([
@@ -631,7 +631,7 @@ describe('step 3 · «se confirman solas / las reviso yo» is a setting of the d
     expect(text(el), 'explained the review flow to somebody who is not reviewing').not.toContain(
       sentence(APPOINTMENTS.policy.reviewHelpKey),
     );
-    pick(el, `policy-${APPOINTMENTS.family}`)!.dispatchEvent(
+    pick(el, `whatsapp-settings-policy-${APPOINTMENTS.family}`)!.dispatchEvent(
       new CustomEvent('ionChange', { detail: { value: 'review' } }),
     );
     await settle(el);
@@ -641,7 +641,7 @@ describe('step 3 · «se confirman solas / las reviso yo» is a setting of the d
   it('a diary too old to publish the narrow command says so instead of failing mute', async () => {
     mountWith({ built: running, policyError: { code: 'not_found', message: 'no existe' } });
     const el = await mount();
-    pick(el, `policy-${APPOINTMENTS.family}`)!.dispatchEvent(
+    pick(el, `whatsapp-settings-policy-${APPOINTMENTS.family}`)!.dispatchEvent(
       new CustomEvent('ionChange', { detail: { value: 'review' } }),
     );
     await settle(el);
@@ -666,7 +666,7 @@ describe('step 2 · a restaurant is offered «Reservar mesa», and it is the sam
     mountWith();
     const el = await mount();
     expect(
-      pick(el, `activate-${RESERVATIONS.family}`),
+      pick(el, `whatsapp-settings-activate-${RESERVATIONS.family}`),
       'a restaurant sees only «Reservar citas», which is not what it does',
     ).not.toBeNull();
     expect(text(el)).toContain(sentence(RESERVATIONS.nameKey));
@@ -676,16 +676,16 @@ describe('step 2 · a restaurant is offered «Reservar mesa», and it is the sam
     mountWith({ absent: ['reservations'] });
     const el = await mount();
     expect(
-      pick(el, `activate-${RESERVATIONS.family}`),
+      pick(el, `whatsapp-settings-activate-${RESERVATIONS.family}`),
       'offered a use whose module is not installed: the tap would fail on press',
     ).toBeNull();
-    expect(pick(el, `activate-${APPOINTMENTS.family}`), 'took the salon card down with it').not.toBeNull();
+    expect(pick(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`), 'took the salon card down with it').not.toBeNull();
   });
 
   it('asks for consent in one sentence naming the consequence, and activates nothing yet', async () => {
     mountWith();
     const el = await mount();
-    await tap(el, `activate-${RESERVATIONS.family}`);
+    await tap(el, `whatsapp-settings-activate-${RESERVATIONS.family}`);
     expect(text(el)).toContain(sentence(RESERVATIONS.consentKey));
     expect(kernel.filter((k) => k.call === 'activate'), 'turned it on before she said yes').toEqual([]);
   });
@@ -693,21 +693,21 @@ describe('step 2 · a restaurant is offered «Reservar mesa», and it is the sam
   it('one confirmation builds THE TABLE recipe, scoped to this module, and nothing else', async () => {
     mountWith();
     const el = await mount();
-    await tap(el, `activate-${RESERVATIONS.family}`);
-    await tap(el, `confirm-activate-${RESERVATIONS.family}`);
+    await tap(el, `whatsapp-settings-activate-${RESERVATIONS.family}`);
+    await tap(el, `whatsapp-settings-confirm-activate-${RESERVATIONS.family}`);
     expect(kernel.filter((k) => k.call === 'activate')).toEqual([
       { call: 'activate', family: RESERVATIONS.family, scopedTo: MODULE_ID },
     ]);
-    expect(pick(el, `state-${RESERVATIONS.family}`)!.textContent).toContain(esLocale.ui.stateOn);
+    expect(pick(el, `whatsapp-settings-state-${RESERVATIONS.family}`)!.textContent).toContain(esLocale.ui.stateOn);
   });
 
   it('the two cards are two switches: turning the table on leaves the diary off', async () => {
     mountWith();
     const el = await mount();
-    await tap(el, `activate-${RESERVATIONS.family}`);
-    await tap(el, `confirm-activate-${RESERVATIONS.family}`);
-    expect(pick(el, `state-${APPOINTMENTS.family}`), 'the salon card claims to be running too').toBeNull();
-    expect(pick(el, `activate-${APPOINTMENTS.family}`), 'left the salon no way to turn its own on').not.toBeNull();
+    await tap(el, `whatsapp-settings-activate-${RESERVATIONS.family}`);
+    await tap(el, `whatsapp-settings-confirm-activate-${RESERVATIONS.family}`);
+    expect(pick(el, `whatsapp-settings-state-${APPOINTMENTS.family}`), 'the salon card claims to be running too').toBeNull();
+    expect(pick(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`), 'left the salon no way to turn its own on').not.toBeNull();
   });
 
   it('and turning it off stops the table recipe, not the diary one', async () => {
@@ -718,9 +718,9 @@ describe('step 2 · a restaurant is offered «Reservar mesa», and it is the sam
       },
     });
     const el = await mount();
-    await tap(el, `deactivate-${RESERVATIONS.family}`);
+    await tap(el, `whatsapp-settings-deactivate-${RESERVATIONS.family}`);
     expect(kernel.filter((k) => k.call === 'deactivate').map((k) => k.family)).toEqual([RESERVATIONS.family]);
-    expect(pick(el, `state-${APPOINTMENTS.family}`)!.textContent).toContain(esLocale.ui.stateOn);
+    expect(pick(el, `whatsapp-settings-state-${APPOINTMENTS.family}`)!.textContent).toContain(esLocale.ui.stateOn);
   });
 });
 
@@ -733,7 +733,7 @@ describe('step 3 · the restaurant decides about ITS OWN tables, never about the
   it('writes the NARROW command of Reservations, and not the one of Appointments', async () => {
     mountWith({ built: bothRunning });
     const el = await mount();
-    pick(el, `policy-${RESERVATIONS.family}`)!.dispatchEvent(
+    pick(el, `whatsapp-settings-policy-${RESERVATIONS.family}`)!.dispatchEvent(
       new CustomEvent('ionChange', { detail: { value: 'auto' } }),
     );
     await settle(el);
@@ -755,12 +755,12 @@ describe('step 3 · the restaurant decides about ITS OWN tables, never about the
     mountWith({ built: bothRunning, reservationsSettings: [], appointmentsSettings: [] });
     const el = await mount();
     expect(
-      (pick(el, `policy-${RESERVATIONS.family}`) as unknown as { value: string }).value,
+      (pick(el, `whatsapp-settings-policy-${RESERVATIONS.family}`) as unknown as { value: string }).value,
       'told a restaurant its tables confirm themselves while Reservations holds every one of them ' +
         '(`auto_confirm INTEGER NOT NULL DEFAULT 0`)',
     ).toBe('review');
     expect(
-      (pick(el, `policy-${APPOINTMENTS.family}`) as unknown as { value: string }).value,
+      (pick(el, `whatsapp-settings-policy-${APPOINTMENTS.family}`) as unknown as { value: string }).value,
       'the salon default was dragged along with the restaurant one — they are opposite next door',
     ).toBe('auto');
   });
@@ -768,7 +768,7 @@ describe('step 3 · the restaurant decides about ITS OWN tables, never about the
   it('reads the 0/1 integer Reservations really serves, both ways', async () => {
     mountWith({ built: bothRunning, reservationsSettings: [{ auto_confirm: 1 }] });
     const el = await mount();
-    expect((pick(el, `policy-${RESERVATIONS.family}`) as unknown as { value: string }).value).toBe('auto');
+    expect((pick(el, `whatsapp-settings-policy-${RESERVATIONS.family}`) as unknown as { value: string }).value).toBe('auto');
   });
 
   it('the sentences it shows are about tables, not about a diary it does not have', async () => {
@@ -787,7 +787,7 @@ describe('step 3 · the restaurant decides about ITS OWN tables, never about the
   it('a refused save blames the right thing, and says so instead of failing mute', async () => {
     mountWith({ built: bothRunning, policyError: { code: 'not_found', message: 'no existe' } });
     const el = await mount();
-    pick(el, `policy-${RESERVATIONS.family}`)!.dispatchEvent(
+    pick(el, `whatsapp-settings-policy-${RESERVATIONS.family}`)!.dispatchEvent(
       new CustomEvent('ionChange', { detail: { value: 'auto' } }),
     );
     await settle(el);
@@ -804,7 +804,7 @@ describe('everything the owner does not have to read any more is gone', () => {
   it('writes NOTHING of this module: no upsert, no Save, one policy in one place', async () => {
     mountWith({ built: running });
     const el = await mount();
-    pick(el, `policy-${APPOINTMENTS.family}`)!.dispatchEvent(
+    pick(el, `whatsapp-settings-policy-${APPOINTMENTS.family}`)!.dispatchEvent(
       new CustomEvent('ionChange', { detail: { value: 'review' } }),
     );
     await settle(el);
@@ -854,16 +854,16 @@ describe('the advanced door is where it always was, and only if it exists', () =
     mountWith();
     const el = await mount();
     const push = vi.spyOn(window.history, 'pushState');
-    await tap(el, 'advanced-automations');
+    await tap(el, 'whatsapp-settings-advanced-automations');
     expect(push).toHaveBeenCalledWith({}, '', AUTOMATIONS_PATH);
   });
 
   it('offers no advanced link without the flows module, and «Activar» still works', async () => {
     mountWith({ absent: ['flows'] });
     const el = await mount();
-    expect(pick(el, 'advanced-automations'), 'a door to a module that is not installed').toBeNull();
-    await tap(el, `activate-${APPOINTMENTS.family}`);
-    await tap(el, `confirm-activate-${APPOINTMENTS.family}`);
+    expect(pick(el, 'whatsapp-settings-advanced-automations'), 'a door to a module that is not installed').toBeNull();
+    await tap(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-confirm-activate-${APPOINTMENTS.family}`);
     expect(
       kernel.filter((k) => k.call === 'activate').map((k) => k.family),
       'the one tap needs the flows MODULE now',
@@ -889,21 +889,21 @@ describe('after Meta: two screens and three taps', () => {
     const push = vi.spyOn(window.history, 'pushState');
     const el = await mount();
     let taps = 0;
-    for (const testid of [`activate-${APPOINTMENTS.family}`, `confirm-activate-${APPOINTMENTS.family}`]) {
+    for (const testid of [`whatsapp-settings-activate-${APPOINTMENTS.family}`, `whatsapp-settings-confirm-activate-${APPOINTMENTS.family}`]) {
       await tap(el, testid);
       taps += 1;
     }
     expect(taps).toBe(2);
-    expect(pick(el, `state-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.stateOn);
+    expect(pick(el, `whatsapp-settings-state-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.stateOn);
     expect(push, 'a second screen means a third tap to come back').not.toHaveBeenCalled();
   });
 
   it('the third tap is the switch, and only if she wants to review', async () => {
     mountWith();
     const el = await mount();
-    await tap(el, `activate-${APPOINTMENTS.family}`);
-    await tap(el, `confirm-activate-${APPOINTMENTS.family}`);
-    const segment = pick(el, `policy-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-confirm-activate-${APPOINTMENTS.family}`);
+    const segment = pick(el, `whatsapp-settings-policy-${APPOINTMENTS.family}`);
     expect(segment, 'the switch is not reachable right after activating: that is a fourth tap').not.toBeNull();
     segment!.dispatchEvent(new CustomEvent('ionChange', { detail: { value: 'review' } }));
     await settle(el);

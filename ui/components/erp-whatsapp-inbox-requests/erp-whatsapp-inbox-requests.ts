@@ -478,9 +478,9 @@ export class ErpWhatsappInboxRequests extends LitElement {
     const t = (k: string): string => erplora().t(CATALOG, k);
     return html`<section class="confirm">
       <p>${t('ui.confirmDeleteRequest')} <strong>${this.pendingDelete.reference_number}</strong></p>
-      <ion-button size="small" color="danger" ?disabled=${this.busyId === this.pendingDelete.id}
+      <ion-button data-testid="whatsapp-requests-delete-confirm" size="small" color="danger" ?disabled=${this.busyId === this.pendingDelete.id}
         @click=${() => this.confirmDelete()}>${t('ui.delete')}</ion-button>
-      <ion-button size="small" fill="clear" @click=${() => (this.pendingDelete = null)}>${t('ui.cancel')}</ion-button>
+      <ion-button data-testid="whatsapp-requests-delete-cancel" size="small" fill="clear" @click=${() => (this.pendingDelete = null)}>${t('ui.cancel')}</ion-button>
     </section>`;
   }
 
@@ -516,13 +516,13 @@ export class ErpWhatsappInboxRequests extends LitElement {
       <h4>${t('ui.labelParsedData')}</h4>
       ${this.renderParsed(r.data)}
       ${r.notes ? html`<h4>${t('ui.labelNotes')}</h4><p class="summary">${r.notes}</p>` : nothing}
-      ${r.failure_reason ? html`<ok-inline-feedback tone="warning" heading=${t('ui.bookingFailedTitle')}>
+      ${r.failure_reason ? html`<ok-inline-feedback data-testid="whatsapp-requests-detail-booking-failed" tone="warning" heading=${t('ui.bookingFailedTitle')}>
         ${r.failure_reason}
       </ok-inline-feedback>` : nothing}
       ${r.linked_object_id
         ? html`<p class="summary">${t('ui.labelLinkedObject')}: ${r.linked_module} · ${r.linked_object_id}</p>`
         : nothing}
-      <ion-button size="small" fill="clear" @click=${() => { this.openRequest = null; }}>${t('ui.closeView')}</ion-button>
+      <ion-button data-testid="whatsapp-requests-detail-close" size="small" fill="clear" @click=${() => { this.openRequest = null; }}>${t('ui.closeView')}</ion-button>
     </section>`;
   }
 
@@ -531,7 +531,7 @@ export class ErpWhatsappInboxRequests extends LitElement {
     const bookable = BOOKABLE_TYPES.has(r.request_type) && this.canBook;
     const open = this.bookingFor === r.id;
     return html`<div class="pending-row">
-      ${r.failure_reason ? html`<ok-inline-feedback tone="warning" heading=${t('ui.bookingFailedTitle')}>
+      ${r.failure_reason ? html`<ok-inline-feedback data-testid=${`whatsapp-requests-pending-failed-${r.id}`} tone="warning" heading=${t('ui.bookingFailedTitle')}>
         ${r.failure_reason}
       </ok-inline-feedback>` : nothing}
       <div class="who">
@@ -544,13 +544,13 @@ export class ErpWhatsappInboxRequests extends LitElement {
       ${r.raw_summary ? html`<p class="summary">${r.raw_summary}</p>` : nothing}
       <div class="actions">
         ${bookable
-          ? html`<ion-button size="small" ?disabled=${this.busyId === r.id}
+          ? html`<ion-button data-testid=${`whatsapp-requests-pending-book-${r.id}`} size="small" ?disabled=${this.busyId === r.id}
               @click=${() => { this.bookingFor = open ? '' : r.id; }}>
               ${open ? t('ui.bookingClose') : r.failure_reason ? t('ui.bookingRetry') : t('ui.bookingOpen')}
             </ion-button>`
-          : html`<ion-button size="small" ?disabled=${this.busyId === r.id}
+          : html`<ion-button data-testid=${`whatsapp-requests-pending-approve-${r.id}`} size="small" ?disabled=${this.busyId === r.id}
               @click=${() => this.approve(r.id)}>${t('ui.approve')}</ion-button>`}
-        <ion-button size="small" color="medium" ?disabled=${this.busyId === r.id}
+        <ion-button data-testid=${`whatsapp-requests-pending-reject-${r.id}`} size="small" color="medium" ?disabled=${this.busyId === r.id}
           @click=${() => this.reject(r.id)}>${t('ui.reject')}</ion-button>
       </div>
       ${open ? html`<div class="booking-slot"></div>` : nothing}
@@ -564,15 +564,19 @@ export class ErpWhatsappInboxRequests extends LitElement {
         <header>
           <h2>${t('ui.requestsTitle')}</h2>
         </header>
-        ${this.formError ? html`<p class="err">${this.formError}</p>` : nothing}
-        ${this.ctrl?.error ? html`<p class="err">${this.ctrl.error}</p>` : nothing}
+        ${this.formError
+          ? html`<p class="err" data-testid="whatsapp-requests-form-error">${this.formError}</p>`
+          : nothing}
+        ${this.ctrl?.error
+          ? html`<p class="err" data-testid="whatsapp-requests-load-error">${this.ctrl.error}</p>`
+          : nothing}
         ${this.renderDeleteConfirm()}
         ${this.renderDetail()}
         ${pending.length > 0 ? html`<div>
           <h3>${t('ui.pendingReview')}</h3>
           ${pending.map((r) => this.renderPending(r))}
         </div>` : nothing}
-        <ok-data-table .serverSide=${true} .views=${true} .actions=${this.rowActions} .rowClickable=${true} .cardTitle=${(row: Record<string, unknown>) => String(row.reference_number ?? row.contact_name ?? '—')} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? 'desc'} .searchable=${true} .searchPlaceholder=${t('ui.searchRequests')} .emptyMessage=${this.ctrl?.loading ? t('ui.loading') : t('ui.emptyRequests')} @rowAction=${(e: CustomEvent<{ actionId: string; row: Record<string, unknown> }>) => this.onRowAction(e)} @rowClick=${(e: CustomEvent<{ row: Record<string, unknown> }>) => this.onRowAction({ detail: { actionId: 'open', row: e.detail.row } } as CustomEvent<{ actionId: string; row: Record<string, unknown> }>)} @pageChange=${(e: CustomEvent<number>) => this.ctrl.setPage(e.detail)} @pageSizeChange=${(e: CustomEvent<number>) => this.ctrl.setPageSize(e.detail)} @sortChange=${(e: CustomEvent<{ sort: string; dir: 'asc' | 'desc' }>) => this.ctrl.setSort(e.detail.sort, e.detail.dir)} @searchChange=${(e: CustomEvent<string>) => this.ctrl.setSearch(e.detail)} @filterChange=${(e: CustomEvent<{ col: string; value: unknown }>) => this.ctrl.setFilter(e.detail.col, e.detail.value)}></ok-data-table>
+        <ok-data-table testid="whatsapp-requests-table" .serverSide=${true} .views=${true} .actions=${this.rowActions} .rowClickable=${true} .cardTitle=${(row: Record<string, unknown>) => String(row.reference_number ?? row.contact_name ?? '—')} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? 'desc'} .searchable=${true} .searchPlaceholder=${t('ui.searchRequests')} .emptyMessage=${this.ctrl?.loading ? t('ui.loading') : t('ui.emptyRequests')} @rowAction=${(e: CustomEvent<{ actionId: string; row: Record<string, unknown> }>) => this.onRowAction(e)} @rowClick=${(e: CustomEvent<{ row: Record<string, unknown> }>) => this.onRowAction({ detail: { actionId: 'open', row: e.detail.row } } as CustomEvent<{ actionId: string; row: Record<string, unknown> }>)} @pageChange=${(e: CustomEvent<number>) => this.ctrl.setPage(e.detail)} @pageSizeChange=${(e: CustomEvent<number>) => this.ctrl.setPageSize(e.detail)} @sortChange=${(e: CustomEvent<{ sort: string; dir: 'asc' | 'desc' }>) => this.ctrl.setSort(e.detail.sort, e.detail.dir)} @searchChange=${(e: CustomEvent<string>) => this.ctrl.setSearch(e.detail)} @filterChange=${(e: CustomEvent<{ col: string; value: unknown }>) => this.ctrl.setFilter(e.detail.col, e.detail.value)}></ok-data-table>
       </div>`;
   }
 }
