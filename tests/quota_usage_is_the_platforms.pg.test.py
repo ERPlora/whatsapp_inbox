@@ -395,6 +395,21 @@ def check_a_new_month_does_not_inherit_the_spend(db):
             "both alone — re-stamping it revives September's spend as October's and shuts the "
             "channel on a bill the business has already paid"
         ]
+
+    # The other half of the stamp: the first October tick that DOES bring a spend has to move the
+    # month with it. A stamp that is written once and then kept reads every later month as 0 for
+    # ever — the tab says «0 of 30» all year and neither guard ever cuts, with every test about the
+    # seeding tick still green.
+    problems = set_quota(db, "2026-10-02T06:00:00+00:00", "q-6", CAP, 7)
+    if problems:
+        return problems
+    got = tab_reads(db, "2026-10-02T06:30:00+00:00")
+    if got != f"7/{CAP}":
+        return [
+            f"after an October tick that reported a spend of 7 the tab reads [{got}], expected "
+            f"[7/{CAP}]: the month stamp has to follow the figure on an existing row too, or the "
+            "hub stops metering the channel the first time the month changes"
+        ]
     return []
 
 
