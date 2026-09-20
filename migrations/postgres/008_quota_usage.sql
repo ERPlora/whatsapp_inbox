@@ -1,0 +1,44 @@
+-- The SPEND comes from the platform too, not only the cap (whatsapp_inbox#155).
+--
+-- `free_tier_monthly_limit` (002) has been the Cloud's number since whatsapp_inbox#37, but the
+-- consumption beside it was counted here — `COUNT(*)` over the inbound messages of the month, in
+-- three places. That is a different unit from the one that is sold: what the business bought, and
+-- what Meta charges ERPlora for, are the messages the business SENDS, and the platform already
+-- meters exactly that and shows it to the owner on erplora.com. One allowance, two meters: the
+-- owner could read «4 of 30» in their account and find WhatsApp cut off in their hub at the same
+-- time, both numbers true, neither of them the one about to stop them.
+--
+-- ── `monthly_usage` ──────────────────────────────────────────────────────────────────────────
+-- Billable messages the platform has counted for this hub this month, arriving through the one
+-- door that already carries the cap (`whatsapp_inbox._quota.set`, `internal: true`). Like the cap,
+-- it is the invoice and not a preference: no screen, API key or assistant can write it.
+--
+-- ── `monthly_usage_month`, and why the number cannot travel alone ────────────────────────────
+-- The payload carries the figure but not the month it counts, and the Cloud sync ticks once a
+-- day. Without a stamp, a business that ended September at 30/30 would wake up on 1 October with
+-- the channel still shut for up to 24 h, because the stored number would still be September's.
+-- So the month the figure was written FOR is stored next to it, as the UTC `YYYY-MM` of `:now`,
+-- and every reader treats a figure of another month as «not known yet» rather than «still spent».
+-- Text domain and `substr(:now, 1, 7)` throughout, never `erp_month_start` (whatsapp_inbox#24)
+--
+-- ── The defaults, and the window they open on purpose ────────────────────────────────────────
+-- `''` is «the platform has never spoken», which is the truth about every row that exists today
+-- and about a hub whose first tick has not run yet. It never equals a real month, so those hubs
+-- read a spend of 0 and their channel keeps working for up to one tick after the update. That
+-- direction is deliberate: reading «I do not know» as «you are out» would silence a paying
+-- business on the strength of a number nobody sent, and the door that really protects the
+-- invoice is the platform's own (`check_quota`, saas apps/public/modules/usage.py) — this column
+-- is the hub-side mirror of it. Seeding it from the old inbound count was not an option: that
+-- count is the wrong unit, which is the whole defect
+--
+-- Additive only (`expand`, ADR-0269): ADD COLUMN with defaults, no DROP and no DELETE. Every
+-- statement that does not name them keeps working untouched, and rolling back is rolling back the
+-- code — the columns stop being consulted and take no data with them
+--
+-- WARNING No semicolons in this header. The migration guard that runs on the fleet splits
+-- statements by the semicolon without understanding comments, and one inside a `--` line turns the
+-- rest of the sentence into SQL (printing#23 — the module stopped installing everywhere for two
+-- days).
+ALTER TABLE whatsapp_inbox_settings
+  ADD COLUMN IF NOT EXISTS monthly_usage INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS monthly_usage_month TEXT NOT NULL DEFAULT '';

@@ -282,24 +282,34 @@ def sql_literal(value):
 
 
 def free_tier_window(db):
-    """Run the real guard and check WHICH month it counts. Returns a list of failures.
+    """Run the real guard and check WHICH number it weighs, and for WHICH month. Failures as a list.
 
-    Preparing is not enough: the fix picked a semantics (the UTC calendar month of `:now`,
-    compared as ISO text) over casting the column to timestamptz, and the two do NOT agree. The
-    session runs in `Europe/Madrid` on purpose: `date_trunc('month', x::timestamptz)` truncates in
-    the SESSION time zone, so a cast-based guard would count two extra hours of the previous month
-    and meter a different number per connection. This asserts the window is the UTC month, always.
+    Two things are pinned here, and the second one replaced the first as the risk.
 
-    Seed: limit 2, two inbound messages in JULY (one of them at 23:59:59.999999999 of the last
-    day, the lexicographic worst case), one OUTBOUND in August, and one August inbound message of
-    the coexistence BACKLOG (`source = history`, whatsapp_inbox#91) — none of the four may count.
-    The backlog one is not decoration: it is written by the OTHER door (the core-event listener), it
-    lands in this same table as `direction = inbound`, and a salon whose six months of history is
-    300 messages would find this guard shut before a single customer had written.
+    **Which number.** Until whatsapp_inbox#155 this guard COUNTED the live inbound messages of the
+    month, which is not the unit that is sold: what the business bought — and what Meta charges
+    ERPlora for — are the messages the business SENDS, and the platform already meters exactly that
+    (`usage.billable_messages`). One allowance had two meters, and the owner could read «4 of 30»
+    on erplora.com with the channel already shut in their hub, both numbers true. The guard now
+    weighs the figure `whatsapp_inbox._quota.set` stored, and `h-mountain` below is the positive
+    control for that: forty live inbound rows of the month, and the door still has to open, because
+    the business was never charged for a single one of them.
+
+    **Which month.** The figure travels without the month it counts and the Cloud sync ticks once a
+    day, so it is stored stamped with the UTC month of `:now` and read as 0 in any other one. The
+    session runs in `Europe/Madrid` on purpose: this comparison must never go back through
+    `erp_month_start`, which lowers to `date_trunc('month', x::timestamptz)` and truncates in the
+    SESSION time zone — the same call would read a different month per connection, and against this
+    TEXT column (ADR-0007 §1) it did not even PREPARE, which is the defect whatsapp_inbox#24 paid
+    for. `h-last-month` is the positive control: a figure stamped July is not «still spent» in
+    August.
+
+    Seed, all with the same cap of 2: `h1` is spent (2, stamped August), `h-mountain` has spent 1
+    and carries forty August inbound rows plus July rows, an outbound one and a message of the
+    coexistence backlog (whatsapp_inbox#91), and `h-last-month` is spent but stamped July.
     """
     ingest, names = translate((MODULE_DIR / SQL_FILE).read_text())
     fixed = {
-        "hub_id": "h1",
         "wa_contact_id": "wa1",
         "message_type": "text",
         "body": "hi",
@@ -308,37 +318,61 @@ def free_tier_window(db):
         "current_user_id": "u1",
     }
 
-    def execute(msg_id, now):
-        args = dict(fixed, new_id=msg_id, wa_message_id=msg_id, now=now)
+    def execute(msg_id, now, hub):
+        args = dict(fixed, new_id=msg_id, wa_message_id=msg_id, now=now, hub_id=hub)
         values = ", ".join(sql_literal(args[n]) for n in names)
         return f"EXECUTE ingest({values});"
+
+    hubs = {
+        # hub: (spend the platform reported, month it was stamped with)
+        "h1": (2, "2026-08"),
+        "h-mountain": (1, "2026-08"),
+        "h-last-month": (2, "2026-07"),
+    }
+    settings = ",".join(
+        f" ('s-{hub}',{sql_literal(hub)},'2026-01-01T00:00:00+00:00',2,{spend},{sql_literal(month)})"
+        for hub, (spend, month) in hubs.items()
+    )
+    conversations = ",".join(
+        f" ('c-{hub}',{sql_literal(hub)},'wa1','n','p','2026-01-01T00:00:00+00:00')" for hub in hubs
+    )
+    # Forty live inbound messages of the month, on the hub that still has allowance left. The old
+    # guard counted these and would refuse; nothing here was ever billed to the merchant.
+    mountain = ",".join(
+        f" ('mt{n}','h-mountain','c-h-mountain','inbound','live','wmt{n}',"
+        f"'2026-08-05T10:{n:02d}:00+00:00')"
+        for n in range(40)
+    )
 
     r = psql(
         db,
         "SET TimeZone='Europe/Madrid';\n"
-        "INSERT INTO whatsapp_inbox_settings (id, hub_id, created_at, free_tier_monthly_limit)"
-        " VALUES ('s1','h1','2026-01-01T00:00:00+00:00', 2);\n"
+        "INSERT INTO whatsapp_inbox_settings"
+        " (id, hub_id, created_at, free_tier_monthly_limit, monthly_usage, monthly_usage_month)"
+        f" VALUES{settings};\n"
         "INSERT INTO whatsapp_inbox_conversation"
         " (id, hub_id, wa_contact_id, contact_name, contact_phone, created_at)"
-        " VALUES ('c1','h1','wa1','n','p','2026-01-01T00:00:00+00:00');\n"
+        f" VALUES{conversations};\n"
         "INSERT INTO whatsapp_inbox_message"
-        " (id, hub_id, conversation_id, direction, wa_message_id, created_at) VALUES"
-        " ('m1','h1','c1','inbound','w1','2026-07-31T23:59:59.999999999+00:00'),"
-        " ('m2','h1','c1','inbound','w2','2026-07-15T10:00:00+00:00'),"
-        " ('m3','h1','c1','outbound','w3','2026-08-02T10:00:00+00:00');\n"
-        "INSERT INTO whatsapp_inbox_message"
-        " (id, hub_id, conversation_id, direction, wa_message_id, created_at, source) VALUES"
-        " ('m4','h1','c1','inbound','w4','2026-08-01T09:00:00+00:00','history');\n"
+        " (id, hub_id, conversation_id, direction, source, wa_message_id, created_at) VALUES"
+        f"{mountain},"
+        " ('m1','h-mountain','c-h-mountain','inbound','live','w1',"
+        "'2026-07-31T23:59:59.999999999+00:00'),"
+        " ('m2','h-mountain','c-h-mountain','outbound','live','w3','2026-08-02T10:00:00+00:00'),"
+        " ('m4','h-mountain','c-h-mountain','inbound','history','w4','2026-08-01T09:00:00+00:00');\n"
         f"PREPARE ingest AS {ingest}\n"
-        # Two August messages fit under the limit of 2, the third must be refused, and the
-        # September one must pass again: the window resets on the UTC month boundary.
-        + execute("i1", "2026-08-01T00:00:00+00:00")
+        # i1: allowance left, and a message table the old guard would have choked on.
+        + execute("i1", "2026-08-09T18:33:13.5+00:00", "h-mountain")
         + "\n"
-        + execute("i2", "2026-08-09T18:33:13.5+00:00")
+        # i2: spent, but the figure belongs to JULY — August starts clean.
+        + execute("i2", "2026-08-01T00:00:00+00:00", "h-last-month")
         + "\n"
-        + execute("i3", "2026-08-09T18:33:14.9+00:00")
+        # i3: spent this month, and the message table is EMPTY. The guard has to refuse anyway.
+        + execute("i3", "2026-08-09T18:33:14.9+00:00", "h1")
         + "\n"
-        + execute("i4", "2026-09-01T00:00:00+00:00")
+        # i4: the same hub in SEPTEMBER, before the day's tick — a fresh window, not last month's
+        # bill carried over.
+        + execute("i4", "2026-09-01T00:00:00+00:00", "h1")
         + "\n"
         "\\pset tuples_only on\n\\pset format unaligned\n"
         "SELECT string_agg(id, ',' ORDER BY id) FROM whatsapp_inbox_message"
@@ -346,17 +380,17 @@ def free_tier_window(db):
     )
     if r.returncode != 0:
         error = " ".join(x for x in r.stderr.splitlines() if x.startswith("ERROR"))
-        return [f"the free-tier guard could not run: {error}"]
+        return [f"the plan guard could not run: {error}"]
 
     got = r.stdout.strip().splitlines()[-1].strip() if r.stdout.strip() else ""
-    want = "i1,i2,i4"  # i3 is the one over the limit
+    want = "i1,i2,i4"  # i3 is the one the platform says is over the limit
     if got != want:
         return [
-            "the free-tier guard counts the wrong traffic: the messages that got through are "
-            f"[{got}], expected [{want}] (i1/i2 = August under the limit, i3 = August over it, "
-            "i4 = September, a fresh window). It counts the UTC month of `:now`, and only what the "
-            "merchant is being metered for — never the July rows, never an outbound one, and never "
-            "`m4`, a message of the coexistence backlog (whatsapp_inbox#91)"
+            "the plan guard weighs the wrong number: the messages that got through are "
+            f"[{got}], expected [{want}]. i1 = allowance left on a hub with forty inbound rows of "
+            "the month (the guard must not count rows the merchant was never charged for), "
+            "i2 = spent, but stamped LAST month, i3 = spent this month with an EMPTY message table "
+            "(the guard must refuse it anyway), i4 = the same hub in September, a fresh window"
         ]
     return []
 

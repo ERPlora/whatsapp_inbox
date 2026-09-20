@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "whatsapp_inbox._quota.set",
-  "description": "The monthly inbound allowance billing granted this hub for the WhatsApp channel. Written ONLY by the runtime's Cloud-facing sync (whatsapp_inbox#37): the command is internal, so no screen, API key or assistant can reach it.",
+  "description": "The monthly WhatsApp allowance billing granted this hub, and how much of it the platform has already counted as spent. Written ONLY by the runtime's Cloud-facing sync (whatsapp_inbox#37): the command is internal, so no screen, API key or assistant can reach it.",
   "type": "object",
   "additionalProperties": false,
   "required": ["monthly_limit"],
@@ -9,7 +9,12 @@
     "monthly_limit": {
       "type": "integer",
       "minimum": 0,
-      "description": "Inbound messages per calendar month the plan allows. 0 = no cap (unmetered plan, or a hub billing has not spoken about yet)."
+      "description": "Billable messages per calendar month the plan allows. 0 = no cap (unmetered plan, or a hub billing has not spoken about yet)."
+    },
+    "monthly_usage": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Billable messages already spent this calendar month, as the platform counts them (`usage.billable_messages`, whatsapp_inbox#155). OPTIONAL on purpose: the hub omits the key on a tick where the platform did not report a usable spend, and the cap has to keep arriving on that tick — an absence means «I do not know» and preserves the stored spend, while a 0 that does arrive is a fact and is written."
     }
   }
 }

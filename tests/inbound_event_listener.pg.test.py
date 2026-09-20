@@ -333,12 +333,27 @@ def served_payload(
     }
 
 
-def seed_quota(db, limit, hub_id="h1"):
-    """The free-tier meter of a hub. `> 0` is what arms both ingest guards."""
+def seed_quota(db, limit, hub_id="h1", spend=0, month="2026-09"):
+    """The plan of a hub exactly as the platform wrote it through `whatsapp_inbox._quota.set`.
+
+    `limit > 0` is what arms both ingest guards; `spend` is the figure they weigh against it since
+    whatsapp_inbox#155 — the billable messages the PLATFORM counted, not anything this module can
+    see. `month` is the UTC month that figure counts, and a figure of any other month reads as 0.
+
+    Re-seeding moves both numbers the way the daily Cloud tick would, which is how a test arms the
+    cap half way through a scenario instead of having to generate traffic the meter no longer
+    watches.
+    """
     return psql(
         db,
-        "INSERT INTO whatsapp_inbox_settings (id, hub_id, free_tier_monthly_limit, created_at)"
-        f" VALUES ('s-{hub_id}', {sql_literal(hub_id)}, {limit}, '2026-08-11T00:00:00+00:00');\n",
+        "INSERT INTO whatsapp_inbox_settings"
+        " (id, hub_id, free_tier_monthly_limit, monthly_usage, monthly_usage_month, created_at)"
+        f" VALUES ('s-{hub_id}', {sql_literal(hub_id)}, {limit}, {spend}, {sql_literal(month)},"
+        " '2026-08-11T00:00:00+00:00')"
+        " ON CONFLICT (hub_id) DO UPDATE SET"
+        "   free_tier_monthly_limit = excluded.free_tier_monthly_limit,"
+        "   monthly_usage           = excluded.monthly_usage,"
+        "   monthly_usage_month     = excluded.monthly_usage_month;\n",
     )
 
 
@@ -455,18 +470,23 @@ def check_an_unknown_direction_is_never_repainted(db, command):
     return problems
 
 
-def check_the_meter_only_stops_what_it_counts(db, command):
-    """The free-tier cap counts inbound customer traffic — so it may only ever BLOCK that.
+def check_the_cap_only_stops_live_customer_traffic(db, command):
+    """The cap guards the channel, so it may only ever BLOCK live customer traffic.
 
-    Three ways the guard used to be wrong at once, with the limit already reached:
-      * the owner's own reply was refused — the business ran out of quota by answering;
+    Three ways the guard used to be wrong at once, with the allowance already spent:
+      * the owner's own reply was refused — the business was stopped by answering;
       * a message of the 180-day coexistence backlog (`source = history`) was refused, so the
         thread the merchant connected WhatsApp to read stayed half empty;
-      * and a value nobody recognises was metered as if it were a customer.
+      * and a value nobody recognises was treated as if it were a customer.
     A live inbound message IS refused, which is what proves the guard is still armed.
+
+    The allowance is spent the way it really is spent since whatsapp_inbox#155: the platform says
+    so. The first message lands with nothing spent, then the daily tick reports the cap reached —
+    which is what the business answering its customer actually costs — and from there on only live
+    inbound traffic may be refused.
     """
     hub = "h-meter"
-    r = seed_quota(db, 1, hub)
+    r = seed_quota(db, 1, hub, spend=0)
     if r.returncode != 0:
         return [f"could not seed the quota: {r.stderr}"]
 
@@ -477,6 +497,12 @@ def check_the_meter_only_stops_what_it_counts(db, command):
     )
     if problems:
         return problems
+
+    # The tick that follows: the platform has counted the answer the business sent, and the
+    # allowance is spent. Nothing but live inbound traffic may be refused from here on.
+    r = seed_quota(db, 1, hub, spend=1)
+    if r.returncode != 0:
+        return [f"could not report the spend: {r.stderr}"]
 
     allowed = {
         "the owner's own reply": served_payload(
@@ -495,7 +521,9 @@ def check_the_meter_only_stops_what_it_counts(db, command):
     if problems:
         return problems
 
-    # The positive control: the meter still cuts off live customer traffic over the limit.
+    # The positive control: the cap still cuts off live customer traffic once the allowance is
+    # spent — and it does so with FOUR rows in the table, so a guard that went back to counting
+    # them would refuse M2-M4 above instead.
     problems += run_listener(
         db, command,
         served_payload("wamid.M5", "segunda", "2026-09-02T09:04:00+00:00"),
@@ -512,8 +540,8 @@ def check_the_meter_only_stops_what_it_counts(db, command):
     want = "wamid.M1,wamid.M2,wamid.M3,wamid.M4"
     if landed != want:
         problems.append(
-            f"with the free tier at its limit the messages that landed are [{landed}], expected "
-            f"[{want}]: the cap counts inbound customer traffic, so it may only stop that — and it "
+            f"with the allowance spent the messages that landed are [{landed}], expected "
+            f"[{want}]: the cap guards live customer traffic, so it may only stop that — and it "
             "must still stop it (`wamid.M5` is the positive control)"
         )
     return problems
@@ -521,12 +549,12 @@ def check_the_meter_only_stops_what_it_counts(db, command):
 
 
 def usage_reported(db, hub_id):
-    """`inbound_this_month/monthly_limit` as `queries/usage_get.sql` answers it — run, not rewritten.
+    """`billable_this_month/monthly_limit` as `queries/usage_get.sql` answers it — run, not rewritten.
 
     The screen and the guard have to say the SAME number: a merchant whose channel stopped at the
     limit while the settings screen reads 0 has no way of knowing what happened. So this runs the
-    SHIPPED query, lowered exactly as the runtime lowers it, instead of a hand-written COUNT that
-    could agree with the guard by accident.
+    SHIPPED query, lowered exactly as the runtime lowers it, instead of a hand-written expression
+    that could agree with the guard by accident.
     """
     rel = MANIFEST["queries"]["whatsapp_inbox.usage.get"]["sql"]
     sql, names = translate((MODULE_DIR / rel).read_text())
@@ -554,9 +582,14 @@ def check_the_history_does_not_eat_the_month(db, command):
     single customer had written. From then on the messages that DID arrive were dropped until the
     month rolled over.
 
+    Since whatsapp_inbox#155 neither the guard nor the screen counts rows at all — both read the
+    figure the platform wrote — so the backlog cannot spend an allowance by construction. That is
+    asserted here rather than deleted: this is the file that would notice a local count coming
+    back, and the backlog is the traffic that made it expensive the first time.
+
     The guard of `commands/inbound_message_insert.sql` and the number `queries/usage_get.sql` puts
-    on the settings screen are asserted TOGETHER on purpose: two definitions of «this month» is a
-    merchant reading one figure while a different one cuts their channel off.
+    on the settings screen are asserted TOGETHER on purpose: two figures for one allowance is a
+    merchant reading one while a different one cuts their channel off.
     """
     hub = "h-backfill"
     limit = 3
@@ -583,7 +616,7 @@ def check_the_history_does_not_eat_the_month(db, command):
         problems.append(
             f"after {limit + 1} backlog messages the settings screen reads [{reported}], expected "
             f"[0/{limit}]: the history is what already happened, so it is shown but does not spend "
-            "the allowance"
+            "the allowance — and the platform has not reported any spend at all yet"
         )
 
     # The whole allowance still has to be there for the customers who write NOW.
@@ -596,7 +629,13 @@ def check_the_history_does_not_eat_the_month(db, command):
         if failed:
             return failed
 
-    # The positive control: the meter is still armed and cuts off the one over the limit.
+    # The tick where the platform reports the allowance spent — the business has been answering
+    # those customers, and that is what it is charged for. Only now may the door shut.
+    r = seed_quota(db, limit, hub, spend=limit)
+    if r.returncode != 0:
+        return problems + [f"could not report the spend: {r.stderr}"]
+
+    # The positive control: the cap is still armed and cuts off the one over the limit.
     failed = run_listener(
         db, command,
         served_payload("wamid.N9", "una de mas", "2026-09-02T09:09:00+00:00"),
@@ -614,17 +653,19 @@ def check_the_history_does_not_eat_the_month(db, command):
     if landed != want:
         problems.append(
             f"with a free tier of {limit} and {limit + 1} backlog messages the rows that landed are "
-            f"[{landed}], expected [{want}]: the backlog does not spend the allowance, the "
-            f"{limit} live messages do, and `wamid.N9` is the positive control that the cap still "
-            "cuts off live traffic over the limit"
+            f"[{landed}], expected [{want}]: the backlog does not spend the allowance and "
+            f"neither does receiving, so the {limit} live messages land too; `wamid.N9` arrives "
+            "after the platform reported the allowance spent and is the positive control that the "
+            "cap still cuts off live traffic"
         )
 
     reported = usage_reported(db, hub)
     if reported != f"{limit}/{limit}":
         problems.append(
-            f"after the {limit} live messages the settings screen reads [{reported}], expected "
-            f"[{limit}/{limit}] — the guard and the screen have to show the same number, or the "
-            "merchant sees a consumption that disagrees with the one that cut their channel off"
+            f"after the platform reported the allowance spent the settings screen reads "
+            f"[{reported}], expected [{limit}/{limit}] — the guard and the screen have to show the "
+            "same number, or the merchant sees a consumption that disagrees with the one that cut "
+            "their channel off"
         )
 
     # And the distinction has to survive in the ROW: a meter that can only tell the two apart while
@@ -649,58 +690,52 @@ def check_the_history_does_not_eat_the_month(db, command):
 def check_the_meter_is_per_hub(db, command):
     """`hub_id` is the FIRST predicate of the meter, on the guard and on the screen alike.
 
-    Every hub of a marketplace-served module shares one table shape, and the meter is a COUNT over
-    that table. Drop `m.hub_id = :hub_id` from it and two things happen at once: a salon reads on
-    its settings screen the traffic of every other business, and a neighbour who has used up ITS
-    allowance shuts THIS salon's door before a single customer has written to it.
+    Every hub of a marketplace-served module shares one table shape, and since whatsapp_inbox#155
+    the meter is a column on the settings singleton — so the tenancy predicate moved from the COUNT
+    to the row lookup, and it matters just as much: `queries/usage_get.sql` picks a row with
+    `LIMIT 1`, and without `s.hub_id = :hub_id` in front of it a salon reads whichever business
+    happens to come first. Two things then happen at once: it sees a neighbour's consumption on its
+    own settings screen, and a neighbour who has spent ITS allowance shuts this salon's door before
+    a single customer has written to it.
 
     Why this is its own check and not a side effect of the others: with several hubs seeded in the
     same scratch database, a meter without `hub_id` already fails the checks above — but only by
-    accident of ordering and dates, and a test that dies by accident survives the next refactor.
-    Here the neighbour is seeded ON PURPOSE, at its limit, in the metered month, and BOTH rows are
+    accident of ordering, and a test that dies by accident survives the next refactor. Here the
+    neighbour is seeded ON PURPOSE, spent to its limit in the metered month, and BOTH rows are
     asserted on: the neighbour's own screen and door (the foreign row), and this salon's (the own
     row), in that order, so a leak in either direction has a sentence naming it.
     """
     mine, other = "h-mine", "h-neighbour"
     limit = 2
-    for hub in (mine, other):
-        r = seed_quota(db, limit, hub)
-        if r.returncode != 0:
-            return [f"could not seed the quota of {hub}: {r.stderr}"]
+    # The neighbour has spent its whole allowance, in the metered month. This salon has spent
+    # nothing — which is the difference a leak erases.
+    r = seed_quota(db, limit, other, spend=limit)
+    if r.returncode != 0:
+        return [f"could not seed the quota of {other}: {r.stderr}"]
+    r = seed_quota(db, limit, mine, spend=0)
+    if r.returncode != 0:
+        return [f"could not seed the quota of {mine}: {r.stderr}"]
 
-    # The neighbour spends its whole allowance on live customer traffic, in the metered month.
+    # The foreign row: the neighbour's screen shows the neighbour's figure, and only there.
     problems = []
-    for n in range(1, limit + 1):
-        problems += run_listener(
-            db,
-            command,
-            served_payload(
-                f"wamid.O{n}", f"vecino {n}", f"2026-09-02T10:0{n}:00+00:00"
-            ),
-            hub_id=other,
-        )
-    if problems:
-        return problems
-
-    # The foreign row: the neighbour's screen shows the neighbour's traffic, and only there.
     reported = usage_reported(db, other)
     if reported != f"{limit}/{limit}":
         problems.append(
-            f"the neighbour hub's settings screen reads [{reported}] after {limit} live messages, "
-            f"expected [{limit}/{limit}]: its own traffic has to be metered on its own screen"
+            f"the neighbour hub's settings screen reads [{reported}] with its allowance spent, "
+            f"expected [{limit}/{limit}]: its own plan has to be read on its own screen"
         )
     reported = usage_reported(db, mine)
     if reported != f"0/{limit}":
         problems.append(
-            f"this hub's settings screen reads [{reported}] while it has received NOTHING, expected "
-            f"[0/{limit}]: the meter is leaking the neighbour's traffic across hubs "
-            "(`queries/usage_get.sql` without `m.hub_id = :hub_id`)"
+            f"this hub's settings screen reads [{reported}] while it has spent NOTHING, expected "
+            f"[0/{limit}]: the meter is leaking the neighbour's figure across hubs "
+            "(`queries/usage_get.sql` without `s.hub_id = :hub_id`)"
         )
 
-    # The own row: a neighbour at its cap must not shut THIS door. My allowance is whole, my
-    # (limit+1)th message is the positive control that my own cap still cuts me off — and the
-    # neighbour's next one is refused by ITS cap, so a cap that stopped counting altogether cannot
-    # pass this either.
+    # The own row: a neighbour at its cap must not shut THIS door. My allowance is whole, so my
+    # messages land; the neighbour's next one is refused by ITS cap, so a cap that stopped cutting
+    # altogether cannot pass this either. Then the platform reports MY allowance spent, and
+    # `wamid.P9` is the positive control that my own cap still cuts me off.
     for n in range(1, limit + 1):
         problems += run_listener(
             db,
@@ -711,14 +746,20 @@ def check_the_meter_is_per_hub(db, command):
     problems += run_listener(
         db,
         command,
-        served_payload("wamid.P9", "una de mas", "2026-09-02T11:09:00+00:00"),
-        hub_id=mine,
+        served_payload("wamid.O9", "vecino de mas", "2026-09-02T10:09:00+00:00"),
+        hub_id=other,
     )
+    if problems:
+        return problems
+
+    r = seed_quota(db, limit, mine, spend=limit)
+    if r.returncode != 0:
+        return [f"could not report the spend of {mine}: {r.stderr}"]
     problems += run_listener(
         db,
         command,
-        served_payload("wamid.O9", "vecino de mas", "2026-09-02T10:09:00+00:00"),
-        hub_id=other,
+        served_payload("wamid.P9", "una de mas", "2026-09-02T11:09:00+00:00"),
+        hub_id=mine,
     )
     if problems:
         return problems
@@ -732,8 +773,8 @@ def check_the_meter_is_per_hub(db, command):
     if landed_mine != want_mine:
         problems.append(
             f"with a neighbour hub at its cap, the rows that landed in THIS hub are [{landed_mine}], "
-            f"expected [{want_mine}]: the guard of `commands/inbound_message_insert.sql` counted the "
-            "neighbour's traffic against this hub (`m.hub_id = :hub_id` missing from the COUNT), or "
+            f"expected [{want_mine}]: the guard of `commands/inbound_message_insert.sql` read the "
+            "neighbour's row against this hub (`s.hub_id = :hub_id` missing from the lookup), or "
             "`wamid.P9` got through and the cap no longer cuts anything"
         )
     landed_other = scalar(
@@ -741,18 +782,17 @@ def check_the_meter_is_per_hub(db, command):
         "SELECT COALESCE(string_agg(wa_message_id, ',' ORDER BY wa_message_id), '')"
         f" FROM whatsapp_inbox_message WHERE hub_id = {sql_literal(other)} AND is_deleted = 0;",
     )
-    want_other = ",".join(f"wamid.O{n}" for n in range(1, limit + 1))
-    if landed_other != want_other:
+    if landed_other != "":
         problems.append(
-            f"the rows that landed in the neighbour hub are [{landed_other}], expected "
-            f"[{want_other}]: its cap has to cut its own `wamid.O9`, and nothing of this hub may "
-            "be filed under it"
+            f"the rows that landed in the neighbour hub are [{landed_other}], expected none: its "
+            "allowance was already spent when `wamid.O9` arrived, and nothing of this hub may be "
+            "filed under it"
         )
     reported = usage_reported(db, mine)
     if reported != f"{limit}/{limit}":
         problems.append(
-            f"after {limit} live messages this hub's settings screen reads [{reported}], expected "
-            f"[{limit}/{limit}]"
+            f"after the platform reported its allowance spent this hub's settings screen reads "
+            f"[{reported}], expected [{limit}/{limit}]"
         )
     return problems
 
@@ -836,7 +876,7 @@ def main():
         problems = check_ingestion(db, command)
         problems += check_echo_lands_in_the_customers_thread(db, command)
         problems += check_an_unknown_direction_is_never_repainted(db, command)
-        problems += check_the_meter_only_stops_what_it_counts(db, command)
+        problems += check_the_cap_only_stops_live_customer_traffic(db, command)
         problems += check_the_history_does_not_eat_the_month(db, command)
         problems += check_the_meter_is_per_hub(db, command)
         problems += check_a_hub_before_1612_still_ingests(db, command)

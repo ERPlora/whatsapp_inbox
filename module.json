@@ -82,7 +82,8 @@
       "migrations/postgres/004_booking_handoff.sql",
       "migrations/postgres/005_message_dedup.sql",
       "migrations/postgres/006_message_source.sql",
-      "migrations/postgres/007_meta_rejected_reason.sql"
+      "migrations/postgres/007_meta_rejected_reason.sql",
+    "migrations/postgres/008_quota_usage.sql"
     ]
   },
   "queries": {
@@ -732,7 +733,7 @@
     "usage": {
       "query": "whatsapp_inbox.usage.get",
       "metric": "billable_messages_per_month",
-      "used": "inbound_this_month",
+      "used": "billable_this_month",
       "limit": "monthly_limit"
     }
   }

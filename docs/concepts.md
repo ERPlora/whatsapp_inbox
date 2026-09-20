@@ -47,12 +47,14 @@ flow template shipped in `flows/`.
 Two commands write the same message row: the public `messages.ingest` and the internal
 `_ingest_inbound_message` that the core event runs. Since **whatsapp_inbox#30** a partial unique
 index over `(hub_id, wa_message_id)` sits underneath both, and both absorb the conflict silently —
-so the same message delivered twice leaves **one row, one unit off the free-tier meter and one
-unread bump**, and neither caller gets an error for having tried.
+so the same message delivered twice leaves **one row and one unread bump**, and neither caller
+gets an error for having tried.
 
-That last part is what the meter needs. The free tier is measured by counting inbound messages of
-the month, so a duplicate row is not an untidy inbox: it is the merchant's quota being spent twice
-on one message, and the bill arriving early.
+That mattered to the bill until whatsapp_inbox#155: the free tier was measured by counting inbound
+messages of the month, so a duplicate row was the merchant's quota being spent twice on one message.
+The allowance is now the platform's own count of **billable** messages — the ones the business
+sends, which is what is sold and what Meta charges for — so a duplicate no longer touches the bill.
+It is still a second copy of the customer's message in the thread the merchant reads.
 
 Soft-deleting a message releases its `wa_message_id` again — the index is partial over
 `is_deleted = 0` — so deleting is not a one-way door.
