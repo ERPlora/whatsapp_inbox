@@ -46,7 +46,7 @@ Since [#27](https://github.com/ERPlora/whatsapp_inbox/pull/27) the hub's own pol
 the core event `hub.whatsapp.message_received` and this module listens to it, so an inbound message
 lands in a conversation by itself. **Exactly once**: since whatsapp_inbox#30 a partial unique index
 over `(hub_id, wa_message_id)` sits under both ingestion doors, so the same message arriving twice
-leaves one row, one unit on the free-tier meter and one unread bump.
+leaves one row and one unread bump.
 
 There is still no webhook receiver and no network access to Meta declared here.
 
@@ -122,8 +122,9 @@ never blanks a header somebody set. **Delete** asks for confirmation in the page
 WhatsApp for**, and **the requests**. Read with `whatsapp_inbox.settings.get` and saved with
 `whatsapp_inbox.settings.upsert`. Requires `whatsapp_inbox.manage_settings` — **admin only**.
 
-**The channel** shows the meter (messages received this month against the plan's allowance,
-read-only: its only writer is `whatsapp_inbox._quota.set`, fed by the Cloud) and embeds the shell's
+**The channel** shows the meter (the billable messages this hub has spent this month against the
+plan's allowance — both read-only, both counted by the platform and written by their only writer,
+`whatsapp_inbox._quota.set`, fed by the Cloud) and embeds the shell's
 `<erp-whatsapp-connect>`, which is where the number is connected by scanning Meta's QR with the
 WhatsApp Business app. There is no credential to type: Meta's token lives Fernet-sealed in the SaaS
 and the hub never sees it.

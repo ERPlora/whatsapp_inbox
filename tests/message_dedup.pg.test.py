@@ -15,18 +15,19 @@ is written once. Nothing below it enforced anything —
 `migrations/postgres/001_init.sql:110` created `ix_wa_msg_hub_wamsgid` as a **plain** index and both
 inserts went in bare — so the same message arriving through both doors produced two rows.
 
-And the second row is not cosmetic. `free_tier_monthly_limit`
-(`migrations/postgres/002_free_tier.sql`) meters the free tier by **counting inbound rows of the
-month**, so a duplicate eats the merchant's quota and starts charging them early. Billing the same
-customer twice for one WhatsApp message is what makes this a P1 and not a tidiness issue.
+And the second row is not cosmetic. When this was written the free tier was metered by
+**counting inbound rows of the month**, so a duplicate ate the merchant's quota and started
+charging them early — billing the same customer twice for one WhatsApp message, which is what made
+it a P1 and not a tidiness issue. The allowance is the platform's count since whatsapp_inbox#155,
+so a duplicate no longer touches the bill; it still leaves the customer's message stored twice, in
+the thread the merchant reads and in everything derived from this table.
 
 What is asserted here, all three against a real Postgres built from this module's own migrations:
 
 1. **One row.** Ingest `wamid.DUP` through door A, then through door B, and the table holds one
    message with that `wa_message_id`.
-2. **One unit on the meter.** The free-tier guard counts one inbound message for the month, so the
-   second delivery does not consume quota. (Asserted as the guard sees it: the same `COUNT(*)` the
-   two `WHERE NOT EXISTS` clauses run.)
+2. **One row for the month.** The table holds one inbound message for the month, so the second
+   delivery leaves nothing behind — neither in the thread nor in any figure read off this table.
 3. **One unread bump.** `unread_count` moves once. The stats statement of each door only fires when
    **its own** insert landed — recognised by `:new_id`, a fresh uuid per command execution — so a
    duplicate cannot leave a badge on a thread that has nothing new in it.
@@ -195,17 +196,20 @@ def check_both_doors_write_one_row(db):
             "inbox shows the customer's message twice and the free tier is metered twice"
         )
 
-    # The meter, read exactly as the two `WHERE NOT EXISTS` guards read it.
-    metered = scalar(
+    # The month's inbound traffic. Since whatsapp_inbox#155 the allowance is metered by the
+    # platform, so a duplicate no longer spends quota — but it is still a second copy of the
+    # customer's message in everything the merchant reads, and the hub's own reporting counts it.
+    stored = scalar(
         db,
         "SELECT count(*)::text FROM whatsapp_inbox_message m"
         f" WHERE m.hub_id = {sql_literal(HUB)} AND m.direction = 'inbound' AND m.is_deleted = 0"
         " AND m.created_at >= '2026-08-01';",
     )
-    if metered != "1":
+    if stored != "1":
         problems.append(
-            f"the free-tier meter counts {metered} inbound messages for the month, expected 1: a "
-            "redelivery eats the merchant's quota and starts charging them early"
+            f"the month holds {stored} inbound messages, expected 1: a redelivery leaves the "
+            "customer's message stored twice, so every figure derived from this table is off by "
+            "the duplicates"
         )
 
     unread = scalar(

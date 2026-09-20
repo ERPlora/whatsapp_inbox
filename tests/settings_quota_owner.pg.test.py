@@ -2,8 +2,10 @@
 """The free-tier meter has ONE writer, and it is not the hub (whatsapp_inbox#37).
 
 `free_tier_monthly_limit` is not a preference, it is the invoice: the two ingest guards
-(`commands/message_ingest_msg.sql`, `commands/inbound_message_insert.sql`) only count when it is
-`> 0`, so writing a `0` there turns the channel's metering off for good. Until this gate existed,
+(`commands/message_ingest_msg.sql`, `commands/inbound_message_insert.sql`) only enforce when it is
+`> 0`, so writing a `0` there turns the channel's metering off for good. The same is true of the
+spend the platform reports beside it (`monthly_usage`, whatsapp_inbox#155): a hub that can write
+how much it has used can write its own bill. Until this gate existed,
 `whatsapp_inbox.settings.upsert` wrote that column from its payload like any other field, which
 means **anybody holding `manage_settings`** — the hub's `admin` role, or the assistant acting for
 them — could zero the merchant's own meter with one command. The settings screen showing the number
@@ -38,7 +40,7 @@ it, only the runtime itself.
    anybody to visit a screen, so neither can the meter.
 5. **The owner's door is unreachable from outside.** `_quota.set` is `internal: true` in the
    manifest (the `_` prefix alone would do it; both are asserted so a rename cannot open it), and
-   the SQL of `settings.upsert` never names the column again.
+   the SQL of `settings.upsert` never names the cap or the spend again.
 
 Usage: tests/settings_quota_owner.pg.test.py   (exit 0 = green)
   Uses the `erplora-test-pg-5433` container by default (override: ERPLORA_TEST_PG_CONTAINER).
@@ -61,6 +63,11 @@ CONTAINER = os.environ.get("ERPLORA_TEST_PG_CONTAINER", "erplora-test-pg-5433")
 PUBLIC_DOOR = "whatsapp_inbox.settings.upsert"
 OWNER_DOOR = "whatsapp_inbox._quota.set"
 METER_COLUMN = "free_tier_monthly_limit"
+# The spend the platform reports arrives through the SAME door and is the invoice for the
+# same reason (whatsapp_inbox#155): a hub that can write how much it has used can write its
+# own bill. `monthly_usage_month` is half of the same fact — a figure without the month it
+# counts is a figure no reader may trust.
+SPEND_COLUMNS = ("monthly_usage", "monthly_usage_month")
 
 HUB = "h1"
 GRANTED = 30  # what billing said this hub bought
@@ -100,7 +107,9 @@ def run_command(db, command, binds):
             ]
         # Every bind travels as an untyped literal, which is how the runtime binds them: the
         # parameter has no declared type and Postgres infers it from the column it lands in.
-        values = ", ".join(sql_literal(str(binds[n])) for n in names)
+        values = ", ".join(
+            "NULL" if binds[n] is None else sql_literal(str(binds[n])) for n in names
+        )
         statements.append(
             f"PREPARE s{i} AS {sql}\nEXECUTE s{i}({values});\nDEALLOCATE s{i};"
         )
@@ -137,14 +146,20 @@ def settings_binds(now, new_id, **overrides):
     return binds
 
 
-def quota_binds(now, new_id, monthly_limit):
-    """The payload the Cloud-facing caller hands to the owner's door."""
+def quota_binds(now, new_id, monthly_limit, monthly_usage=None):
+    """The payload the Cloud-facing caller hands to the owner's door.
+
+    `monthly_usage` defaults to None — the key ABSENT — because that is the tick this file cares
+    about: the cap has to land whether or not the platform reported a usable spend
+    (whatsapp_inbox#155). The runtime binds what is not in the payload as SQL NULL.
+    """
     return {
         "hub_id": HUB,
         "current_user_id": "",  # billing is not a person in this hub
         "now": now,
         "new_id": new_id,
         "monthly_limit": monthly_limit,
+        "monthly_usage": monthly_usage,
     }
 
 
@@ -269,11 +284,12 @@ def check_the_door_is_internal():
         code = "\n".join(
             line for line in body.splitlines() if not line.lstrip().startswith("--")
         )
-        if METER_COLUMN in code:
-            problems.append(
-                f"`{PUBLIC_DOOR}` [{rel}] still names `{METER_COLUMN}` in its SQL: the public door "
-                f"is writing the invoice again."
-            )
+        for column in (METER_COLUMN, *SPEND_COLUMNS):
+            if column in code:
+                problems.append(
+                    f"`{PUBLIC_DOOR}` [{rel}] still names `{column}` in its SQL: the public door "
+                    f"is writing the invoice again."
+                )
     return problems
 
 
