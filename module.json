@@ -1,7 +1,7 @@
 {
   "id": "whatsapp_inbox",
   "name": "WhatsApp Inbox",
-  "version": "2.1.63",
+  "version": "2.1.64",
   "description": "WhatsApp conversations, inbound requests, message templates and channel settings.",
   "agent": {
     "description": "Manages WhatsApp conversations, inbound requests, message templates, and channel settings: list and read conversations/messages, assign conversations, approve or reject requests, and configure the WhatsApp channel.",
@@ -83,7 +83,7 @@
       "migrations/postgres/005_message_dedup.sql",
       "migrations/postgres/006_message_source.sql",
       "migrations/postgres/007_meta_rejected_reason.sql",
-    "migrations/postgres/008_quota_usage.sql"
+      "migrations/postgres/008_quota_usage.sql"
     ]
   },
   "queries": {
