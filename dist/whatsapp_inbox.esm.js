@@ -2046,6 +2046,16 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     .rrow .rv { font-weight: 500; text-align: right; color: var(--color); }
     /* Barra de acciones (Ionic no trae "card actions"): pie alineado a la derecha, fondo transparente. */
     .ractions { display: flex; justify-content: flex-end; gap: 0.25rem; padding: 0 0.5rem 0.5rem; }
+    /* ERPlora/appointments#154 - a card's action row must NEVER clip.
+       The assumption was that they always fit across the card. With the eight actions an
+       appointment carries they do not: on a 411dp phone the card leaves 363px and the buttons ask
+       for 380px (8 x 44px of tap floor + 7 gaps of 4px). Without wrapping, justify-content:
+       flex-end takes that difference off the START side, so the FIRST button - Cobrar - hung off
+       the left edge of the card, clipped, with no scrollbar and nothing to say it was there.
+       The wrap is scoped to the card on purpose: the LIST view's row is measured by its
+       scrollWidth to pin the column track (#121), and a row that wraps changes width with the
+       track it is measured against, which is the loop that measure avoids. */
+    .ractions .actions { flex-wrap: wrap; }
 
     /* ── Estado vacío ────────────────────────────────────────────────────────────────────── */
     .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.75rem; padding: 3.5rem 1rem; text-align: center; color: var(--color-muted); }
@@ -2854,9 +2864,17 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
       </ion-popover>
     `;
   }
-  // Botones de acción de una fila (compartido por vista tabla y tarjetas).
-  // `collapsible` = la vista lista, la única que puede quedarse sin ancho (#122). Las tarjetas
-  // tienen su propia fila de acciones a lo ancho de la tarjeta y ahí siempre caben.
+  // Row action buttons, shared by the table and the card views.
+  //
+  // `collapsible` = the LIST view, the only one that folds its buttons into a "⋮" menu when the
+  // columns leave it no width (#122). The CARD view does not fold; it WRAPS instead, see
+  // `.ractions .actions` in the stylesheet.
+  //
+  // This comment used to claim that a card's actions "always fit across the card". They do not,
+  // and nobody had measured it (#132 / ERPlora/appointments#154): with the eight actions an
+  // appointment carries, the row asks for 380px and the card gives 379px at 411dp, 237px at 768px
+  // and 272px at 1440px — so the first button hung off the card at ALL THREE widths, not just on
+  // a phone. If you add a view that lays these buttons out, MEASURE it.
   actionButtons(row, collapsible = false) {
     if (!this.actions.length) return A;
     if (collapsible && this.rowActionsCollapsed) {
@@ -4657,6 +4675,24 @@ var ErpWhatsappInboxRequests = class extends i3 {
     .summary { margin:.25rem 0 .5rem; color: var(--ion-color-step-600, #5b5852); }
     /* 44px minimum touch target: this screen is used one-handed, at a counter. */
     ion-button { --min-height: 44px; }
+    /* pm#392 — the tone of a button is declared HERE, never with \`color="…"\`: Ionic resolves
+       \`color=\` through a GLOBAL \`.ion-color-*\` rule that does not reach inside this shadow root,
+       so a solid button came out as white text on a transparent background (invisible). Custom
+       properties do inherit through the boundary, so the theme token still applies. */
+    ion-button.tone-danger:not([fill]) {
+      --background: var(--ion-color-danger, #c5000f);
+      --background-activated: var(--ion-color-danger-shade, #ad000d);
+      --background-focused: var(--ion-color-danger-shade, #ad000d);
+      --background-hover: var(--ion-color-danger-tint, #cb1a27);
+      --color: var(--ion-color-danger-contrast, #fff);
+    }
+    ion-button.tone-medium:not([fill]) {
+      --background: var(--ion-color-medium, #636469);
+      --background-activated: var(--ion-color-medium-shade, #57585c);
+      --background-focused: var(--ion-color-medium-shade, #57585c);
+      --background-hover: var(--ion-color-medium-tint, #737478);
+      --color: var(--ion-color-medium-contrast, #fff);
+    }
     .booking-slot { margin-top:.5rem; }
     .booking-slot:empty { display:none; }
     .detail { border:1px solid var(--ion-border-color,#e7e2d6); border-radius: var(--ok-radius-sm, 10px);
@@ -4934,7 +4970,7 @@ var ErpWhatsappInboxRequests = class extends i3 {
     const t5 = (k2) => erplora2().t(CATALOG2, k2);
     return b2`<section class="confirm">
       <p>${t5("ui.confirmDeleteRequest")} <strong>${this.pendingDelete.reference_number}</strong></p>
-      <ion-button data-testid="whatsapp-requests-delete-confirm" size="small" color="danger" ?disabled=${this.busyId === this.pendingDelete.id}
+      <ion-button data-testid="whatsapp-requests-delete-confirm" size="small" class="tone-danger" ?disabled=${this.busyId === this.pendingDelete.id}
         @click=${() => this.confirmDelete()}>${t5("ui.delete")}</ion-button>
       <ion-button data-testid="whatsapp-requests-delete-cancel" size="small" fill="clear" @click=${() => this.pendingDelete = null}>${t5("ui.cancel")}</ion-button>
     </section>`;
@@ -5007,7 +5043,7 @@ var ErpWhatsappInboxRequests = class extends i3 {
               ${open ? t5("ui.bookingClose") : r6.failure_reason ? t5("ui.bookingRetry") : t5("ui.bookingOpen")}
             </ion-button>` : b2`<ion-button data-testid=${`whatsapp-requests-pending-approve-${r6.id}`} size="small" ?disabled=${this.busyId === r6.id}
               @click=${() => this.approve(r6.id)}>${t5("ui.approve")}</ion-button>`}
-        <ion-button data-testid=${`whatsapp-requests-pending-reject-${r6.id}`} size="small" color="medium" ?disabled=${this.busyId === r6.id}
+        <ion-button data-testid=${`whatsapp-requests-pending-reject-${r6.id}`} size="small" class="tone-medium" ?disabled=${this.busyId === r6.id}
           @click=${() => this.reject(r6.id)}>${t5("ui.reject")}</ion-button>
       </div>
       ${open ? b2`<div class="booking-slot"></div>` : A}
@@ -5673,6 +5709,17 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
       background:var(--ok-surface-2, var(--ion-color-step-50, rgba(0,0,0,.04))); }
     /* 44px minimum touch target: this screen is used one-handed, at a counter. */
     ion-button { --min-height: 44px; }
+    /* pm#392 — the tone of a button is declared HERE, never with \`color="…"\`: Ionic resolves
+       \`color=\` through a GLOBAL \`.ion-color-*\` rule that does not reach inside this shadow root,
+       so a solid button came out as white text on a transparent background (invisible). Custom
+       properties do inherit through the boundary, so the theme token still applies. */
+    ion-button.tone-danger:not([fill]) {
+      --background: var(--ion-color-danger, #c5000f);
+      --background-activated: var(--ion-color-danger-shade, #ad000d);
+      --background-focused: var(--ion-color-danger-shade, #ad000d);
+      --background-hover: var(--ion-color-danger-tint, #cb1a27);
+      --color: var(--ion-color-danger-contrast, #fff);
+    }
     /* Meta's verdict: the colour is a second channel, never the only one — the sentence says it. */
     .meta { border-left: 4px solid var(--ok-color-medium, #8a8578); padding: .5rem .75rem;
       border-radius: var(--ok-radius-sm, 10px);
@@ -6030,7 +6077,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     const t5 = (k2) => erplora4().t(CATALOG4, k2);
     return b2`<section class="panel">
       <p>${t5("ui.confirmDeleteTemplate")} <strong>${this.pendingDelete.name}</strong></p>
-      <ion-button data-testid="whatsapp-templates-delete-confirm" size="small" color="danger" ?disabled=${this.saving}
+      <ion-button data-testid="whatsapp-templates-delete-confirm" size="small" class="tone-danger" ?disabled=${this.saving}
         @click=${() => this.confirmDelete()}>${t5("ui.delete")}</ion-button>
       <ion-button data-testid="whatsapp-templates-delete-cancel" size="small" fill="clear" @click=${() => this.pendingDelete = null}>${t5("ui.cancel")}</ion-button>
     </section>`;
