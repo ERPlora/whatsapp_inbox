@@ -137,6 +137,17 @@ export class ErpWhatsappInboxTemplates extends LitElement {
       background:var(--ok-surface-2, var(--ion-color-step-50, rgba(0,0,0,.04))); }
     /* 44px minimum touch target: this screen is used one-handed, at a counter. */
     ion-button { --min-height: 44px; }
+    /* pm#392 — the tone of a button is declared HERE, never with \`color="…"\`: Ionic resolves
+       \`color=\` through a GLOBAL \`.ion-color-*\` rule that does not reach inside this shadow root,
+       so a solid button came out as white text on a transparent background (invisible). Custom
+       properties do inherit through the boundary, so the theme token still applies. */
+    ion-button.tone-danger:not([fill]) {
+      --background: var(--ion-color-danger, #c5000f);
+      --background-activated: var(--ion-color-danger-shade, #ad000d);
+      --background-focused: var(--ion-color-danger-shade, #ad000d);
+      --background-hover: var(--ion-color-danger-tint, #cb1a27);
+      --color: var(--ion-color-danger-contrast, #fff);
+    }
     /* Meta's verdict: the colour is a second channel, never the only one — the sentence says it. */
     .meta { border-left: 4px solid var(--ok-color-medium, #8a8578); padding: .5rem .75rem;
       border-radius: var(--ok-radius-sm, 10px);
@@ -604,7 +615,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     const t = (k: string): string => erplora().t(CATALOG, k);
     return html`<section class="panel">
       <p>${t('ui.confirmDeleteTemplate')} <strong>${this.pendingDelete.name}</strong></p>
-      <ion-button data-testid="whatsapp-templates-delete-confirm" size="small" color="danger" ?disabled=${this.saving}
+      <ion-button data-testid="whatsapp-templates-delete-confirm" size="small" class="tone-danger" ?disabled=${this.saving}
         @click=${() => this.confirmDelete()}>${t('ui.delete')}</ion-button>
       <ion-button data-testid="whatsapp-templates-delete-cancel" size="small" fill="clear" @click=${() => (this.pendingDelete = null)}>${t('ui.cancel')}</ion-button>
     </section>`;

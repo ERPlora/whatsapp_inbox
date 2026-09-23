@@ -158,6 +158,24 @@ export class ErpWhatsappInboxRequests extends LitElement {
     .summary { margin:.25rem 0 .5rem; color: var(--ion-color-step-600, #5b5852); }
     /* 44px minimum touch target: this screen is used one-handed, at a counter. */
     ion-button { --min-height: 44px; }
+    /* pm#392 — the tone of a button is declared HERE, never with \`color="…"\`: Ionic resolves
+       \`color=\` through a GLOBAL \`.ion-color-*\` rule that does not reach inside this shadow root,
+       so a solid button came out as white text on a transparent background (invisible). Custom
+       properties do inherit through the boundary, so the theme token still applies. */
+    ion-button.tone-danger:not([fill]) {
+      --background: var(--ion-color-danger, #c5000f);
+      --background-activated: var(--ion-color-danger-shade, #ad000d);
+      --background-focused: var(--ion-color-danger-shade, #ad000d);
+      --background-hover: var(--ion-color-danger-tint, #cb1a27);
+      --color: var(--ion-color-danger-contrast, #fff);
+    }
+    ion-button.tone-medium:not([fill]) {
+      --background: var(--ion-color-medium, #636469);
+      --background-activated: var(--ion-color-medium-shade, #57585c);
+      --background-focused: var(--ion-color-medium-shade, #57585c);
+      --background-hover: var(--ion-color-medium-tint, #737478);
+      --color: var(--ion-color-medium-contrast, #fff);
+    }
     .booking-slot { margin-top:.5rem; }
     .booking-slot:empty { display:none; }
     .detail { border:1px solid var(--ion-border-color,#e7e2d6); border-radius: var(--ok-radius-sm, 10px);
@@ -478,7 +496,7 @@ export class ErpWhatsappInboxRequests extends LitElement {
     const t = (k: string): string => erplora().t(CATALOG, k);
     return html`<section class="confirm">
       <p>${t('ui.confirmDeleteRequest')} <strong>${this.pendingDelete.reference_number}</strong></p>
-      <ion-button data-testid="whatsapp-requests-delete-confirm" size="small" color="danger" ?disabled=${this.busyId === this.pendingDelete.id}
+      <ion-button data-testid="whatsapp-requests-delete-confirm" size="small" class="tone-danger" ?disabled=${this.busyId === this.pendingDelete.id}
         @click=${() => this.confirmDelete()}>${t('ui.delete')}</ion-button>
       <ion-button data-testid="whatsapp-requests-delete-cancel" size="small" fill="clear" @click=${() => (this.pendingDelete = null)}>${t('ui.cancel')}</ion-button>
     </section>`;
@@ -550,7 +568,7 @@ export class ErpWhatsappInboxRequests extends LitElement {
             </ion-button>`
           : html`<ion-button data-testid=${`whatsapp-requests-pending-approve-${r.id}`} size="small" ?disabled=${this.busyId === r.id}
               @click=${() => this.approve(r.id)}>${t('ui.approve')}</ion-button>`}
-        <ion-button data-testid=${`whatsapp-requests-pending-reject-${r.id}`} size="small" color="medium" ?disabled=${this.busyId === r.id}
+        <ion-button data-testid=${`whatsapp-requests-pending-reject-${r.id}`} size="small" class="tone-medium" ?disabled=${this.busyId === r.id}
           @click=${() => this.reject(r.id)}>${t('ui.reject')}</ion-button>
       </div>
       ${open ? html`<div class="booking-slot"></div>` : nothing}
