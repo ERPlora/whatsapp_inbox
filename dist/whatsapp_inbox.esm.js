@@ -1591,20 +1591,20 @@ var WINDOWS_1252_C1 = [
   376
 ];
 function decodeWindows1252(bytes) {
-  let text = "";
+  let text2 = "";
   for (const byte of bytes) {
-    text += String.fromCharCode(byte >= 128 && byte <= 159 ? WINDOWS_1252_C1[byte - 128] : byte);
+    text2 += String.fromCharCode(byte >= 128 && byte <= 159 ? WINDOWS_1252_C1[byte - 128] : byte);
   }
-  return text;
+  return text2;
 }
 function decodeCsvBuffer(buf) {
-  let text;
+  let text2;
   try {
-    text = new TextDecoder("utf-8", { fatal: true }).decode(buf);
+    text2 = new TextDecoder("utf-8", { fatal: true }).decode(buf);
   } catch {
-    text = decodeWindows1252(new Uint8Array(buf));
+    text2 = decodeWindows1252(new Uint8Array(buf));
   }
-  return text.charCodeAt(0) === 65279 ? text.slice(1) : text;
+  return text2.charCodeAt(0) === 65279 ? text2.slice(1) : text2;
 }
 var __defProp2 = Object.defineProperty;
 var __decorateClass2 = (decorators, target, key, kind) => {
@@ -2280,6 +2280,13 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     if (typeof this.rowKey === "string") return String(row[this.rowKey] ?? "");
     return String(row[this.rowKeyField] ?? "");
   }
+  /** #143 — `<prefix>-<suffix>`, or `nothing` (= the attribute is not painted) when the host gave
+   *  no prefix. A blank prefix counts as absent: `" "` would leave dangling `-add` hooks, identical
+   *  on every table of the screen, which is exactly what the prefix prevents. */
+  tid(suffix) {
+    const prefix = this.testid?.trim();
+    return prefix ? `${prefix}-${suffix}` : A;
+  }
   get selection() {
     return this.selectedKeys ?? this.internalSelection;
   }
@@ -2323,16 +2330,16 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     this.emit("csvExport", { rows: this.rows.length });
     this.emit("export", { rows: this.rows.length });
   }
-  parseCsv(text) {
+  parseCsv(text2) {
     const out = [];
     let row = [];
     let field = "";
     let q = false;
-    for (let i7 = 0; i7 < text.length; i7++) {
-      const c5 = text[i7];
+    for (let i7 = 0; i7 < text2.length; i7++) {
+      const c5 = text2[i7];
       if (q) {
         if (c5 === '"') {
-          if (text[i7 + 1] === '"') {
+          if (text2[i7 + 1] === '"') {
             field += '"';
             i7++;
           } else q = false;
@@ -2342,7 +2349,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
         row.push(field);
         field = "";
       } else if (c5 === "\n" || c5 === "\r") {
-        if (c5 === "\r" && text[i7 + 1] === "\n") i7++;
+        if (c5 === "\r" && text2[i7 + 1] === "\n") i7++;
         row.push(field);
         field = "";
         if (row.length > 1 || row[0] !== "") out.push(row);
@@ -2361,8 +2368,8 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     const input = ev.target;
     const file = input.files?.[0];
     if (!file) return;
-    const text = decodeCsvBuffer(await file.arrayBuffer());
-    const { headers, rows } = this.parseCsv(text);
+    const text2 = decodeCsvBuffer(await file.arrayBuffer());
+    const { headers, rows } = this.parseCsv(text2);
     this.emit("csvImport", { headers, rows });
     this.emit("import", { headers, rows });
     input.value = "";
@@ -2646,6 +2653,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
   renderRowMenu() {
     const row = this.rowMenuRow;
     if (!this.actions.length || !row) return A;
+    const key = this.keyOf(row);
     return b2`
       <ion-popover
         class="row-menu"
@@ -2660,8 +2668,14 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
       const disabled = a3.loading?.(row) === true || a3.disabled?.(row) === true;
       const label = typeof a3.label === "function" ? a3.label(row) : a3.label;
       return b2`
+                <!-- #143 — The action is named the SAME collapsed or not, so one spec works at any
+                     width. It carries the hook only while the direct buttons are NOT there: the
+                     popover survives its dismissal («rowMenuRow» is not cleared), and if the table
+                     widened again there would be TWO elements with the hook and «getByTestId»
+                     would pick one at random. -->
                 <ion-item
                   button
+                  data-testid=${this.rowActionsCollapsed ? this.tid(`row-${key}-${a3.id}`) : A}
                   ?disabled=${disabled}
                   aria-disabled=${disabled ? "true" : A}
                   .detail=${false}
@@ -2877,6 +2891,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
   // a phone. If you add a view that lays these buttons out, MEASURE it.
   actionButtons(row, collapsible = false) {
     if (!this.actions.length) return A;
+    const key = this.keyOf(row);
     if (collapsible && this.rowActionsCollapsed) {
       return b2`
         <div class="actions">
@@ -2884,6 +2899,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
             size="small"
             fill="clear"
             color="medium"
+            data-testid=${this.tid(`row-${key}-menu`)}
             aria-label=${this.t.moreActions}
             title=${this.t.moreActions}
             aria-haspopup="menu"
@@ -2906,6 +2922,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
               size="small"
               fill="clear"
               color=${a3.color ?? "medium"}
+              data-testid=${this.tid(`row-${key}-${a3.id}`)}
               ?disabled=${disabled}
               aria-disabled=${disabled ? "true" : A}
               aria-label=${label}
@@ -2922,9 +2939,9 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
   }
   // Botón de barra icon-only (filtros / alta / conmutador de vista). `on` = estado activo.
   // `badge` opcional → contador (p.ej. nº de filtros activos), look del Hub.
-  toolButton(icon, on, onClick, label, badge) {
+  toolButton(icon, on, onClick, label, badge, testid = A) {
     return b2`
-      <ion-button class="toolbtn" size="small" fill=${on ? "solid" : "outline"} title=${label} aria-label=${label} @click=${onClick}>
+      <ion-button class="toolbtn" size="small" fill=${on ? "solid" : "outline"} data-testid=${testid} title=${label} aria-label=${label} @click=${onClick}>
         <ion-icon slot="icon-only" .icon=${okIcon(icon)}></ion-icon>
         ${badge && badge > 0 ? b2`<span class="badge">${badge}</span>` : A}
       </ion-button>
@@ -3005,7 +3022,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
         this.mobileShown = 0;
       }
     };
-    const searchbar = b2`<ion-searchbar class="ion-no-border" .value=${this.q} placeholder=${this.effSearchPlaceholder} debounce="250" @ionInput=${this.onSearch}></ion-searchbar>`;
+    const searchbar = b2`<ion-searchbar class="ion-no-border" data-testid=${this.tid("search")} .value=${this.q} placeholder=${this.effSearchPlaceholder} debounce="250" @ionInput=${this.onSearch}></ion-searchbar>`;
     const selCount = this.selection.size;
     const showTopbar = !!this.title || this.hasSearch || this.viewToggle || this.effColumnPicker || this.effExport || this.effImport || this.hasFilterRow || this.addable || !!this.primaryAction;
     return b2`
@@ -3050,20 +3067,30 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
                     ${this.hasFilterRow && !this.inlineFilters ? this.toolButton("funnel-outline", this.panel === "filters" || this.activeFilterCount > 0, () => this.toggle("filters"), this.t.filters, this.activeFilterCount) : A}
                     ${this.effImport ? b2`
                           ${this.toolButton("cloud-upload-outline", false, () => this.renderRoot.querySelector(".tk-file")?.click(), this.t.importCsv)}
-                          <input class="tk-file" type="file" accept=".csv,text/csv" hidden @change=${(e5) => this.onImportFile(e5)} />
+                          <!-- #143 — The import hook goes on the INPUT, not on the button that
+                               triggers it: what a spec drives is «setInputFiles», and nobody opens
+                               the button's native dialog from a test. Same criterion as
+                               «GrantFilePicker.vue» in the Hub (the hook goes on the control, not
+                               on its disguise). -->
+                          <input class="tk-file" data-testid=${this.tid("csv-import")} type="file" accept=".csv,text/csv" hidden @change=${(e5) => this.onImportFile(e5)} />
                         ` : A}
-                    ${this.effExport ? this.toolButton("download-outline", false, () => this.exportCsv(), this.t.exportCsv) : A}
+                    ${this.effExport ? this.toolButton("download-outline", false, () => this.exportCsv(), this.t.exportCsv, void 0, this.tid("csv-export")) : A}
                     <!-- #113 — Mismo botón en los dos viewports: la acción principal de la pantalla
                          se lee, no se adivina. En escritorio era un «+» de 36px idéntico a los
                          iconos de vista/filtrar/exportar, y era el último de cuatro. -->
                     ${this.addable ? b2`
-                          <ion-button class="primary-btn add-btn" size="small" @click=${() => this.toggle("create")}>
+                          <ion-button class="primary-btn add-btn" data-testid=${this.tid("add")} size="small" @click=${() => this.toggle("create")}>
                             <ion-icon slot="start" .icon=${okIcon("add")}></ion-icon>${this.t.add}
                           </ion-button>
                         ` : A}
                     ${this.renderOverflowMenu()}
                     ${this.primaryAction ? b2`
-                          <ion-button class="primary-btn add-btn" size="small" @click=${() => this.emit("primaryAction", {})}>
+                          <!-- #143 — Its own hook and NOT «-add»: «addable» and «primaryAction» are
+                               two different buttons that may coexist, and both are really used
+                               («addable» in the modules, «primaryAction» in the SaaS screens).
+                               Sharing the name would give two elements with the same hook as soon
+                               as a screen declared both. -->
+                          <ion-button class="primary-btn add-btn" data-testid=${this.tid("primary-action")} size="small" @click=${() => this.emit("primaryAction", {})}>
                             <ion-icon slot="start" .icon=${okIcon(this.primaryAction.icon ?? "add")}></ion-icon>${this.primaryAction.label}
                           </ion-button>
                         ` : A}
@@ -3096,13 +3123,13 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
                         </select>
                       ` : A}
                 </div>
-                ${this.isMobile ? canLoadMore ? b2`<ion-button class="load-more" size="small" @click=${loadMore}>${this.t.loadMore}</ion-button>` : A : pages > 1 ? b2`
+                ${this.isMobile ? canLoadMore ? b2`<ion-button class="load-more" data-testid=${this.tid("load-more")} size="small" @click=${loadMore}>${this.t.loadMore}</ion-button>` : A : pages > 1 ? b2`
                       <div class="nav">
-                        <ion-button size="small" fill="clear" ?disabled=${current === 0} @click=${() => goTo(current - 1)}><ion-icon slot="icon-only" .icon=${iconChevronBack}></ion-icon></ion-button>
+                        <ion-button size="small" fill="clear" data-testid=${this.tid("page-prev")} ?disabled=${current === 0} @click=${() => goTo(current - 1)}><ion-icon slot="icon-only" .icon=${iconChevronBack}></ion-icon></ion-button>
                         ${this.pageList(current + 1, pages).map(
       (p4) => p4 === "\u2026" ? b2`<span class="pgap">…</span>` : b2`<button class=${`pnum${p4 === current + 1 ? " on" : ""}`} @click=${() => goTo(p4 - 1)}>${p4}</button>`
     )}
-                        <ion-button size="small" fill="clear" ?disabled=${current >= pages - 1} @click=${() => goTo(current + 1)}><ion-icon slot="icon-only" .icon=${iconChevronForward}></ion-icon></ion-button>
+                        <ion-button size="small" fill="clear" data-testid=${this.tid("page-next")} ?disabled=${current >= pages - 1} @click=${() => goTo(current + 1)}><ion-icon slot="icon-only" .icon=${iconChevronForward}></ion-icon></ion-button>
                       </div>
                     ` : A}
               </div>
@@ -3230,6 +3257,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
                 <div
                   class=${`grow grow-data${selected ? " selected" : ""}${this.rowClickable ? " clickable" : ""}`}
                   role="row"
+                  data-testid=${this.tid(`row-${key}`)}
                   style=${o6(tpl)}
                   tabindex=${this.rowClickable ? "0" : A}
                   @click=${this.rowClickable ? () => this.emit("rowClick", { row }) : A}
@@ -3264,6 +3292,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
         return b2`
               <ion-card
                 class=${`rcard${selected ? " selected" : ""}${this.rowClickable ? " clickable" : ""}`}
+                data-testid=${this.tid(`row-${key}`)}
                 role=${this.rowClickable ? "button" : A}
                 tabindex=${this.rowClickable ? "0" : A}
                 @click=${this.rowClickable ? () => this.emit("rowClick", { row }) : A}
@@ -3410,6 +3439,9 @@ __decorateClass2([
 __decorateClass2([
   n4({ attribute: false })
 ], _OkDataTable.prototype, "renderCard");
+__decorateClass2([
+  n4({ type: String })
+], _OkDataTable.prototype, "testid");
 __decorateClass2([
   r5()
 ], _OkDataTable.prototype, "q");
@@ -3877,7 +3909,7 @@ var es_default = {
     doorRefusalNoCode: "No se ha podido registrar la plantilla en Meta. Queda guardada aqu\xED: prueba a guardarla otra vez dentro de un rato.",
     metaRejectedReason: "Motivo de Meta: {reason}",
     metaSyncUnavailable: "No hemos podido comprobar con Meta si hay veredictos nuevos, as\xED que lo que ves es lo \xFAltimo que sabemos. Vuelve a abrir esta pesta\xF1a dentro de un rato.",
-    metaOnlyTemplates: "WhatsApp Manager tiene plantillas que no est\xE1n en esta lista, porque se crearon all\xED: {names}",
+    metaOnlyTemplates: "Estas plantillas de WhatsApp Manager todav\xEDa no se pueden traer a esta lista (llevan cabecera con imagen, v\xEDdeo o documento, botones o una variable en la cabecera). Gesti\xF3nalas en WhatsApp Manager: {names}",
     doorRefusal: {
       invalid_name: "Meta no ha aceptado el nombre. Usa solo min\xFAsculas, n\xFAmeros y guiones bajos \u2014sin espacios ni acentos\u2014 y vuelve a intentarlo.",
       invalid_category: "Meta no ha aceptado la categor\xEDa. Elige Utilidad, Marketing o Autenticaci\xF3n y vuelve a enviarla.",
@@ -4081,7 +4113,7 @@ var en_default = {
     doorRefusalNoCode: "The template could not be registered with Meta. It is saved here: try saving it again in a moment.",
     metaRejectedReason: "Meta's reason: {reason}",
     metaSyncUnavailable: "We could not check with Meta for new verdicts, so what you see is the last we know. Open this tab again in a while.",
-    metaOnlyTemplates: "WhatsApp Manager has templates that are not in this list, because they were created there: {names}",
+    metaOnlyTemplates: "These WhatsApp Manager templates cannot be brought into this list yet (they use an image, video or document header, buttons, or a variable in the header). Manage them in WhatsApp Manager: {names}",
     doorRefusal: {
       invalid_name: "Meta did not accept the name. Use lowercase letters, numbers and underscores only \u2014 no spaces or accents \u2014 and try again.",
       invalid_category: "Meta did not accept the category. Pick Utility, Marketing or Authentication and send it again.",
@@ -4120,8 +4152,8 @@ var en_default = {
 var SOURCE_LANG = "en";
 function textFor(catalog, lang, code) {
   const dict = catalog[lang];
-  const text = dict?.errors?.[code];
-  return typeof text === "string" && text.trim() ? text : "";
+  const text2 = dict?.errors?.[code];
+  return typeof text2 === "string" && text2.trim() ? text2 : "";
 }
 function alreadySpoken(catalog, code, message) {
   if (!message) return false;
@@ -4138,11 +4170,11 @@ function alreadySpoken(catalog, code, message) {
 function domainErrorText(catalog, locale, e5) {
   const code = e5?.code;
   if (typeof code !== "string" || !code) return "";
-  const text = textFor(catalog, locale, code) || textFor(catalog, SOURCE_LANG, code);
-  if (!text.includes("{message}")) return text;
+  const text2 = textFor(catalog, locale, code) || textFor(catalog, SOURCE_LANG, code);
+  if (!text2.includes("{message}")) return text2;
   const message = e5 instanceof Error ? e5.message : "";
   if (alreadySpoken(catalog, code, message)) return message;
-  return text.replaceAll("{message}", message);
+  return text2.replaceAll("{message}", message);
 }
 
 // ui/components/erp-whatsapp-inbox-inbox/erp-whatsapp-inbox-inbox.ts
@@ -5610,14 +5642,14 @@ function doorErrorCode(e5) {
 function textFor2(catalog, lang, key) {
   const ui = catalog[lang]?.ui;
   const bucket = ui?.doorRefusal;
-  const text = key ? bucket?.[key] : void 0;
-  return typeof text === "string" && text.trim() ? text : "";
+  const text2 = key ? bucket?.[key] : void 0;
+  return typeof text2 === "string" && text2.trim() ? text2 : "";
 }
 function unknownText(catalog, lang, key, code) {
   const ui = catalog[lang]?.ui;
-  const text = ui?.[key];
-  if (typeof text !== "string" || !text.trim()) return "";
-  return text.replaceAll("{code}", code);
+  const text2 = ui?.[key];
+  if (typeof text2 !== "string" || !text2.trim()) return "";
+  return text2.replaceAll("{code}", code);
 }
 function doorRefusalText(catalog, locale, e5) {
   const code = doorErrorCode(e5);
@@ -5654,6 +5686,59 @@ function metaTemplateState(raw) {
 function metaTemplateView(raw) {
   const state = metaTemplateState(raw);
   return { state, ...VIEWS[state] };
+}
+
+// ui/lib/meta-template-import.ts
+var CATEGORIES = /* @__PURE__ */ new Set(["MARKETING", "UTILITY", "AUTHENTICATION"]);
+var text = (value) => typeof value === "string" ? value : "";
+function placeholders(value) {
+  return new Set([...value.matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map((m4) => m4[1])).size;
+}
+function templateFromMeta(template) {
+  const refused = { ok: false };
+  const name = text(template.name).trim();
+  const language = text(template.language).trim();
+  const category = text(template.category).trim().toUpperCase();
+  const status = text(template.status).trim();
+  if (!name || !language || !status || !CATEGORIES.has(category)) return refused;
+  if (!Array.isArray(template.components)) return refused;
+  let header = "";
+  let body = "";
+  let footer = "";
+  let examples = [];
+  for (const raw of template.components) {
+    if (!raw || typeof raw !== "object") return refused;
+    const part = raw;
+    const type = text(part.type).trim().toUpperCase();
+    if (type === "HEADER") {
+      const format = text(part.format).trim().toUpperCase() || "TEXT";
+      header = text(part.text);
+      if (format !== "TEXT" || placeholders(header) > 0) return refused;
+    } else if (type === "BODY") {
+      body = text(part.text);
+      const example = part.example?.body_text;
+      const first = Array.isArray(example) ? example[0] : void 0;
+      examples = Array.isArray(first) ? first : [];
+    } else if (type === "FOOTER") {
+      footer = text(part.text);
+    } else {
+      return refused;
+    }
+  }
+  if (!body.trim()) return refused;
+  const variables = Array.from(
+    { length: placeholders(body) },
+    (_2, i7) => text(examples[i7]).trim() || `var${i7 + 1}`
+  );
+  return {
+    ok: true,
+    fields: { name, language, category, header, body, footer, variables: JSON.stringify(variables) },
+    meta: {
+      meta_template_id: text(template.meta_id).trim(),
+      meta_status: status,
+      meta_rejected_reason: text(template.rejected_reason)
+    }
+  };
 }
 
 // ui/components/erp-whatsapp-inbox-templates/erp-whatsapp-inbox-templates.ts
@@ -5847,11 +5932,11 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     const listed = Array.isArray(answer?.templates) ? answer.templates : [];
     for (const template of listed) atMeta.set(metaKey(template?.name, template?.language), template);
     const absenceIsDeletion = answer?.stale !== true && listed.length > 0;
-    const text = (value) => typeof value === "string" ? value : "";
+    const text2 = (value) => typeof value === "string" ? value : "";
     let written = 0;
     for (const row of rows) {
       const answered = atMeta.get(metaKey(row.name, row.language));
-      const knownId = text(row.meta_template_id).trim();
+      const knownId = text2(row.meta_template_id).trim();
       let verdict;
       if (answered) {
         verdict = answered;
@@ -5860,12 +5945,12 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
       } else {
         continue;
       }
-      const status = text(verdict.status).trim();
+      const status = text2(verdict.status).trim();
       if (!status) continue;
-      const metaId = text(verdict.meta_id).trim() || text(row.meta_template_id);
-      const reason = text(verdict.rejected_reason);
+      const metaId = text2(verdict.meta_id).trim() || text2(row.meta_template_id);
+      const reason = text2(verdict.rejected_reason);
       const projected = metaId ? status.toLowerCase() : "not_sent";
-      if (projected === text(row.meta_status) && reason === text(row.meta_rejected_reason) && metaId === text(row.meta_template_id)) {
+      if (projected === text2(row.meta_status) && reason === text2(row.meta_rejected_reason) && metaId === text2(row.meta_template_id)) {
         continue;
       }
       try {
@@ -5889,9 +5974,30 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
         this.metaSyncNotice = domainErrorText4(e5, "ui.errUpdateTemplate");
       }
     }
-    if (written) await this.ctrl.load();
     const here = new Set(rows.map((row) => metaKey(row.name, row.language)));
-    this.metaOnly = listed.filter((template) => text(template?.name).trim() && !here.has(metaKey(template.name, template.language))).map((template) => `${text(template.name).trim()} (${text(template.language).trim()})`);
+    const notBrought = [];
+    for (const template of listed) {
+      if (!text2(template?.name).trim() || here.has(metaKey(template.name, template.language))) continue;
+      here.add(metaKey(template.name, template.language));
+      const label = `${text2(template.name).trim()} (${text2(template.language).trim()})`;
+      const imported = templateFromMeta(template);
+      if (!imported.ok) {
+        notBrought.push(label);
+        continue;
+      }
+      try {
+        await erplora4().command("whatsapp_inbox.templates.import_from_meta", {
+          ...imported.fields,
+          ...imported.meta
+        });
+        written += 1;
+      } catch (e5) {
+        notBrought.push(label);
+        this.metaSyncNotice = domainErrorText4(e5, "ui.errCreateTemplate");
+      }
+    }
+    if (written) await this.ctrl.load();
+    this.metaOnly = notBrought;
   }
   disconnectedCallback() {
     window.removeEventListener("erplora:locale-changed", this.onLocaleChange);
@@ -5933,8 +6039,8 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
       this.formError = doorRefusalText(CATALOG4, erplora4().locale, e5);
       return;
     }
-    const text = (value) => typeof value === "string" ? value : "";
-    const status = text(verdict?.status).trim();
+    const text2 = (value) => typeof value === "string" ? value : "";
+    const status = text2(verdict?.status).trim();
     if (!status || !templateId) {
       this.formError = doorRefusalText(CATALOG4, erplora4().locale, null);
       return;
@@ -5942,9 +6048,9 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     try {
       await erplora4().command("whatsapp_inbox.templates.record_meta_answer", {
         template_id: templateId,
-        meta_template_id: text(verdict.meta_id),
+        meta_template_id: text2(verdict.meta_id),
         meta_status: status,
-        meta_rejected_reason: text(verdict.rejected_reason),
+        meta_rejected_reason: text2(verdict.rejected_reason),
         ...reviewed
       });
     } catch (e5) {
