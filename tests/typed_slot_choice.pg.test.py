@@ -462,7 +462,9 @@ def main():
         db = "wa_offer_" + uuid.uuid4().hex[:8]
         psql("postgres", f'CREATE DATABASE "{db}";')
         try:
-            for rel in MANIFEST["migrations"]["postgres"]:
+            for entry in MANIFEST["migrations"]["postgres"]:
+                # A contract migration is declared as `{file, kind, since}` (hub#542).
+                rel = entry if isinstance(entry, str) else entry["file"]
                 r = psql(db, (MODULE_DIR / rel).read_text())
                 if r.returncode != 0:
                     problems.append(f"migration `{rel}` failed: {r.stderr.strip()}")
