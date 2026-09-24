@@ -89,6 +89,9 @@ releerla. La receta la **recuerda ella misma**:
   lista y que el hueco elegido se trata **igual que un toque**: `availability.check` y reservar tal
   cual. Si sus palabras encajan con varios o con ninguno, no reserva y vuelve a ofrecer.
 
+La receta de reservas de mesa hace lo mismo con su lista de horas (whatsapp_inbox#174, ver
+`reservation-from-whatsapp` abajo).
+
 Las dos puertas van por el **contacto** (`input.from`), como `link_customer`, y sus dos grants están
 **fijados** a `input.from` (hub#1623/#1662): un run desatendido no puede leer ni escribir la oferta
 de otra clienta. Lo vigila `tests/typed_slot_choice.pg.test.py` (y el e2e
@@ -457,9 +460,15 @@ Reservas sale como **ERPlora/reservations#50**. Hasta que aterrice, la regla es 
 se entrega la herramienta** — se contesta que una persona se ocupa, que es una espera, pero no la
 reserva de otro cambiada por un desconocido.
 
-⚠️ **Y lo mismo que en citas: no hay lista numerada.** «Responde 2» necesita que la oferta se guarde
-entre un mensaje y el siguiente, y no hay dónde (whatsapp_inbox#76). Por eso el prompt pide el día,
-la hora **y cuántos sois** en palabras, con un ejemplo.
+**Y lo mismo que en citas: contestar la lista ESCRIBIENDO** (whatsapp_inbox#174). Quien contesta
+«la 2» o «21:30» a la lista de horas arranca un run nuevo, así que la receta lleva los mismos dos
+pasos que la de citas, con las mismas puertas y los mismos grants fijados a `input.from`:
+`recall_offer` delante de `book_table` y `remember_offer` (`{{steps.book_table.slots}}`) detrás de
+`confirm_to_customer` y delante de `any_time_to_offer`. El prompt trata la fila elegida por
+palabras igual que un toque: comprueba con `reservations.slots.count_for` que la franja sigue
+teniendo sitio y reserva tal cual. Ver «Contestar la lista ESCRIBIENDO» arriba; lo vigilan la misma
+batería (`tests/typed_slot_choice.pg.test.py`) y el e2e
+`their_typed_choice_finds_the_table_times_they_were_offered`.
 
 ## `appointment-confirmed-to-whatsapp` — cuando el salón confirma, la clienta se entera
 
