@@ -89,3 +89,14 @@ La misma cadena de tres mensajes con la receta de **reservas de mesa**: se le of
 la conversación las recuerda; contesta «la 2» → `recall_offer` las encuentra ANTES de `book_table`;
 reserva → la oferta se vacía. También con solo el trigger escrito (hub#2061). Necesita en `$MODS`
 `customers`, `tables`, `reservations` y este módulo.
+
+### `when_her_card_cannot_be_created_she_is_still_answered` (whatsapp_inbox#83)
+
+Una clienta nueva escribe y `know_the_customer` no consigue crearle la ficha (`customers.create`
+rechazado). Con `policy: "auto"` ese rechazo vuelve al turno del modelo como resultado de la
+herramienta, así que el paso acaba `done` y SIN ficha detrás. El test hace de modelo y comprueba que
+el run sigue igualmente hasta el paso que le escribe: `resolve_customer` le dice al paso de reserva
+`count: 0`, el enlace sin id no para el run, y lo que redacta `book_appointment` se encola para
+ELLA. Control negativo, ejecutado: quitar el `on_error: "continue"` de `remember_the_customer` → el
+run acaba `failed`; meter un `condition` «tiene ficha» antes de reservar → el run acaba sin llegar al
+paso que le escribe. Los dos caen. Mismos módulos en `$MODS` que el de #76.
