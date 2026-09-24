@@ -381,8 +381,16 @@ destinatario, mismos pasos —, no un diseño nuevo. Lo que cambia es a quién l
 **Un paso menos que en citas, y por una razón del contrato ajeno:** Citas exige `customer_id` para reservar, así que su plantilla lleva un paso entero
 —`know_the_customer`— dedicado a que la ficha exista. En Reservas el cliente es **opcional**: con
 `guest_name` y `guest_phone` basta. Así que la mesa se reserva **sin dar de alta a nadie**: se busca
-la ficha con `customers.list` y, si existe, se pasa su id; si no existe, no se crea. Un turno menos,
+la ficha con `customers.by_phone` y, si existe, se pasa su id; si no existe, no se crea. Un turno menos,
 una escritura menos y un grant menos.
+
+**La ficha se busca por NÚMERO, no por texto** (whatsapp_inbox#165), en las dos familias: los pasos
+`find_customer` (y `resolve_customer` en citas) leen `customers.by_phone` con `phone = {{input.from}}`.
+`customers.list` comparaba el teléfono como texto (`LIKE`), así que `34600111222` —lo que da
+WhatsApp— no encontraba la ficha apuntada como `600 111 222` o `+34 600-111-222`: la receta la daba
+por nueva y le creaba una segunda ficha. `customers.by_phone` (customers ≥ 2.3.45, suelo en
+`*.requires.json`) aplica la misma regla que la bandeja desde #162. Lo vigila la marca 6 de
+`own_customer_only_problems` en `tests/flow_templates.test.py`.
 
 1. **`acknowledge`** — contesta al instante por WhatsApp, igual que en citas.
 2. **`book_table`** — decide qué le están pidiendo y, si es una mesa, **mira y reserva en el mismo

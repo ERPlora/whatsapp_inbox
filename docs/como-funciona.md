@@ -144,7 +144,8 @@ le haya concedido en su pantalla de permisos. Para el flujo de arriba hacen falt
 - `notify` → canal `whatsapp` (cada WhatsApp cuesta dinero; conceder email no es conceder WhatsApp);
 - `recipient_query` → `whatsapp_inbox.conversations.list#contact_phone` (a quién se escribe se
   **lee** de la conversación, nunca se teclea);
-- `query` → las lecturas de los pasos de IA: `customers.list`, `services.services.list`,
+- `query` → la ficha de quien escribe, buscada por su número (`customers.by_phone`), y las lecturas
+  de los pasos de IA: `services.services.list`,
   `staff.members.list`, `staff.schedules.list_for_member`;
 - `command` → los de **disponibilidad** de Citas, que son commands aunque solo lean
   (`appointments.availability.day_opening`, `.slots`, `.check`), y las escrituras:

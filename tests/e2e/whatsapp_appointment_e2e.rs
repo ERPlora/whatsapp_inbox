@@ -26,7 +26,7 @@
 use std::path::PathBuf;
 
 use erplora_db::{testutil::fresh_db, Params};
-use erplora_runtime::flows::grants::GrantKind;
+use erplora_runtime::flows::grants::{GrantKind, GrantSpec};
 use erplora_runtime::flows::{store, NewFlow};
 use erplora_runtime::{outbox, Runtime};
 use serde_json::{json, Value};
@@ -54,7 +54,10 @@ fn template(name: &str) -> Value {
         .expect("the template is JSON")
 }
 
-fn template_grants() -> Vec<(GrantKind, String)> {
+/// The sidecar's grants AS the hub installs them, pins included (hub#1623/#1662): a `payload` fixes
+/// part of what the flow may send or read, and dropping it here would test a wider recipe than the
+/// one that ships.
+fn template_grants() -> Vec<GrantSpec> {
     let path = module("whatsapp_inbox")
         .join("flows")
         .join("appointment-from-whatsapp.grants.json");
@@ -64,10 +67,14 @@ fn template_grants() -> Vec<(GrantKind, String)> {
         .unwrap()
         .iter()
         .map(|g| {
-            (
+            let mut spec = GrantSpec::pair(
                 GrantKind::parse(g["kind"].as_str().unwrap()).unwrap(),
-                g["value"].as_str().unwrap().to_string(),
-            )
+                g["value"].as_str().unwrap(),
+            );
+            if let Some(pin) = g["payload"].as_object() {
+                spec.payload = pin.clone().into_iter().collect();
+            }
+            spec
         })
         .collect()
 }
@@ -236,10 +243,10 @@ async fn the_customer_who_writes_at_3am_gets_an_answer_addressed_by_the_grant() 
     rt.replace_flow_grants(
         &flow_id,
         &[
-            (GrantKind::Notify, "whatsapp".into()),
-            (
+            GrantSpec::pair(GrantKind::Notify, "whatsapp"),
+            GrantSpec::pair(
                 GrantKind::RecipientQuery,
-                "whatsapp_inbox.conversations.list#contact_phone".into(),
+                "whatsapp_inbox.conversations.list#contact_phone",
             ),
         ],
         "hub_user:owner",
@@ -346,5 +353,102 @@ async fn with_the_ai_steps_the_run_reaches_them_and_hands_over_to_the_server() {
     assert!(
         !report.pending_io.is_empty(),
         "the tick handed the agent turn to the server, outside the global lock"
+    );
+}
+
+// ── 5. whatsapp_inbox#165: the recipe knows a customer on file, however her phone was typed ────
+
+/// A customer of years writes in, and the salon typed her phone the way phones are typed in
+/// Spain — no country code, spaces. WhatsApp hands the recipe `34600111222`. Over `customers.list`
+/// the lookup was a LIKE on the raw text, so `find_customer` answered «nobody», the agent step was
+/// told she was new, and it created a SECOND card and booked on it. The read has to compare
+/// NUMBERS (`customers.by_phone`, customers#79) — and only the runtime can say that the shipped
+/// step, its grant and the neighbour's query really fit together.
+#[tokio::test]
+async fn the_recipe_finds_the_customer_on_file_however_the_salon_typed_her_phone() {
+    let rt = runtime(&[
+        "customers",
+        "taxes",
+        "services",
+        "staff",
+        "schedules",
+        "appointments",
+        "whatsapp_inbox",
+    ])
+    .await;
+    let owner = erplora_runtime::RequestContext::new(HUB, "owner", ["*".to_string()]);
+    let card: Params = json!({ "name": "Ana de siempre", "phone": "600 111 222" })
+        .as_object()
+        .unwrap()
+        .clone()
+        .into_iter()
+        .collect();
+    rt.execute_command("customers.create", &card, &owner)
+        .await
+        .expect("the salon's card for Ana");
+    let ana = rows(&rt, "SELECT id FROM customers_customer WHERE name = 'Ana de siempre'").await;
+    let ana = ana[0]["id"].as_str().unwrap().to_string();
+
+    // Only the TYPED-message trigger. The template also declares the tapped-option one on the same
+    // event, and the kernel keeps ONE trigger per event and flow (the last): with both, a typed
+    // message starts nothing at all — hub#2061. What this test is about starts after the trigger.
+    let mut definition = template("appointment-from-whatsapp.es.flow.json");
+    let typed = definition["triggers"][0].clone();
+    assert_eq!(typed["filter"]["event.text"], json!({ "neq": "" }), "triggers[0] is the typed one");
+    definition["triggers"] = json!([typed]);
+    let flow_id = create(&rt, definition).await;
+    rt.replace_flow_grants(&flow_id, &template_grants(), "hub_user:owner")
+        .await
+        .unwrap();
+
+    // Exactly the keys `crates/server/src/inbound_poll.rs::event_payload` writes since hub#1621:
+    // the recipe's trigger answers a customer writing NOW, not the owner's reply or the backlog.
+    let payload: Params = json!({
+        "wa_message_id": "wamid.ANA",
+        "from": WA_ID,
+        "direction": "inbound",
+        "contact": WA_ID,
+        "source": "live",
+        "text": "hola! quiero cita para un tinte",
+        "received_at": "2026-09-24T09:00:00+00:00",
+        "message": { "id": "wamid.ANA", "from": WA_ID, "type": "text",
+                     "text": { "body": "hola! quiero cita para un tinte" } },
+    })
+    .as_object()
+    .unwrap()
+    .clone()
+    .into_iter()
+    .collect();
+    assert!(outbox::insert_core_event_once(
+        rt.db_for_test(),
+        "wa-wamid.ANA",
+        HUB,
+        "hub.whatsapp.message_received",
+        &payload,
+    )
+    .await
+    .unwrap());
+    rt.drain_outbox().await.unwrap();
+    rt.process_flows().await.unwrap();
+
+    let runs = rt.list_flow_runs(&flow_id, 10, None).await.unwrap();
+    assert_eq!(runs.len(), 1, "her message started the recipe");
+    let (_, steps) = rt.get_flow_run(&runs[0].id).await.unwrap();
+    let find = steps
+        .iter()
+        .find(|s| s.step_id == "find_customer")
+        .unwrap_or_else(|| panic!("the run reached `find_customer`: {steps:?}"));
+    assert_eq!(find.status, "done", "the read ran under the recipe's own grant: {find:?}");
+    assert_eq!(
+        find.output["found"],
+        json!(true),
+        "Ana is on file as `600 111 222` and wrote from {WA_ID}: the recipe must know her, or it \
+         creates her a second card — {find:?}"
+    );
+    assert_eq!(find.output["count"], json!(1), "one card carries that number: {find:?}");
+    assert_eq!(find.output["id"], json!(ana), "and it is HER card: {find:?}");
+    assert!(
+        steps.iter().any(|s| s.step_id == "know_the_customer"),
+        "the run went on to the agent step, which is now told she is on file: {steps:?}"
     );
 }
