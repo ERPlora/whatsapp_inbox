@@ -23,12 +23,16 @@
 // message into a red build, and the sentence is exactly the part that is meant to change.
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import manifest from '../../module.json' with { type: 'json' };
 import en from '../../locales/en.json' with { type: 'json' };
 import es from '../../locales/es.json' with { type: 'json' };
 
 const MODULE_ID = 'whatsapp_inbox';
+// The module root is two folders above this file (`ui/lib/`), whichever checkout it lives in.
+const MODULE_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 type Catalog = { errors?: Record<string, string> };
 const declared = (manifest as { errors?: Record<string, unknown> }).errors ?? {};
@@ -53,7 +57,7 @@ function emittedCodes(): string[] {
     ...Object.keys((manifest as { queries?: object }).queries ?? {}),
     ...Object.keys((manifest as { commands?: object }).commands ?? {}),
   ]);
-  const src = readFileSync(join(process.cwd(), 'handler', 'src', 'lib.rs'), 'utf8');
+  const src = readFileSync(join(MODULE_ROOT, 'handler', 'src', 'lib.rs'), 'utf8');
   const found = new Set<string>();
   for (const m of src.matchAll(new RegExp(`"(${MODULE_ID}\\.[a-z][a-z0-9_]*)"`, 'g'))) {
     const code = m[1];
@@ -77,6 +81,20 @@ describe('module.json → errors (ADR-0398)', () => {
 
   it('declares every code the handler raises, and raises every code it declares', () => {
     expect(Object.keys(declared).sort()).toEqual(emittedCodes());
+  });
+
+  // The handler is found from THIS file, not from the folder vitest was launched in: `erplora test`
+  // runs from the module root, but a run from `modules-workspace/` resolved `handler/src/lib.rs`
+  // against the workspace and failed on a healthy module (ERPlora/module-toolkit#290).
+  it('reads this module’s handler whatever the working directory is', () => {
+    const expected = emittedCodes();
+    const cwd = process.cwd();
+    process.chdir(tmpdir());
+    try {
+      expect(emittedCodes()).toEqual(expected);
+    } finally {
+      process.chdir(cwd);
+    }
   });
 
   it('declares every `expect_rows.error` of the manifest — the derived link (ADR-0398 §1)', () => {
