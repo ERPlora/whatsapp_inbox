@@ -735,3 +735,86 @@ async fn their_typed_choice_finds_the_table_times_they_were_offered() {
         "a cleared offer is not recalled"
     );
 }
+
+// ── 8. whatsapp_inbox#83: her card could not be created, and she is answered all the same ──────
+
+/// A new customer writes and `know_the_customer` cannot give her a card: `customers.create` is
+/// refused (a duplicate number, a field the module rejects). Under `policy: "auto"` that refusal
+/// goes back into the agent's turn as a tool result (`crates/server/src/agent_runner.rs::dispatch`),
+/// so the step ends `done` with prose about the failure and NO card behind it. From there the run
+/// has to carry on to the step that talks to her — through a lookup that finds nobody, a link that
+/// has no id to link and a booking step briefed with `count: 0` — and queue that answer. A step on
+/// that path that stops the run on an empty card leaves her with «let me check the diary» and then
+/// silence, which is exactly what #83 reports.
+#[tokio::test]
+async fn when_her_card_cannot_be_created_she_is_still_answered() {
+    let rt = runtime(&[
+        "customers",
+        "taxes",
+        "services",
+        "staff",
+        "schedules",
+        "appointments",
+        "whatsapp_inbox",
+    ])
+    .await;
+
+    // Only the TYPED trigger (hub#2061), as in the tests above.
+    let mut definition = template("appointment-from-whatsapp.es.flow.json");
+    let typed = definition["triggers"][0].clone();
+    assert_eq!(typed["filter"]["event.text"], json!({ "neq": "" }), "triggers[0] is the typed one");
+    definition["triggers"] = json!([typed]);
+    let flow_id = create(&rt, definition).await;
+    rt.replace_flow_grants(&flow_id, &template_grants(), "hub_user:owner")
+        .await
+        .unwrap();
+
+    const SORRY: &str = "No he podido apuntarte todavía; alguien del salón te escribe enseguida.";
+    let mut seen = Vec::new();
+    ana_writes(&rt, "wamid.NOCARD", "hola, soy Ana, ¿tenéis hueco mañana?").await;
+    let steps = drive(
+        &rt,
+        &flow_id,
+        "book_appointment",
+        0,
+        |id| match id {
+            // What the model writes after `customers.create` came back as `{"error": …}`.
+            "know_the_customer" => json!({ "text": "customers.create was refused; no card exists" }),
+            "book_appointment" => json!({ "text": SORRY, "slots": [] }),
+            other => panic!("no other step is an agent turn: {other}"),
+        },
+        &mut seen,
+    )
+    .await;
+
+    assert!(
+        rows(&rt, "SELECT id FROM customers_customer").await.is_empty(),
+        "the premise: nobody is on file"
+    );
+    let resolved = step(&seen, "resolve_customer");
+    assert_eq!(resolved.output["found"], json!(false), "{resolved:?}");
+    assert_eq!(
+        resolved.output["count"],
+        json!(0),
+        "the booking step is briefed that no single card answers her number: {resolved:?}"
+    );
+
+    let runs = rt.list_flow_runs(&flow_id, 10, None).await.unwrap();
+    assert_eq!(runs[0].status, store::STATUS_DONE, "the run did not stop on the missing card: {steps:?}");
+    assert_eq!(step(&steps, "confirm_to_customer").status, "done", "{steps:?}");
+
+    let answers: Vec<Value> = rows(
+        &rt,
+        "SELECT payload FROM _event_outbox WHERE event_name = 'flow.reminder.due'",
+    )
+    .await
+    .iter()
+    .map(|r| serde_json::from_str(r["payload"].as_str().unwrap()).unwrap())
+    .collect();
+    assert!(
+        answers
+            .iter()
+            .any(|p| p["to"] == json!(E164) && p["vars"]["text"] == json!(SORRY)),
+        "after «let me check the diary», what the booking step wrote reaches HER: {answers:?}"
+    );
+}
