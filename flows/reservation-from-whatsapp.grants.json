@@ -79,6 +79,28 @@
         "en": "Link the conversation to the customer's card, so next time it knows who is writing.",
         "es": "Vincular la conversación con la ficha del cliente, para saber la próxima vez quién escribe."
       }
+    },
+    {
+      "kind": "query",
+      "value": "whatsapp_inbox.conversations.last_offer",
+      "payload": {
+        "wa_contact_id": "input.from"
+      },
+      "reason": {
+        "en": "Read the times it offered the guest who is writing in the last 24 hours, so a reply like \"the 2nd\" or \"21:30\" books the right one.",
+        "es": "Leer las horas que le ofreció en las últimas 24 horas a quien escribe, para que una respuesta como «la 2» o «21:30» reserve la correcta."
+      }
+    },
+    {
+      "kind": "command",
+      "value": "whatsapp_inbox.conversations.remember_offer",
+      "payload": {
+        "wa_contact_id": "input.from"
+      },
+      "reason": {
+        "en": "Remember the times it just offered the guest who is writing, and only in their conversation.",
+        "es": "Recordar las horas que acaba de ofrecer a quien escribe, y solo en su conversación."
+      }
     }
   ]
 }

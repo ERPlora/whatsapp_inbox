@@ -58,9 +58,12 @@ fn template(name: &str) -> Value {
 /// part of what the flow may send or read, and dropping it here would test a wider recipe than the
 /// one that ships.
 fn template_grants() -> Vec<GrantSpec> {
-    let path = module("whatsapp_inbox")
-        .join("flows")
-        .join("appointment-from-whatsapp.grants.json");
+    grants_of("appointment-from-whatsapp.grants.json")
+}
+
+/// The pinned grants of any recipe's sidecar, read the same way as [`template_grants`].
+fn grants_of(sidecar: &str) -> Vec<GrantSpec> {
+    let path = module("whatsapp_inbox").join("flows").join(sidecar);
     let body: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
     body["grants"]
         .as_array()
@@ -486,11 +489,12 @@ async fn ana_writes(rt: &Runtime, wa_message_id: &str, text: &str) {
 
 /// Drives the ONE run of this message to its end, standing in for the model: every agent turn the
 /// tick hands over is answered with what `answer` says for that step. Returns the run's steps as
-/// the kernel recorded them. Before answering `book_appointment`, `seen` gets the steps recorded so
-/// far — that is what the agent would have been briefed with.
+/// the kernel recorded them. Before answering `ai_step` (`book_appointment`, `book_table`), `seen`
+/// gets the steps recorded so far — that is what the agent would have been briefed with.
 async fn drive(
     rt: &Runtime,
     flow_id: &str,
+    ai_step: &str,
     run_index: usize,
     answer: impl Fn(&str) -> Value,
     seen: &mut Vec<store::FlowRunStep>,
@@ -498,7 +502,7 @@ async fn drive(
     for _ in 0..30 {
         let report = rt.process_flows().await.unwrap();
         for io in report.pending_io {
-            if io.step_id() == "book_appointment" {
+            if io.step_id() == ai_step {
                 *seen = rt.get_flow_run(io.run_id()).await.unwrap().1;
             }
             rt.complete_flow_io(
@@ -584,6 +588,7 @@ async fn her_typed_choice_finds_the_list_she_was_offered() {
     let first = drive(
         &rt,
         &flow_id,
+        "book_appointment",
         0,
         |id| match id {
             "book_appointment" => json!({ "text": "Mañana tengo estos:", "slots": offered.clone() }),
@@ -606,6 +611,7 @@ async fn her_typed_choice_finds_the_list_she_was_offered() {
     let second = drive(
         &rt,
         &flow_id,
+        "book_appointment",
         1,
         |id| match id {
             "book_appointment" => json!({ "text": "Reservada el jueves a las 12:30 con Ana.", "slots": [] }),
@@ -627,11 +633,99 @@ async fn her_typed_choice_finds_the_list_she_was_offered() {
     drive(
         &rt,
         &flow_id,
+        "book_appointment",
         2,
         |id| match id {
             "book_appointment" => json!({ "text": "¿Qué día te viene bien?", "slots": [] }),
             _ => json!({ "text": "Ana, en la ficha" }),
         },
+        &mut seen,
+    )
+    .await;
+    assert_eq!(
+        step(&seen, "recall_offer").output["found"],
+        json!(false),
+        "a cleared offer is not recalled"
+    );
+}
+
+// ── 7. whatsapp_inbox#174: «la 2» — the same for the times a restaurant offered ────────────────
+
+/// The restaurant recipe answers «¿tenéis mesa esta noche para 4?» with a list of times, exactly
+/// like the salon one answers with slots. A guest who WRITES «la 2» starts a fresh run, and that run
+/// has to find the times they were offered BEFORE `book_table`, or it offers them all over again.
+/// Once the table is booked the list is cleared, so a later «la 2» points at nothing.
+#[tokio::test]
+async fn their_typed_choice_finds_the_table_times_they_were_offered() {
+    let rt = runtime(&["customers", "tables", "reservations", "whatsapp_inbox"]).await;
+
+    // Only the TYPED trigger, for the same reason as above (hub#2061).
+    let mut definition = template("reservation-from-whatsapp.es.flow.json");
+    let typed = definition["triggers"][0].clone();
+    assert_eq!(typed["filter"]["event.text"], json!({ "neq": "" }), "triggers[0] is the typed one");
+    definition["triggers"] = json!([typed]);
+    let flow_id = create(&rt, definition).await;
+    rt.replace_flow_grants(
+        &flow_id,
+        &grants_of("reservation-from-whatsapp.grants.json"),
+        "hub_user:owner",
+    )
+    .await
+    .unwrap();
+
+    let offered = json!([
+        { "id": "2026-09-24T21:00|party:4", "title": "hoy 21:00" },
+        { "id": "2026-09-24T21:30|party:4", "title": "hoy 21:30" },
+    ]);
+    let mut seen = Vec::new();
+
+    // 1) «¿tenéis mesa esta noche para 4?» → two times offered.
+    ana_writes(&rt, "wamid.TABLE", "¿tenéis mesa esta noche para 4?").await;
+    let first = drive(
+        &rt,
+        &flow_id,
+        "book_table",
+        0,
+        |_| json!({ "text": "Esta noche para cuatro tengo:", "slots": offered.clone() }),
+        &mut seen,
+    )
+    .await;
+    assert_eq!(
+        step(&seen, "recall_offer").output["found"],
+        json!(false),
+        "before anything was offered there is nothing to recall"
+    );
+    assert_eq!(step(&first, "remember_offer").status, "done", "{first:?}");
+    let stored: Value = serde_json::from_str(&remembered(&rt).await).expect("the list is JSON");
+    assert_eq!(stored, offered, "the conversation remembers the times they were offered");
+
+    // 2) «la 2» → a fresh run, whose agent step is briefed with that list.
+    ana_writes(&rt, "wamid.TABLE2", "la 2").await;
+    let second = drive(
+        &rt,
+        &flow_id,
+        "book_table",
+        1,
+        |_| json!({ "text": "Mesa para cuatro hoy a las 21:30.", "slots": [] }),
+        &mut seen,
+    )
+    .await;
+    let recall = step(&seen, "recall_offer");
+    assert_eq!(recall.output["found"], json!(true), "«la 2» finds the list: {recall:?}");
+    let recalled: Value = serde_json::from_str(recall.output["offered_slots"].as_str().unwrap())
+        .expect("the recalled list is JSON");
+    assert_eq!(recalled, offered, "the SAME list, in the order they saw it");
+    assert_eq!(step(&second, "remember_offer").status, "done", "{second:?}");
+    assert_eq!(remembered(&rt).await, "[]", "once the table is booked, nothing is on offer");
+
+    // 3) a stray «la 2» later points at nothing.
+    ana_writes(&rt, "wamid.TABLE3", "la 2").await;
+    drive(
+        &rt,
+        &flow_id,
+        "book_table",
+        2,
+        |_| json!({ "text": "¿Para qué día y cuántos sois?", "slots": [] }),
         &mut seen,
     )
     .await;

@@ -30,7 +30,8 @@ What is checked here, each one a separate way the chain breaks silently:
    nobody is offering any more. Neither the write nor the read crosses hubs or touches a deleted
    thread. The `before` read is the bug, measured: with nothing remembered there is nothing to read.
 
-4. **The recipes walk through both doors, in the right order.** In both languages: the read runs
+4. **The recipes walk through both doors, in the right order.** Appointments and table
+   reservations (#174) alike, in both languages: the read runs
    BEFORE the assistant, the assistant's briefing quotes what it read, the write runs AFTER the
    assistant and BEFORE the guard that stops the run when nothing is offered (otherwise a booking
    would never clear the list), it cannot kill the reply (`on_error: continue`), and both grants
@@ -72,13 +73,28 @@ SLOTS = json.dumps(
     separators=(",", ":"),
 )
 
-RECIPES = [
-    "appointment-from-whatsapp.en.flow.json",
-    "appointment-from-whatsapp.es.flow.json",
+# Every recipe that offers a list to tap: (recipe files, grants file, assistant step, offer guard).
+# Table reservations answer with the same kind of list, so they remember it too (whatsapp_inbox#174).
+RECIPE_FAMILIES = [
+    (
+        [
+            "appointment-from-whatsapp.en.flow.json",
+            "appointment-from-whatsapp.es.flow.json",
+        ],
+        "appointment-from-whatsapp.grants.json",
+        "book_appointment",
+        "any_slot_to_offer",
+    ),
+    (
+        [
+            "reservation-from-whatsapp.en.flow.json",
+            "reservation-from-whatsapp.es.flow.json",
+        ],
+        "reservation-from-whatsapp.grants.json",
+        "book_table",
+        "any_time_to_offer",
+    ),
 ]
-GRANTS = "appointment-from-whatsapp.grants.json"
-AI_STEP = "book_appointment"
-OFFER_GUARD = "any_slot_to_offer"
 
 
 def load(name, rel):
@@ -187,14 +203,21 @@ def check_the_schema(jsonschema):
 
 def check_the_recipes():
     problems = []
-    for name in RECIPES:
+    for recipes, grants_file, ai_step, offer_guard in RECIPE_FAMILIES:
+        problems += check_one_recipe_family(recipes, grants_file, ai_step, offer_guard)
+    return problems
+
+
+def check_one_recipe_family(recipes, grants_file, ai_step, offer_guard):
+    problems = []
+    for name in recipes:
         recipe = json.loads((MODULE_DIR / "flows" / name).read_text())
         steps = recipe.get("steps", [])
         ids = [s.get("id") for s in steps]
         by_id = {s.get("id"): s for s in steps}
-        if AI_STEP not in by_id or OFFER_GUARD not in by_id:
+        if ai_step not in by_id or offer_guard not in by_id:
             problems.append(
-                f"`{name}` lost `{AI_STEP}` or `{OFFER_GUARD}`: this check is blind"
+                f"`{name}` lost `{ai_step}` or `{offer_guard}`: this check is blind"
             )
             continue
 
@@ -209,7 +232,7 @@ def check_the_recipes():
             )
         else:
             read = reads[0]
-            if ids.index(read["id"]) > ids.index(AI_STEP):
+            if ids.index(read["id"]) > ids.index(ai_step):
                 problems.append(
                     f"`{name}` reads the last offer AFTER the assistant decided"
                 )
@@ -222,7 +245,7 @@ def check_the_recipes():
                 problems.append(
                     f"`{name}` reads the last offer with result={read.get('result')!r}"
                 )
-            prompt = by_id[AI_STEP].get("prompt", "")
+            prompt = by_id[ai_step].get("prompt", "")
             for field in ("found", "offered_slots"):
                 if f"{{{{steps.{read['id']}.{field}}}}}" not in prompt:
                     problems.append(
@@ -246,19 +269,19 @@ def check_the_recipes():
                 problems.append(
                     f"`{name}` remembers the offer on {params!r}, not on her thread"
                 )
-            if params.get("offered_slots") != f"{{{{steps.{AI_STEP}.slots}}}}":
+            if params.get("offered_slots") != f"{{{{steps.{ai_step}.slots}}}}":
                 problems.append(
                     f"`{name}` remembers {params.get('offered_slots')!r} instead of the slots the "
                     "assistant just handed over"
                 )
             position = ids.index(write["id"])
-            if position < ids.index(AI_STEP):
+            if position < ids.index(ai_step):
                 problems.append(
                     f"`{name}` remembers the offer before the assistant made it"
                 )
-            if position > ids.index(OFFER_GUARD):
+            if position > ids.index(offer_guard):
                 problems.append(
-                    f"`{name}` remembers the offer after `{OFFER_GUARD}`: when she books, cancels or "
+                    f"`{name}` remembers the offer after `{offer_guard}`: when she books, cancels or "
                     "moves, the guard stops the run first and the old list is never cleared"
                 )
             if write.get("on_error") != "continue":
@@ -267,7 +290,7 @@ def check_the_recipes():
                     "failure there would swallow the reply she is waiting for"
                 )
 
-    grants = json.loads((MODULE_DIR / "flows" / GRANTS).read_text()).get("grants", [])
+    grants = json.loads((MODULE_DIR / "flows" / grants_file).read_text()).get("grants", [])
     for kind, value in (("command", REMEMBER), ("query", LAST_OFFER)):
         grant = next(
             (g for g in grants if g.get("kind") == kind and g.get("value") == value),
@@ -275,11 +298,11 @@ def check_the_recipes():
         )
         if not grant:
             problems.append(
-                f"`{GRANTS}` has no `{kind}` grant for `{value}`: the step is refused"
+                f"`{grants_file}` has no `{kind}` grant for `{value}`: the step is refused"
             )
         elif (grant.get("payload") or {}).get("wa_contact_id") != "input.from":
             problems.append(
-                f"`{GRANTS}`: the `{kind}` grant for `{value}` is not pinned to `input.from` — an "
+                f"`{grants_file}`: the `{kind}` grant for `{value}` is not pinned to `input.from` — an "
                 "unattended run could read or write another customer's thread"
             )
     return problems
