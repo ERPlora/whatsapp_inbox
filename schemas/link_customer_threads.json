@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "whatsapp_inbox._link_customer_threads",
+  "description": "The payload of `customer.created` / `customer.updated`, verbatim — a manifest listener has no mapping layer. It is the saved customer sheet plus the runtime's system binds (`new_id` names the card of a creation, `customer_id` the card of an edit). Nothing is required and anything is accepted: a stricter schema would not degrade the link, it would dead-letter the customer event for this listener. The handler links nobody when the payload names no card or no phone.",
+  "type": "object",
+  "additionalProperties": true
+}
