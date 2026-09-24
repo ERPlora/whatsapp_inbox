@@ -65,7 +65,7 @@
       },
       "template": "",
       "vars": {
-        "text": "¡Confirmada! Te esperamos para tu {{steps.read_appointment.service_name}} con {{steps.read_appointment.staff_name}}."
+        "text": "¡Confirmada! Te esperamos el {{steps.read_appointment.start_date_label}} a las {{steps.read_appointment.start_time_label}} para tu {{steps.read_appointment.service_name}} con {{steps.read_appointment.staff_name}}."
       }
     }
   ]

@@ -475,28 +475,37 @@ booleano de verdad y en SQLite un `1`/`0`. `eq`/`neq` son **estrictos**, así qu
 dejaría de disparar en uno de los dos dialectos — y fallaría callando, que es el fallo que esta
 familia viene a arreglar.
 
-### Por qué el mensaje no dice el día y la hora
+### El mensaje dice el día y la hora (whatsapp_inbox#146)
 
-Porque el lenguaje de mapeo no tiene reloj ni formateo, y `start_datetime` es ISO: escribirlo tal
-cual le mandaría a la clienta un `2026-09-12T10:30:00`. El mensaje nombra el **servicio** y la
-**profesional**, y aterriza en el mismo hilo en el que la automatización ya dijo el día y la hora
-cuando apuntó la cita. Que la agenda dé día y hora legibles es **ERPlora/appointments#151**; cuando
-esté, la frase los lleva.
+«¡Confirmada! Te esperamos el **martes, 15 de septiembre de 2026 a las 10:30** para tu Corte con
+Ana». El lenguaje de mapeo no tiene reloj ni formateo y `start_datetime` es ISO, así que la receta no
+formatea nada: lee `start_date_label` y `start_time_label`, que `appointments.appointments.get`
+devuelve **ya legibles**, en el idioma y la zona del negocio (appointments#151). Llegan por separado a
+propósito: el conector («… a las …» / «… at …») es prosa y vive en el texto de cada idioma. Lo fija
+`confirmation_notice_problems`, marca 6: un aviso que no nombra los dos es la issue otra vez.
 
-### Por qué el suelo es `appointments >= 1.1.26` y no el 1.1.73 de la familia de arriba
+### Por qué el suelo es `appointments >= 1.1.77`
 
-Porque esta receta pide dos cosas y solo dos, y ninguna es de las que subieron aquel suelo (mover y
-anular). El número lo fija el **evento**: `appointments.appointments.confirm` lo emite desde el
-primer commit del módulo, pero Citas no lo **declara** en `events.emits` hasta appointments#40 — y lo
-que un vecino puede consumir es lo declarado, no lo que ocurre de rebote. Y el número no es el del
-commit que lo declaró, sino el del **primer `chore(release)` posterior**: `f213ade` ES
-`chore(release): v1.1.25` y su `module.json` no tiene ni clave `events`; la declaración entra con el
-manifest todavía en 1.1.25 y, como el zip `modules/appointments/v1.1.25.zip` se sube **CREATE-ONLY**,
-no llega al 1.1.25 que sirve el marketplace: llega en `f3426cd` = `chore(release): v1.1.26`.
-La lectura (`customer_phone`, `service_name`, `staff_name`) está en el SELECT desde v1.1.6, así que
-esa mitad no sube nada. Detalle medido en `appointment-confirmed-to-whatsapp.requires.json`.
+Lo fija el **texto**. Las dos etiquetas entran con appointments#151 (PR #152, `8b11fa5`) con el
+manifest todavía en 1.1.76, pero `52588bf` = `chore(release): v1.1.76` es **anterior** y su
+`appointment_get.sql` no nombra ninguna; el primer release que las lleva es `2cd6d26` =
+`chore(release): v1.1.77`. Contra un hub con Citas en 1.1.76 la receta se ofrecería y la clienta
+recibiría el literal `{{steps.read_appointment.start_date_label}}` — peor que no decir la hora. Lo
+vigila `floor_read_column_problems` en `tests/flow_templates.test.py`, que lee el SQL de la consulta
+**en el árbol publicado como el suelo**, no el del checkout.
 
-🔴 **Ese suelo por debajo del de la tarjeta es una condición, no una casualidad.**
+Por debajo quedan las dos razones que antes fijaban 1.1.26 y siguen siendo ciertas. El **evento**:
+`appointments.appointments.confirm` lo emite desde el primer commit del módulo, pero Citas no lo
+**declara** en `events.emits` hasta appointments#40 — y lo que un vecino puede consumir es lo
+declarado, no lo que ocurre de rebote. El número no es el del commit que lo declaró, sino el del
+**primer `chore(release)` posterior**: `f213ade` ES `chore(release): v1.1.25` y su `module.json` no
+tiene ni clave `events`; la declaración entra con el manifest todavía en 1.1.25 y, como el zip
+`modules/appointments/v1.1.25.zip` se sube **CREATE-ONLY**, llega en `f3426cd` =
+`chore(release): v1.1.26`. Y la lectura de `customer_phone`, `service_name` y `staff_name`, que está
+en el SELECT desde v1.1.6. Detalle medido en `appointment-confirmed-to-whatsapp.requires.json`.
+
+🔴 **Ese suelo nunca por encima del de la tarjeta es una condición, no una casualidad**, y por eso
+whatsapp_inbox#146 subió **también** el de `appointment-from-whatsapp` a 1.1.77.
 `flow_template_floor_is_met` (hub#1611) decide **por familia** si una receta se ofrece, así que una
 acompañante que pidiera un vecino más nuevo que su tarjeta sería rechazada justo en los hubs que sí
 aceptan la tarjeta: «Activo» en pantalla y la clienta esperando. Lo fija un test —
@@ -548,8 +557,8 @@ La vía declarativa para que un blueprint la reparta está propuesta en **ERPlor
   que enciende el poller que trae los mensajes (hub#664), y es lo que crea la conversación de la
   que sale el destinatario.
 - Los módulos que aportan las tools. Para la familia de **cita**: `customers`, `services`,
-  `appointments` (>= 1.1.73, ver `requires.json`) y `staff`. Para el **aviso al confirmar**, solo
-  `appointments` (>= 1.1.26, el suelo del evento declarado). Para la de **mesa**: `customers` y
+  `appointments` (>= 1.1.77, ver `requires.json`) y `staff`. Para el **aviso al confirmar**, solo
+  `appointments` (>= 1.1.77, el primero que da el día y la hora legibles). Para la de **mesa**: `customers` y
   `reservations` (>= 1.1.72 no, **>= 3.0.19** — el suelo lo fija `blocked_dates.on_date`, que es la
   única lectura con la que la plantilla sabe que el restaurante cierra ese día; ver
   `reservation-from-whatsapp.requires.json`). El horario del negocio ya **no** se le pregunta a `schedules` desde el
