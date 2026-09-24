@@ -167,7 +167,7 @@
     "doorRefusalNoCode": "No se ha podido registrar la plantilla en Meta. Queda guardada aquí: prueba a guardarla otra vez dentro de un rato.",
     "metaRejectedReason": "Motivo de Meta: {reason}",
     "metaSyncUnavailable": "No hemos podido comprobar con Meta si hay veredictos nuevos, así que lo que ves es lo último que sabemos. Vuelve a abrir esta pestaña dentro de un rato.",
-    "metaOnlyTemplates": "Estas plantillas de WhatsApp Manager todavía no se pueden traer a esta lista (llevan cabecera con imagen, vídeo o documento, botones o una variable en la cabecera). Gestiónalas en WhatsApp Manager: {names}",
+    "metaOnlyTemplates": "Estas plantillas de WhatsApp Manager todavía no se pueden traer a esta lista (llevan cabecera con imagen, vídeo o documento, botones, variables con nombre o una variable en la cabecera). Gestiónalas en WhatsApp Manager: {names}",
     "doorRefusal": {
       "invalid_name": "Meta no ha aceptado el nombre. Usa solo minúsculas, números y guiones bajos —sin espacios ni acentos— y vuelve a intentarlo.",
       "invalid_category": "Meta no ha aceptado la categoría. Elige Utilidad, Marketing o Autenticación y vuelve a enviarla.",
@@ -198,6 +198,7 @@
     "whatsapp_inbox.request_not_fulfillable": "Solo una solicitud confirmada se puede marcar como atendida.",
     "whatsapp_inbox.request_not_pending": "Esa solicitud no está pendiente de revisión: no existe en este negocio, o ya se aprobó, rechazó o atendió.",
     "whatsapp_inbox.request_unreadable": "No se ha podido leer la solicitud, así que no se ha cambiado nada. Prueba otra vez.",
+    "whatsapp_inbox.template_already_here": "Este negocio ya tiene una plantilla con ese nombre e idioma (viva o borrada aquí), así que no se ha traído nada.",
     "whatsapp_inbox.template_not_found": "Esa plantilla no existe en este negocio."
   }
 }

@@ -618,7 +618,13 @@
       "schema": "schemas/template_import_from_meta.json",
       "emit": [
         "whatsapp_inbox.template.created"
-      ]
+      ],
+      "expect_rows": {
+        "op": "min",
+        "n": 1,
+        "error": "whatsapp_inbox.template_already_here",
+        "message": "This business already holds a template with that name and language (live or deleted here), so nothing was brought in."
+      }
     },
     "whatsapp_inbox.templates.delete": {
       "permission": "whatsapp_inbox.manage_settings",
@@ -780,6 +786,7 @@
     "whatsapp_inbox.request_not_fulfillable": {},
     "whatsapp_inbox.request_not_pending": {},
     "whatsapp_inbox.request_unreadable": {},
+    "whatsapp_inbox.template_already_here": {},
     "whatsapp_inbox.template_not_found": {}
   },
   "events": {

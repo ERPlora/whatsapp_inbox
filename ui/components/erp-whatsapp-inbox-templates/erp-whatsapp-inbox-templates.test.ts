@@ -1160,6 +1160,33 @@ describe('lo creado en WhatsApp Manager se trae a la lista con su texto (whatsap
     expect(paginas, 'se trajo una plantilla y nadie volvió a leer la lista').toBeGreaterThan(1);
   });
 
+  it('una que este hub ya tiene (la dueña la borró aquí) no es un fallo: ni aviso, ni recarga, ni evento', async () => {
+    // The list hides deleted rows, so the tab asks to import it on every open; the command
+    // refuses with `template_already_here` and the tab takes that as the normal answer it is.
+    filas = [ENVIADA];
+    respondeListado = async () => ({ templates: [DE_META, PROMO], stale: false });
+    let paginas = 0;
+    const base = (globalThis as Record<string, unknown>).erplora as Record<string, unknown>;
+    (globalThis as Record<string, unknown>).erplora = {
+      ...base,
+      queryPage: async () => {
+        paginas += 1;
+        return { rows: filas, total: filas.length };
+      },
+      command: async (name: string, payload: Record<string, unknown>) => {
+        comandos.push({ name, payload });
+        if (name === 'whatsapp_inbox.templates.import_from_meta') throw refusal('whatsapp_inbox.template_already_here');
+        return { ok: true };
+      },
+    };
+
+    const el = await montar();
+
+    expect((el as unknown as { metaSyncNotice: string }).metaSyncNotice, 'una fila que ya existe se contó como fallo').toBe('');
+    expect(soloEnMeta(el), 'una plantilla borrada aquí volvió al aviso').toBeNull();
+    expect(paginas, 'nada se trajo y la lista se releyó igual').toBe(1);
+  });
+
   it('si el hub no puede guardarla, se dice y sigue en el aviso', async () => {
     filas = [ENVIADA];
     respondeListado = async () => ({ templates: [DE_META, PROMO], stale: false });

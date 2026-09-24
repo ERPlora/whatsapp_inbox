@@ -192,7 +192,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
 
   /** Templates Meta holds that this hub could NOT bring in (whatsapp_inbox#140, #179), as
    *  `name (language)`, the two halves of Meta's identity: parts this module has no field for
-   *  (media header, buttons, header variables), no text from the door, or a failed write. The ones
+   *  (media header, buttons, header or named variables), no text from the door, or a failed write. The ones
    *  that fit are imported with their text and never listed here. */
   @state() metaOnly: string[] = [];
 
@@ -432,6 +432,10 @@ export class ErpWhatsappInboxTemplates extends LitElement {
         });
         written += 1;
       } catch (e) {
+        // The list hides deleted rows, so a template the owner deleted here is asked for on every
+        // open and the command's gate answers `template_already_here`: nothing to say, nothing to
+        // reload. Any other refusal is a failure the owner has to hear about.
+        if ((e as { code?: unknown } | null)?.code === 'whatsapp_inbox.template_already_here') continue;
         notBrought.push(label);
         this.metaSyncNotice = domainErrorText(e, 'ui.errCreateTemplate');
       }

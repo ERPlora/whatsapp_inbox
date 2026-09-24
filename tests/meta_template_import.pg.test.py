@@ -149,6 +149,17 @@ def main():
     if IMPORT_COMMAND not in P.MANIFEST.get("commands", {}):
         print(f"FAIL: `{IMPORT_COMMAND}` is not declared in module.json")
         return 1
+    # The runtime writes the declared `emit` into the outbox whether or not the INSERT landed
+    # (`crates/runtime/src/commands.rs`: the row gate is opt-in). A template the owner deleted here
+    # is asked for on EVERY open of the tab, so without the gate every open would announce a
+    # `template.created` that never happened. The gate rolls the outbox back with the no-op.
+    gate = P.MANIFEST["commands"][IMPORT_COMMAND].get("expect_rows") or {}
+    if gate.get("error") != "whatsapp_inbox.template_already_here" or gate.get("n") != 1:
+        print(
+            f"FAIL: `{IMPORT_COMMAND}` must declare `expect_rows` with "
+            "`whatsapp_inbox.template_already_here`: a no-op import would still emit `template.created`"
+        )
+        return 1
     base, names = P.list_sql()
     if base is None:
         print(f"FAIL: `{P.LIST_QUERY}` binds {names}; this gate lowers only `:hub_id`")

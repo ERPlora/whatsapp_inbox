@@ -13,7 +13,12 @@
 -- NOT EXISTS). Deleting in the tab does not delete at Meta, so Meta keeps listing the template:
 -- bringing it back on the next open would undo what the owner did.
 --
--- A no-match is a NORMAL outcome, which is why the command declares no `expect_rows`.
+-- A no-match is a NORMAL outcome for the tab — but the runtime writes the declared `emit` into
+-- the outbox whether or not the INSERT landed, and a template the owner deleted here is asked for
+-- on EVERY open of the tab. So the command DOES declare `expect_rows` (`template_already_here`):
+-- the no-op rolls back together with its `template.created`, and the tab treats that code as the
+-- quiet answer it is (no notice, no reload). Without the gate every open would announce a template
+-- that was never created (the online_booking#25 failure).
 INSERT INTO whatsapp_inbox_template
   (id, hub_id, name, language, category, header, body, footer,
    meta_template_id, meta_status, meta_rejected_reason, variables, is_active,

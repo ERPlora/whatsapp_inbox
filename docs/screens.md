@@ -118,10 +118,11 @@ never blanks a header somebody set. **Delete** asks for confirmation in the page
 > WhatsApp Manager) is marked `deleted` and kept, so the owner's text is not lost; only a fresh
 > answer that lists at least one template can mark it. Templates Meta holds and this hub does not
 > (created in WhatsApp Manager) are imported with their header, body, footer, example values and
-> Meta's verdict (#179), once per name + language, and never over one the owner deleted here. Those
-> with parts this module has no field for (image/video/document header, buttons, a header
-> variable) are not imported without them: they are named in a notice above the table,
-> `name (language)`.
+> Meta's verdict (#179), once per name + language, and never over one the owner deleted here (the
+> command refuses with `template_already_here` and the tab takes it as the normal answer: no notice,
+> no phantom `template.created`). Those with parts this module has no field for (image/video/document
+> header, buttons, a header variable, named `{{name}}` variables) are not imported without them: they
+> are named in a notice above the table, `name (language)`.
 
 ## Settings — the channel
 

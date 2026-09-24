@@ -110,6 +110,27 @@ describe('what does NOT fit is refused, never imported with a piece missing', ()
     }
   });
 
+  it('named variables ({{nombre}}) in the body or the header: this module and the SaaS count {{1}}…{{n}} only', () => {
+    // WhatsApp Manager lets the owner name a variable instead of numbering it. Imported as is,
+    // the row would carry `variables: []` next to a body full of holes, and the next «Guardar»
+    // would send it to Meta with no example for them.
+    expect(
+      templateFromMeta({
+        ...BASE,
+        components: [{ type: 'BODY', text: 'Hola {{nombre}}, te esperamos el {{fecha}}.' }],
+      }),
+    ).toEqual({ ok: false });
+    expect(
+      templateFromMeta({
+        ...BASE,
+        components: [
+          { type: 'HEADER', format: 'TEXT', text: 'Hola {{nombre}}' },
+          { type: 'BODY', text: 'Te esperamos.' },
+        ],
+      }),
+    ).toEqual({ ok: false });
+  });
+
   it('a header with a variable (the module carries body variables only)', () => {
     expect(
       refused({ ...BASE, components: [{ type: 'HEADER', format: 'TEXT', text: 'Hola {{1}}' }, { type: 'BODY', text: 'x' }] }),

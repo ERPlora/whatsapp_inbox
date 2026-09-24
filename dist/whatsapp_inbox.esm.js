@@ -3877,7 +3877,7 @@ var es_default = {
     doorRefusalNoCode: "No se ha podido registrar la plantilla en Meta. Queda guardada aqu\xED: prueba a guardarla otra vez dentro de un rato.",
     metaRejectedReason: "Motivo de Meta: {reason}",
     metaSyncUnavailable: "No hemos podido comprobar con Meta si hay veredictos nuevos, as\xED que lo que ves es lo \xFAltimo que sabemos. Vuelve a abrir esta pesta\xF1a dentro de un rato.",
-    metaOnlyTemplates: "Estas plantillas de WhatsApp Manager todav\xEDa no se pueden traer a esta lista (llevan cabecera con imagen, v\xEDdeo o documento, botones o una variable en la cabecera). Gesti\xF3nalas en WhatsApp Manager: {names}",
+    metaOnlyTemplates: "Estas plantillas de WhatsApp Manager todav\xEDa no se pueden traer a esta lista (llevan cabecera con imagen, v\xEDdeo o documento, botones, variables con nombre o una variable en la cabecera). Gesti\xF3nalas en WhatsApp Manager: {names}",
     doorRefusal: {
       invalid_name: "Meta no ha aceptado el nombre. Usa solo min\xFAsculas, n\xFAmeros y guiones bajos \u2014sin espacios ni acentos\u2014 y vuelve a intentarlo.",
       invalid_category: "Meta no ha aceptado la categor\xEDa. Elige Utilidad, Marketing o Autenticaci\xF3n y vuelve a enviarla.",
@@ -3908,6 +3908,7 @@ var es_default = {
     "whatsapp_inbox.request_not_fulfillable": "Solo una solicitud confirmada se puede marcar como atendida.",
     "whatsapp_inbox.request_not_pending": "Esa solicitud no est\xE1 pendiente de revisi\xF3n: no existe en este negocio, o ya se aprob\xF3, rechaz\xF3 o atendi\xF3.",
     "whatsapp_inbox.request_unreadable": "No se ha podido leer la solicitud, as\xED que no se ha cambiado nada. Prueba otra vez.",
+    "whatsapp_inbox.template_already_here": "Este negocio ya tiene una plantilla con ese nombre e idioma (viva o borrada aqu\xED), as\xED que no se ha tra\xEDdo nada.",
     "whatsapp_inbox.template_not_found": "Esa plantilla no existe en este negocio."
   }
 };
@@ -4081,7 +4082,7 @@ var en_default = {
     doorRefusalNoCode: "The template could not be registered with Meta. It is saved here: try saving it again in a moment.",
     metaRejectedReason: "Meta's reason: {reason}",
     metaSyncUnavailable: "We could not check with Meta for new verdicts, so what you see is the last we know. Open this tab again in a while.",
-    metaOnlyTemplates: "These WhatsApp Manager templates cannot be brought into this list yet (they use an image, video or document header, buttons, or a variable in the header). Manage them in WhatsApp Manager: {names}",
+    metaOnlyTemplates: "These WhatsApp Manager templates cannot be brought into this list yet (they use an image, video or document header, buttons, named variables, or a variable in the header). Manage them in WhatsApp Manager: {names}",
     doorRefusal: {
       invalid_name: "Meta did not accept the name. Use lowercase letters, numbers and underscores only \u2014 no spaces or accents \u2014 and try again.",
       invalid_category: "Meta did not accept the category. Pick Utility, Marketing or Authentication and send it again.",
@@ -4112,6 +4113,7 @@ var en_default = {
     "whatsapp_inbox.request_not_fulfillable": "Only a confirmed request can be marked as handled.",
     "whatsapp_inbox.request_not_pending": "That request is not waiting for review: it does not exist in this business, or it was already approved, rejected or handled.",
     "whatsapp_inbox.request_unreadable": "That request could not be read, so nothing was changed. Try again.",
+    "whatsapp_inbox.template_already_here": "This business already holds a template with that name and language (live or deleted here), so nothing was brought in.",
     "whatsapp_inbox.template_not_found": "That template does not exist in this business."
   }
 };
@@ -5662,6 +5664,9 @@ var text = (value) => typeof value === "string" ? value : "";
 function placeholders(value) {
   return new Set([...value.matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map((m4) => m4[1])).size;
 }
+function hasNamedPlaceholders(value) {
+  return [...value.matchAll(/\{\{\s*([^{}]*?)\s*\}\}/g)].some((m4) => !/^\d+$/.test(m4[1]));
+}
 function templateFromMeta(template) {
   const refused = { ok: false };
   const name = text(template.name).trim();
@@ -5681,7 +5686,7 @@ function templateFromMeta(template) {
     if (type === "HEADER") {
       const format = text(part.format).trim().toUpperCase() || "TEXT";
       header = text(part.text);
-      if (format !== "TEXT" || placeholders(header) > 0) return refused;
+      if (format !== "TEXT" || placeholders(header) > 0 || hasNamedPlaceholders(header)) return refused;
     } else if (type === "BODY") {
       body = text(part.text);
       const example = part.example?.body_text;
@@ -5693,7 +5698,7 @@ function templateFromMeta(template) {
       return refused;
     }
   }
-  if (!body.trim()) return refused;
+  if (!body.trim() || hasNamedPlaceholders(body)) return refused;
   const variables = Array.from(
     { length: placeholders(body) },
     (_2, i7) => text(examples[i7]).trim() || `var${i7 + 1}`
@@ -5960,6 +5965,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
         });
         written += 1;
       } catch (e5) {
+        if (e5?.code === "whatsapp_inbox.template_already_here") continue;
         notBrought.push(label);
         this.metaSyncNotice = domainErrorText4(e5, "ui.errCreateTemplate");
       }

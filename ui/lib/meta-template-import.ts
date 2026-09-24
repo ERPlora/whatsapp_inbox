@@ -5,7 +5,7 @@
  * (ERPlora/saas#2253). This module stores a template as seven flat fields, the same seven Meta
  * reviews when the tab registers one. `templateFromMeta` translates the first into the second —
  * or refuses: a template with a part those fields cannot hold (a media header, buttons, a header
- * variable) is NOT imported without it. The panel resends every field on «Guardar», so a row
+ * variable, named variables) is NOT imported without it. The panel resends every field on «Guardar», so a row
  * missing the buttons would register the template again at Meta without them.
  */
 
@@ -43,6 +43,12 @@ function placeholders(value: string): number {
   return new Set([...value.matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map((m) => m[1])).size;
 }
 
+/** A `{{…}}` that is not a number: WhatsApp Manager's NAMED variables (`{{nombre}}`). This module
+ *  and the SaaS count `{{1}}…{{n}}` only, so such a template cannot be stored with its examples. */
+function hasNamedPlaceholders(value: string): boolean {
+  return [...value.matchAll(/\{\{\s*([^{}]*?)\s*\}\}/g)].some((m) => !/^\d+$/.test(m[1]));
+}
+
 export function templateFromMeta(template: Record<string, unknown>): TemplateImport {
   const refused: TemplateImport = { ok: false };
   const name = text(template.name).trim();
@@ -63,7 +69,7 @@ export function templateFromMeta(template: Record<string, unknown>): TemplateImp
     if (type === 'HEADER') {
       const format = text(part.format).trim().toUpperCase() || 'TEXT';
       header = text(part.text);
-      if (format !== 'TEXT' || placeholders(header) > 0) return refused;
+      if (format !== 'TEXT' || placeholders(header) > 0 || hasNamedPlaceholders(header)) return refused;
     } else if (type === 'BODY') {
       body = text(part.text);
       const example = (part.example as { body_text?: unknown } | undefined)?.body_text;
@@ -75,7 +81,7 @@ export function templateFromMeta(template: Record<string, unknown>): TemplateImp
       return refused;
     }
   }
-  if (!body.trim()) return refused;
+  if (!body.trim() || hasNamedPlaceholders(body)) return refused;
 
   // One value per placeholder, or the SaaS refuses the next save (`missing_example`). Meta's own
   // examples first; a hole Meta left without one gets a named stand-in the owner can overwrite.
