@@ -1122,6 +1122,18 @@ describe('lo creado en WhatsApp Manager se trae a la lista con su texto (whatsap
     expect(texto, 'se sigue avisando de una plantilla que ya se trajo').not.toContain('promo_otono');
   });
 
+  it('la misma plantilla listada dos veces (otra caja) se trae UNA vez', async () => {
+    filas = [ENVIADA];
+    respondeListado = async () => ({
+      templates: [DE_META, PROMO, { ...PROMO, name: 'Promo_Otono', language: 'ES' }],
+      stale: false,
+    });
+
+    await montar();
+
+    expect(importados(), 'Meta nombra por nombre + idioma: dos entradas iguales son una plantilla').toHaveLength(1);
+  });
+
   it('si todas se traen, no queda aviso', async () => {
     filas = [ENVIADA];
     respondeListado = async () => ({ templates: [DE_META, PROMO], stale: false });
