@@ -787,6 +787,8 @@ async fn when_her_card_cannot_be_created_she_is_still_answered() {
     )
     .await;
 
+    let runs = rt.list_flow_runs(&flow_id, 10, None).await.unwrap();
+    assert_eq!(runs[0].status, store::STATUS_DONE, "the run did not stop on the missing card: {steps:?}");
     assert!(
         rows(&rt, "SELECT id FROM customers_customer").await.is_empty(),
         "the premise: nobody is on file"
@@ -799,8 +801,6 @@ async fn when_her_card_cannot_be_created_she_is_still_answered() {
         "the booking step is briefed that no single card answers her number: {resolved:?}"
     );
 
-    let runs = rt.list_flow_runs(&flow_id, 10, None).await.unwrap();
-    assert_eq!(runs[0].status, store::STATUS_DONE, "the run did not stop on the missing card: {steps:?}");
     assert_eq!(step(&steps, "confirm_to_customer").status, "done", "{steps:?}");
 
     let answers: Vec<Value> = rows(
