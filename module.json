@@ -86,7 +86,8 @@
       "migrations/postgres/005_message_dedup.sql",
       "migrations/postgres/006_message_source.sql",
       "migrations/postgres/007_meta_rejected_reason.sql",
-      "migrations/postgres/008_quota_usage.sql"
+      "migrations/postgres/008_quota_usage.sql",
+      "migrations/postgres/009_last_offer.sql"
     ]
   },
   "queries": {
@@ -155,6 +156,13 @@
       "schema": "schemas/conversation_get.json",
       "ai": {
         "description": "Retrieves the details of a WhatsApp conversation by its ID"
+      }
+    },
+    "whatsapp_inbox.conversations.last_offer": {
+      "permission": "whatsapp_inbox.view_conversation",
+      "sql": "queries/conversation_last_offer.sql",
+      "ai": {
+        "description": "Returns the list of slots offered to a WhatsApp customer in the last 24 hours, if any. Identified by the WhatsApp contact the messages come from"
       }
     },
     "whatsapp_inbox.messages.list": {
@@ -387,6 +395,23 @@
       },
       "ai": {
         "description": "Remembers which customer a WhatsApp conversation belongs to, so the inbox can be filtered by her and every request read from the thread is born carrying her. Identified by the WhatsApp contact the messages come from"
+      }
+    },
+    "whatsapp_inbox.conversations.remember_offer": {
+      "permission": "whatsapp_inbox.manage_settings",
+      "transaction": true,
+      "sql": [
+        "commands/conversation_remember_offer.sql"
+      ],
+      "schema": "schemas/conversation_remember_offer.json",
+      "expect_rows": {
+        "op": "min",
+        "n": 1,
+        "error": "whatsapp_inbox.conversation_not_found",
+        "message": "That conversation does not exist in this business."
+      },
+      "ai": {
+        "description": "Remembers the list of slots an automation just offered a WhatsApp customer, so her next message (\"the 2nd\", \"12:30\") can be resolved against it. An empty list clears it. Identified by the WhatsApp contact the messages come from"
       }
     },
     "whatsapp_inbox.requests.approve": {
