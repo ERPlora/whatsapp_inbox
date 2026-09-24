@@ -17,7 +17,8 @@
 // tools (Twilio, 360dialog, Brevo, AWS End User Messaging) tell their users too: PENDING is a
 // review that takes up to 24 h; REJECTED can be corrected and sent back; PAUSED is a temporary
 // block Meta lifts, from too much negative feedback; DISABLED does not come back and needs a new
-// template.
+// template. DELETED (whatsapp_inbox#140) is a template removed in WhatsApp Manager: Meta no longer
+// holds it, so nothing that uses it goes out.
 
 /** Every value the tab can be handed. `unknown` is not stored: it is what an unlearned code becomes. */
 export type MetaTemplateState =
@@ -27,6 +28,7 @@ export type MetaTemplateState =
   | 'rejected'
   | 'paused'
   | 'disabled'
+  | 'deleted'
   | 'unknown';
 
 /**
@@ -42,6 +44,7 @@ export const META_TEMPLATE_STATES: readonly MetaTemplateState[] = [
   'rejected',
   'paused',
   'disabled',
+  'deleted',
 ];
 
 /**
@@ -68,6 +71,7 @@ const VIEWS: Record<MetaTemplateState, Omit<MetaTemplateView, 'state'>> = {
   rejected: { labelKey: 'ui.metaRejected', actionKey: 'ui.metaActionRejected', tone: 'problem' },
   paused: { labelKey: 'ui.metaPaused', actionKey: 'ui.metaActionPaused', tone: 'problem' },
   disabled: { labelKey: 'ui.metaDisabled', actionKey: 'ui.metaActionDisabled', tone: 'problem' },
+  deleted: { labelKey: 'ui.metaDeleted', actionKey: 'ui.metaActionDeleted', tone: 'problem' },
   unknown: { labelKey: '', actionKey: 'ui.metaActionUnknown', tone: 'info' },
 };
 

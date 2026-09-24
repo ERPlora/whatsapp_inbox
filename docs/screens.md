@@ -103,7 +103,7 @@ The WhatsApp Business templates approved by Meta (`whatsapp_inbox.templates.list
 Requires `whatsapp_inbox.manage_settings` — **admin only**, so a manager cannot even list them.
 
 A template has a **category** (`MARKETING`, `UTILITY`, `AUTHENTICATION`), a language, a header, a
-body, a footer, its Meta template id, its **status at Meta** (`pending`, `approved`, `rejected`), its
+body, a footer, its Meta template id, its **status at Meta** (`not_sent`, `pending`, `approved`, `rejected`, `paused`, `disabled`, `deleted`), its
 variables, and an active flag.
 
 Create, update and delete are all admin-only. Create and **edit** share the panel behind the «+» of
@@ -113,8 +113,12 @@ never blanks a header somebody set. **Delete** asks for confirmation in the page
 
 > Editing a template resets its Meta status to `pending`: Meta re-approves content.
 
-> The Meta status is stored, not synchronised. Nothing checks with Meta whether a template was
-> approved.
+> Meta's verdicts are refreshed once, when the tab opens — never on a timer. Meta names a template
+> by **name + language**. A template this hub sent to Meta that Meta no longer lists (deleted in
+> WhatsApp Manager) is marked `deleted` and kept, so the owner's text is not lost; only a fresh
+> answer that lists at least one template can mark it. Templates Meta holds and this hub does not
+> (created in WhatsApp Manager) are named in a notice above the table, `name (language)`; they are
+> not imported (#169).
 
 ## Settings — the channel
 

@@ -3775,12 +3775,14 @@ var es_default = {
     metaNotSent: "Sin enviar a Meta",
     metaPaused: "Pausada por Meta",
     metaDisabled: "Desactivada por Meta",
+    metaDeleted: "Borrada en WhatsApp Manager",
     metaActionNotSent: "Meta no ha recibido esta plantilla. Solo puedes usarla para responder dentro de las 24 horas siguientes al \xFAltimo mensaje del cliente.",
     metaActionPending: "Meta la est\xE1 revisando. Suele tardar unos minutos, hasta 24 horas. No la env\xEDes todav\xEDa.",
     metaActionApproved: "Puedes enviarla cuando quieras, tambi\xE9n fuera de la ventana de 24 horas.",
     metaActionRejected: "Meta la ha rechazado. Cambia el texto en WhatsApp Manager y vuelve a enviarla a revisi\xF3n desde ah\xED.",
     metaActionPaused: "Demasiada gente la ha denunciado y Meta no la entregar\xE1 durante un tiempo. Cambia el texto en WhatsApp Manager y vuelve a enviarla desde ah\xED.",
     metaActionDisabled: "Meta no volver\xE1 a aceptar esta plantilla. Escribe otra con un texto distinto.",
+    metaActionDeleted: "Meta ya no tiene esta plantilla, as\xED que nada de lo que la use se enviar\xE1. B\xF3rrala aqu\xED, o escribe una nueva con otro nombre.",
     metaActionUnknown: "Consulta esta plantilla en WhatsApp Manager: Meta informa de un estado que esta pantalla a\xFAn no conoce.",
     yes: "S\xED",
     no: "No",
@@ -3875,6 +3877,7 @@ var es_default = {
     doorRefusalNoCode: "No se ha podido registrar la plantilla en Meta. Queda guardada aqu\xED: prueba a guardarla otra vez dentro de un rato.",
     metaRejectedReason: "Motivo de Meta: {reason}",
     metaSyncUnavailable: "No hemos podido comprobar con Meta si hay veredictos nuevos, as\xED que lo que ves es lo \xFAltimo que sabemos. Vuelve a abrir esta pesta\xF1a dentro de un rato.",
+    metaOnlyTemplates: "WhatsApp Manager tiene plantillas que no est\xE1n en esta lista, porque se crearon all\xED: {names}",
     doorRefusal: {
       invalid_name: "Meta no ha aceptado el nombre. Usa solo min\xFAsculas, n\xFAmeros y guiones bajos \u2014sin espacios ni acentos\u2014 y vuelve a intentarlo.",
       invalid_category: "Meta no ha aceptado la categor\xEDa. Elige Utilidad, Marketing o Autenticaci\xF3n y vuelve a enviarla.",
@@ -3976,12 +3979,14 @@ var en_default = {
     metaNotSent: "Not sent to Meta",
     metaPaused: "Paused by Meta",
     metaDisabled: "Disabled by Meta",
+    metaDeleted: "Deleted in WhatsApp Manager",
     metaActionNotSent: "Meta has not received this template. You can only use it to reply within 24 hours of the customer's last message.",
     metaActionPending: "Meta is reviewing it. It usually takes a few minutes, up to 24 hours. Do not send it yet.",
     metaActionApproved: "You can send it whenever you want, also outside the 24-hour window.",
     metaActionRejected: "Meta turned it down. Change the wording in WhatsApp Manager and send it back for review from there.",
     metaActionPaused: "Too many people reported it, so Meta will not deliver it for a while. Change the wording in WhatsApp Manager and send it back from there.",
     metaActionDisabled: "Meta will not accept this template again. Write a new one with different wording.",
+    metaActionDeleted: "Meta no longer has this template, so nothing that uses it will be sent. Delete it here, or write a new one with a different name.",
     metaActionUnknown: "Check this template in WhatsApp Manager: Meta reports a status this screen does not know yet.",
     yes: "Yes",
     no: "No",
@@ -4076,6 +4081,7 @@ var en_default = {
     doorRefusalNoCode: "The template could not be registered with Meta. It is saved here: try saving it again in a moment.",
     metaRejectedReason: "Meta's reason: {reason}",
     metaSyncUnavailable: "We could not check with Meta for new verdicts, so what you see is the last we know. Open this tab again in a while.",
+    metaOnlyTemplates: "WhatsApp Manager has templates that are not in this list, because they were created there: {names}",
     doorRefusal: {
       invalid_name: "Meta did not accept the name. Use lowercase letters, numbers and underscores only \u2014 no spaces or accents \u2014 and try again.",
       invalid_category: "Meta did not accept the category. Pick Utility, Marketing or Authentication and send it again.",
@@ -5628,7 +5634,8 @@ var META_TEMPLATE_STATES = [
   "approved",
   "rejected",
   "paused",
-  "disabled"
+  "disabled",
+  "deleted"
 ];
 var VIEWS = {
   not_sent: { labelKey: "ui.metaNotSent", actionKey: "ui.metaActionNotSent", tone: "info" },
@@ -5637,6 +5644,7 @@ var VIEWS = {
   rejected: { labelKey: "ui.metaRejected", actionKey: "ui.metaActionRejected", tone: "problem" },
   paused: { labelKey: "ui.metaPaused", actionKey: "ui.metaActionPaused", tone: "problem" },
   disabled: { labelKey: "ui.metaDisabled", actionKey: "ui.metaActionDisabled", tone: "problem" },
+  deleted: { labelKey: "ui.metaDeleted", actionKey: "ui.metaActionDeleted", tone: "problem" },
   unknown: { labelKey: "", actionKey: "ui.metaActionUnknown", tone: "info" }
 };
 function metaTemplateState(raw) {
@@ -5681,6 +5689,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     this.editingId = "";
     this.pendingDelete = null;
     this.metaSyncNotice = "";
+    this.metaOnly = [];
     this.editingMeta = null;
     this.editingMetaCode = "";
     this.editingMetaReason = "";
@@ -5728,7 +5737,8 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     .meta[data-state="approved"] { border-left-color: var(--ion-color-success, #2dd36f); }
     .meta[data-state="rejected"],
     .meta[data-state="paused"],
-    .meta[data-state="disabled"] { border-left-color: var(--ion-color-danger, #c5000f); }
+    .meta[data-state="disabled"],
+    .meta[data-state="deleted"] { border-left-color: var(--ion-color-danger, #c5000f); }
   `;
   }
   get rowActions() {
@@ -5822,6 +5832,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
    */
   async refreshMetaVerdicts() {
     this.metaSyncNotice = "";
+    this.metaOnly = [];
     let answer;
     let rows;
     try {
@@ -5835,11 +5846,20 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     const atMeta = /* @__PURE__ */ new Map();
     const listed = Array.isArray(answer?.templates) ? answer.templates : [];
     for (const template of listed) atMeta.set(metaKey(template?.name, template?.language), template);
+    const absenceIsDeletion = answer?.stale !== true && listed.length > 0;
     const text = (value) => typeof value === "string" ? value : "";
     let written = 0;
     for (const row of rows) {
-      const verdict = atMeta.get(metaKey(row.name, row.language));
-      if (!verdict) continue;
+      const answered = atMeta.get(metaKey(row.name, row.language));
+      const knownId = text(row.meta_template_id).trim();
+      let verdict;
+      if (answered) {
+        verdict = answered;
+      } else if (absenceIsDeletion && knownId) {
+        verdict = { status: "DELETED", rejected_reason: "" };
+      } else {
+        continue;
+      }
       const status = text(verdict.status).trim();
       if (!status) continue;
       const metaId = text(verdict.meta_id).trim() || text(row.meta_template_id);
@@ -5870,6 +5890,8 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
       }
     }
     if (written) await this.ctrl.load();
+    const here = new Set(rows.map((row) => metaKey(row.name, row.language)));
+    this.metaOnly = listed.filter((template) => text(template?.name).trim() && !here.has(metaKey(template.name, template.language))).map((template) => `${text(template.name).trim()} (${text(template.language).trim()})`);
   }
   disconnectedCallback() {
     window.removeEventListener("erplora:locale-changed", this.onLocaleChange);
@@ -6088,6 +6110,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
         ${this.formError ? b2`<p class="err" data-testid="whatsapp-templates-form-error">${this.formError}</p>` : A}
         ${this.ctrl?.error ? b2`<p class="err" data-testid="whatsapp-templates-load-error">${this.ctrl.error}</p>` : A}
         ${this.metaSyncNotice ? b2`<section class="panel"><p data-testid="whatsapp-templates-meta-sync-notice">${this.metaSyncNotice}</p></section>` : A}
+        ${this.metaOnly.length ? b2`<section class="panel"><p data-testid="whatsapp-templates-meta-only">${erplora4().t(CATALOG4, "ui.metaOnlyTemplates", { names: this.metaOnly.join(", ") })}</p></section>` : A}
         ${this.renderDeleteConfirm()}
         <ok-data-table testid="whatsapp-templates-table" .serverSide=${true} .fill=${true} .primaryAction=${{ label: t5("ui.add"), icon: "add" }} @primaryAction=${() => this.openCreate()} .views=${true} .actions=${this.rowActions} .rowClickable=${true} .cardTitle=${(row) => String(row.name ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "desc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchTemplates")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyTemplates")} @rowAction=${(e5) => this.onRowAction(e5)} @rowClick=${(e5) => this.onRowAction({ detail: { actionId: "edit", row: e5.detail.row } })} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @pageSizeChange=${(e5) => this.ctrl.setPageSize(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}>
           <!-- Alta: se proyecta SIEMPRE (aunque el panel esté cerrado). Si solo se renderizara con el
@@ -6140,6 +6163,9 @@ __decorateClass([
 __decorateClass([
   r5()
 ], _ErpWhatsappInboxTemplates.prototype, "metaSyncNotice", 2);
+__decorateClass([
+  r5()
+], _ErpWhatsappInboxTemplates.prototype, "metaOnly", 2);
 __decorateClass([
   r5()
 ], _ErpWhatsappInboxTemplates.prototype, "editingMeta", 2);

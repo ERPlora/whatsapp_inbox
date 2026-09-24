@@ -62,15 +62,25 @@ describe('every state says what to DO, not just what it is', () => {
 
   it('only an approved template is presented as one that can be sent', () => {
     expect(metaTemplateView('APPROVED').tone).toBe('ok');
-    for (const raw of ['not_sent', 'pending', 'rejected', 'paused', 'disabled']) {
+    for (const raw of ['not_sent', 'pending', 'rejected', 'paused', 'disabled', 'deleted']) {
       expect(metaTemplateView(raw).tone, `\`${raw}\` is painted as usable`).not.toBe('ok');
     }
   });
 
-  it('rejected, paused and disabled are problems the owner has to act on', () => {
-    for (const raw of ['rejected', 'paused', 'disabled']) {
+  it('rejected, paused, disabled and deleted are problems the owner has to act on', () => {
+    for (const raw of ['rejected', 'paused', 'disabled', 'deleted']) {
       expect(metaTemplateView(raw).tone).toBe('problem');
     }
+  });
+
+  // whatsapp_inbox#140 — a template deleted in WhatsApp Manager. `DELETED` is Meta's own word for
+  // it (Meta keeps the name blocked after a deletion), so the tab learns it instead of leaving it
+  // as an unknown code that sends the owner to look for a template that is no longer there.
+  it('a template Meta no longer has is its own state, never read as usable', () => {
+    const view = metaTemplateView('DELETED');
+    expect(view.state, 'a deleted template is shown as an unknown code').toBe('deleted');
+    expect(view.labelKey).toBeTruthy();
+    expect(view.tone).toBe('problem');
   });
 
   it('an unknown code keeps its own text (`labelKey` empty) so the owner can look it up', () => {

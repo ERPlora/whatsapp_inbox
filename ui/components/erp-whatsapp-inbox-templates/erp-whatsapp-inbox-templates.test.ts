@@ -738,11 +738,10 @@ describe('al ABRIR la pestaña, el veredicto de Meta se pone al día (whatsapp_i
     expect(veredicto(), 'se reescribe una fila que decía exactamente lo mismo').toHaveLength(0);
   });
 
-  it('una plantilla que la puerta ya no menciona se deja como está', async () => {
-    // Borrada desde WhatsApp Manager. Marcarla pide vocabulario que Meta no da (ausencia no es un
-    // veredicto) y va en su propia issue (whatsapp_inbox#140): aquí lo que NO se hace es
-    // inventarle un estado.
-    filas = [EN_REVISION];
+  it('una plantilla que este hub NUNCA mandó a Meta y que la puerta no menciona se deja como está', async () => {
+    // Sin `meta_template_id` Meta no la ha tenido nunca: su ausencia no dice nada nuevo y la fila
+    // ya dice la verdad («Sin enviar a Meta»). Inventarle «borrada» sería mentir en la otra dirección.
+    filas = [{ ...EN_REVISION, meta_template_id: '', meta_status: 'not_sent' }];
     respondeListado = async () => ({
       templates: [{ name: 'otra_distinta', language: 'es', status: 'APPROVED', meta_id: '5' }],
       stale: false,
@@ -750,12 +749,13 @@ describe('al ABRIR la pestaña, el veredicto de Meta se pone al día (whatsapp_i
 
     await montar();
 
-    expect(veredicto(), 'se le inventó un veredicto a una plantilla de la que Meta no dijo nada').toHaveLength(0);
+    expect(veredicto(), 'se le inventó un veredicto a una plantilla que Meta no ha tenido nunca').toHaveLength(0);
   });
 
   it('la misma plantilla en OTRO idioma es otra plantilla para Meta', async () => {
     // Meta identifica una plantilla por nombre + idioma. Casar solo por nombre le pegaría a la
-    // versión española el veredicto de la inglesa, que Meta revisa por separado.
+    // versión española el veredicto de la inglesa, que Meta revisa por separado. Y como Meta ya
+    // no tiene la española, lo que se escribe es eso (whatsapp_inbox#140), no el rechazo inglés.
     filas = [EN_REVISION];
     respondeListado = async () => ({
       templates: [{ name: 'recordatorio_cita', language: 'en', status: 'REJECTED', meta_id: '88' }],
@@ -764,7 +764,14 @@ describe('al ABRIR la pestaña, el veredicto de Meta se pone al día (whatsapp_i
 
     await montar();
 
-    expect(veredicto(), 'el veredicto del idioma inglés aterrizó en la fila española').toHaveLength(0);
+    const escritos = veredicto();
+    expect(escritos, 'la fila española recibió más de una escritura').toHaveLength(1);
+    expect(escritos[0].payload, 'el veredicto del idioma inglés aterrizó en la fila española').toMatchObject({
+      template_id: 't1',
+      meta_template_id: '77',
+      meta_status: 'DELETED',
+      meta_rejected_reason: '',
+    });
   });
 
   it('una respuesta sin veredicto no se escribe', async () => {
@@ -891,5 +898,169 @@ describe('al ABRIR la pestaña, el veredicto de Meta se pone al día (whatsapp_i
       (tabla(el)?.rows as Record<string, unknown>[] | undefined)?.[0]?.meta_status,
       'la fila de la pantalla sigue con el veredicto viejo',
     ).toBe('approved');
+  });
+});
+
+// whatsapp_inbox#140 — the two halves #134 left out on purpose: what WhatsApp Manager changed
+// behind this tab's back. Meta names a template by name + language; the door lists EVERY template
+// of the business, so both halves come out of the same answer, with no extra call to Meta.
+describe('lo que se crea o se borra en WhatsApp Manager se ve en la pestaña (whatsapp_inbox#140)', () => {
+  /** Una plantilla que Meta SÍ tuvo: lleva el id que Meta le dio al aceptarla. */
+  const ENVIADA = {
+    id: 't1',
+    name: 'recordatorio_cita',
+    language: 'es',
+    category: 'UTILITY',
+    header: '',
+    body: 'Te esperamos el {{1}}',
+    footer: '',
+    variables: '[]',
+    meta_template_id: '77',
+    meta_status: 'approved',
+    meta_rejected_reason: '',
+    is_active: 1,
+  };
+  /** Otra plantilla de la cuenta, para que la respuesta de Meta no venga vacía. */
+  const OTRA_EN_META = { name: 'aviso_cierre', language: 'es', status: 'APPROVED', meta_id: '78' };
+
+  const veredicto = () => comandos.filter((c) => c.name === 'whatsapp_inbox.templates.record_meta_answer');
+  const soloEnMeta = (el: HTMLElement & { shadowRoot: ShadowRoot }) =>
+    el.shadowRoot.querySelector('[data-testid="whatsapp-templates-meta-only"]');
+
+  it('borrada en WhatsApp Manager: la fila deja de decir «Aprobada» y dice que Meta ya no la tiene', async () => {
+    filas = [ENVIADA];
+    respondeListado = async () => ({ templates: [OTRA_EN_META], stale: false });
+
+    await montar();
+
+    const escritos = veredicto().filter((c) => c.payload.template_id === 't1');
+    expect(escritos, 'la plantilla borrada en Meta sigue «Aprobada» en la pestaña').toHaveLength(1);
+    expect(escritos[0].payload).toMatchObject({
+      // El id se CONSERVA: sin él la lista la proyectaría como «Sin enviar», que es otra mentira.
+      meta_template_id: '77',
+      meta_status: 'DELETED',
+      meta_rejected_reason: '',
+      // Los siete revisados viajan igual: la guarda de carrera del comando sigue valiendo.
+      name: 'recordatorio_cita',
+      language: 'es',
+      category: 'UTILITY',
+      body: 'Te esperamos el {{1}}',
+    });
+  });
+
+  it('la fila NO se borra: el texto que escribió la dueña se queda', async () => {
+    filas = [ENVIADA];
+    respondeListado = async () => ({ templates: [OTRA_EN_META], stale: false });
+
+    await montar();
+
+    expect(
+      comandos.filter((c) => c.name === 'whatsapp_inbox.templates.delete'),
+      'se borró en silencio una plantilla que la dueña escribió aquí',
+    ).toHaveLength(0);
+  });
+
+  it('una que ya se marcó como borrada no se reescribe en cada apertura', async () => {
+    filas = [{ ...ENVIADA, meta_status: 'deleted' }];
+    respondeListado = async () => ({ templates: [OTRA_EN_META], stale: false });
+
+    await montar();
+
+    expect(veredicto(), 'se reescribe una fila que ya decía exactamente eso').toHaveLength(0);
+  });
+
+  it('una respuesta de memoria (`stale`) no borra nada: Meta no ha dicho nada hoy', async () => {
+    filas = [ENVIADA];
+    respondeListado = async () => ({ templates: [OTRA_EN_META], stale: true });
+
+    await montar();
+
+    expect(veredicto(), 'se marcó como borrada con una lista que el SaaS sacó de su memoria').toHaveLength(0);
+  });
+
+  it('una respuesta VACÍA no borra nada: no distingue «sin plantillas» de «sin número conectado»', async () => {
+    // El SaaS contesta `{templates: [], stale: false}` también cuando el hub no tiene número de
+    // WhatsApp: marcar con eso vaciaría de golpe todas las plantillas aprobadas del negocio.
+    filas = [ENVIADA];
+    respondeListado = async () => ({ templates: [], stale: false });
+
+    await montar();
+
+    expect(veredicto(), 'una respuesta vacía se leyó como «Meta las borró todas»').toHaveLength(0);
+  });
+
+  it('una que Meta rechazó de entrada (sin id, con motivo) no se marca borrada ni pierde el motivo', async () => {
+    // Meta refused it outright and never gave it an id: the list projects `not_sent`, but Meta's
+    // reason is still on the row. Marking it «deleted» would write over that reason with '' — the
+    // `knownId` guard is what stops it, so this is the case that proves it is not decoration.
+    filas = [{ ...ENVIADA, meta_template_id: '', meta_status: 'not_sent', meta_rejected_reason: 'INVALID_FORMAT' }];
+    respondeListado = async () => ({ templates: [OTRA_EN_META], stale: false });
+
+    await montar();
+
+    expect(veredicto(), 'se marcó como borrada una plantilla que Meta nunca tuvo y se perdió su motivo').toHaveLength(0);
+  });
+
+  it('una respuesta sin lista no borra nada', async () => {
+    filas = [ENVIADA];
+    respondeListado = async () => ({ stale: false });
+
+    await montar();
+
+    expect(veredicto(), 'una respuesta sin `templates` se leyó como «Meta las borró todas»').toHaveLength(0);
+  });
+
+  it('creada en WhatsApp Manager: la pestaña dice cuáles tiene Meta y aquí no, con su idioma', async () => {
+    filas = [ENVIADA];
+    respondeListado = async () => ({
+      templates: [
+        { name: 'recordatorio_cita', language: 'es', status: 'APPROVED', meta_id: '77' },
+        { name: 'hello_world', language: 'en_US', status: 'APPROVED', meta_id: '1' },
+        // Mismo nombre, OTRO idioma: para Meta es otra plantilla, y aquí no está.
+        { name: 'recordatorio_cita', language: 'en', status: 'PENDING', meta_id: '79' },
+      ],
+      stale: false,
+    });
+
+    const el = await montar();
+
+    const aviso = soloEnMeta(el);
+    expect(aviso, 'la dueña no se entera de las plantillas que creó en WhatsApp Manager').toBeTruthy();
+    const texto = aviso?.textContent ?? '';
+    expect(texto).toContain('ui.metaOnlyTemplates');
+    expect(texto).toContain('hello_world (en_US)');
+    expect(texto, 'el mismo nombre en otro idioma se dio por la misma plantilla').toContain('recordatorio_cita (en)');
+    expect(texto, 'se avisa de una plantilla que SÍ está en la lista').not.toContain('recordatorio_cita (es)');
+  });
+
+  it('si Meta no tiene nada que aquí no esté, no se pinta ningún aviso', async () => {
+    filas = [ENVIADA];
+    respondeListado = async () => ({
+      templates: [{ name: 'Recordatorio_Cita', language: 'ES', status: 'APPROVED', meta_id: '77' }],
+      stale: false,
+    });
+
+    const el = await montar();
+
+    expect(soloEnMeta(el), 'aviso de plantillas «solo en Meta» cuando no hay ninguna').toBeNull();
+  });
+
+  it('las de Meta que aquí no están NO se escriben en la base de datos del hub', async () => {
+    // La puerta no trae su texto: crearlas aquí sería guardar filas con un cuerpo inventado.
+    filas = [ENVIADA];
+    respondeListado = async () => ({
+      templates: [
+        { name: 'recordatorio_cita', language: 'es', status: 'APPROVED', meta_id: '77' },
+        { name: 'hello_world', language: 'en_US', status: 'APPROVED', meta_id: '1' },
+      ],
+      stale: false,
+    });
+
+    await montar();
+
+    expect(
+      comandos.filter((c) => c.name === 'whatsapp_inbox.templates.create'),
+      'se importó una plantilla sin su texto',
+    ).toHaveLength(0);
   });
 });

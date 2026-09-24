@@ -156,7 +156,8 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     .meta[data-state="approved"] { border-left-color: var(--ion-color-success, #2dd36f); }
     .meta[data-state="rejected"],
     .meta[data-state="paused"],
-    .meta[data-state="disabled"] { border-left-color: var(--ion-color-danger, #c5000f); }
+    .meta[data-state="disabled"],
+    .meta[data-state="deleted"] { border-left-color: var(--ion-color-danger, #c5000f); }
   `;
 
   @state() newName = '';
@@ -185,6 +186,11 @@ export class ErpWhatsappInboxTemplates extends LitElement {
    *  `''` when the tab and Meta agree. It is NOT `formError`: nothing the owner did failed, and the
    *  list on screen is still worth reading — it is just not guaranteed to be today's. */
   @state() metaSyncNotice = '';
+
+  /** Templates Meta holds and this hub does not — created in WhatsApp Manager (whatsapp_inbox#140) —
+   *  as `name (language)`, the two halves of Meta's identity. Named, never imported: the door does
+   *  not carry their text, and a row here without the text the owner wrote would be invented. */
+  @state() metaOnly: string[] = [];
 
   /** Meta's verdict on the template being edited, and the move it asks for. `null` while the panel
    *  is an ADD: there is no verdict on a template that does not exist yet. */
@@ -310,6 +316,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
    */
   private async refreshMetaVerdicts(): Promise<void> {
     this.metaSyncNotice = '';
+    this.metaOnly = [];
     let answer: { templates?: unknown; stale?: unknown };
     let rows: Template[];
     try {
@@ -333,14 +340,32 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     const listed = Array.isArray(answer?.templates) ? (answer.templates as MetaTemplate[]) : [];
     for (const template of listed) atMeta.set(metaKey(template?.name, template?.language), template);
 
+    // whatsapp_inbox#140 — when is an ABSENCE Meta's word that the template is gone? Only when the
+    // answer is today's (`stale` is the SaaS's memory, not Meta) AND it lists something: the SaaS
+    // also answers an empty, non-stale list when the hub has no WhatsApp number connected, and
+    // reading that as «Meta deleted every template» would mark every approved one as gone at once.
+    // The accepted price: a business that deletes ALL its templates in WhatsApp Manager is not told.
+    const absenceIsDeletion = answer?.stale !== true && listed.length > 0;
+
     const text = (value: unknown): string => (typeof value === 'string' ? value : '');
     let written = 0;
     for (const row of rows) {
-      const verdict = atMeta.get(metaKey(row.name, row.language));
-      // A row Meta does not mention is left EXACTLY as it is. Absence is not a verdict — it can be
-      // a template deleted from WhatsApp Manager or one this hub never sent — and inventing a
-      // status would put a word in Meta's mouth. Painting that case is whatsapp_inbox#140.
-      if (!verdict) continue;
+      const answered = atMeta.get(metaKey(row.name, row.language));
+      const knownId = text(row.meta_template_id).trim();
+      let verdict: MetaTemplate;
+      if (answered) {
+        verdict = answered;
+      } else if (absenceIsDeletion && knownId) {
+        // Meta HAD it (it gave it an id) and no longer lists it: deleted in WhatsApp Manager.
+        // `DELETED` is Meta's own word for that state; the id stays (the fallback below keeps the
+        // one this hub knows), so the row reads what Meta did to it instead of «Sin enviar». The
+        // row itself is NOT deleted: the text is the owner's, and deleting it here is their call.
+        verdict = { status: 'DELETED', rejected_reason: '' };
+      } else {
+        // A row Meta never had (no id) is left EXACTLY as it is: it already says «not sent», which
+        // is the truth, and its absence tells nothing new.
+        continue;
+      }
       const status = text(verdict.status).trim();
       if (!status) continue; // nothing to record; `record_meta_answer` refuses an empty verdict too
       // A payload without an id never ERASES the one this hub already knows: that would drop the
@@ -382,6 +407,12 @@ export class ErpWhatsappInboxTemplates extends LitElement {
       }
     }
     if (written) await this.ctrl.load();
+
+    // The other half of #140: what Meta holds and this hub does not. Same answer, no extra call.
+    const here = new Set(rows.map((row) => metaKey(row.name, row.language)));
+    this.metaOnly = listed
+      .filter((template) => text(template?.name).trim() && !here.has(metaKey(template.name, template.language)))
+      .map((template) => `${text(template.name).trim()} (${text(template.language).trim()})`);
   }
 
   disconnectedCallback() {
@@ -632,6 +663,9 @@ export class ErpWhatsappInboxTemplates extends LitElement {
           : nothing}
         ${this.metaSyncNotice
           ? html`<section class="panel"><p data-testid="whatsapp-templates-meta-sync-notice">${this.metaSyncNotice}</p></section>`
+          : nothing}
+        ${this.metaOnly.length
+          ? html`<section class="panel"><p data-testid="whatsapp-templates-meta-only">${erplora().t(CATALOG, 'ui.metaOnlyTemplates', { names: this.metaOnly.join(', ') })}</p></section>`
           : nothing}
         ${this.renderDeleteConfirm()}
         <ok-data-table testid="whatsapp-templates-table" .serverSide=${true} .fill=${true} .primaryAction=${{ label: t('ui.add'), icon: 'add' }} @primaryAction=${() => this.openCreate()} .views=${true} .actions=${this.rowActions} .rowClickable=${true} .cardTitle=${(row: Record<string, unknown>) => String(row.name ?? '—')} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? 'desc'} .searchable=${true} .searchPlaceholder=${t('ui.searchTemplates')} .emptyMessage=${this.ctrl?.loading ? t('ui.loading') : t('ui.emptyTemplates')} @rowAction=${(e: CustomEvent<{ actionId: string; row: Record<string, unknown> }>) => this.onRowAction(e)} @rowClick=${(e: CustomEvent<{ row: Record<string, unknown> }>) => this.onRowAction({ detail: { actionId: 'edit', row: e.detail.row } } as CustomEvent<{ actionId: string; row: Record<string, unknown> }>)} @pageChange=${(e: CustomEvent<number>) => this.ctrl.setPage(e.detail)} @pageSizeChange=${(e: CustomEvent<number>) => this.ctrl.setPageSize(e.detail)} @sortChange=${(e: CustomEvent<{ sort: string; dir: 'asc' | 'desc' }>) => this.ctrl.setSort(e.detail.sort, e.detail.dir)} @searchChange=${(e: CustomEvent<string>) => this.ctrl.setSearch(e.detail)} @filterChange=${(e: CustomEvent<{ col: string; value: unknown }>) => this.ctrl.setFilter(e.detail.col, e.detail.value)}>
