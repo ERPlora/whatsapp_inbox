@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "whatsapp_inbox._sweep_unlinked_threads",
+  "description": "Run by the module's own scheduled task with an empty payload: what to sweep comes from the read, never from the caller.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {}
+}
