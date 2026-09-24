@@ -5,7 +5,7 @@ Why this file exists. whatsapp_inbox#133 gave the thread a door (`conversations.
 but only the two «from WhatsApp» recipes walk through it. A business that reads and answers by
 hand — no recipe installed — never linked a single conversation: filtering the inbox by customer
 still answered zero. The fix is a listener of this module's own `whatsapp_inbox.message.received`:
-a Tier-2 command that pre-loads `customers.list` filtered by the phone (`reads`, ADR-0069 —
+a Tier-2 command that pre-loads `customers.by_phone` for the number (`reads`, ADR-0069 —
 `customers` is a hard dependency, so the read is in scope) and, when exactly one customer card
 carries that number, writes the link through an internal SQL command.
 
@@ -13,7 +13,7 @@ What is checked here, each one a separate way the chain breaks silently:
 
 1. **The listener is wired.** `events.listen` routes `whatsapp_inbox.message.received` to the
    Tier-2 command; the command is `internal` (no caller but the relay), points at an EXPORTED
-   handler function, and declares the `customers.list` read filtered by `payload.contact` — without
+   handler function, and declares the `customers.by_phone` read keyed by `payload.contact` — without
    the filter the handler would be handed one page of the whole customer list and link almost
    nobody. `customers` must stay in `depends_on`, or the runtime drops the read as out of scope.
 
@@ -49,7 +49,7 @@ EVENT = "whatsapp_inbox.message.received"
 LISTENER = "whatsapp_inbox._link_known_customer"
 WRITE = "whatsapp_inbox._link_known_customer_write"
 FUNCTION = "link_known_customer"
-READ = "customers.list"
+READ = "customers.by_phone"
 
 HUB = "hub-149"
 OTHER_HUB = "hub-149-other"
@@ -120,9 +120,9 @@ def check_listener_is_wired():
         problems.append(
             f"`{LISTENER}` does not pre-load `{READ}`: the handler knows nobody"
         )
-    elif (reads[0].get("params") or {}).get("f_phone") != "payload.contact":
+    elif (reads[0].get("params") or {}).get("phone") != "payload.contact":
         problems.append(
-            f"`{LISTENER}` reads `{READ}` without `f_phone: payload.contact` "
+            f"`{LISTENER}` reads `{READ}` without `phone: payload.contact` "
             f"({reads[0].get('params')!r}): the handler would get one page of ALL customers"
         )
     elif reads[0].get("required"):

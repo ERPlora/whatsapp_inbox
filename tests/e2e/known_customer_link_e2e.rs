@@ -5,16 +5,17 @@
 //! core event hub.whatsapp.message_received          (as `inbound_poll.rs::event_payload` writes it)
 //!         ↓ relay: `_ingest_inbound_message`        → conversation + message
 //!         ↓ emits whatsapp_inbox.message.received
-//!         ↓ relay: `_link_known_customer`           → WASM handler, `customers.list` pre-loaded
+//!         ↓ relay: `_link_known_customer`           → WASM handler, `customers.by_phone` pre-loaded
 //!         ↓ intent `_link_known_customer_write`     → conversation.customer_id
 //! ```
 //!
 //! whatsapp_inbox#160 adds the other direction: `customer.created` / `customer.updated` →
-//! `_link_customer_threads` → the same write, for a thread that existed before the card.
+//! `_link_customer_threads` → `_link_customer_threads_write`, for a thread that existed before the
+//! card; whatsapp_inbox#162 makes both find a card typed without the country code (`600 111 222`).
 //!
 //! What only the runtime can prove, and the module's own tests cannot: that a module may listen to
 //! its OWN event, that the `reads` of a listener are served (in scope through `depends_on`,
-//! filtered by `payload.contact` through the list engine), and that the handler's intent lands.
+//! keyed by `payload.contact`), and that the handler's intent lands.
 //!
 //! Run with: `ERPLORA_MODULES_DIR=…/modules-workspace/modules DATABASE_URL=… cargo test -p
 //! erplora-runtime --test known_customer_link_e2e` (see `README.md` next to this file).
@@ -205,5 +206,44 @@ async fn two_cards_with_the_same_number_leave_the_thread_for_a_human() {
     // Both cards exist by the time the relay runs either event: each one sees its twin, so the
     // shared number is left for a human — the same rule as a message from that number.
     assert_eq!(thread_customer(&rt).await, Value::Null, "a shared number links nobody");
+    nothing_dead_lettered(&rt).await;
+}
+
+// ── whatsapp_inbox#162: the card typed the way people type it in Spain ─────────────────────────────
+
+#[tokio::test]
+async fn a_card_typed_without_the_country_code_is_recognised_when_she_writes() {
+    let rt = runtime().await;
+    customer_on_file(&rt, "Eva", "611 222 333").await;
+    let ana = customer_on_file(&rt, "Ana", "600 111 222").await;
+
+    a_customer_writes(&rt, "wamid.NATIONAL-CARD").await;
+
+    assert_eq!(thread_customer(&rt).await, json!(ana), "600 111 222 is 34600111222");
+    nothing_dead_lettered(&rt).await;
+}
+
+#[tokio::test]
+async fn a_card_typed_without_the_country_code_claims_the_thread_she_opened_before() {
+    let rt = runtime().await;
+    a_customer_writes(&rt, "wamid.BEFORE-NATIONAL-CARD").await;
+    assert_eq!(thread_customer(&rt).await, Value::Null, "nobody is on file yet");
+
+    let ana = customer_on_file(&rt, "Ana", "600 111 222").await;
+    rt.drain_outbox().await.unwrap();
+
+    assert_eq!(thread_customer(&rt).await, json!(ana), "the national card claimed 34600111222");
+    nothing_dead_lettered(&rt).await;
+}
+
+#[tokio::test]
+async fn a_national_card_and_an_international_twin_leave_the_thread_for_a_human() {
+    let rt = runtime().await;
+    customer_on_file(&rt, "Ana", "600 111 222").await;
+    customer_on_file(&rt, "Eva", "+34 600-111-222").await;
+
+    a_customer_writes(&rt, "wamid.TWINS-TYPED-APART").await;
+
+    assert_eq!(thread_customer(&rt).await, Value::Null, "two cards, one number: nobody");
     nothing_dead_lettered(&rt).await;
 }
