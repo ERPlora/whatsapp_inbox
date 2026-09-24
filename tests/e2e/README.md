@@ -73,3 +73,12 @@ with_the_ai_steps_…                      el run termina en `failed`, no en `do
 El que sigue verde es el de la plantilla, y también es correcto: un documento de flujo válido lo es
 tenga o no tenga el módulo su listener. Sin el listener el flujo se guarda, se arma… y a las 3 de la
 mañana no contesta nadie.
+
+### `her_typed_choice_finds_the_list_she_was_offered` (whatsapp_inbox#76)
+
+Dentro de `whatsapp_appointment_e2e.rs`. Hace de modelo (`complete_flow_io`) y recorre tres
+mensajes: le ofrece dos huecos → la conversación los recuerda; contesta «el 2» → el run nuevo los
+encuentra en `recall_offer` ANTES del paso `ai`; reserva (`slots: []`) → la oferta se vacía y un «el
+2» posterior no encuentra nada. Usa solo el trigger del mensaje escrito (hub#2061). Necesita en
+`$MODS` `customers`, `taxes`, `services`, `staff`, `schedules`, `appointments` y este módulo, a su
+`origin/main` (con checkouts viejos `appointments` no instala).

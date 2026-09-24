@@ -69,6 +69,34 @@ más deja de ser una traducción.
    huecos vuelven en `slots` y salen como una lista que la clienta **toca**. El id de cada hueco
    lleva inicio, profesional y servicio, así que su respuesta no tiene que repetir nada.
 
+### Contestar la lista ESCRIBIENDO: `recall_offer` + `remember_offer` (whatsapp_inbox#76)
+
+Tocar no es lo único que hace la gente con una lista: muchas contestan **«el 2»**, «12:30» o «la
+segunda». Ese mensaje arranca un run NUEVO que no vio la lista, y lo que manda la automatización sale
+por el kernel (`notify` → outbox → proxy del SaaS), no por este módulo: el SaaS solo devuelve como
+`outbound` lo que el dueño teclea en su móvil, así que la lista no está en el historial para
+releerla. La receta la **recuerda ella misma**:
+
+- **`remember_offer`** (después de `confirm_to_customer` y ANTES de `any_slot_to_offer`) guarda en la
+  conversación lo que el modelo devolvió en `slots` — `"{{steps.book_appointment.slots}}"`, que el
+  kernel serializa a JSON. Corre en TODOS los turnos: cuando reservó, anuló, movió o contestó otra
+  cosa, `slots` es `[]` y eso **vacía** la oferta, así que un «el 2» de otro día no reserva nada
+  viejo. Detrás de la guarda no serviría: la guarda para el run justo cuando hay que vaciar.
+  `on_error: continue`: si falla, ella recibe su respuesta igual.
+- **`recall_offer`** (antes de `book_appointment`) lee `whatsapp_inbox.conversations.last_offer`: la
+  lista, solo si se ofreció en las **últimas 24 h** y no está vacía. El prompt se la da al modelo
+  (`{{steps.recall_offer.found}}` / `.offered_slots`) y le dice que un número es la posición en esa
+  lista y que el hueco elegido se trata **igual que un toque**: `availability.check` y reservar tal
+  cual. Si sus palabras encajan con varios o con ninguno, no reserva y vuelve a ofrecer.
+
+Las dos puertas van por el **contacto** (`input.from`), como `link_customer`, y sus dos grants están
+**fijados** a `input.from` (hub#1623/#1662): un run desatendido no puede leer ni escribir la oferta
+de otra clienta. Lo vigila `tests/typed_slot_choice.pg.test.py` (y el e2e
+`her_typed_choice_finds_the_list_she_was_offered`).
+
+⚠️ Hoy un mensaje ESCRITO no arranca la receta en el hub (hub#2061: con dos triggers del mismo
+evento el kernel guarda solo el último, el del toque). Esta pieza está lista para cuando lo haga.
+
 Es lo que pidió Ioan el 06/09/2026: «un proceso automático con WhatsApp sin necesidad de un
 humano». Un salón de una persona no tiene a nadie mirando el hub a las 3 AM.
 
