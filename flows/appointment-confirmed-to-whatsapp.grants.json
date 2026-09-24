@@ -5,6 +5,10 @@
       "value": "appointments.appointments.get",
       "payload": {
         "appointment_id": "input.appointment_id"
+      },
+      "reason": {
+        "en": "Read the appointment that was just confirmed: day, time, service and the customer's phone.",
+        "es": "Leer la cita que se acaba de confirmar: día, hora, servicio y teléfono de la clienta."
       }
     },
     {
@@ -12,15 +16,27 @@
       "value": "whatsapp_inbox.conversations.list",
       "payload": {
         "f_contact_phone": "steps.read_appointment.customer_phone"
+      },
+      "reason": {
+        "en": "Check that customer already has a WhatsApp conversation with you, and only that customer's.",
+        "es": "Comprobar que esa clienta ya tiene una conversación de WhatsApp contigo, y solo la suya."
       }
     },
     {
       "kind": "notify",
-      "value": "whatsapp"
+      "value": "whatsapp",
+      "reason": {
+        "en": "Send WhatsApp messages to the customer. Meta bills every message sent.",
+        "es": "Mandar mensajes de WhatsApp a la clienta. Meta cobra cada mensaje que se manda."
+      }
     },
     {
       "kind": "recipient_query",
-      "value": "whatsapp_inbox.conversations.list#contact_phone"
+      "value": "whatsapp_inbox.conversations.list#contact_phone",
+      "reason": {
+        "en": "Write only to the person who is in that conversation, and to nobody else.",
+        "es": "Escribir solo a la persona de esa conversación, y a nadie más."
+      }
     }
   ]
 }
