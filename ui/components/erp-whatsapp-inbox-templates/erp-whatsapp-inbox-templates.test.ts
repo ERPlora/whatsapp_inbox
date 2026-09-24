@@ -989,6 +989,18 @@ describe('lo que se crea o se borra en WhatsApp Manager se ve en la pestaña (wh
     expect(veredicto(), 'una respuesta vacía se leyó como «Meta las borró todas»').toHaveLength(0);
   });
 
+  it('una que Meta rechazó de entrada (sin id, con motivo) no se marca borrada ni pierde el motivo', async () => {
+    // Meta refused it outright and never gave it an id: the list projects `not_sent`, but Meta's
+    // reason is still on the row. Marking it «deleted» would write over that reason with '' — the
+    // `knownId` guard is what stops it, so this is the case that proves it is not decoration.
+    filas = [{ ...ENVIADA, meta_template_id: '', meta_status: 'not_sent', meta_rejected_reason: 'INVALID_FORMAT' }];
+    respondeListado = async () => ({ templates: [OTRA_EN_META], stale: false });
+
+    await montar();
+
+    expect(veredicto(), 'se marcó como borrada una plantilla que Meta nunca tuvo y se perdió su motivo').toHaveLength(0);
+  });
+
   it('una respuesta sin lista no borra nada', async () => {
     filas = [ENVIADA];
     respondeListado = async () => ({ stale: false });
