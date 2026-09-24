@@ -9,6 +9,9 @@
 //!         ↓ intent `_link_known_customer_write`     → conversation.customer_id
 //! ```
 //!
+//! whatsapp_inbox#160 adds the other direction: `customer.created` / `customer.updated` →
+//! `_link_customer_threads` → the same write, for a thread that existed before the card.
+//!
 //! What only the runtime can prove, and the module's own tests cannot: that a module may listen to
 //! its OWN event, that the `reads` of a listener are served (in scope through `depends_on`,
 //! filtered by `payload.contact` through the list engine), and that the handler's intent lands.
@@ -147,5 +150,60 @@ async fn a_link_somebody_already_made_is_not_overwritten_by_the_phone_match() {
 
     a_customer_writes(&rt, "wamid.SECOND").await;
     assert_eq!(thread_customer(&rt).await, json!(eva), "the person's link wins over the match");
+    nothing_dead_lettered(&rt).await;
+}
+
+// ── whatsapp_inbox#160: the card saved AFTER she wrote claims her thread ──────────────────────────
+
+#[tokio::test]
+async fn a_customer_filed_after_she_wrote_gets_her_thread_without_a_new_message() {
+    let rt = runtime().await;
+    a_customer_writes(&rt, "wamid.BEFORE-CARD").await;
+    assert_eq!(thread_customer(&rt).await, Value::Null, "nobody is on file yet");
+
+    // The owner files her afterwards; the thread must not wait for her next message.
+    let ana = customer_on_file(&rt, "Ana", "+34 600 111 222").await;
+    rt.drain_outbox().await.unwrap();
+
+    assert_eq!(thread_customer(&rt).await, json!(ana), "saving the card claimed the thread");
+    nothing_dead_lettered(&rt).await;
+}
+
+#[tokio::test]
+async fn fixing_the_phone_on_a_card_claims_the_thread_of_the_right_number() {
+    let rt = runtime().await;
+    let ana = customer_on_file(&rt, "Ana", "+34600000000").await;
+    a_customer_writes(&rt, "wamid.WRONG-PHONE").await;
+    assert_eq!(thread_customer(&rt).await, Value::Null, "the card had a wrong number");
+
+    rt.execute_command(
+        "customers.update",
+        &params(json!({
+            "customer_id": ana, "name": "Ana", "email": "", "phone": "+34600111222", "tax_id": "",
+            "address": "", "city": "", "postal_code": "", "country": "", "notes": "",
+            "lifecycle_stage": "lead", "source": "walk_in", "company_name": "", "birthday": null,
+            "anniversary": null, "preferred_channel": "none", "is_active": 1,
+        })),
+        &owner(),
+    )
+    .await
+    .unwrap();
+    rt.drain_outbox().await.unwrap();
+
+    assert_eq!(thread_customer(&rt).await, json!(ana), "the corrected card claimed the thread");
+    nothing_dead_lettered(&rt).await;
+}
+
+#[tokio::test]
+async fn two_cards_with_the_same_number_leave_the_thread_for_a_human() {
+    let rt = runtime().await;
+    a_customer_writes(&rt, "wamid.SHARED").await;
+    customer_on_file(&rt, "Ana", "+34600111222").await;
+    customer_on_file(&rt, "Eva", "+34600111222").await;
+    rt.drain_outbox().await.unwrap();
+
+    // Both cards exist by the time the relay runs either event: each one sees its twin, so the
+    // shared number is left for a human — the same rule as a message from that number.
+    assert_eq!(thread_customer(&rt).await, Value::Null, "a shared number links nobody");
     nothing_dead_lettered(&rt).await;
 }

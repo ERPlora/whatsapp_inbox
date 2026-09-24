@@ -4,7 +4,7 @@
 //! transacción. Los eventos los emite el runtime vía el `emit` declarado en
 //! `module.json` (no se duplican aquí).
 //!
-//! Exporta tres funciones:
+//! Exported functions:
 //! * `fulfill_request` — cumplir una request (portado de
 //!   `RequestService.fulfill_request`, ver `WASM-TODO.md` §1).
 //! * `parse_inbound_message` — crear la request parseada por el LLM (pieza 3 de
@@ -12,6 +12,8 @@
 //!   Tier-0 `whatsapp_inbox.messages.ingest`).
 //! * `link_known_customer` — links a conversation to the customer on file for the number that
 //!   wrote, with no automation installed (whatsapp_inbox#149).
+//! * `link_customer_threads` — the same link seen from the card: saving a customer claims the
+//!   unlinked thread of her number (whatsapp_inbox#160).
 //!
 //! Ramas:
 //! * `create_linked_object = false` (default) — transición simple a `fulfilled`.
@@ -50,6 +52,15 @@ pub fn fulfill_request(input: Json<erplora_guest_sdk::Input>) -> FnResult<Json<O
 #[plugin_fn]
 pub fn parse_inbound_message(input: Json<erplora_guest_sdk::Input>) -> FnResult<Json<Output>> {
     match parse_inbound_message_pure(input.into_inner().into_value()) {
+        Ok(out) => Ok(Json(out)),
+        Err(msg) => Err(WithReturnCode::new(Error::msg(msg), 1)),
+    }
+}
+
+#[cfg(feature = "guest")]
+#[plugin_fn]
+pub fn link_customer_threads(input: Json<erplora_guest_sdk::Input>) -> FnResult<Json<Output>> {
+    match link_customer_threads_pure(input.into_inner().into_value()) {
         Ok(out) => Ok(Json(out)),
         Err(msg) => Err(WithReturnCode::new(Error::msg(msg), 1)),
     }
@@ -410,10 +421,17 @@ pub fn link_known_customer_pure(input: Value) -> Result<Output, String> {
     if wanted.is_empty() {
         return Ok(Output::new());
     }
-    let Some(rows) = read_rows(&input, CUSTOMERS_READ) else {
-        return Ok(Output::new());
-    };
+    Ok(link_to_the_only_card(&input, &wanted, contact))
+}
 
+/// The link intent for the thread keyed by `wa_contact_id`, when exactly ONE customer card of the
+/// pre-loaded `customers.list` carries the phone `wanted` (in digits). Every doubt resolves to «link
+/// nobody»: the read did not arrive, no card matches exactly (the read is a LIKE, so a longer number
+/// that merely contains it is somebody else), or two different cards share it.
+fn link_to_the_only_card(input: &Value, wanted: &str, wa_contact_id: String) -> Output {
+    let Some(rows) = read_rows(input, CUSTOMERS_READ) else {
+        return Output::new();
+    };
     let mut matches: Vec<String> = rows
         .iter()
         .filter(|row| phone_digits(row.get("phone").unwrap_or(&Value::Null)) == wanted)
@@ -423,16 +441,42 @@ pub fn link_known_customer_pure(input: Value) -> Result<Output, String> {
     matches.sort();
     matches.dedup();
     let [customer_id] = matches.as_slice() else {
-        return Ok(Output::new());
+        return Output::new();
     };
 
     let mut params = Map::new();
-    params.insert("wa_contact_id".into(), json!(contact));
+    params.insert("wa_contact_id".into(), json!(wa_contact_id));
     params.insert("customer_id".into(), json!(customer_id));
-    Ok(Output::new().with_operation(Operation::sql(
+    Output::new().with_operation(Operation::sql(
         "whatsapp_inbox._link_known_customer_write",
         params,
-    )))
+    ))
+}
+
+// ───────────────────── link_customer_threads (whatsapp_inbox#160) ─────────────────────
+
+/// The other half of the automatic link (whatsapp_inbox#160): the thread of somebody who wrote
+/// BEFORE her card existed — or before its phone was right — learns whose it is the moment the
+/// card is saved, without waiting for her next message. Runs as the listener of
+/// `customer.created` and `customer.updated`.
+///
+/// Same rule as `link_known_customer_pure`, seen from the card: the thread goes to the ONE card
+/// whose phone is exactly those digits, and to nobody when two cards share the number. The card is
+/// identified by the read, never by the payload: the runtime binds a FRESH `new_id` to every
+/// command it runs, the listener included, so the id the creation used is not in the payload the
+/// handler receives (`system_params`). The saved card is always among the rows (the read filters by
+/// its own phone), so «exactly one» is her — or nobody, when a twin is on file.
+///
+/// It never refuses: a listener that errors dead-letters the customer event, and «we could not
+/// tell» is not a failure of saving a card. The thread is keyed by `wa_contact_id`, the
+/// international number in digits; the write only fills an empty link.
+pub fn link_customer_threads_pure(input: Value) -> Result<Output, String> {
+    let payload = input.get("payload").cloned().unwrap_or(Value::Null);
+    let wanted = phone_digits(payload.get("phone").unwrap_or(&Value::Null));
+    if wanted.is_empty() {
+        return Ok(Output::new());
+    }
+    Ok(link_to_the_only_card(&input, &wanted, wanted.clone()))
 }
 
 // ───────────────────── tests (pure functions, no DB, ADR-0069 §1) ─────────────────────
@@ -681,5 +725,86 @@ mod tests {
     fn a_customer_card_without_a_phone_is_never_a_match() {
         let input = input_with(core_event("34600111222"), json!({ "customers.list": [customer("cu-x", ""), json!({"id": "cu-y"})] }));
         untouched(&link_known_customer_pure(input).unwrap());
+    }
+
+    // ── link_customer_threads: the card saved AFTER she wrote claims her thread (whatsapp_inbox#160) ──
+
+    /// `customer.created` as the LISTENER receives it: the create payload plus the system binds the
+    /// runtime re-injects for the listener — including a FRESH `new_id` that is NOT the card's id
+    /// (`system_params` overwrites the one the creation bound). The card is only known by the read.
+    fn customer_created(phone: &str) -> Value {
+        json!({ "name": "Ana", "phone": phone, "hub_id": "h1", "new_id": "fresh-unused-id", "now": "2026-09-24T09:00:00+00:00" })
+    }
+
+    /// `customer.updated`: the edit payload names the card in `customer_id`.
+    fn customer_updated(customer_id: &str, phone: &str) -> Value {
+        json!({ "customer_id": customer_id, "name": "Ana", "phone": phone, "hub_id": "h1", "new_id": "fresh-unused-id" })
+    }
+
+    #[test]
+    fn a_card_created_after_she_wrote_links_her_thread() {
+        let input = input_with(
+            customer_created("+34600111222"),
+            json!({ "customers.list": [customer("cu-ana", "+34600111222")] }),
+        );
+        assert_eq!(linked(&link_customer_threads_pure(input).unwrap()), ("34600111222".to_string(), "cu-ana".to_string()));
+    }
+
+    #[test]
+    fn an_edited_card_claims_the_thread_of_its_corrected_number() {
+        let input = input_with(
+            customer_updated("cu-ana", "+34 600-111-222"),
+            json!({ "customers.list": [customer("cu-ana", "+34 600-111-222")] }),
+        );
+        assert_eq!(linked(&link_customer_threads_pure(input).unwrap()), ("34600111222".to_string(), "cu-ana".to_string()));
+    }
+
+    #[test]
+    fn a_second_card_with_the_same_number_links_nobody() {
+        // Mother and daughter share the phone: the second card must not claim the thread.
+        let input = input_with(
+            customer_created("34600111222"),
+            json!({ "customers.list": [customer("cu-ana", "+34600111222"), customer("cu-eva", "34600111222")] }),
+        );
+        untouched(&link_customer_threads_pure(input).unwrap());
+    }
+
+    #[test]
+    fn a_longer_number_on_another_card_does_not_count_as_a_twin() {
+        let input = input_with(
+            customer_created("+34600111222"),
+            json!({ "customers.list": [customer("cu-ana", "+34600111222"), customer("cu-other", "+346001112229")] }),
+        );
+        assert_eq!(linked(&link_customer_threads_pure(input).unwrap()).1, "cu-ana");
+    }
+
+    #[test]
+    fn a_card_the_read_does_not_return_links_nobody() {
+        // Deleted or anonymised before the relay got here: the read no longer vouches for it.
+        let input = input_with(
+            customer_created("+34600111222"),
+            json!({ "customers.list": [customer("cu-eva", "+34600999888")] }),
+        );
+        untouched(&link_customer_threads_pure(input).unwrap());
+    }
+
+    #[test]
+    fn a_card_without_a_phone_or_without_the_read_links_nobody() {
+        let no_phone = input_with(customer_created(""), json!({ "customers.list": [customer("cu-ana", "")] }));
+        untouched(&link_customer_threads_pure(no_phone).unwrap());
+        let null_phone = input_with(json!({ "name": "Ana", "phone": null, "new_id": "cu-ana" }), json!({ "customers.list": [] }));
+        untouched(&link_customer_threads_pure(null_phone).unwrap());
+        let no_read = input_with(customer_created("+34600111222"), json!({}));
+        untouched(&link_customer_threads_pure(no_read).unwrap());
+    }
+
+    #[test]
+    fn the_fresh_new_id_of_the_listener_is_never_taken_for_the_card() {
+        // The runtime binds a new `new_id` to every command, the listener included: taking it for
+        // the card would file the thread under a customer that does not exist.
+        let input = input_with(customer_created("+34600111222"), json!({ "customers.list": [customer("cu-ana", "+34600111222")] }));
+        let (_, customer_id) = linked(&link_customer_threads_pure(input).unwrap());
+        assert_eq!(customer_id, "cu-ana");
+        assert_ne!(customer_id, "fresh-unused-id");
     }
 }

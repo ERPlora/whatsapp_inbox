@@ -118,8 +118,14 @@ is born carrying her.
 
 It only fills an **empty** link. If a person or an automation already said whose the conversation
 is, the phone match never changes it. It links nobody when two different customers share the number
-(a family phone): a person decides that one. And a conversation that already existed is linked the
-next time that person writes — nothing is linked retroactively.
+(a family phone): a person decides that one.
+
+It also works the other way round (whatsapp_inbox#160). When somebody wrote **before** she was on
+file — the bookings automation does not create a card — or her card had a wrong number, saving her
+card (creating it, or correcting its phone) links her conversation right away, with the same rules:
+exact number, only an empty link, nobody when two cards share it. A conversation from before this
+existed is linked the next time that person writes or her card is saved; an untouched card and a
+silent customer stay unlinked until then.
 
 ## Templates are stored, not synchronised
 

@@ -643,6 +643,24 @@
         }
       ]
     },
+    "whatsapp_inbox._link_customer_threads": {
+      "permission": "whatsapp_inbox.manage_connections",
+      "internal": true,
+      "schema": "schemas/link_customer_threads.json",
+      "handler": {
+        "type": "wasm",
+        "file": "dist/handler.wasm",
+        "function": "link_customer_threads"
+      },
+      "reads": [
+        {
+          "query": "customers.list",
+          "params": {
+            "f_phone": "payload.phone"
+          }
+        }
+      ]
+    },
     "whatsapp_inbox._link_known_customer_write": {
       "permission": "whatsapp_inbox.manage_connections",
       "internal": true,
@@ -699,6 +717,12 @@
       },
       "whatsapp_inbox.message.received": {
         "command": "whatsapp_inbox._link_known_customer"
+      },
+      "customer.created": {
+        "command": "whatsapp_inbox._link_customer_threads"
+      },
+      "customer.updated": {
+        "command": "whatsapp_inbox._link_customer_threads"
       }
     },
     "emits": [

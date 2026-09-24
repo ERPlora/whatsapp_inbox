@@ -15,7 +15,7 @@
 | **Ingesting a message and a request** | ✅ Works, when something calls it |
 | **Approve / reject / delete a request** | ✅ Works |
 | **Templates and settings CRUD** | ✅ Works |
-| **Knowing whose a conversation is** | ✅ Automatic when the number is on a customer card in international form (`+34600111222`; with spaces or without the country code it is not found yet, #162); only fills an empty link, and a conversation from before is linked on its next message |
+| **Knowing whose a conversation is** | ✅ Automatic when the number is on a customer card in international form (`+34600111222`; with spaces or without the country code it is not found yet, #162); only fills an empty link. A customer filed (or whose phone is corrected) after she wrote gets her conversation when the card is saved (#160); a conversation from before is linked on her next message or when her card is saved (a one-off sweep is #163) |
 
 ## Errors and refusals
 
