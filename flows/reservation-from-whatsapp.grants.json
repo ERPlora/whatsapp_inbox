@@ -2,43 +2,83 @@
   "grants": [
     {
       "kind": "notify",
-      "value": "whatsapp"
+      "value": "whatsapp",
+      "reason": {
+        "en": "Send WhatsApp messages to the customer. Meta bills every message sent.",
+        "es": "Mandar mensajes de WhatsApp al cliente. Meta cobra cada mensaje que se manda."
+      }
     },
     {
       "kind": "recipient_query",
-      "value": "whatsapp_inbox.conversations.list#contact_phone"
+      "value": "whatsapp_inbox.conversations.list#contact_phone",
+      "reason": {
+        "en": "Write only to the person who is in that conversation, and to nobody else.",
+        "es": "Escribir solo a la persona de esa conversación, y a nadie más."
+      }
     },
     {
       "kind": "query",
-      "value": "customers.list"
+      "value": "customers.list",
+      "reason": {
+        "en": "Look the customer up by their phone number.",
+        "es": "Buscar al cliente por su teléfono."
+      }
     },
     {
       "kind": "query",
-      "value": "reservations.settings.get"
+      "value": "reservations.settings.get",
+      "reason": {
+        "en": "Read what your restaurant accepts: party sizes, notice, and whether it needs a phone or an email. It only reads them.",
+        "es": "Leer qué acepta tu restaurante: grupos, antelación y si necesita teléfono o correo. Solo lo lee."
+      }
     },
     {
       "kind": "query",
-      "value": "reservations.timeslots.list"
+      "value": "reservations.timeslots.list",
+      "reason": {
+        "en": "Read which service windows you open that day of the week, so it never offers a time you do not serve.",
+        "es": "Leer qué turnos abres ese día de la semana, para no ofrecer nunca una hora en la que no das servicio."
+      }
     },
     {
       "kind": "query",
-      "value": "reservations.slots.count_for"
+      "value": "reservations.slots.count_for",
+      "reason": {
+        "en": "See how many tables are really left in each window of that day.",
+        "es": "Ver cuántas mesas quedan de verdad en cada turno de ese día."
+      }
     },
     {
       "kind": "query",
-      "value": "reservations.blocked_dates.on_date"
+      "value": "reservations.blocked_dates.on_date",
+      "reason": {
+        "en": "Know whether you are closed that day, or part of it, before offering anything.",
+        "es": "Saber si ese día cierras, entero o a ratos, antes de ofrecer nada."
+      }
     },
     {
       "kind": "command",
-      "value": "reservations.reservations.create"
+      "value": "reservations.reservations.create",
+      "reason": {
+        "en": "Put the table in the book, with the day, time and number of people the guest gave.",
+        "es": "Apuntar la mesa en el libro, con el día, la hora y las personas que haya dicho el cliente."
+      }
     },
     {
       "kind": "command",
-      "value": "reservations.waitlist.create"
+      "value": "reservations.waitlist.create",
+      "reason": {
+        "en": "Put the guest on the waiting list when the day is full and they ask to be told if a table frees up.",
+        "es": "Apuntar al cliente en la lista de espera cuando el día está lleno y pide que le avisen si se libera una mesa."
+      }
     },
     {
       "kind": "command",
-      "value": "whatsapp_inbox.conversations.link_customer"
+      "value": "whatsapp_inbox.conversations.link_customer",
+      "reason": {
+        "en": "Link the conversation to the customer's card, so next time it knows who is writing.",
+        "es": "Vincular la conversación con la ficha del cliente, para saber la próxima vez quién escribe."
+      }
     }
   ]
 }

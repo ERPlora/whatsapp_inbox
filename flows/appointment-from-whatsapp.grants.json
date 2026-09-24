@@ -2,53 +2,101 @@
   "grants": [
     {
       "kind": "notify",
-      "value": "whatsapp"
+      "value": "whatsapp",
+      "reason": {
+        "en": "Send WhatsApp messages to the customer. Meta bills every message sent.",
+        "es": "Mandar mensajes de WhatsApp a la clienta. Meta cobra cada mensaje que se manda."
+      }
     },
     {
       "kind": "recipient_query",
-      "value": "whatsapp_inbox.conversations.list#contact_phone"
+      "value": "whatsapp_inbox.conversations.list#contact_phone",
+      "reason": {
+        "en": "Write only to the person who is in that conversation, and to nobody else.",
+        "es": "Escribir solo a la persona de esa conversación, y a nadie más."
+      }
     },
     {
       "kind": "query",
-      "value": "customers.list"
+      "value": "customers.list",
+      "reason": {
+        "en": "Look the customer up by their phone number.",
+        "es": "Buscar a la clienta por su teléfono."
+      }
     },
     {
       "kind": "query",
-      "value": "services.services.list"
+      "value": "services.services.list",
+      "reason": {
+        "en": "Read your service catalogue, to know which service they ask for and how long it takes.",
+        "es": "Leer tu catálogo de servicios, para saber cuál pide y cuánto dura."
+      }
     },
     {
       "kind": "query",
-      "value": "staff.members.list"
+      "value": "staff.members.list",
+      "reason": {
+        "en": "Read who works with you, so it only proposes somebody who is really there.",
+        "es": "Leer quién trabaja contigo, para proponer solo a alguien que de verdad esté."
+      }
     },
     {
       "kind": "query",
-      "value": "staff.schedules.list_for_member"
+      "value": "staff.schedules.list_for_member",
+      "reason": {
+        "en": "Read a professional's hours, so the slot is one they actually work.",
+        "es": "Leer el horario de una profesional, para que el hueco sea uno que trabaje."
+      }
     },
     {
       "kind": "query",
-      "value": "appointments.settings.get"
+      "value": "appointments.settings.get",
+      "reason": {
+        "en": "Read your booking rules (notice, cancellations), so it follows them. It only reads them.",
+        "es": "Leer tus reglas de citas (antelación, anulaciones), para respetarlas. Solo las lee."
+      }
     },
     {
       "kind": "command",
-      "value": "appointments.availability.day_opening"
+      "value": "appointments.availability.day_opening",
+      "reason": {
+        "en": "Ask when you open that day, instead of working it out on its own.",
+        "es": "Preguntar cuándo abres ese día, en vez de deducirlo por su cuenta."
+      }
     },
     {
       "kind": "command",
-      "value": "appointments.availability.slots"
+      "value": "appointments.availability.slots",
+      "reason": {
+        "en": "Ask which slots are really free on that date.",
+        "es": "Preguntar qué huecos están libres de verdad ese día."
+      }
     },
     {
       "kind": "command",
-      "value": "appointments.availability.check"
+      "value": "appointments.availability.check",
+      "reason": {
+        "en": "Check the slot is still free before booking it.",
+        "es": "Comprobar que el hueco sigue libre antes de reservarlo."
+      }
     },
     {
       "kind": "command",
-      "value": "customers.create"
+      "value": "customers.create",
+      "reason": {
+        "en": "Create the customer's card when it is somebody new.",
+        "es": "Crear la ficha de la clienta cuando es alguien nuevo."
+      }
     },
     {
       "kind": "command",
       "value": "appointments.appointments.create",
       "payload": {
         "booked_online": true
+      },
+      "reason": {
+        "en": "Book the appointment the customer chose, marked as booked online.",
+        "es": "Reservar la cita que ha elegido la clienta, marcada como reservada por internet."
       }
     },
     {
@@ -56,6 +104,10 @@
       "value": "appointments.appointments.list_for_customer",
       "payload": {
         "customer_id": "steps.resolve_customer.id"
+      },
+      "reason": {
+        "en": "Read the appointments of the customer who is writing, and nobody else's, so it cancels or moves the right one.",
+        "es": "Leer las citas de la clienta que escribe, y de nadie más, para anular o mover la correcta."
       }
     },
     {
@@ -63,6 +115,10 @@
       "value": "appointments.appointments.cancel",
       "payload": {
         "channel": "customer"
+      },
+      "reason": {
+        "en": "Cancel an appointment when the customer asks, and only as that customer: your own cancellation rules still apply.",
+        "es": "Anular una cita cuando la clienta lo pide, y solo como esa clienta: tus reglas de anulación siguen mandando."
       }
     },
     {
@@ -70,11 +126,19 @@
       "value": "appointments.appointments.reschedule",
       "payload": {
         "channel": "customer"
+      },
+      "reason": {
+        "en": "Move an appointment when the customer asks, and only as that customer: your own notice rules still apply.",
+        "es": "Cambiar una cita de hora cuando la clienta lo pide, y solo como esa clienta: tus reglas de antelación siguen mandando."
       }
     },
     {
       "kind": "command",
-      "value": "whatsapp_inbox.conversations.link_customer"
+      "value": "whatsapp_inbox.conversations.link_customer",
+      "reason": {
+        "en": "Link the conversation to the customer's card, so next time it knows who is writing.",
+        "es": "Vincular la conversación con la ficha de la clienta, para saber la próxima vez quién escribe."
+      }
     }
   ]
 }
