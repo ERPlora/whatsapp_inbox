@@ -10,7 +10,7 @@
     },
     {
       "kind": "query",
-      "value": "customers.list"
+      "value": "customers.by_phone"
     },
     {
       "kind": "query",
@@ -75,6 +75,20 @@
     {
       "kind": "command",
       "value": "whatsapp_inbox.conversations.link_customer"
+    },
+    {
+      "kind": "query",
+      "value": "whatsapp_inbox.conversations.last_offer",
+      "payload": {
+        "wa_contact_id": "input.from"
+      }
+    },
+    {
+      "kind": "command",
+      "value": "whatsapp_inbox.conversations.remember_offer",
+      "payload": {
+        "wa_contact_id": "input.from"
+      }
     }
   ]
 }

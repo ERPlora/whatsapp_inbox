@@ -231,11 +231,19 @@ def check_recipes_use_the_door():
             )
             continue
         step = linking[0]
-        payload = step.get("payload") or {}
+        # `params`, not `payload`: `payload` is the GRANT's word, and on a `command` step the
+        # kernel refuses the whole document for it (`flow.invalid_definition`, whatsapp_inbox#171).
+        # This check used to demand `payload`, which is how both recipes shipped unactivatable.
+        if "payload" in step:
+            problems.append(
+                f"`{name}` calls `{LINK}` with a `payload` key: a `command` step takes `params`, "
+                "and the kernel refuses the whole recipe when it is activated"
+            )
+        payload = step.get("params") or {}
         if "customer_id" not in payload:
-            problems.append(f"`{name}` calls `{LINK}` without a `customer_id` in its payload")
+            problems.append(f"`{name}` calls `{LINK}` without a `customer_id` in its params")
         if "wa_contact_id" not in payload:
-            problems.append(f"`{name}` calls `{LINK}` without a `wa_contact_id` in its payload")
+            problems.append(f"`{name}` calls `{LINK}` without a `wa_contact_id` in its params")
         elif "input.from" not in json.dumps(payload.get("wa_contact_id")):
             problems.append(
                 f"`{name}` calls `{LINK}` with a `wa_contact_id` that is not the phone this "

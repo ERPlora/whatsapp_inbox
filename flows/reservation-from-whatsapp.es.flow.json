@@ -72,9 +72,9 @@
     {
       "id": "find_customer",
       "kind": "query",
-      "query": "customers.list",
+      "query": "customers.by_phone",
       "params": {
-        "f_phone": "+{{input.from}}"
+        "phone": "{{input.from}}"
       },
       "result": "first",
       "limit": 1
@@ -83,7 +83,7 @@
       "id": "remember_the_customer",
       "kind": "command",
       "command": "whatsapp_inbox.conversations.link_customer",
-      "payload": {
+      "params": {
         "wa_contact_id": "{{input.from}}",
         "customer_id": "{{steps.find_customer.id}}"
       },

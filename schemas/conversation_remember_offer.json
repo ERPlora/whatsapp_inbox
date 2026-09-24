@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "whatsapp_inbox.conversations.remember_offer",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["wa_contact_id", "offered_slots"],
+  "properties": {
+    "wa_contact_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "WhatsApp contact the thread belongs to — the phone the message came from"
+    },
+    "offered_slots": {
+      "type": "string",
+      "maxLength": 8000,
+      "description": "JSON array of the slots just offered ({id, title, description}, 10 at most, as Meta caps a list). '' or '[]' clears the offer"
+    }
+  }
+}

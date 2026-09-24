@@ -1,7 +1,7 @@
 {
   "id": "whatsapp_inbox",
   "name": "WhatsApp Inbox",
-  "version": "2.1.68",
+  "version": "2.1.70",
   "description": "WhatsApp conversations, inbound requests, message templates and channel settings.",
   "agent": {
     "description": "Manages WhatsApp conversations, inbound requests, message templates, and channel settings: list and read conversations/messages, assign conversations, approve or reject requests, and configure the WhatsApp channel.",
@@ -87,6 +87,7 @@
       "migrations/postgres/006_message_source.sql",
       "migrations/postgres/007_meta_rejected_reason.sql",
       "migrations/postgres/008_quota_usage.sql",
+      "migrations/postgres/009_last_offer.sql",
       "migrations/postgres/010_link_sweep.sql"
     ]
   },
@@ -156,6 +157,13 @@
       "schema": "schemas/conversation_get.json",
       "ai": {
         "description": "Retrieves the details of a WhatsApp conversation by its ID"
+      }
+    },
+    "whatsapp_inbox.conversations.last_offer": {
+      "permission": "whatsapp_inbox.view_conversation",
+      "sql": "queries/conversation_last_offer.sql",
+      "ai": {
+        "description": "Returns the list of slots offered to a WhatsApp customer in the last 24 hours, if any. Identified by the WhatsApp contact the messages come from"
       }
     },
     "whatsapp_inbox.messages.list": {
@@ -393,6 +401,23 @@
       },
       "ai": {
         "description": "Remembers which customer a WhatsApp conversation belongs to, so the inbox can be filtered by her and every request read from the thread is born carrying her. Identified by the WhatsApp contact the messages come from"
+      }
+    },
+    "whatsapp_inbox.conversations.remember_offer": {
+      "permission": "whatsapp_inbox.manage_settings",
+      "transaction": true,
+      "sql": [
+        "commands/conversation_remember_offer.sql"
+      ],
+      "schema": "schemas/conversation_remember_offer.json",
+      "expect_rows": {
+        "op": "min",
+        "n": 1,
+        "error": "whatsapp_inbox.conversation_not_found",
+        "message": "That conversation does not exist in this business."
+      },
+      "ai": {
+        "description": "Remembers the list of slots an automation just offered a WhatsApp customer, so her next message (\"the 2nd\", \"12:30\") can be resolved against it. An empty list clears it. Identified by the WhatsApp contact the messages come from"
       }
     },
     "whatsapp_inbox.requests.approve": {

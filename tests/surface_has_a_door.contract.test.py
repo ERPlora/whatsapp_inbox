@@ -33,7 +33,8 @@ The doors that are NOT a screen are recognised as what they are, not waved throu
     `command` steps are run by the flow executor, which is a caller as real as a button. It counts
     only when the family's `<family>.grants.json` grants it too: a step without its grant is
     refused at run time (`flows/grants.rs::check_command_grant`), so the step ALONE is a door that
-    does not open (whatsapp_inbox#133).
+    does not open (whatsapp_inbox#133). The same goes for a query a recipe's `query` step reads
+    under a `query` grant (whatsapp_inbox#76): the executor runs it, gated by the grant.
   * an `internal: true` command, or one prefixed `_`, which no caller outside the module may reach.
 
 Usage: tests/surface_has_a_door.contract.test.py   (exit 0 = green). No Postgres, no Docker.
@@ -101,7 +102,7 @@ def handler_intentions():
 
 
 def recipe_callers():
-    """Commands our own shipped recipes call — the flow executor is their caller.
+    """Commands and queries our own shipped recipes call — the flow executor is their caller.
 
     Both halves are required. The `command` step names it, and the family's grants file has to
     grant it: the executor checks the grant before it runs the step, so a step whose grant is
@@ -114,13 +115,13 @@ def recipe_callers():
         if not grants_path.exists():
             continue
         granted = {
-            g.get("value")
+            (g.get("kind"), g.get("value"))
             for g in json.loads(grants_path.read_text()).get("grants", [])
-            if g.get("kind") == "command"
         }
         for step in json.loads(recipe.read_text()).get("steps", []):
-            if step.get("kind") == "command" and step.get("command") in granted:
-                called.add(step["command"])
+            kind = step.get("kind")
+            if kind in ("command", "query") and (kind, step.get(kind)) in granted:
+                called.add(step[kind])
     return called
 
 

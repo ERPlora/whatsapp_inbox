@@ -10,7 +10,7 @@
     },
     {
       "kind": "query",
-      "value": "customers.list"
+      "value": "customers.by_phone"
     },
     {
       "kind": "query",

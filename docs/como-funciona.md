@@ -144,11 +144,17 @@ le haya concedido en su pantalla de permisos. Para el flujo de arriba hacen falt
 - `notify` → canal `whatsapp` (cada WhatsApp cuesta dinero; conceder email no es conceder WhatsApp);
 - `recipient_query` → `whatsapp_inbox.conversations.list#contact_phone` (a quién se escribe se
   **lee** de la conversación, nunca se teclea);
-- `query` → las lecturas de los pasos de IA: `customers.list`, `services.services.list`,
+- `query` → la ficha de quien escribe, buscada por su número (`customers.by_phone`), y las lecturas
+  de los pasos de IA: `services.services.list`,
   `staff.members.list`, `staff.schedules.list_for_member`;
 - `command` → los de **disponibilidad** de Citas, que son commands aunque solo lean
   (`appointments.availability.day_opening`, `.slots`, `.check`), y las escrituras:
-  `customers.create` y `appointments.appointments.create`.
+  `customers.create` y `appointments.appointments.create`;
+- la **última lista de huecos** que se le ofreció (whatsapp_inbox#76): `query` →
+  `whatsapp_inbox.conversations.last_offer` y `command` → `whatsapp_inbox.conversations.remember_offer`,
+  los dos fijados al número de quien escribe. Es lo que permite contestar la lista **escribiendo**
+  («el 2», «12:30») en vez de tocarla: la receta recuerda lo que ofreció y el siguiente mensaje lo
+  relee (solo durante 24 h, y se vacía en cuanto reserva, anula o mueve).
 
 Que los de disponibilidad sean commands **ya no obliga a partir la automatización en dos pasos**:
 desde ERPlora/hub#1595 un command que solo contesta se ejecuta en el turno con cualquier política y
