@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "whatsapp_inbox.conversations.unlinked",
+  "description": "No parameters: the hub comes from the context and the batch size is fixed in the SQL.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {}
+}

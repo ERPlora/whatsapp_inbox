@@ -14,6 +14,8 @@
 //!   wrote, with no automation installed (whatsapp_inbox#149).
 //! * `link_customer_threads` — the same link seen from the card: saving a customer claims the
 //!   unlinked thread of her number (whatsapp_inbox#160).
+//! * `sweep_unlinked_threads` — the scheduled sweep that asks the same question once for every
+//!   thread that predates the automatic link (whatsapp_inbox#163).
 //!
 //! Ramas:
 //! * `create_linked_object = false` (default) — transición simple a `fulfilled`.
@@ -33,7 +35,7 @@
 //!   Hasta que esa decisión de modelo de comandos se tome (issue #3/#5), esta
 //!   rama devuelve el error explícito `cross_module_dispatch_unsupported`.
 
-use erplora_guest_sdk::{DomainError, Operation, Output};
+use erplora_guest_sdk::{DomainError, Event, Operation, Output};
 use serde_json::{json, Map, Value};
 
 #[cfg(feature = "guest")]
@@ -70,6 +72,15 @@ pub fn link_customer_threads(input: Json<erplora_guest_sdk::Input>) -> FnResult<
 #[plugin_fn]
 pub fn link_known_customer(input: Json<erplora_guest_sdk::Input>) -> FnResult<Json<Output>> {
     match link_known_customer_pure(input.into_inner().into_value()) {
+        Ok(out) => Ok(Json(out)),
+        Err(msg) => Err(WithReturnCode::new(Error::msg(msg), 1)),
+    }
+}
+
+#[cfg(feature = "guest")]
+#[plugin_fn]
+pub fn sweep_unlinked_threads(input: Json<erplora_guest_sdk::Input>) -> FnResult<Json<Output>> {
+    match sweep_unlinked_threads_pure(input.into_inner().into_value()) {
         Ok(out) => Ok(Json(out)),
         Err(msg) => Err(WithReturnCode::new(Error::msg(msg), 1)),
     }
@@ -508,6 +519,49 @@ pub fn link_customer_threads_pure(input: Value) -> Result<Output, String> {
     )))
 }
 
+// ───────────────────── sweep_unlinked_threads (whatsapp_inbox#163) ─────────────────────
+
+/// The unlinked, not-yet-swept threads, pre-loaded by `reads` (`queries/conversations_unlinked.sql`).
+const SWEEP_READ: &str = "whatsapp_inbox.conversations.unlinked";
+
+/// «Look this thread's number up»: this module listens to it with `_link_known_customer`, the very
+/// listener that links a thread when she writes — so the sweep applies the same rule, not a copy.
+const LINK_PENDING_EVENT: &str = "whatsapp_inbox.conversation.link_pending";
+
+/// The third way a conversation learns whose it is (whatsapp_inbox#163): the threads that already
+/// existed before the automatic link (#149/#160) and whose customer neither writes again nor has
+/// her card saved. Runs as the module's scheduled task.
+///
+/// A handler cannot run a read per row (the reads are bound from the payload before it starts), so
+/// the sweep does not decide the link itself: for each thread it emits `LINK_PENDING_EVENT` with
+/// the thread's contact, and `_link_known_customer` looks the number up in `customers.by_phone`
+/// and fills an empty link only when exactly one card carries it.
+///
+/// Every row it sees is MARKED (`_mark_thread_swept`), matched or not: the read only returns
+/// unmarked threads, so each thread is looked up once — a number nobody has on file does not come
+/// back every run and cannot starve the threads behind it. A read that did not arrive marks
+/// nothing: «no threads» and «could not ask» are not the same answer.
+pub fn sweep_unlinked_threads_pure(input: Value) -> Result<Output, String> {
+    let Some(rows) = read_rows(&input, SWEEP_READ) else {
+        return Ok(Output::new());
+    };
+    let mut out = Output::new();
+    for row in rows {
+        let id = as_str(row.get("id").unwrap_or(&Value::Null));
+        if id.is_empty() {
+            continue;
+        }
+        let contact = as_str(row.get("wa_contact_id").unwrap_or(&Value::Null));
+        if !contact.is_empty() {
+            out = out.with_event(Event::new(LINK_PENDING_EVENT, json!({ "contact": contact })));
+        }
+        let mut params = Map::new();
+        params.insert("conversation_id".into(), json!(id));
+        out = out.with_operation(Operation::sql("whatsapp_inbox._mark_thread_swept", params));
+    }
+    Ok(out)
+}
+
 // ───────────────────── tests (pure functions, no DB, ADR-0069 §1) ─────────────────────
 
 #[cfg(test)]
@@ -909,5 +963,68 @@ mod tests {
             json!({ "customers.by_phone": [customer("cu-x", "111 222")] }),
         );
         untouched(&link_customer_threads_pure(input).unwrap());
+    }
+
+    // ── sweep_unlinked_threads: the threads from before the automatic link (whatsapp_inbox#163) ──
+
+    fn unlinked(id: &str, wa_contact_id: &str) -> Value {
+        json!({ "id": id, "wa_contact_id": wa_contact_id })
+    }
+
+    fn sweep_input(rows: Value) -> Value {
+        input_with(json!({}), json!({ (SWEEP_READ): rows }))
+    }
+
+    fn lookups(out: &Output) -> Vec<String> {
+        out.events
+            .iter()
+            .inspect(|ev| assert_eq!(ev.name, LINK_PENDING_EVENT, "the only event of a sweep is the lookup"))
+            .map(|ev| ev.payload["contact"].as_str().unwrap_or_default().to_string())
+            .collect()
+    }
+
+    fn marked(out: &Output) -> Vec<String> {
+        out.operations
+            .iter()
+            .inspect(|op| assert_eq!(op.command, "whatsapp_inbox._mark_thread_swept"))
+            .map(|op| op.params["conversation_id"].as_str().unwrap_or_default().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn every_unlinked_thread_is_looked_up_by_its_number_and_marked_once() {
+        let out = sweep_unlinked_threads_pure(sweep_input(json!([
+            unlinked("c-ana", "34600111222"),
+            unlinked("c-eva", "34600999888"),
+        ])))
+        .unwrap();
+        assert!(out.error.is_none());
+        assert_eq!(lookups(&out), vec!["34600111222", "34600999888"]);
+        assert_eq!(marked(&out), vec!["c-ana", "c-eva"]);
+    }
+
+    #[test]
+    fn a_thread_without_a_contact_is_marked_but_never_looked_up() {
+        // Nothing to match it by — but left unmarked it would come back in every sweep, forever,
+        // and a batch full of them would starve the threads behind it.
+        let out = sweep_unlinked_threads_pure(sweep_input(json!([unlinked("c-blank", ""), json!({ "id": "c-null" })]))).unwrap();
+        assert!(lookups(&out).is_empty());
+        assert_eq!(marked(&out), vec!["c-blank", "c-null"]);
+    }
+
+    #[test]
+    fn a_row_without_an_id_is_skipped_entirely() {
+        let out = sweep_unlinked_threads_pure(sweep_input(json!([json!({ "wa_contact_id": "34600111222" })]))).unwrap();
+        assert!(lookups(&out).is_empty());
+        assert!(marked(&out).is_empty());
+    }
+
+    #[test]
+    fn nothing_to_sweep_and_a_read_that_did_not_arrive_do_nothing() {
+        let empty = sweep_unlinked_threads_pure(sweep_input(json!([]))).unwrap();
+        assert!(empty.events.is_empty() && empty.operations.is_empty());
+        // A read that did not arrive is not «no threads»: marking nothing is the only safe answer.
+        let absent = sweep_unlinked_threads_pure(input_with(json!({}), json!({}))).unwrap();
+        assert!(absent.events.is_empty() && absent.operations.is_empty());
     }
 }
