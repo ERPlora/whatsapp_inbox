@@ -452,3 +452,192 @@ async fn the_recipe_finds_the_customer_on_file_however_the_salon_typed_her_phone
         "the run went on to the agent step, which is now told she is on file: {steps:?}"
     );
 }
+
+// ── 6. whatsapp_inbox#76: «el 2» — the list she was offered is there for her next message ──────
+
+/// A typed message from Ana, with the keys `inbound_poll.rs::event_payload` writes (hub#1621).
+async fn ana_writes(rt: &Runtime, wa_message_id: &str, text: &str) {
+    let payload: Params = json!({
+        "wa_message_id": wa_message_id,
+        "from": WA_ID,
+        "direction": "inbound",
+        "contact": WA_ID,
+        "source": "live",
+        "text": text,
+        "received_at": "2026-09-24T09:00:00+00:00",
+        "message": { "id": wa_message_id, "from": WA_ID, "type": "text", "text": { "body": text } },
+    })
+    .as_object()
+    .unwrap()
+    .clone()
+    .into_iter()
+    .collect();
+    assert!(outbox::insert_core_event_once(
+        rt.db_for_test(),
+        &format!("wa-{wa_message_id}"),
+        HUB,
+        "hub.whatsapp.message_received",
+        &payload,
+    )
+    .await
+    .unwrap());
+    rt.drain_outbox().await.unwrap();
+}
+
+/// Drives the ONE run of this message to its end, standing in for the model: every agent turn the
+/// tick hands over is answered with what `answer` says for that step. Returns the run's steps as
+/// the kernel recorded them. Before answering `book_appointment`, `seen` gets the steps recorded so
+/// far — that is what the agent would have been briefed with.
+async fn drive(
+    rt: &Runtime,
+    flow_id: &str,
+    run_index: usize,
+    answer: impl Fn(&str) -> Value,
+    seen: &mut Vec<store::FlowRunStep>,
+) -> Vec<store::FlowRunStep> {
+    for _ in 0..30 {
+        let report = rt.process_flows().await.unwrap();
+        for io in report.pending_io {
+            if io.step_id() == "book_appointment" {
+                *seen = rt.get_flow_run(io.run_id()).await.unwrap().1;
+            }
+            rt.complete_flow_io(
+                io.run_id(),
+                io.step_id(),
+                erplora_runtime::flows::executor::IoResult::Done(answer(io.step_id())),
+            )
+            .await
+            .unwrap();
+        }
+        let runs = rt.list_flow_runs(flow_id, 10, None).await.unwrap();
+        assert_eq!(runs.len(), run_index + 1, "each message starts exactly one run");
+        // Newest first: this message's run is the first one.
+        let ended = [store::STATUS_DONE, store::STATUS_FAILED, store::STATUS_CANCELLED];
+        if ended.contains(&runs[0].status.as_str()) {
+            return rt.get_flow_run(&runs[0].id).await.unwrap().1;
+        }
+    }
+    panic!("the run of message #{run_index} never finished");
+}
+
+fn step<'a>(steps: &'a [store::FlowRunStep], id: &str) -> &'a store::FlowRunStep {
+    steps
+        .iter()
+        .find(|s| s.step_id == id)
+        .unwrap_or_else(|| panic!("the run reached `{id}`: {steps:?}"))
+}
+
+/// What the conversation remembers as on offer — the column `remember_offer` writes.
+async fn remembered(rt: &Runtime) -> String {
+    let r = rows(
+        rt,
+        &format!("SELECT offered_slots FROM whatsapp_inbox_conversation WHERE wa_contact_id = '{WA_ID}'"),
+    )
+    .await;
+    r[0]["offered_slots"].as_str().unwrap_or_default().to_string()
+}
+
+/// Ana asks for a slot and is offered two. She answers «el 2» — a fresh run. That run has to find
+/// the two slots she was offered BEFORE its agent step, or «el 2» points at nothing and she is
+/// offered the list again (the bug). Once she has booked, the list is cleared: a «el 2» written
+/// later finds nothing to point at.
+#[tokio::test]
+async fn her_typed_choice_finds_the_list_she_was_offered() {
+    let rt = runtime(&[
+        "customers",
+        "taxes",
+        "services",
+        "staff",
+        "schedules",
+        "appointments",
+        "whatsapp_inbox",
+    ])
+    .await;
+    let owner = erplora_runtime::RequestContext::new(HUB, "owner", ["*".to_string()]);
+    let card: Params = json!({ "name": "Ana", "phone": E164 })
+        .as_object()
+        .unwrap()
+        .clone()
+        .into_iter()
+        .collect();
+    rt.execute_command("customers.create", &card, &owner).await.expect("Ana's card");
+
+    // Only the TYPED trigger: with both, the kernel keeps the tapped one and a typed message starts
+    // nothing (hub#2061). This test is about what happens once it starts.
+    let mut definition = template("appointment-from-whatsapp.es.flow.json");
+    let typed = definition["triggers"][0].clone();
+    assert_eq!(typed["filter"]["event.text"], json!({ "neq": "" }), "triggers[0] is the typed one");
+    definition["triggers"] = json!([typed]);
+    let flow_id = create(&rt, definition).await;
+    rt.replace_flow_grants(&flow_id, &template_grants(), "hub_user:owner")
+        .await
+        .unwrap();
+
+    let offered = json!([
+        { "id": "2026-09-25T10:00|staff:1|service:3", "title": "jue 10:00 · Ana" },
+        { "id": "2026-09-25T12:30|staff:1|service:3", "title": "jue 12:30 · Ana" },
+    ]);
+    let mut seen = Vec::new();
+
+    // 1) «¿tenéis hueco mañana?» → two slots offered.
+    ana_writes(&rt, "wamid.ASK", "¿tenéis hueco mañana para un corte?").await;
+    let first = drive(
+        &rt,
+        &flow_id,
+        0,
+        |id| match id {
+            "book_appointment" => json!({ "text": "Mañana tengo estos:", "slots": offered.clone() }),
+            _ => json!({ "text": "Ana, en la ficha" }),
+        },
+        &mut seen,
+    )
+    .await;
+    assert_eq!(
+        step(&seen, "recall_offer").output["found"],
+        json!(false),
+        "before anything was offered there is nothing to recall"
+    );
+    assert_eq!(step(&first, "remember_offer").status, "done", "{first:?}");
+    let stored: Value = serde_json::from_str(&remembered(&rt).await).expect("the list is JSON");
+    assert_eq!(stored, offered, "the conversation remembers the list she was offered");
+
+    // 2) «el 2» → a fresh run, whose agent step is briefed with that list.
+    ana_writes(&rt, "wamid.TWO", "el 2").await;
+    let second = drive(
+        &rt,
+        &flow_id,
+        1,
+        |id| match id {
+            "book_appointment" => json!({ "text": "Reservada el jueves a las 12:30 con Ana.", "slots": [] }),
+            _ => json!({ "text": "Ana, en la ficha" }),
+        },
+        &mut seen,
+    )
+    .await;
+    let recall = step(&seen, "recall_offer");
+    assert_eq!(recall.output["found"], json!(true), "«el 2» finds the list: {recall:?}");
+    let recalled: Value = serde_json::from_str(recall.output["offered_slots"].as_str().unwrap())
+        .expect("the recalled list is JSON");
+    assert_eq!(recalled, offered, "the SAME list, in the order she saw it");
+    assert_eq!(step(&second, "remember_offer").status, "done", "{second:?}");
+    assert_eq!(remembered(&rt).await, "[]", "once she booked, nothing is on offer any more");
+
+    // 3) a stray «el 2» later points at nothing.
+    ana_writes(&rt, "wamid.LATER", "el 2").await;
+    drive(
+        &rt,
+        &flow_id,
+        2,
+        |id| match id {
+            "book_appointment" => json!({ "text": "¿Qué día te viene bien?", "slots": [] }),
+            _ => json!({ "text": "Ana, en la ficha" }),
+        },
+        &mut seen,
+    )
+    .await;
+    assert_eq!(
+        step(&seen, "recall_offer").output["found"],
+        json!(false),
+        "a cleared offer is not recalled"
+    );
+}
