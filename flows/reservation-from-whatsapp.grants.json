@@ -18,7 +18,7 @@
     },
     {
       "kind": "query",
-      "value": "customers.list",
+      "value": "customers.by_phone",
       "reason": {
         "en": "Look the customer up by their phone number.",
         "es": "Buscar al cliente por su teléfono."

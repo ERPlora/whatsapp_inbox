@@ -2231,6 +2231,14 @@ OWNED_APPOINTMENTS_QUERY = "appointments.appointments.list_for_customer"
 # `name` filter with `op: like`, so on the wire `f_name`/`search` reach whoever holds it).
 # Harmless in a hub screen; not in the hands of a model that is reading a stranger's WhatsApp.
 DIRECTORY_QUERY = "customers.list"
+# The read that answers «whose number is this?» — and the ONLY one a resolver may be
+# (whatsapp_inbox#165). `customers.list` filters `phone` with a LIKE over the raw column, so the
+# number WhatsApp gives (`34600111222`) never finds a card the salon typed the way people type
+# phones in Spain (`600 111 222`, `+34 600-111-222`): the recipe answered «not on file», created a
+# SECOND card for a customer of years, and booked on the new one. `customers.by_phone`
+# (customers#79) compares NUMBERS — the same rule the inbox listeners apply since whatsapp_inbox#162
+# — and takes only `phone`, so it is not a search box either.
+RESOLVER_QUERY = "customers.by_phone"
 # What the trigger carries and no model can touch: the phone the message came FROM. It is mapped
 # in `triggers[].input`, so it reaches a step as `{{input.from}}` — the one identity in this run
 # that WhatsApp itself vouched for.
@@ -2439,7 +2447,7 @@ def unpinned_query_problems(name, doc, pins):
     does not degrade to a wide grant — it takes the recipe down with it.
     """
     problems = []
-    resolvers = [(i, s.get("id")) for i, s in _query_steps(doc, DIRECTORY_QUERY)]
+    resolvers = [(i, s.get("id")) for i, s in _query_steps(doc, RESOLVER_QUERY)]
     for index, step in enumerate(doc.get("steps", [])):
         if step.get("kind") != "ai":
             continue
@@ -2821,7 +2829,7 @@ def own_customer_only_problems(name, doc):
       `tools.queries`. This is the red the issue is: leave it in and every other mark here is
       decoration, because the model can resolve anybody by name whatever the prompt says;
     * **whoever can read a diary has a deterministic resolver BEFORE it** — a `kind: query` step
-      over `DIRECTORY_QUERY` earlier in the document. «Earlier» is not pedantry: `steps.x` of a
+      over `RESOLVER_QUERY` earlier in the document. «Earlier» is not pedantry: `steps.x` of a
       step that has not run resolves to `null` (`resolve_path`), so a resolver placed after the
       reader hands it nothing and the model improvises again;
     * **that resolver is keyed on the phone and on nothing a model wrote** — every param
@@ -2837,7 +2845,23 @@ def own_customer_only_problems(name, doc):
     """
     problems = []
     steps = doc.get("steps", [])
-    resolvers = _query_steps(doc, DIRECTORY_QUERY)
+    resolvers = _query_steps(doc, RESOLVER_QUERY)
+
+    # Mark 6 (whatsapp_inbox#165): the number is looked up as a NUMBER. A `query` step that feeds
+    # the trusted phone to the address book is a resolver in every way but the one that matters —
+    # `customers.list` compares the raw text with a LIKE, so a card typed `600 111 222` never
+    # answers `34600111222`, the recipe believes she is new, and a second card is born for a
+    # customer of years with the booking hung on it. Named here because the document parses, the
+    # grant covers the read, and without this mark every other one stays green.
+    for _, step in _query_steps(doc, DIRECTORY_QUERY):
+        if TRUSTED_PHONE in json.dumps(step.get("params") or {}, ensure_ascii=False):
+            problems.append(
+                f"{name} step `{step.get('id')}` looks the customer up by her number with "
+                f"`{DIRECTORY_QUERY}`, which filters `phone` as TEXT: a card the business typed "
+                f"`600 111 222` or `+34 600-111-222` never matches `34600111222`, so a customer on "
+                f"file is taken for a new one and gets a second card. Read `{RESOLVER_QUERY}` with "
+                f"`phone` = `{{{{{TRUSTED_PHONE}}}}}` — it compares numbers"
+            )
 
     # Mark 5, and the one that caught a real bug in this very commit: a resolver ANSWERS in
     # `{{steps.<id>.…}}`, and the braces are the whole mechanism. Written with one brace the
@@ -2847,7 +2871,7 @@ def own_customer_only_problems(name, doc):
     # LOOKS wired. The reservation templates have no diary read, so mark 4 does not cover them:
     # this one is owed by every resolver in every family.
     for index, step in enumerate(steps):
-        if step.get("kind") != "query" or step.get("query") != DIRECTORY_QUERY:
+        if step.get("kind") != "query" or step.get("query") != RESOLVER_QUERY:
             continue
         sid = step.get("id")
         later = json.dumps(steps[index + 1:], ensure_ascii=False, sort_keys=True)
@@ -2908,7 +2932,7 @@ def own_customer_only_problems(name, doc):
                 f"{name} step `{sid}` can read one customer's whole diary with "
                 f"`{OWNED_APPOINTMENTS_QUERY}` and no `kind: query` step resolved that customer "
                 f"before it: the `customer_id` can only come from the model, so it is whoever the "
-                f"message named. Add a deterministic read of `{DIRECTORY_QUERY}` keyed on "
+                f"message named. Add a deterministic read of `{RESOLVER_QUERY}` keyed on "
                 f"`{{{{{TRUSTED_PHONE}}}}}` ahead of this step"
             )
             continue
@@ -2918,7 +2942,7 @@ def own_customer_only_problems(name, doc):
             params = resolver.get("params") or {}
             if not params:
                 problems.append(
-                    f"{name} step `{rid}` resolves the customer with `{DIRECTORY_QUERY}` and "
+                    f"{name} step `{rid}` resolves the customer with `{RESOLVER_QUERY}` and "
                     f"passes NO params: that is the whole address book, and its first row is "
                     f"somebody. Key it on `{{{{{TRUSTED_PHONE}}}}}`"
                 )
@@ -2927,7 +2951,7 @@ def own_customer_only_problems(name, doc):
                 text = expr if isinstance(expr, str) else json.dumps(expr, sort_keys=True)
                 if "{{steps." in text or text.startswith("steps."):
                     problems.append(
-                        f"{name} step `{rid}` resolves the customer with `{DIRECTORY_QUERY}` and "
+                        f"{name} step `{rid}` resolves the customer with `{RESOLVER_QUERY}` and "
                         f"takes `{key}` from another step's output (`{text}`). If that step is an "
                         f"`ai` one, the model is choosing who this run is about again — the "
                         f"lookup moved, the hole did not. Key it on `{{{{{TRUSTED_PHONE}}}}}`"
@@ -2937,7 +2961,7 @@ def own_customer_only_problems(name, doc):
                 for expr in params.values()
             ):
                 problems.append(
-                    f"{name} step `{rid}` resolves the customer with `{DIRECTORY_QUERY}` and "
+                    f"{name} step `{rid}` resolves the customer with `{RESOLVER_QUERY}` and "
                     f"never reads `{TRUSTED_PHONE}`: it is keyed on "
                     f"{json.dumps(params, sort_keys=True)}, so it answers about somebody the "
                     f"phone number never picked out. The trigger's own `from` is the only "
@@ -3536,6 +3560,58 @@ def parking_producer_problems(name, doc, commands_def, read_perms):
     return problems
 
 
+# The keys the kernel accepts on each step kind — a copy of the `allowed` table in
+# `hub/crates/runtime/src/flows/def.rs` (`parse_step`). The kernel refuses the WHOLE document for
+# one key it does not know (`flow.invalid_definition`, «unknown key»), and the refusal only happens
+# when the owner ACTIVATES the recipe: offering it reads the file as JSON and nothing more
+# (`template_invalid_document`). So a template with a stray key is shown on the card, looks fine
+# in review, and fails the one time it matters — whatsapp_inbox#171: `remember_the_customer`
+# shipped with `payload` (the GRANT's word) where a `command` step takes `params`, and neither
+# WhatsApp recipe could be switched on.
+KERNEL_STEP_KEYS = {
+    "command": {"id", "kind", "command", "params", "on_error"},
+    "query": {"id", "kind", "query", "params", "result", "limit", "options", "on_error"},
+    "condition": {"id", "kind", "when"},
+    "delay": {
+        "id", "kind", "seconds", "until", "offset_seconds", "max_wait", "past_due_policy",
+        "cancel_on", "reschedule_on", "on_error",
+    },
+    "http": {"id", "kind", "method", "url", "headers", "body", "timeout", "on_error"},
+    "ai": {
+        "id", "kind", "prompt", "tools", "policy", "max_iters", "on_expire", "on_reject",
+        "on_error", "output",
+    },
+    "notify": {"id", "kind", "channel", "to", "template", "vars", "interactive", "on_error"},
+    "approval": {
+        "id", "kind", "title", "summary", "assignee", "expires_in", "on_expire", "on_reject",
+    },
+}
+
+
+def unknown_step_key_problems(name, doc):
+    """Every step carries only the keys the kernel accepts for its kind — whatsapp_inbox#171."""
+    problems = []
+    for step in doc.get("steps", []):
+        kind = step.get("kind")
+        allowed = KERNEL_STEP_KEYS.get(kind)
+        if allowed is None:
+            problems.append(
+                f"{name} step `{step.get('id')}` has kind {kind!r}, which the kernel does not "
+                f"know: activating the recipe is refused with `flow.invalid_definition`"
+            )
+            continue
+        for key in sorted(set(step) - allowed):
+            hint = " (a `command` step takes its payload in `params`)" if (
+                kind == "command" and key == "payload"
+            ) else ""
+            problems.append(
+                f"{name} step `{step.get('id')}` (`{kind}`) carries `{key}`, a key the kernel "
+                f"does not accept{hint}: the card offers the recipe, and activating it is "
+                f"refused whole with `flow.invalid_definition` — nobody gets an answer"
+            )
+    return problems
+
+
 DOCUMENT_RULES = (
     floor_read_column_problems,
     family_trigger_problems,
@@ -3566,6 +3642,7 @@ DOCUMENT_RULES = (
     only_the_customer_problems,
     tappable_option_problems,
     parking_producer_problems,
+    unknown_step_key_problems,
 )
 
 # …and the registry itself is guarded, because it is the next place the same hole moves to. The
@@ -3603,6 +3680,7 @@ SELF_CHECKED_RULES = (
     only_the_customer_problems,
     tappable_option_problems,
     parking_producer_problems,
+    unknown_step_key_problems,
 )
 
 
@@ -3901,7 +3979,7 @@ def _query_step(step_id, query=None, params=None):
     step = {
         "id": step_id,
         "kind": "query",
-        "query": DIRECTORY_QUERY if query is None else query,
+        "query": RESOLVER_QUERY if query is None else query,
         "result": "first",
         "limit": 1,
     }
@@ -4887,7 +4965,7 @@ MOVE_CASES = [
 # The mutants of «one customer, and only that one» (whatsapp_inbox#103). The shape every row below
 # is a deviation FROM is the one the four templates ship: a `kind: query` resolver keyed on the
 # phone WhatsApp vouched for, and a reader that is handed its answer instead of a search box.
-_OWN_PHONE = {"f_phone": "+{{" + TRUSTED_PHONE + "}}"}
+_OWN_PHONE = {"phone": "{{" + TRUSTED_PHONE + "}}"}
 _DIARY = (OWNED_APPOINTMENTS_QUERY,)
 
 
@@ -4899,6 +4977,34 @@ def _own_customer_doc(prompt, queries, params=_OWN_PHONE, resolver_first=True):
 
 
 _BOOK_FOR_HER = "Book for {{steps.resolve.id}} and for nobody else."
+
+# The mutants of «a key the kernel does not know» (whatsapp_inbox#171).
+STEP_KEY_CASES = [
+    (
+        "the shipped shape: a `command` step sends its payload in `params`",
+        {"steps": [{"id": "link", "kind": "command", "command": "x.write",
+                    "params": {"a": "{{input.from}}"}, "on_error": "continue"}]},
+        0,
+    ),
+    (
+        "\U0001f534 the bug: `payload` is the GRANT's word, and on a step the kernel refuses the "
+        "whole document with it — the recipe is offered and cannot be switched on",
+        {"steps": [{"id": "link", "kind": "command", "command": "x.write",
+                    "payload": {"a": "{{input.from}}"}}]},
+        1,
+    ),
+    (
+        "a key the query kind does not take either — the table is per KIND, not one global list",
+        {"steps": [{"id": "r", "kind": "query", "query": "x.read", "params": {}, "when": {}}]},
+        1,
+    ),
+    (
+        "a kind the kernel does not know is refused before any key is read",
+        {"steps": [{"id": "s", "kind": "webhook"}]},
+        1,
+    ),
+]
+
 
 OWN_CUSTOMER_CASES = [
     (
@@ -5012,6 +5118,39 @@ OWN_CUSTOMER_CASES = [
             ),
         ),
         1,
+    ),
+    (
+        "\U0001f534 the lookup whatsapp_inbox#165 is about: deterministic, keyed on the trusted "
+        "phone, its answer used — and made over `customers.list`, whose `f_phone` is a LIKE on the "
+        "raw text. `34600111222` never finds the card typed `600 111 222`, so the customer of "
+        "years is «not on file» and gets a second card. Nothing else here is wrong, which is why "
+        "only this mark can see it",
+        UNATTENDED,
+        _fixture_doc(
+            _query_step("find", DIRECTORY_QUERY, {"f_phone": "+{{" + TRUSTED_PHONE + "}}"}),
+            _ai_step("know", "auto", ["customers.create"], "On file: {{steps.find.found}}."),
+        ),
+        1,
+    ),
+    (
+        "the same text lookup where a diary is read: the address-book step is no resolver, so the "
+        "reader has none before it either — two reds for one wrong query",
+        UNATTENDED,
+        _fixture_doc(
+            _query_step("resolve", DIRECTORY_QUERY, {"f_phone": "+{{" + TRUSTED_PHONE + "}}"}),
+            _ai_step("book", "auto", [BOOKING_COMMAND], _BOOK_FOR_HER, queries=_DIARY),
+        ),
+        2,
+    ),
+    (
+        "silent on a deterministic read of the address book that is not about the sender's number: "
+        "the mark is about looking a PHONE up as text, not about `customers.list` as such",
+        UNNAMED_FAMILY,
+        _fixture_doc(
+            _query_step("vips", DIRECTORY_QUERY, {"f_tag": "vip"}),
+            _ai_step("reply", "manual", [], "VIPs on file: {{steps.vips.count}}."),
+        ),
+        0,
     ),
     (
         "silent where nothing is owed: a step that reads no diary and holds no address book",
@@ -6041,7 +6180,7 @@ PIN_CASES = [
 # `(label, file name, document, the pins its grants declare, problems expected)` — the unit tests of
 # `unpinned_query_problems`. Handed in for the same reason as `PIN_CASES`: half of what the rule
 # judges lives in a sidecar, so a row has to be able to describe one that does not exist.
-_RESOLVER = _query_step("resolve_customer", DIRECTORY_QUERY, {"f_phone": "+{{input.from}}"})
+_RESOLVER = _query_step("resolve_customer", RESOLVER_QUERY, _OWN_PHONE)
 _QPIN_OK = {OWNED_APPOINTMENTS_QUERY: {"customer_id": "steps.resolve_customer.id"}}
 _QPIN_NONE = {OWNED_APPOINTMENTS_QUERY: {}}
 
@@ -6149,7 +6288,7 @@ QUERY_PIN_CASES = [
         "the step's own prompt sends as the `customer_id`",
         UNATTENDED,
         _fixture_doc(
-            _query_step("find_customer", DIRECTORY_QUERY, {"f_phone": "+{{input.from}}"}),
+            _query_step("find_customer", RESOLVER_QUERY, _OWN_PHONE),
             _RESOLVER,
             _diary_reader_using("resolve_customer"),
         ),
@@ -6162,7 +6301,7 @@ QUERY_PIN_CASES = [
         "CREATED a step ago, because the earlier read found nobody and the pin resolves to `null`",
         UNATTENDED,
         _fixture_doc(
-            _query_step("find_customer", DIRECTORY_QUERY, {"f_phone": "+{{input.from}}"}),
+            _query_step("find_customer", RESOLVER_QUERY, _OWN_PHONE),
             _RESOLVER,
             _diary_reader_using("resolve_customer"),
         ),
@@ -7616,6 +7755,13 @@ def self_check():
                 f"the battery's own «an instruction may not be lost in translation» rule is wrong "
                 f"— {label}: expected {expected} problem(s), got {len(got)}: {got}"
             )
+    for label, doc, expected in STEP_KEY_CASES:
+        got = unknown_step_key_problems("(self-check)", doc)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «a key the kernel does not know» rule is wrong — {label}: "
+                f"expected {expected} problem(s), got {len(got)}: {got}"
+            )
     for label, name, doc, expected in OWN_CUSTOMER_CASES:
         got = own_customer_only_problems(name, doc)
         if len(got) != expected:
@@ -7951,6 +8097,7 @@ def main():
         # run is about is the one the PHONE picked out and never the one the message named
         # (whatsapp_inbox#103). Needs no manifest: it is the document's own shape.
         problems += applied(ledger, own_customer_only_problems, path.name, doc)
+        problems += applied(ledger, unknown_step_key_problems, path.name, doc)
 
         # 3a-bis-vi) …and the narrow value the salon's own cancellation rules hang on travels in
         # the GRANT and not in the prompt, wherever nobody is watching (whatsapp_inbox#100).
