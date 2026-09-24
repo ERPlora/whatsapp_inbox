@@ -15,6 +15,7 @@
 | **Ingesting a message and a request** | ✅ Works, when something calls it |
 | **Approve / reject / delete a request** | ✅ Works |
 | **Templates and settings CRUD** | ✅ Works |
+| **Knowing whose a conversation is** | ✅ Automatic when the number is on a customer card; only fills an empty link, and a conversation from before is linked on its next message |
 
 ## Errors and refusals
 
