@@ -144,6 +144,7 @@ const COVERED: Record<
       'whatsapp-templates-form-error',
       'whatsapp-templates-language',
       'whatsapp-templates-load-error',
+      'whatsapp-templates-meta-only',
       'whatsapp-templates-meta-sync-notice',
       'whatsapp-templates-meta-verdict',
       'whatsapp-templates-name',

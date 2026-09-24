@@ -357,10 +357,10 @@ export class ErpWhatsappInboxTemplates extends LitElement {
         verdict = answered;
       } else if (absenceIsDeletion && knownId) {
         // Meta HAD it (it gave it an id) and no longer lists it: deleted in WhatsApp Manager.
-        // `DELETED` is Meta's own word for that state; the id stays, so the row keeps saying what
-        // Meta did to it instead of falling back to «Sin enviar». The row itself is NOT deleted:
-        // the text is the owner's, and deleting it here is their call.
-        verdict = { status: 'DELETED', meta_id: knownId, rejected_reason: '' };
+        // `DELETED` is Meta's own word for that state; the id stays (the fallback below keeps the
+        // one this hub knows), so the row reads what Meta did to it instead of «Sin enviar». The
+        // row itself is NOT deleted: the text is the owner's, and deleting it here is their call.
+        verdict = { status: 'DELETED', rejected_reason: '' };
       } else {
         // A row Meta never had (no id) is left EXACTLY as it is: it already says «not sent», which
         // is the truth, and its absence tells nothing new.

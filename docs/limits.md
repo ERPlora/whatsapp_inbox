@@ -9,7 +9,7 @@
 | **Receiving messages automatically** | ❌ No webhook and no declared network access to Meta |
 | **Auto-replies, greetings, out-of-hours messages** | ❌ Configurable, never sent |
 | **Calling an LLM to parse a message** | ❌ Not here — the parsed data must arrive already parsed |
-| **Syncing template status with Meta** | ❌ Stored, never checked |
+| **Syncing template status with Meta** | ✅ Each time the Templates tab opens (never on a timer). A template deleted in WhatsApp Manager is marked «Deleted in WhatsApp Manager», not removed; one created there is named in a notice but not imported — its text does not reach the hub yet (#169) |
 | **Per-employee routing** | ❌ Table exists; no command, no screen |
 | **Fulfilling a request** (status only) | ✅ Works |
 | **Ingesting a message and a request** | ✅ Works, when something calls it |
@@ -42,7 +42,7 @@ These fail as **silent no-ops**:
 | Account mode | `shared`, `per_employee` |
 | Approval mode | `auto`, `manual` |
 | Template category | `MARKETING`, `UTILITY`, `AUTHENTICATION` |
-| Template status at Meta | `pending`, `approved`, `rejected` |
+| Template status at Meta | `not_sent`, `pending`, `approved`, `rejected`, `paused`, `disabled`, `deleted`; any other Meta code is shown as Meta words it |
 | Confidence score | clamped to 0–1 |
 | Free-tier monthly limit | 0 means no limit |
 
@@ -126,7 +126,15 @@ rejected.
 passed in**, and it checks a subset. It is deliberately non-authoritative — tighten the schema in
 settings.
 
-**"Meta approved my template and the hub still says pending."** Nothing synchronises with Meta.
-Update it by hand.
+**"Meta approved my template and the hub still says pending."** The verdict is refreshed when the
+Templates tab opens. If a notice says Meta could not be reached, open the tab again later.
+
+**"I deleted a template in WhatsApp Manager and it is still in the list."** It stays, marked
+«Deleted in WhatsApp Manager», so the text is not lost: nothing that uses it will be sent. Delete it
+in the tab, or write a new one with a different name. The mark needs a fresh answer from Meta that
+lists at least one template; with no WhatsApp number connected nothing is marked.
+
+**"A template I created in WhatsApp Manager is not in the list."** The tab names it in a notice
+above the table, with its language. It cannot be edited or used from here yet (#169).
 
 **"New requests skip review."** The approval mode is `auto`. Set it to `manual`.
