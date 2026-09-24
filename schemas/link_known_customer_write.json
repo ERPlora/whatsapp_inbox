@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "whatsapp_inbox._link_known_customer_write",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["wa_contact_id", "customer_id"],
+  "properties": {
+    "wa_contact_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "WhatsApp contact the thread is keyed by (the number at the other end)"
+    },
+    "customer_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The one customer on file whose phone is exactly that number. Never blank"
+    }
+  }
+}

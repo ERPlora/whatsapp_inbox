@@ -625,6 +625,33 @@
         "whatsapp_inbox.message.received"
       ]
     },
+    "whatsapp_inbox._link_known_customer": {
+      "permission": "whatsapp_inbox.manage_connections",
+      "internal": true,
+      "schema": "schemas/link_known_customer.json",
+      "handler": {
+        "type": "wasm",
+        "file": "dist/handler.wasm",
+        "function": "link_known_customer"
+      },
+      "reads": [
+        {
+          "query": "customers.list",
+          "params": {
+            "f_phone": "payload.contact"
+          }
+        }
+      ]
+    },
+    "whatsapp_inbox._link_known_customer_write": {
+      "permission": "whatsapp_inbox.manage_connections",
+      "internal": true,
+      "transaction": true,
+      "sql": [
+        "commands/_link_known_customer_write.sql"
+      ],
+      "schema": "schemas/link_known_customer_write.json"
+    },
     "whatsapp_inbox.settings.upsert": {
       "permission": "whatsapp_inbox.manage_settings",
       "transaction": true,
@@ -669,6 +696,9 @@
       },
       "appointments.booking_request.failed": {
         "command": "whatsapp_inbox._booking_failed"
+      },
+      "whatsapp_inbox.message.received": {
+        "command": "whatsapp_inbox._link_known_customer"
       }
     },
     "emits": [
