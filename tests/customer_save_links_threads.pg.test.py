@@ -95,6 +95,7 @@ def seed(db):
     rows = [
         ("t-ana", HUB, "34600111222", "NULL", 0),  # the bug: keyed international, card national
         ("t-longer", HUB, "346001112229", "NULL", 0),  # contains her number: somebody else
+        ("t-four-more", HUB, "1234600111222", "NULL", 0),  # hers plus 4 digits: not a country code
         ("t-linked", HUB, "34600999888", sql_literal(SOMEBODY_ELSE), 0),  # a person linked it
         ("t-blank", HUB, "34600777666", "''", 0),  # blank = unlinked
         ("t-dead", HUB, "34600555444", "NULL", 1),  # deleted thread
@@ -137,6 +138,8 @@ def check_behaviour(db):
         )
     if n != 1:
         problems.append(f"claiming one thread wrote {n} rows, expected exactly 1")
+    if customer_of(db, "t-four-more") != "<null>":
+        problems.append("a number that is hers plus FOUR digits was claimed: country codes are 1-3")
     if customer_of(db, "t-longer") != "<null>":
         problems.append("a LONGER number that merely contains hers was claimed")
     if customer_of(db, "t-other") != "<null>":
