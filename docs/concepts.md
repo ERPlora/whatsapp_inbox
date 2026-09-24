@@ -124,9 +124,15 @@ is, the phone match never changes it. It links nobody when two different custome
 It also works the other way round (whatsapp_inbox#160). When somebody wrote **before** she was on
 file — the bookings automation does not create a card — or her card had a wrong number, saving her
 card (creating it, or correcting its phone) links her conversation right away, with the same rules:
-exact number, only an empty link, nobody when two cards share it. A conversation from before this
-existed is linked the next time that person writes or her card is saved; an untouched card and a
-silent customer stay unlinked until then.
+exact number, only an empty link, nobody when two cards share it.
+
+And a conversation from **before** any of this existed — her card untouched, and she has not written
+since — is linked on its own too (whatsapp_inbox#163). A few minutes after the module is updated, a
+background sweep asks the same question once for every conversation that still has no customer:
+same rules, only an empty link, nobody when two cards share the number. It works in batches, so a
+hub with a long history may take a little while to get through all of them. A conversation it could
+not link (nobody on file with that number) is not asked again; it gets linked the moment she writes
+or a card with her number is saved.
 
 ## Templates are stored, not synchronised
 
