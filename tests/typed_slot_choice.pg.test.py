@@ -414,6 +414,19 @@ def check_behaviour(db):
         problems.append(
             f"remembering on a DELETED thread affected {affected} rows, expected 0"
         )
+    # A thread offered a list and deleted afterwards: its list must not come back either.
+    psql(
+        db,
+        f"UPDATE whatsapp_inbox_conversation SET offered_slots = {sql_literal(SLOTS)},"
+        f" offered_at = {sql_literal(NOW)} WHERE id = 'c7';\n",
+    )
+    got, err = read_back(db, DELETED_CONTACT, AN_HOUR_LATER)
+    if err:
+        return problems + [err]
+    if got[0]:
+        problems.append(
+            f"a DELETED thread still hands back the list it was offered ({got!r})"
+        )
 
     err, affected = run_command(
         db, {"wa_contact_id": "nobody-ever", "offered_slots": SLOTS}, "ghost", NOW
