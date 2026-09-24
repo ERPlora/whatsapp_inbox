@@ -707,6 +707,21 @@ mod tests {
     }
 
     #[test]
+    fn a_card_with_the_national_trunk_zero_is_her() {
+        // UK: the card says «07700 900123», WhatsApp says 447700900123. The trunk 0 is not part of
+        // the number; without dropping it the card is one digit off and never matches.
+        let input = input_with(core_event("447700900123"), json!({ "customers.by_phone": [customer("cu-tom", "07700 900123")] }));
+        assert_eq!(linked(&link_known_customer_pure(input).unwrap()).1, "cu-tom");
+    }
+
+    #[test]
+    fn four_extra_digits_are_not_a_country_code() {
+        // Country codes are 1-3 digits: a number that is the card plus four more is somebody else.
+        let input = input_with(core_event("1234600111222"), json!({ "customers.by_phone": [customer("cu-ana", "600 111 222")] }));
+        untouched(&link_known_customer_pure(input).unwrap());
+    }
+
+    #[test]
     fn a_short_fragment_on_a_card_is_never_her() {
         // Six digits are an extension or a typo, not an identity — whatever the read let through.
         let input = input_with(core_event("34600111222"), json!({ "customers.by_phone": [customer("cu-x", "111222")] }));
