@@ -7398,6 +7398,20 @@ _READS_1_1_77 = {
     APPOINTMENT_READ: _READS_1_1_76[APPOINTMENT_READ] | {WHEN_DATE, WHEN_TIME}
 }
 
+def _read_only_in_a_condition_key():
+    """The confirmation recipe with one more guard, on a column the fixture floors never answer."""
+    doc = _confirmation()
+    doc["steps"].insert(
+        1,
+        {
+            "id": "still_booked",
+            "kind": "condition",
+            "when": {"steps.read_appointment.status": {"eq": "confirmed"}},
+        },
+    )
+    return doc
+
+
 FLOOR_READ_CASES = [
     (
         "the floor already answers every column the recipe reads — `found`/`count` are the "
@@ -7416,10 +7430,17 @@ FLOOR_READ_CASES = [
         2,
     ),
     (
-        "🔴 a column read in a CONDITION key, not in a text: the phone guard reads "
-        "`customer_phone`, and a floor that predates it turns the guard into a `null` check",
+        "🔴 a column read in a CONDITION and in a param: the phone guard and the lookup read "
+        "`customer_phone`, and a floor that predates it turns both into a `null` check",
         _confirmation(),
         {APPOINTMENT_READ: _READS_1_1_77[APPOINTMENT_READ] - {"customer_phone"}},
+        1,
+    ),
+    (
+        "🔴 a column read ONLY as a condition KEY — the shape `when` spells its operands in — and "
+        "nowhere else: a walker that only reads values never sees it",
+        _read_only_in_a_condition_key(),
+        _READS_1_1_77,
         1,
     ),
     (
