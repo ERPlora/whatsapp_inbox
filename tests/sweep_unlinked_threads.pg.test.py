@@ -209,7 +209,8 @@ def main():
         db = "wa_sweep_" + uuid.uuid4().hex[:8]
         psql("postgres", f'CREATE DATABASE "{db}";')
         try:
-            for rel in MANIFEST["migrations"]["postgres"]:
+            for entry in MANIFEST["migrations"]["postgres"]:
+                rel = entry if isinstance(entry, str) else entry["file"]
                 if psql(db, (MODULE_DIR / rel).read_text()).returncode != 0:
                     problems.append(f"migration `{rel}` failed")
                     break
