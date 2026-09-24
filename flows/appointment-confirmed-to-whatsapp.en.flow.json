@@ -65,7 +65,7 @@
       },
       "template": "",
       "vars": {
-        "text": "Confirmed! We'll see you for your {{steps.read_appointment.service_name}} with {{steps.read_appointment.staff_name}}."
+        "text": "Confirmed! We'll see you on {{steps.read_appointment.start_date_label}} at {{steps.read_appointment.start_time_label}} for your {{steps.read_appointment.service_name}} with {{steps.read_appointment.staff_name}}."
       }
     }
   ]

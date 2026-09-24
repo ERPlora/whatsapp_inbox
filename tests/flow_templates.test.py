@@ -216,6 +216,12 @@ PHONE_FILTER = "f_contact_phone"
 # The contract key a `result: "first"` read always answers with, row or no row (`flows/query.rs`):
 # it is the ONLY thing that tells this family apart from a run whose appointment vanished.
 READ_FOUND = "found"
+# whatsapp_inbox#146 — the two columns `appointments.appointments.get` answers with the day and the
+# hour ALREADY READABLE, in the business's language and zone (appointments#151, first published in
+# 1.1.77). They arrive split on purpose: the connector («… a las …» / «… at …») is prose, and prose
+# lives in each language's own text (ADR-0055).
+WHEN_DATE = "start_date_label"
+WHEN_TIME = "start_time_label"
 
 
 def confirmation_notice_problems(name, doc):
@@ -342,6 +348,30 @@ def confirmation_notice_problems(name, doc):
             f"`flow.recipient_ambiguous` and nobody can read why. Asking `found` alone is green "
             f"over both"
         )
+
+    # Mark 6 — whatsapp_inbox#146: the message says WHEN. Skipped with no reader, because then
+    # there is nothing to name the hour from and mark 2 already said so.
+    if readers:
+        for notify in notifies:
+            text = (notify.get("vars") or {}).get("text")
+            placeholders = set(
+                re.findall(r"\{\{\s*([^{}]+?)\s*\}\}", text if isinstance(text, str) else "")
+            )
+            missing = [
+                label
+                for label in (WHEN_DATE, WHEN_TIME)
+                if not any(f"steps.{r.get('id')}.{label}" in placeholders for r in readers)
+            ]
+            if missing:
+                problems.append(
+                    f"{name} step `{notify.get('id')}` confirms the appointment without "
+                    f"{' or '.join(f'`{{{{steps.<read>.{m}}}}}`' for m in missing)} in its text: "
+                    f"she just asked for an appointment and the one thing she needs to know — the "
+                    f"day and the hour she has to come — is the one the message leaves out "
+                    f"(whatsapp_inbox#146). `{APPOINTMENT_READ}` answers both already readable, in "
+                    f"the business's language and zone; the raw `start_datetime` is an ISO instant "
+                    f"the mapping language cannot format"
+                )
     return problems
 
 
@@ -1524,6 +1554,62 @@ def emits_at_version(module_dir, version):
     return {e for e in emits if isinstance(e, str)} if isinstance(emits, list) else set(), None
 
 
+SQL_COMMENT = re.compile(r"--[^\n]*|/\*.*?\*/", re.S)
+SQL_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def sql_names_at_version(module_dir, version, rel):
+    """Every identifier a query's SQL MENTIONS in the tree published as `version`, comments out.
+
+    «Mentions», not «selects», on purpose: telling an output column from a filter would need a SQL
+    parser, and the names a template reads are output aliases (`… AS start_date_label`) that only
+    ever appear in the release that answers them. The price is a false GREEN when a template reads
+    a name the query only filters by — never a false red. Comments are stripped because a release
+    note can name a column before the SELECT does.
+
+    Returns `(names, None)` or `(None, reason)`: «not there» and «could not look» stay apart.
+    """
+    sha, why = release_commit(module_dir, version)
+    if sha is None:
+        return None, why
+    blob, why = git_in(module_dir, "show", f"{sha}:{rel}")
+    if blob is None:
+        return None, f"{module_dir.name}/{rel} is not in the tree of {version} ({why})"
+    return set(SQL_NAME.findall(SQL_COMMENT.sub(" ", blob))), None
+
+
+def floor_read_columns(floors, definitions, resolved, qids):
+    """`query id -> {names its SQL mentions}` AS OF the floor, for the `qids` a family reads.
+
+    Returns the map and the floors it could not read, printed as skips by `main()` — an unreadable
+    floor and a floor that is high enough look identical from here.
+    """
+    out, skipped = {}, []
+    for qid in sorted(qids):
+        module_id = qid.split(".", 1)[0]
+        floor = floors.get(module_id)
+        target = definitions.get(qid)
+        if floor is None or target is None or module_id not in resolved:
+            continue  # unfloored, or already reported as a name no module declares
+        module_dir, qdef = target
+        rel = qdef.get("sql")
+        if not isinstance(rel, str):
+            skipped.append(
+                f"`{qid}` declares no `sql` file, so what it answered at {floor} could not be read "
+                f"— the columns these templates read from it were NOT verified"
+            )
+            continue
+        names, why = sql_names_at_version(module_dir, floor, rel)
+        if names is None:
+            skipped.append(
+                f"what `{qid}` answered as of the declared floor {floor} could not be read "
+                f"({why}) — the columns these templates read from it were NOT verified"
+            )
+            continue
+        out[qid] = names
+    return out, skipped
+
+
 def floor_payload_properties(floors, commands_def, resolved):
     """`command id -> {declared property names}` AS OF the floor this family declares.
 
@@ -1662,6 +1748,72 @@ def floor_trigger_problems(name, doc, floor_emits):
                 f"copy where the trigger matches nothing and it never runs once — raise `modules` "
                 f"in `{name.split('.')[0]}.requires.json` to the version that declared it"
             )
+    return problems
+
+
+# The keys a `kind: query` step answers with whatever the SQL says (`flows/query.rs`): written by
+# the kernel, never a column, so no floor owes them.
+QUERY_CONTRACT_KEYS = {"found", "count", "options"}
+STEP_FIELD = re.compile(r"steps\.([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)")
+
+
+def step_field_references(doc):
+    """Every `steps.<id>.<field>` the document names — in a value, in a `{{…}}` text or as a KEY.
+
+    Keys count because a `condition` spells its operands as keys (`"steps.x.phone": {"neq": ""}`),
+    and a guard over a column the floor lacks is a guard over `null`.
+    """
+    refs = set()
+
+    def walk(node):
+        if isinstance(node, dict):
+            for k, v in node.items():
+                walk(k)
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+        elif isinstance(node, str):
+            refs.update(STEP_FIELD.findall(node))
+
+    walk(doc.get("steps") or [])
+    return refs
+
+
+def floor_read_column_problems(name, doc, floor_columns):
+    """The columns a family READS off a neighbour's query were already there at the declared floor.
+
+    The third twin of {@link floor_field_problems} (what the templates SEND) and
+    {@link floor_trigger_problems} (what wakes them up): this one holds the floor to what they
+    READ back. whatsapp_inbox#146 is why it exists — the confirmation now names the day and the
+    hour through `start_date_label` / `start_time_label`, two columns `appointments.appointments.get`
+    only answers since appointments#151 (1.1.77). The floor travels to the hub (hub#1611) and
+    decides whether the recipe is OFFERED, so a floor below that release hands the recipe to a copy
+    whose read has no such column: `{{steps.read_appointment.start_date_label}}` resolves to
+    nothing and the customer receives the placeholder, which is worse than not saying the hour.
+
+    `floor_columns` is `query id -> {names its SQL mentions at the floor}` (see
+    {@link sql_names_at_version} for why «mentions» and not «selects»). Silent by design on a query
+    whose owner this family pins no floor for and on a floor `main()` could not read.
+    """
+    readers = {
+        s.get("id"): s.get("query")
+        for s in doc.get("steps") or []
+        if isinstance(s, dict) and s.get("kind") == "query"
+    }
+    problems = []
+    for step_id, field in sorted(step_field_references(doc)):
+        qid = readers.get(step_id)
+        columns = floor_columns.get(qid)
+        if columns is None or field in QUERY_CONTRACT_KEYS or field in columns:
+            continue
+        problems.append(
+            f"{name} reads `steps.{step_id}.{field}` off `{qid}`, and the SQL of that query at "
+            f"the floor this family declares has no `{field}`: the hub OFFERS this recipe to a "
+            f"copy where the value resolves to nothing — a guard over `null`, or a customer "
+            f"receiving an empty gap where the data should be — raise `modules` in "
+            f"`{name.split('.')[0]}.requires.json` to the release that started answering it"
+        )
     return problems
 
 
@@ -3385,6 +3537,7 @@ def parking_producer_problems(name, doc, commands_def, read_perms):
 
 
 DOCUMENT_RULES = (
+    floor_read_column_problems,
     family_trigger_problems,
     confirmation_notice_problems,
     policy_problems,
@@ -3421,6 +3574,7 @@ DOCUMENT_RULES = (
 # (whatsapp_inbox#61, mutant P4). Every rule `self_check()` proves has to be one `main()` is
 # REQUIRED to apply, and that is asserted rather than assumed.
 SELF_CHECKED_RULES = (
+    floor_read_column_problems,
     family_trigger_problems,
     confirmation_notice_problems,
     policy_problems,
@@ -6471,6 +6625,94 @@ def _floor_reading_problems():
     return problems
 
 
+def _floor_read_reading_problems():
+    """`sql_names_at_version` reads a real git history, so `floor_read_column_problems` is only
+    worth what this proves: the release that answers the labels, the one below it — whose SQL
+    already NAMES them in a comment, the way a release note does — a version nobody released, a
+    file absent from the release, and the collector naming every floor it could not read.
+    """
+    problems = []
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        (root / "queries").mkdir()
+
+        def run(*args):
+            done = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
+            if done.returncode != 0:
+                problems.append(
+                    f"the battery could not build its own git fixture (`git {args[0]}`): "
+                    f"{done.stderr.strip()} — `sql_names_at_version` was NOT proved"
+                )
+            return done.returncode == 0
+
+        def commit(version, sql):
+            (root / "module.json").write_text(json.dumps({"id": "appointments", "version": version}))
+            (root / "queries" / "appointment_get.sql").write_text(sql)
+            return run("add", "-A") and run(
+                "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false",
+                "commit", "-q", "-m", f"chore(release): v{version}",
+            )
+
+        if not run("init", "-q"):
+            return problems
+        if not commit(
+            "1.1.76",
+            "-- start_date_label / start_time_label: coming in appointments#151\n"
+            "/* start_time_label */ SELECT a.customer_phone, a.start_datetime FROM a",
+        ):
+            return problems
+        if not commit(
+            "1.1.77",
+            "SELECT a.customer_phone, a.start_datetime, w.hh AS start_time_label, "
+            "w.d AS start_date_label FROM a",
+        ):
+            return problems
+
+        rel = "queries/appointment_get.sql"
+        for label, version, present, absent in [
+            (
+                "the release below the labels — they are only in its COMMENTS, and a reader that "
+                "kept comments would call this floor good",
+                "1.1.76",
+                {"customer_phone", "start_datetime"},
+                {WHEN_DATE, WHEN_TIME},
+            ),
+            ("the release that answers them", "1.1.77", {WHEN_DATE, WHEN_TIME}, set()),
+        ]:
+            got, why = sql_names_at_version(root, version, rel)
+            if got is None or not present <= got or absent & got:
+                problems.append(
+                    f"the battery's own reading of a released query is wrong — {label}: wanted "
+                    f"{sorted(present)} in and {sorted(absent)} out, got "
+                    f"{got if got is None else sorted(got)} ({why})"
+                )
+        for label, version, rel_ in [
+            ("a version nobody released — a typo in `requires.json`", "9.9.9", rel),
+            ("a query file absent from the release", "1.1.77", "queries/nowhere.sql"),
+        ]:
+            got, why = sql_names_at_version(root, version, rel_)
+            if got is not None or not why:
+                problems.append(
+                    f"the battery reads {label} as an answer instead of a skip: got {got} ({why})"
+                )
+
+        definitions = {APPOINTMENT_READ: (root, {"sql": rel})}
+        resolved = {"appointments": (root, {"id": "appointments"})}
+        for label, floors, want, want_skips in [
+            ("the floor that answers the labels", {"appointments": "1.1.77"}, True, 0),
+            ("a floor no release ever carried", {"appointments": "9.9.9"}, False, 1),
+            ("the family pins no floor for that module", {}, False, 0),
+        ]:
+            got, skips = floor_read_columns(floors, definitions, resolved, {APPOINTMENT_READ})
+            if (APPOINTMENT_READ in got) != want or len(skips) != want_skips:
+                problems.append(
+                    f"the battery's own collection of floor reads is wrong — {label}: expected "
+                    f"{'a reading' if want else 'none'} and {want_skips} skip(s), got "
+                    f"{sorted(got)} and {skips}"
+                )
+    return problems
+
+
 def _identity_reading_problems():
     """`payload_properties` reads the real schema files, so `identity_field_problems` is only worth
     what this proves: a schema on disk, one whose file is missing, one with no `schema` at all."""
@@ -6964,9 +7206,15 @@ def _confirmation(
     found_guard=True,
     notify=True,
     notify_to=None,
+    text=None,
 ):
     """The whatsapp_inbox#125 recipe, with one screw loosened at a time."""
     phone = f"steps.{read_id}.{DIARY_PHONE}"
+    if text is None:
+        text = (
+            f"Confirmed! See you on {{{{steps.{read_id}.{WHEN_DATE}}}}} at "
+            f"{{{{steps.{read_id}.{WHEN_TIME}}}}}."
+        )
     steps = []
     if read:
         steps.append(
@@ -7007,7 +7255,7 @@ def _confirmation(
                     "field": "contact_phone",
                 },
                 "template": "",
-                "vars": {"text": "Confirmed!"},
+                "vars": {"text": text},
             }
         )
     return {
@@ -7086,6 +7334,107 @@ CONFIRMATION_CASES = [
         _CONFIRMED_DOC,
         _confirmation(appointment_id="input.customer_id"),
         1,
+    ),
+    (
+        "🔴 whatsapp_inbox#146 word for word: «Confirmed! See you for your Cut with Ana». She just "
+        "asked for an appointment and the one thing she needs to know — WHEN to come — is the one "
+        "thing the message leaves out",
+        _CONFIRMED_DOC,
+        _confirmation(
+            text="Confirmed! See you for your {{steps.read_appointment.service_name}} with "
+            "{{steps.read_appointment.staff_name}}."
+        ),
+        1,
+    ),
+    (
+        "🔴 the day without the hour: «see you on Tuesday» leaves her guessing the half she needs "
+        "to set an alarm by",
+        _CONFIRMED_DOC,
+        _confirmation(text="Confirmed! See you on {{steps.read_appointment.start_date_label}}."),
+        1,
+    ),
+    (
+        "🔴 the hour without the day: «see you at 10:30» — which 10:30, when she asked for two "
+        "slots or the salon moved her",
+        _CONFIRMED_DOC,
+        _confirmation(text="Confirmed! See you at {{steps.read_appointment.start_time_label}}."),
+        1,
+    ),
+    (
+        "🔴 the raw instant instead of the labels: `2026-09-15T10:30:00+02:00` reaches her phone "
+        "as it is, because the mapping language has no clock and no formatter",
+        _CONFIRMED_DOC,
+        _confirmation(text="Confirmed! See you at {{steps.read_appointment.start_datetime}}."),
+        1,
+    ),
+    (
+        "🔴 the right field names, read off a step that is NOT the appointment read — it resolves "
+        "to nothing and the customer gets an empty «see you on  at .»",
+        _CONFIRMED_DOC,
+        _confirmation(
+            text="See you on {{steps.reachable_on_whatsapp.start_date_label}} at "
+            "{{steps.reachable_on_whatsapp.start_time_label}}."
+        ),
+        1,
+    ),
+    (
+        "🔴 the labels written bare, without the braces: the kernel only substitutes `{{…}}`, so "
+        "she receives the literal words `steps.read_appointment.start_date_label`",
+        _CONFIRMED_DOC,
+        _confirmation(
+            text="See you on steps.read_appointment.start_date_label at "
+            "steps.read_appointment.start_time_label."
+        ),
+        1,
+    ),
+]
+
+
+# What `appointments.appointments.get` NAMED in its published SQL on each side of appointments#151 —
+# the release that started answering the day and the hour already readable is 1.1.77 (`2cd6d26`),
+# and 1.1.76 (`52588bf`) is the one below it. Trimmed to the names this family reads.
+_READS_1_1_76 = {APPOINTMENT_READ: {"customer_phone", "service_name", "staff_name", "start_datetime"}}
+_READS_1_1_77 = {
+    APPOINTMENT_READ: _READS_1_1_76[APPOINTMENT_READ] | {WHEN_DATE, WHEN_TIME}
+}
+
+FLOOR_READ_CASES = [
+    (
+        "the floor already answers every column the recipe reads — `found`/`count` are the "
+        "kernel's contract keys (`flows/query.rs`), never a column, and must not be demanded",
+        _confirmation(),
+        _READS_1_1_77,
+        0,
+    ),
+    (
+        "🔴 whatsapp_inbox#146 with the text changed and the floor left at 1.1.76: the hub OFFERS "
+        "the recipe to a copy whose read has no labels, and the customer receives the literal "
+        "`{{steps.read_appointment.start_date_label}}` — worse than not saying the hour (two "
+        "columns, two problems)",
+        _confirmation(),
+        _READS_1_1_76,
+        2,
+    ),
+    (
+        "🔴 a column read in a CONDITION key, not in a text: the phone guard reads "
+        "`customer_phone`, and a floor that predates it turns the guard into a `null` check",
+        _confirmation(),
+        {APPOINTMENT_READ: _READS_1_1_77[APPOINTMENT_READ] - {"customer_phone"}},
+        1,
+    ),
+    (
+        "the query's floor could not be read — `main()` skipped it out loud, and guessing here "
+        "would be this rule inventing a floor it never saw",
+        _confirmation(),
+        {},
+        0,
+    ),
+    (
+        "a read of this module's OWN query is pinned by no neighbour's floor: nothing is "
+        "promised about it, so nothing is demanded (`reachable_on_whatsapp.contact_phone`)",
+        _confirmation(),
+        {CONVERSATIONS_READ: set()} | _READS_1_1_77,
+        0,
     ),
 ]
 
@@ -7327,6 +7676,15 @@ def self_check():
                 f"{label}: expected {expected} problem(s), got {len(got)}: {got}"
             )
 
+    problems += _floor_read_reading_problems()
+    for label, doc, floor_columns, expected in FLOOR_READ_CASES:
+        got = floor_read_column_problems("(self-check)", doc, floor_columns)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «the floor already answers the columns we read» rule is "
+                f"wrong — {label}: expected {expected} problem(s), got {len(got)}: {got}"
+            )
+
     for label, name, doc, expected in POLICY_CASES:
         got = policy_problems(name, doc, _FIXTURE_COMMANDS, _FIXTURE_READS)
         if len(got) != expected:
@@ -7484,6 +7842,7 @@ def main():
     # walks the neighbour's git history and both languages of a family share the same floor.
     floor_props_by_family = {}
     floor_emits_by_family = {}
+    floor_reads_by_family = {}
 
     for path in docs:
         doc = json.loads(path.read_text())
@@ -7649,6 +8008,31 @@ def main():
                 ledger, floor_trigger_problems, path.name, doc, floor_emits_by_family[fpath]
             )
 
+        # 3a-vi-sexies) …and the neighbour already ANSWERED the columns this family reads back at
+        # that same floor (whatsapp_inbox#146): a column the floor lacks resolves to nothing, and
+        # the customer receives the placeholder.
+        if definitions is not None:
+            fpath = floors_of(path)
+            declared = (json.loads(fpath.read_text()) or {}).get("modules") or {} if fpath.is_file() else {}
+            cached = floor_reads_by_family.setdefault(fpath, {})
+            wanted = {
+                s.get("query")
+                for s in doc.get("steps") or []
+                if s.get("kind") == "query" and isinstance(s.get("query"), str)
+            } - set(cached)
+            if wanted:
+                got, read_skips = floor_read_columns(declared, definitions, resolved, wanted)
+                cached.update(got)
+                cached.update({q: None for q in wanted - set(got)})
+                skipped += [f"{fpath.name}: {why}" for why in read_skips]
+            problems += applied(
+                ledger,
+                floor_read_column_problems,
+                path.name,
+                doc,
+                {q: c for q, c in cached.items() if c is not None},
+            )
+
         # 3b) Every parameter is a word the query it addresses actually knows.
         #
         # A name that exists is not a name that filters. `whatsapp_inbox.conversations.list`
@@ -7721,6 +8105,7 @@ def main():
             identity_field_problems.__name__,
             floor_field_problems.__name__,
             floor_trigger_problems.__name__,
+            floor_read_column_problems.__name__,
             parking_producer_problems.__name__,
         }
         if commands_def is None
