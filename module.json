@@ -87,7 +87,7 @@
       "migrations/postgres/006_message_source.sql",
       "migrations/postgres/007_meta_rejected_reason.sql",
       "migrations/postgres/008_quota_usage.sql",
-      "migrations/postgres/009_link_sweep.sql"
+      "migrations/postgres/010_link_sweep.sql"
     ]
   },
   "queries": {
