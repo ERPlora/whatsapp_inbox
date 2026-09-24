@@ -45,10 +45,30 @@ LISTENER = "whatsapp_inbox._link_customer_threads"
 WRITE = "whatsapp_inbox._link_customer_threads_write"
 FUNCTION = "link_customer_threads"
 READ = "customers.by_phone"
+# First `customers` release that serves `customers.by_phone` (customers#79). Without this floor a hub
+# that updates this module but keeps an older `customers` loses the read: the runtime omits it
+# (graceful) and the link silently stops for everybody (hub#681 is the refusal that prevents it).
+BY_PHONE_SINCE = (2, 3, 45)
+
+
+def customers_floor():
+    for dep in MANIFEST.get("depends_on") or []:
+        if isinstance(dep, dict) and dep.get("id") == "customers":
+            floor = dep.get("min_version") or ""
+            parts = floor.split(".")
+            if len(parts) == 3 and all(p.isdigit() for p in parts):
+                return tuple(int(p) for p in parts)
+    return None
 
 
 def check():
     problems = []
+    floor = customers_floor()
+    if floor is None or floor < BY_PHONE_SINCE:
+        problems.append(
+            f"`depends_on` does not require customers >= {'.'.join(map(str, BY_PHONE_SINCE))} "
+            f"(got {floor!r}): with an older customers `{READ}` is missing and nobody is linked"
+        )
     listen = (MANIFEST.get("events") or {}).get("listen") or {}
     for event in EVENTS:
         target = (listen.get(event) or {}).get("command")
