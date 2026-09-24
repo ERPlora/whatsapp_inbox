@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "whatsapp_inbox._link_known_customer",
+  "description": "The payload of `whatsapp_inbox.message.received`, verbatim — a manifest listener has no mapping layer. Two commands emit it with different shapes (`_ingest_inbound_message`: `from`/`contact`/`direction`; `messages.ingest`: `wa_contact_id`/`contact_phone`), so nothing is required and anything is accepted: a stricter schema would not degrade the link, it would dead-letter the event for this listener. The handler resolves the contact and links nobody when it cannot.",
+  "type": "object",
+  "additionalProperties": true
+}

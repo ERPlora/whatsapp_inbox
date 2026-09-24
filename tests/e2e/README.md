@@ -28,6 +28,23 @@ cd "$HUB" && DATABASE_URL="postgres://postgres:test@localhost:5435/hub_test" \
   cargo test -p erplora-runtime --test whatsapp_appointment_e2e
 ```
 
+### `known_customer_link_e2e.rs` (whatsapp_inbox#149)
+
+La conversación aprende de quién es **sin ninguna automatización**: evento core → `_ingest_inbound_message`
+→ `whatsapp_inbox.message.received` → `_link_known_customer` (handler WASM con `customers.list`
+pre-cargada por `reads`) → `_link_known_customer_write`. Instala solo `customers` y este módulo, así
+que el directorio de módulos necesita esos dos:
+
+```bash
+cp tests/e2e/known_customer_link_e2e.rs "$HUB/crates/runtime/tests/"
+cd "$HUB" && DATABASE_URL=… ERPLORA_MODULES_DIR="$MODS" \
+  cargo test -p erplora-runtime --test known_customer_link_e2e
+```
+
+Control negativo medido: contra `whatsapp_inbox@main` sin el listener caen 2 de los 3 (el hilo
+queda con `customer_id` `Null`); el tercero —un número que nadie tiene en ficha— sigue verde, como
+debe.
+
 ## Qué NO prueba, y por qué no puede
 
 - **El mensaje de WhatsApp real.** El evento se inserta como lo inserta `inbound_poll.rs`

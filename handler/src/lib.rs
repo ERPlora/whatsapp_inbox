@@ -4,12 +4,14 @@
 //! transacción. Los eventos los emite el runtime vía el `emit` declarado en
 //! `module.json` (no se duplican aquí).
 //!
-//! Exporta dos funciones:
+//! Exporta tres funciones:
 //! * `fulfill_request` — cumplir una request (portado de
 //!   `RequestService.fulfill_request`, ver `WASM-TODO.md` §1).
 //! * `parse_inbound_message` — crear la request parseada por el LLM (pieza 3 de
 //!   `WASM-TODO.md`; la persistencia del mensaje inbound la cubre el command
 //!   Tier-0 `whatsapp_inbox.messages.ingest`).
+//! * `link_known_customer` — links a conversation to the customer on file for the number that
+//!   wrote, with no automation installed (whatsapp_inbox#149).
 //!
 //! Ramas:
 //! * `create_linked_object = false` (default) — transición simple a `fulfilled`.
@@ -48,6 +50,15 @@ pub fn fulfill_request(input: Json<erplora_guest_sdk::Input>) -> FnResult<Json<O
 #[plugin_fn]
 pub fn parse_inbound_message(input: Json<erplora_guest_sdk::Input>) -> FnResult<Json<Output>> {
     match parse_inbound_message_pure(input.into_inner().into_value()) {
+        Ok(out) => Ok(Json(out)),
+        Err(msg) => Err(WithReturnCode::new(Error::msg(msg), 1)),
+    }
+}
+
+#[cfg(feature = "guest")]
+#[plugin_fn]
+pub fn link_known_customer(input: Json<erplora_guest_sdk::Input>) -> FnResult<Json<Output>> {
+    match link_known_customer_pure(input.into_inner().into_value()) {
         Ok(out) => Ok(Json(out)),
         Err(msg) => Err(WithReturnCode::new(Error::msg(msg), 1)),
     }
@@ -341,6 +352,89 @@ pub fn parse_inbound_message_pure(input: Value) -> Result<Output, String> {
         .with_operation(Operation::sql("whatsapp_inbox._insert_request", insert)))
 }
 
+// ───────────────────── link_known_customer (whatsapp_inbox#149) ─────────────────────
+
+/// The query whose rows `_link_known_customer` pre-loads (`reads`, ADR-0069). `customers` is a HARD
+/// dependency of this module, so the read is in scope; the module still never touches the customers
+/// table from its own SQL (`customer_id` stays a soft reference).
+const CUSTOMERS_READ: &str = "customers.list";
+
+/// A phone reduced to its digits: `+34 600-111-222` and `34600111222` are the same number.
+fn phone_digits(v: &Value) -> String {
+    as_str(v).chars().filter(|c| c.is_ascii_digit()).collect()
+}
+
+/// The contact the thread is keyed by — the value `wa_contact_id` holds for this message — or
+/// `None` when the payload names nobody the business talks to.
+///
+/// Two emitters publish `whatsapp_inbox.message.received`, each with its own payload:
+/// * `_ingest_inbound_message` (the core event): `contact` is the customer in BOTH directions
+///   (hub#1612). A hub older than that sends no `contact`, and then `from` is the thread — but only
+///   when the customer SPOKE: in an outbound echo `from` is the shop's own number.
+/// * `messages.ingest`: `wa_contact_id`, verbatim.
+fn thread_contact(payload: &Value) -> Option<String> {
+    let field = |k: &str| payload.get(k).map(as_str).filter(|s| !s.is_empty());
+    if let Some(contact) = field("contact") {
+        return Some(contact);
+    }
+    if let Some(wa_contact_id) = field("wa_contact_id") {
+        return Some(wa_contact_id);
+    }
+    let direction = field("direction").unwrap_or_else(|| "inbound".to_string());
+    if direction == "inbound" {
+        return field("from");
+    }
+    None
+}
+
+/// Links the conversation to the customer whose card carries the number that wrote — with NO
+/// automation installed (whatsapp_inbox#149). Runs as the listener of this module's own
+/// `whatsapp_inbox.message.received`, after the thread row exists.
+///
+/// It NEVER refuses: a listener that errors is retried and dead-letters, and «we could not tell
+/// whose it is» is not a failure of the message. Every doubt resolves to «link nobody»:
+/// * the read did not arrive (`None`) — nothing is guessed from an absent catalogue;
+/// * the read is a LIKE (`%digits%`), so the handler decides by EXACT digits: a longer number that
+///   merely contains the contact is somebody else;
+/// * two different customers carry the number — picking one files the thread under the wrong
+///   person, so a human decides.
+///
+/// Whether an EXISTING link is kept is the write's job (`_link_known_customer_write.sql` only fills
+/// an empty `customer_id`): a person or a recipe that already linked the thread wins.
+pub fn link_known_customer_pure(input: Value) -> Result<Output, String> {
+    let payload = input.get("payload").cloned().unwrap_or(Value::Null);
+    let Some(contact) = thread_contact(&payload) else {
+        return Ok(Output::new());
+    };
+    let wanted = phone_digits(&Value::String(contact.clone()));
+    if wanted.is_empty() {
+        return Ok(Output::new());
+    }
+    let Some(rows) = read_rows(&input, CUSTOMERS_READ) else {
+        return Ok(Output::new());
+    };
+
+    let mut matches: Vec<String> = rows
+        .iter()
+        .filter(|row| phone_digits(row.get("phone").unwrap_or(&Value::Null)) == wanted)
+        .map(|row| as_str(row.get("id").unwrap_or(&Value::Null)))
+        .filter(|id| !id.is_empty())
+        .collect();
+    matches.sort();
+    matches.dedup();
+    let [customer_id] = matches.as_slice() else {
+        return Ok(Output::new());
+    };
+
+    let mut params = Map::new();
+    params.insert("wa_contact_id".into(), json!(contact));
+    params.insert("customer_id".into(), json!(customer_id));
+    Ok(Output::new().with_operation(Operation::sql(
+        "whatsapp_inbox._link_known_customer_write",
+        params,
+    )))
+}
+
 // ───────────────────── tests (pure functions, no DB, ADR-0069 §1) ─────────────────────
 
 #[cfg(test)]
@@ -470,5 +564,122 @@ mod tests {
             parse_inbound_message_pure(input).is_err(),
             "a missing parsed_data must stay a payload error, not a read refusal"
         );
+    }
+
+    // ── link_known_customer: the thread learns whose it is with NO automation (whatsapp_inbox#149) ──
+
+    fn customer(id: &str, phone: &str) -> Value {
+        json!({ "id": id, "name": "Ana", "phone": phone })
+    }
+
+    fn core_event(contact: &str) -> Value {
+        json!({ "wa_message_id": "wamid.1", "from": contact, "contact": contact, "direction": "inbound", "text": "hola" })
+    }
+
+    fn linked(out: &Output) -> (String, String) {
+        assert!(out.error.is_none(), "a listener must never refuse: {out:?}");
+        assert_eq!(out.operations.len(), 1, "exactly one link intent expected: {out:?}");
+        let op = &out.operations[0];
+        assert_eq!(op.command, "whatsapp_inbox._link_known_customer_write");
+        (as_str(&op.params["wa_contact_id"]), as_str(&op.params["customer_id"]))
+    }
+
+    fn untouched(out: &Output) {
+        assert!(out.error.is_none(), "a listener must never refuse (it would dead-letter the message): {out:?}");
+        assert!(out.operations.is_empty(), "nothing may be linked here: {out:?}");
+    }
+
+    #[test]
+    fn a_message_from_a_number_on_file_links_the_thread_to_that_customer() {
+        let input = input_with(
+            core_event("34600111222"),
+            json!({ "customers.list": [customer("cu-ana", "+34600111222")] }),
+        );
+        let out = link_known_customer_pure(input).expect("no trap");
+        assert_eq!(linked(&out), ("34600111222".to_string(), "cu-ana".to_string()));
+    }
+
+    #[test]
+    fn the_phone_on_file_matches_whatever_way_it_was_typed() {
+        // The read filters with LIKE, the handler decides by DIGITS: spaces, dashes and the `+`
+        // the owner typed on the customer card are formatting, not a different number.
+        let input = input_with(
+            core_event("34600111222"),
+            json!({ "customers.list": [customer("cu-ana", "+34 600-111-222")] }),
+        );
+        assert_eq!(linked(&link_known_customer_pure(input).unwrap()).1, "cu-ana");
+    }
+
+    #[test]
+    fn a_longer_number_that_merely_contains_the_contact_is_not_her() {
+        // LIKE '%34600111222%' also answers +346001112229: containing is not being.
+        let input = input_with(
+            core_event("34600111222"),
+            json!({ "customers.list": [customer("cu-other", "+346001112229")] }),
+        );
+        untouched(&link_known_customer_pure(input).unwrap());
+    }
+
+    #[test]
+    fn two_different_customers_with_that_number_link_nobody() {
+        // Two cards, one phone (a mother and her daughter share it): picking one would file the
+        // thread under the wrong person. Leave it for a human.
+        let input = input_with(
+            core_event("34600111222"),
+            json!({ "customers.list": [customer("cu-ana", "+34600111222"), customer("cu-eva", "34600111222")] }),
+        );
+        untouched(&link_known_customer_pure(input).unwrap());
+    }
+
+    #[test]
+    fn a_number_nobody_has_on_file_links_nobody_and_does_not_fail() {
+        let input = input_with(core_event("34600111222"), json!({ "customers.list": [] }));
+        untouched(&link_known_customer_pure(input).unwrap());
+    }
+
+    #[test]
+    fn without_the_read_nothing_is_guessed_and_the_message_is_not_dead_lettered() {
+        let input = input_with(core_event("34600111222"), json!({}));
+        untouched(&link_known_customer_pure(input).unwrap());
+    }
+
+    #[test]
+    fn the_echo_of_the_owners_reply_links_the_customer_not_the_shop() {
+        // hub#1612: in an echo `from` is the shop's own number; `contact` is still the customer.
+        let payload = json!({ "wa_message_id": "wamid.2", "from": "34911000000", "contact": "34600111222", "direction": "outbound" });
+        let input = input_with(
+            payload,
+            json!({ "customers.list": [customer("cu-shop", "+34911000000"), customer("cu-ana", "+34600111222")] }),
+        );
+        assert_eq!(linked(&link_known_customer_pure(input).unwrap()), ("34600111222".to_string(), "cu-ana".to_string()));
+    }
+
+    #[test]
+    fn a_hub_older_than_the_contact_field_falls_back_to_the_sender() {
+        let payload = json!({ "wa_message_id": "wamid.3", "from": "34600111222" });
+        let input = input_with(payload, json!({ "customers.list": [customer("cu-ana", "+34600111222")] }));
+        assert_eq!(linked(&link_known_customer_pure(input).unwrap()), ("34600111222".to_string(), "cu-ana".to_string()));
+    }
+
+    #[test]
+    fn a_hub_older_than_the_contact_field_never_links_an_echo_to_the_shop() {
+        // No `contact` and an outbound echo: `from` is the SHOP, so there is nobody to link.
+        let payload = json!({ "wa_message_id": "wamid.4", "from": "34911000000", "direction": "outbound" });
+        let input = input_with(payload, json!({ "customers.list": [customer("cu-shop", "+34911000000")] }));
+        untouched(&link_known_customer_pure(input).unwrap());
+    }
+
+    #[test]
+    fn the_manual_ingest_door_is_keyed_by_its_own_contact_fields() {
+        // `messages.ingest` emits the same event with ITS payload: `wa_contact_id` + `contact_phone`.
+        let payload = json!({ "wa_contact_id": "34600111222", "contact_phone": "+34600111222", "wa_message_id": "wamid.5" });
+        let input = input_with(payload, json!({ "customers.list": [customer("cu-ana", "+34600111222")] }));
+        assert_eq!(linked(&link_known_customer_pure(input).unwrap()), ("34600111222".to_string(), "cu-ana".to_string()));
+    }
+
+    #[test]
+    fn a_customer_card_without_a_phone_is_never_a_match() {
+        let input = input_with(core_event("34600111222"), json!({ "customers.list": [customer("cu-x", ""), json!({"id": "cu-y"})] }));
+        untouched(&link_known_customer_pure(input).unwrap());
     }
 }

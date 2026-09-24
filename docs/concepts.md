@@ -106,6 +106,21 @@ The customer on a conversation or a request is an id, resolved through `customer
 queries**. This module never reads that module's tables, and there is no foreign key. The same is
 true of who a conversation is assigned to.
 
+## A message from a number on file tells the inbox whose the conversation is
+
+No automation is needed. Every time a message arrives, the inbox looks for a customer whose phone
+is **exactly** the number that wrote (a longer number that merely contains it is somebody else) and
+links the conversation to her. Today the card must hold the number in international form, digits
+together, with or without a leading `+` (`+34600111222`): a card typed with spaces or without the
+country code (`600 111 222`) is not found yet (whatsapp_inbox#162).
+From then on, filtering the inbox by that customer finds the thread, and every request read from it
+is born carrying her.
+
+It only fills an **empty** link. If a person or an automation already said whose the conversation
+is, the phone match never changes it. It links nobody when two different customers share the number
+(a family phone): a person decides that one. And a conversation that already existed is linked the
+next time that person writes — nothing is linked retroactively.
+
 ## Templates are stored, not synchronised
 
 A template carries its status at Meta, and **nothing checks with Meta**. If Meta approves or rejects
