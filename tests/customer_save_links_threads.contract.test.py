@@ -16,11 +16,13 @@ What is checked here, each one a way the chain breaks silently:
    and a listener of a name nobody emits is green here and dead in production.
 2. **The listener is closed and real**: `internal`, a permission, the WASM function it calls is
    EXPORTED by the handler.
-3. **It pre-loads `customers.list` filtered by `payload.phone`** — unfiltered, the handler gets
+3. **It pre-loads `customers.by_phone` for `payload.phone`** — unfiltered, the handler gets
    one page of the whole list and cannot tell a unique card from a twin on page two — and the read
    is not `required`, or a failing read would dead-letter the customer event.
-4. **It lands through `_link_known_customer_write`**, the fill-only door #149 pins against real
-   Postgres (`known_customer_links_itself.pg.test.py`): no second write with its own rules.
+4. **It lands through `_link_customer_threads_write`**, the fill-only door that finds the thread
+   by NUMBER (whatsapp_inbox#162: a card typed without the country code is `600111222`, the
+   thread is keyed `34600111222`); its behaviour is pinned against real Postgres in
+   `customer_save_links_threads.pg.test.py`.
 
 The decision (which card, twins, the fresh `new_id` of an edit) is pinned by the handler's Rust
 tests (`handler/src/lib.rs`, `link_customer_threads_*`); the end-to-end chain on the real runtime by
@@ -40,9 +42,9 @@ CUSTOMERS_MANIFEST = MODULE_DIR.parent / "customers" / "module.json"
 
 EVENTS = ("customer.created", "customer.updated")
 LISTENER = "whatsapp_inbox._link_customer_threads"
-WRITE = "whatsapp_inbox._link_known_customer_write"
+WRITE = "whatsapp_inbox._link_customer_threads_write"
 FUNCTION = "link_customer_threads"
-READ = "customers.list"
+READ = "customers.by_phone"
 
 
 def check():
@@ -108,9 +110,9 @@ def check():
         problems.append(
             f"`{LISTENER}` does not pre-load `{READ}`: the handler knows no card"
         )
-    elif (reads[0].get("params") or {}).get("f_phone") != "payload.phone":
+    elif (reads[0].get("params") or {}).get("phone") != "payload.phone":
         problems.append(
-            f"`{LISTENER}` reads `{READ}` without `f_phone: payload.phone` "
+            f"`{LISTENER}` reads `{READ}` without `phone: payload.phone` "
             f"({reads[0].get('params')!r}): a twin card on page two would go unseen"
         )
     elif reads[0].get("required"):

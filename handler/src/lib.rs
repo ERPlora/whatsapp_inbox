@@ -365,14 +365,35 @@ pub fn parse_inbound_message_pure(input: Value) -> Result<Output, String> {
 
 // ───────────────────── link_known_customer (whatsapp_inbox#149) ─────────────────────
 
-/// The query whose rows `_link_known_customer` pre-loads (`reads`, ADR-0069). `customers` is a HARD
-/// dependency of this module, so the read is in scope; the module still never touches the customers
-/// table from its own SQL (`customer_id` stays a soft reference).
-const CUSTOMERS_READ: &str = "customers.list";
+/// The query whose rows the two link listeners pre-load (`reads`, ADR-0069): the customers whose
+/// phone is the same NUMBER as the one given, however either side was typed (whatsapp_inbox#162 —
+/// `customers.list` compared the raw text, so «600 111 222» never matched 34600111222). `customers`
+/// is a HARD dependency, so the read is in scope; the module still never touches the customers table
+/// from its own SQL (`customer_id` stays a soft reference).
+const CUSTOMERS_READ: &str = "customers.by_phone";
 
-/// A phone reduced to its digits: `+34 600-111-222` and `34600111222` are the same number.
-fn phone_digits(v: &Value) -> String {
-    as_str(v).chars().filter(|c| c.is_ascii_digit()).collect()
+/// Shortest number that identifies a person: fewer digits are an extension or a typo.
+const MIN_NUMBER_DIGITS: usize = 7;
+
+/// A phone reduced to the number it names: digits only, leading zeros dropped (the `00`
+/// international prefix, a national trunk `0`). `+34 600-111-222`, `0034600111222` and
+/// `34600111222` are the same number.
+fn phone_number(v: &Value) -> String {
+    let digits: String = as_str(v).chars().filter(|c| c.is_ascii_digit()).collect();
+    digits.trim_start_matches('0').to_string()
+}
+
+/// Whether two numbers (as `phone_number` leaves them) are the same person's: equal, or one is the
+/// other plus a 1-3 digit country code — a card typed without it is still her. The SAME rule as
+/// `customers.by_phone` (customers/queries/by_phone.sql): the read narrows, this decides, and both
+/// must agree or a row the read let through would be judged by a different yardstick.
+fn same_number(a: &str, b: &str) -> bool {
+    if a.len() < MIN_NUMBER_DIGITS || b.len() < MIN_NUMBER_DIGITS {
+        return false;
+    }
+    let (long, short) = if a.len() >= b.len() { (a, b) } else { (b, a) };
+    let extra = long.len() - short.len();
+    (extra == 0 && long == short) || ((1..=3).contains(&extra) && long.ends_with(short))
 }
 
 /// The contact the thread is keyed by — the value `wa_contact_id` holds for this message — or
@@ -405,8 +426,8 @@ fn thread_contact(payload: &Value) -> Option<String> {
 /// It NEVER refuses: a listener that errors is retried and dead-letters, and «we could not tell
 /// whose it is» is not a failure of the message. Every doubt resolves to «link nobody»:
 /// * the read did not arrive (`None`) — nothing is guessed from an absent catalogue;
-/// * the read is a LIKE (`%digits%`), so the handler decides by EXACT digits: a longer number that
-///   merely contains the contact is somebody else;
+/// * the handler re-decides every row by `same_number` (the rule `customers.by_phone` applies): a
+///   longer number that merely contains the contact is somebody else, a fragment is nobody;
 /// * two different customers carry the number — picking one files the thread under the wrong
 ///   person, so a human decides.
 ///
@@ -417,40 +438,37 @@ pub fn link_known_customer_pure(input: Value) -> Result<Output, String> {
     let Some(contact) = thread_contact(&payload) else {
         return Ok(Output::new());
     };
-    let wanted = phone_digits(&Value::String(contact.clone()));
-    if wanted.is_empty() {
+    let wanted = phone_number(&Value::String(contact.clone()));
+    let Some(customer_id) = the_only_card(&input, &wanted) else {
         return Ok(Output::new());
-    }
-    Ok(link_to_the_only_card(&input, &wanted, contact))
+    };
+    let mut params = Map::new();
+    params.insert("wa_contact_id".into(), json!(contact));
+    params.insert("customer_id".into(), json!(customer_id));
+    Ok(Output::new().with_operation(Operation::sql(
+        "whatsapp_inbox._link_known_customer_write",
+        params,
+    )))
 }
 
-/// The link intent for the thread keyed by `wa_contact_id`, when exactly ONE customer card of the
-/// pre-loaded `customers.list` carries the phone `wanted` (in digits). Every doubt resolves to «link
-/// nobody»: the read did not arrive, no card matches exactly (the read is a LIKE, so a longer number
-/// that merely contains it is somebody else), or two different cards share it.
-fn link_to_the_only_card(input: &Value, wanted: &str, wa_contact_id: String) -> Output {
-    let Some(rows) = read_rows(input, CUSTOMERS_READ) else {
-        return Output::new();
-    };
+/// The one customer card of the pre-loaded `customers.by_phone` whose phone is the same number as
+/// `wanted`. Every doubt resolves to «nobody»: the read did not arrive, no card is the same number
+/// (a longer number that merely contains it is somebody else, a fragment is nobody), or two
+/// different cards share it — picking one would file the thread under the wrong person.
+fn the_only_card(input: &Value, wanted: &str) -> Option<String> {
+    let rows = read_rows(input, CUSTOMERS_READ)?;
     let mut matches: Vec<String> = rows
         .iter()
-        .filter(|row| phone_digits(row.get("phone").unwrap_or(&Value::Null)) == wanted)
+        .filter(|row| same_number(&phone_number(row.get("phone").unwrap_or(&Value::Null)), wanted))
         .map(|row| as_str(row.get("id").unwrap_or(&Value::Null)))
         .filter(|id| !id.is_empty())
         .collect();
     matches.sort();
     matches.dedup();
-    let [customer_id] = matches.as_slice() else {
-        return Output::new();
-    };
-
-    let mut params = Map::new();
-    params.insert("wa_contact_id".into(), json!(wa_contact_id));
-    params.insert("customer_id".into(), json!(customer_id));
-    Output::new().with_operation(Operation::sql(
-        "whatsapp_inbox._link_known_customer_write",
-        params,
-    ))
+    match matches.as_slice() {
+        [customer_id] => Some(customer_id.clone()),
+        _ => None,
+    }
 }
 
 // ───────────────────── link_customer_threads (whatsapp_inbox#160) ─────────────────────
@@ -461,22 +479,33 @@ fn link_to_the_only_card(input: &Value, wanted: &str, wa_contact_id: String) -> 
 /// `customer.created` and `customer.updated`.
 ///
 /// Same rule as `link_known_customer_pure`, seen from the card: the thread goes to the ONE card
-/// whose phone is exactly those digits, and to nobody when two cards share the number. The card is
+/// whose phone is the same NUMBER (`same_number`), and to nobody when two cards share it. The card is
 /// identified by the read, never by the payload: the runtime binds a FRESH `new_id` to every
 /// command it runs, the listener included, so the id the creation used is not in the payload the
 /// handler receives (`system_params`). The saved card is always among the rows (the read filters by
 /// its own phone), so «exactly one» is her — or nobody, when a twin is on file.
 ///
 /// It never refuses: a listener that errors dead-letters the customer event, and «we could not
-/// tell» is not a failure of saving a card. The thread is keyed by `wa_contact_id`, the
-/// international number in digits; the write only fills an empty link.
+/// tell» is not a failure of saving a card. The thread is keyed by `wa_contact_id`, WhatsApp's
+/// international number, while the card may lack the country code (whatsapp_inbox#162), so the
+/// intent carries the NUMBER and `_link_customer_threads_write` finds the thread by it; the write
+/// only fills an empty link.
 pub fn link_customer_threads_pure(input: Value) -> Result<Output, String> {
     let payload = input.get("payload").cloned().unwrap_or(Value::Null);
-    let wanted = phone_digits(payload.get("phone").unwrap_or(&Value::Null));
-    if wanted.is_empty() {
+    let wanted = phone_number(payload.get("phone").unwrap_or(&Value::Null));
+    let Some(customer_id) = the_only_card(&input, &wanted) else {
         return Ok(Output::new());
-    }
-    Ok(link_to_the_only_card(&input, &wanted, wanted.clone()))
+    };
+    // The card knows a NUMBER, not the thread key: a card typed without the country code is
+    // `600111222` while WhatsApp keyed her thread `34600111222`. The write finds the thread by the
+    // same number rule (`_link_customer_threads_write.sql`).
+    let mut params = Map::new();
+    params.insert("phone".into(), json!(wanted));
+    params.insert("customer_id".into(), json!(customer_id));
+    Ok(Output::new().with_operation(Operation::sql(
+        "whatsapp_inbox._link_customer_threads_write",
+        params,
+    )))
 }
 
 // ───────────────────── tests (pure functions, no DB, ADR-0069 §1) ─────────────────────
@@ -628,6 +657,16 @@ mod tests {
         (as_str(&op.params["wa_contact_id"]), as_str(&op.params["customer_id"]))
     }
 
+    /// The #160 direction: the card knows a NUMBER, not the thread key, so its intent is the write
+    /// that finds the thread by number (`_link_customer_threads_write`), never the exact-key one.
+    fn claimed(out: &Output) -> (String, String) {
+        assert!(out.error.is_none(), "a listener must never refuse: {out:?}");
+        assert_eq!(out.operations.len(), 1, "exactly one claim intent expected: {out:?}");
+        let op = &out.operations[0];
+        assert_eq!(op.command, "whatsapp_inbox._link_customer_threads_write");
+        (as_str(&op.params["phone"]), as_str(&op.params["customer_id"]))
+    }
+
     fn untouched(out: &Output) {
         assert!(out.error.is_none(), "a listener must never refuse (it would dead-letter the message): {out:?}");
         assert!(out.operations.is_empty(), "nothing may be linked here: {out:?}");
@@ -637,7 +676,7 @@ mod tests {
     fn a_message_from_a_number_on_file_links_the_thread_to_that_customer() {
         let input = input_with(
             core_event("34600111222"),
-            json!({ "customers.list": [customer("cu-ana", "+34600111222")] }),
+            json!({ "customers.by_phone": [customer("cu-ana", "+34600111222")] }),
         );
         let out = link_known_customer_pure(input).expect("no trap");
         assert_eq!(linked(&out), ("34600111222".to_string(), "cu-ana".to_string()));
@@ -645,21 +684,50 @@ mod tests {
 
     #[test]
     fn the_phone_on_file_matches_whatever_way_it_was_typed() {
-        // The read filters with LIKE, the handler decides by DIGITS: spaces, dashes and the `+`
+        // The handler decides by NUMBER, not text: spaces, dashes and the `+`
         // the owner typed on the customer card are formatting, not a different number.
         let input = input_with(
             core_event("34600111222"),
-            json!({ "customers.list": [customer("cu-ana", "+34 600-111-222")] }),
+            json!({ "customers.by_phone": [customer("cu-ana", "+34 600-111-222")] }),
         );
         assert_eq!(linked(&link_known_customer_pure(input).unwrap()).1, "cu-ana");
     }
 
     #[test]
-    fn a_longer_number_that_merely_contains_the_contact_is_not_her() {
-        // LIKE '%34600111222%' also answers +346001112229: containing is not being.
+    fn a_card_typed_without_the_country_code_is_her() {
+        // whatsapp_inbox#162: «600 111 222» is how the owner types it; WhatsApp says 34600111222.
+        let input = input_with(core_event("34600111222"), json!({ "customers.by_phone": [customer("cu-ana", "600 111 222")] }));
+        assert_eq!(linked(&link_known_customer_pure(input).unwrap()), ("34600111222".to_string(), "cu-ana".to_string()));
+    }
+
+    #[test]
+    fn a_card_typed_with_the_00_prefix_is_her() {
+        let input = input_with(core_event("34600111222"), json!({ "customers.by_phone": [customer("cu-ana", "0034 600-111-222")] }));
+        assert_eq!(linked(&link_known_customer_pure(input).unwrap()).1, "cu-ana");
+    }
+
+    #[test]
+    fn a_short_fragment_on_a_card_is_never_her() {
+        // Six digits are an extension or a typo, not an identity — whatever the read let through.
+        let input = input_with(core_event("34600111222"), json!({ "customers.by_phone": [customer("cu-x", "111222")] }));
+        untouched(&link_known_customer_pure(input).unwrap());
+    }
+
+    #[test]
+    fn a_national_card_and_an_international_one_for_the_same_number_are_twins() {
         let input = input_with(
             core_event("34600111222"),
-            json!({ "customers.list": [customer("cu-other", "+346001112229")] }),
+            json!({ "customers.by_phone": [customer("cu-ana", "600111222"), customer("cu-eva", "+34 600 111 222")] }),
+        );
+        untouched(&link_known_customer_pure(input).unwrap());
+    }
+
+    #[test]
+    fn a_longer_number_that_merely_contains_the_contact_is_not_her() {
+        // A read that let +346001112229 through must not win it: containing is not being.
+        let input = input_with(
+            core_event("34600111222"),
+            json!({ "customers.by_phone": [customer("cu-other", "+346001112229")] }),
         );
         untouched(&link_known_customer_pure(input).unwrap());
     }
@@ -670,14 +738,14 @@ mod tests {
         // thread under the wrong person. Leave it for a human.
         let input = input_with(
             core_event("34600111222"),
-            json!({ "customers.list": [customer("cu-ana", "+34600111222"), customer("cu-eva", "34600111222")] }),
+            json!({ "customers.by_phone": [customer("cu-ana", "+34600111222"), customer("cu-eva", "34600111222")] }),
         );
         untouched(&link_known_customer_pure(input).unwrap());
     }
 
     #[test]
     fn a_number_nobody_has_on_file_links_nobody_and_does_not_fail() {
-        let input = input_with(core_event("34600111222"), json!({ "customers.list": [] }));
+        let input = input_with(core_event("34600111222"), json!({ "customers.by_phone": [] }));
         untouched(&link_known_customer_pure(input).unwrap());
     }
 
@@ -693,7 +761,7 @@ mod tests {
         let payload = json!({ "wa_message_id": "wamid.2", "from": "34911000000", "contact": "34600111222", "direction": "outbound" });
         let input = input_with(
             payload,
-            json!({ "customers.list": [customer("cu-shop", "+34911000000"), customer("cu-ana", "+34600111222")] }),
+            json!({ "customers.by_phone": [customer("cu-shop", "+34911000000"), customer("cu-ana", "+34600111222")] }),
         );
         assert_eq!(linked(&link_known_customer_pure(input).unwrap()), ("34600111222".to_string(), "cu-ana".to_string()));
     }
@@ -701,7 +769,7 @@ mod tests {
     #[test]
     fn a_hub_older_than_the_contact_field_falls_back_to_the_sender() {
         let payload = json!({ "wa_message_id": "wamid.3", "from": "34600111222" });
-        let input = input_with(payload, json!({ "customers.list": [customer("cu-ana", "+34600111222")] }));
+        let input = input_with(payload, json!({ "customers.by_phone": [customer("cu-ana", "+34600111222")] }));
         assert_eq!(linked(&link_known_customer_pure(input).unwrap()), ("34600111222".to_string(), "cu-ana".to_string()));
     }
 
@@ -709,7 +777,7 @@ mod tests {
     fn a_hub_older_than_the_contact_field_never_links_an_echo_to_the_shop() {
         // No `contact` and an outbound echo: `from` is the SHOP, so there is nobody to link.
         let payload = json!({ "wa_message_id": "wamid.4", "from": "34911000000", "direction": "outbound" });
-        let input = input_with(payload, json!({ "customers.list": [customer("cu-shop", "+34911000000")] }));
+        let input = input_with(payload, json!({ "customers.by_phone": [customer("cu-shop", "+34911000000")] }));
         untouched(&link_known_customer_pure(input).unwrap());
     }
 
@@ -717,13 +785,13 @@ mod tests {
     fn the_manual_ingest_door_is_keyed_by_its_own_contact_fields() {
         // `messages.ingest` emits the same event with ITS payload: `wa_contact_id` + `contact_phone`.
         let payload = json!({ "wa_contact_id": "34600111222", "contact_phone": "+34600111222", "wa_message_id": "wamid.5" });
-        let input = input_with(payload, json!({ "customers.list": [customer("cu-ana", "+34600111222")] }));
+        let input = input_with(payload, json!({ "customers.by_phone": [customer("cu-ana", "+34600111222")] }));
         assert_eq!(linked(&link_known_customer_pure(input).unwrap()), ("34600111222".to_string(), "cu-ana".to_string()));
     }
 
     #[test]
     fn a_customer_card_without_a_phone_is_never_a_match() {
-        let input = input_with(core_event("34600111222"), json!({ "customers.list": [customer("cu-x", ""), json!({"id": "cu-y"})] }));
+        let input = input_with(core_event("34600111222"), json!({ "customers.by_phone": [customer("cu-x", ""), json!({"id": "cu-y"})] }));
         untouched(&link_known_customer_pure(input).unwrap());
     }
 
@@ -745,18 +813,18 @@ mod tests {
     fn a_card_created_after_she_wrote_links_her_thread() {
         let input = input_with(
             customer_created("+34600111222"),
-            json!({ "customers.list": [customer("cu-ana", "+34600111222")] }),
+            json!({ "customers.by_phone": [customer("cu-ana", "+34600111222")] }),
         );
-        assert_eq!(linked(&link_customer_threads_pure(input).unwrap()), ("34600111222".to_string(), "cu-ana".to_string()));
+        assert_eq!(claimed(&link_customer_threads_pure(input).unwrap()), ("34600111222".to_string(), "cu-ana".to_string()));
     }
 
     #[test]
     fn an_edited_card_claims_the_thread_of_its_corrected_number() {
         let input = input_with(
             customer_updated("cu-ana", "+34 600-111-222"),
-            json!({ "customers.list": [customer("cu-ana", "+34 600-111-222")] }),
+            json!({ "customers.by_phone": [customer("cu-ana", "+34 600-111-222")] }),
         );
-        assert_eq!(linked(&link_customer_threads_pure(input).unwrap()), ("34600111222".to_string(), "cu-ana".to_string()));
+        assert_eq!(claimed(&link_customer_threads_pure(input).unwrap()), ("34600111222".to_string(), "cu-ana".to_string()));
     }
 
     #[test]
@@ -764,7 +832,7 @@ mod tests {
         // Mother and daughter share the phone: the second card must not claim the thread.
         let input = input_with(
             customer_created("34600111222"),
-            json!({ "customers.list": [customer("cu-ana", "+34600111222"), customer("cu-eva", "34600111222")] }),
+            json!({ "customers.by_phone": [customer("cu-ana", "+34600111222"), customer("cu-eva", "34600111222")] }),
         );
         untouched(&link_customer_threads_pure(input).unwrap());
     }
@@ -773,9 +841,9 @@ mod tests {
     fn a_longer_number_on_another_card_does_not_count_as_a_twin() {
         let input = input_with(
             customer_created("+34600111222"),
-            json!({ "customers.list": [customer("cu-ana", "+34600111222"), customer("cu-other", "+346001112229")] }),
+            json!({ "customers.by_phone": [customer("cu-ana", "+34600111222"), customer("cu-other", "+346001112229")] }),
         );
-        assert_eq!(linked(&link_customer_threads_pure(input).unwrap()).1, "cu-ana");
+        assert_eq!(claimed(&link_customer_threads_pure(input).unwrap()).1, "cu-ana");
     }
 
     #[test]
@@ -783,16 +851,16 @@ mod tests {
         // Deleted or anonymised before the relay got here: the read no longer vouches for it.
         let input = input_with(
             customer_created("+34600111222"),
-            json!({ "customers.list": [customer("cu-eva", "+34600999888")] }),
+            json!({ "customers.by_phone": [customer("cu-eva", "+34600999888")] }),
         );
         untouched(&link_customer_threads_pure(input).unwrap());
     }
 
     #[test]
     fn a_card_without_a_phone_or_without_the_read_links_nobody() {
-        let no_phone = input_with(customer_created(""), json!({ "customers.list": [customer("cu-ana", "")] }));
+        let no_phone = input_with(customer_created(""), json!({ "customers.by_phone": [customer("cu-ana", "")] }));
         untouched(&link_customer_threads_pure(no_phone).unwrap());
-        let null_phone = input_with(json!({ "name": "Ana", "phone": null, "new_id": "cu-ana" }), json!({ "customers.list": [] }));
+        let null_phone = input_with(json!({ "name": "Ana", "phone": null, "new_id": "cu-ana" }), json!({ "customers.by_phone": [] }));
         untouched(&link_customer_threads_pure(null_phone).unwrap());
         let no_read = input_with(customer_created("+34600111222"), json!({}));
         untouched(&link_customer_threads_pure(no_read).unwrap());
@@ -802,9 +870,29 @@ mod tests {
     fn the_fresh_new_id_of_the_listener_is_never_taken_for_the_card() {
         // The runtime binds a new `new_id` to every command, the listener included: taking it for
         // the card would file the thread under a customer that does not exist.
-        let input = input_with(customer_created("+34600111222"), json!({ "customers.list": [customer("cu-ana", "+34600111222")] }));
-        let (_, customer_id) = linked(&link_customer_threads_pure(input).unwrap());
+        let input = input_with(customer_created("+34600111222"), json!({ "customers.by_phone": [customer("cu-ana", "+34600111222")] }));
+        let (_, customer_id) = claimed(&link_customer_threads_pure(input).unwrap());
         assert_eq!(customer_id, "cu-ana");
         assert_ne!(customer_id, "fresh-unused-id");
+    }
+
+    #[test]
+    fn a_card_saved_without_the_country_code_claims_the_thread_by_its_number() {
+        // whatsapp_inbox#162 in the #160 direction: the card says «600 111 222», the thread is keyed
+        // by WhatsApp's 34600111222. The intent carries the NUMBER; the write finds the thread.
+        let input = input_with(
+            json!({ "customer_id": "cu-ana", "phone": "600 111 222", "new_id": "fresh" }),
+            json!({ "customers.by_phone": [customer("cu-ana", "600 111 222")] }),
+        );
+        assert_eq!(claimed(&link_customer_threads_pure(input).unwrap()), ("600111222".to_string(), "cu-ana".to_string()));
+    }
+
+    #[test]
+    fn a_card_with_a_short_fragment_claims_nothing() {
+        let input = input_with(
+            json!({ "customer_id": "cu-x", "phone": "111 222" }),
+            json!({ "customers.by_phone": [customer("cu-x", "111 222")] }),
+        );
+        untouched(&link_customer_threads_pure(input).unwrap());
     }
 }
