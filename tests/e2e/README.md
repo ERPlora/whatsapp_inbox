@@ -82,3 +82,10 @@ encuentra en `recall_offer` ANTES del paso `ai`; reserva (`slots: []`) → la of
 2» posterior no encuentra nada. Usa solo el trigger del mensaje escrito (hub#2061). Necesita en
 `$MODS` `customers`, `taxes`, `services`, `staff`, `schedules`, `appointments` y este módulo, a su
 `origin/main` (con checkouts viejos `appointments` no instala).
+
+### `their_typed_choice_finds_the_table_times_they_were_offered` (whatsapp_inbox#174)
+
+La misma cadena de tres mensajes con la receta de **reservas de mesa**: se le ofrecen dos horas →
+la conversación las recuerda; contesta «la 2» → `recall_offer` las encuentra ANTES de `book_table`;
+reserva → la oferta se vacía. También con solo el trigger escrito (hub#2061). Necesita en `$MODS`
+`customers`, `tables`, `reservations` y este módulo.
