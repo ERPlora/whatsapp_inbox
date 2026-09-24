@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "whatsapp_inbox.templates.import_from_meta",
+  "description": "A template that exists at Meta (created in WhatsApp Manager) and not in this hub, with its text and Meta's verdict, as the SaaS door lists it. Lands only if this hub has no row — live or deleted — with the same name and language.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "language",
+    "category",
+    "header",
+    "body",
+    "footer",
+    "variables",
+    "meta_template_id",
+    "meta_status",
+    "meta_rejected_reason"
+  ],
+  "properties": {
+    "name": { "type": "string", "minLength": 1, "maxLength": 255 },
+    "language": { "type": "string", "minLength": 1, "maxLength": 10 },
+    "category": { "type": "string", "enum": ["MARKETING", "UTILITY", "AUTHENTICATION"] },
+    "header": { "type": "string" },
+    "body": { "type": "string", "minLength": 1 },
+    "footer": { "type": "string" },
+    "variables": { "type": "string", "description": "JSON array, one example value per {{n}} of the body" },
+    "meta_template_id": { "type": "string", "maxLength": 64 },
+    "meta_status": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40,
+      "description": "Meta's verdict as Meta words it (APPROVED, PENDING, REJECTED…). Not an enum, for the same reason as in template_record_meta_answer.json."
+    },
+    "meta_rejected_reason": { "type": "string", "maxLength": 512 }
+  }
+}

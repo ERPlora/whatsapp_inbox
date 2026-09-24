@@ -1591,20 +1591,20 @@ var WINDOWS_1252_C1 = [
   376
 ];
 function decodeWindows1252(bytes) {
-  let text = "";
+  let text2 = "";
   for (const byte of bytes) {
-    text += String.fromCharCode(byte >= 128 && byte <= 159 ? WINDOWS_1252_C1[byte - 128] : byte);
+    text2 += String.fromCharCode(byte >= 128 && byte <= 159 ? WINDOWS_1252_C1[byte - 128] : byte);
   }
-  return text;
+  return text2;
 }
 function decodeCsvBuffer(buf) {
-  let text;
+  let text2;
   try {
-    text = new TextDecoder("utf-8", { fatal: true }).decode(buf);
+    text2 = new TextDecoder("utf-8", { fatal: true }).decode(buf);
   } catch {
-    text = decodeWindows1252(new Uint8Array(buf));
+    text2 = decodeWindows1252(new Uint8Array(buf));
   }
-  return text.charCodeAt(0) === 65279 ? text.slice(1) : text;
+  return text2.charCodeAt(0) === 65279 ? text2.slice(1) : text2;
 }
 var __defProp2 = Object.defineProperty;
 var __decorateClass2 = (decorators, target, key, kind) => {
@@ -2323,16 +2323,16 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     this.emit("csvExport", { rows: this.rows.length });
     this.emit("export", { rows: this.rows.length });
   }
-  parseCsv(text) {
+  parseCsv(text2) {
     const out = [];
     let row = [];
     let field = "";
     let q = false;
-    for (let i7 = 0; i7 < text.length; i7++) {
-      const c5 = text[i7];
+    for (let i7 = 0; i7 < text2.length; i7++) {
+      const c5 = text2[i7];
       if (q) {
         if (c5 === '"') {
-          if (text[i7 + 1] === '"') {
+          if (text2[i7 + 1] === '"') {
             field += '"';
             i7++;
           } else q = false;
@@ -2342,7 +2342,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
         row.push(field);
         field = "";
       } else if (c5 === "\n" || c5 === "\r") {
-        if (c5 === "\r" && text[i7 + 1] === "\n") i7++;
+        if (c5 === "\r" && text2[i7 + 1] === "\n") i7++;
         row.push(field);
         field = "";
         if (row.length > 1 || row[0] !== "") out.push(row);
@@ -2361,8 +2361,8 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     const input = ev.target;
     const file = input.files?.[0];
     if (!file) return;
-    const text = decodeCsvBuffer(await file.arrayBuffer());
-    const { headers, rows } = this.parseCsv(text);
+    const text2 = decodeCsvBuffer(await file.arrayBuffer());
+    const { headers, rows } = this.parseCsv(text2);
     this.emit("csvImport", { headers, rows });
     this.emit("import", { headers, rows });
     input.value = "";
@@ -3877,7 +3877,7 @@ var es_default = {
     doorRefusalNoCode: "No se ha podido registrar la plantilla en Meta. Queda guardada aqu\xED: prueba a guardarla otra vez dentro de un rato.",
     metaRejectedReason: "Motivo de Meta: {reason}",
     metaSyncUnavailable: "No hemos podido comprobar con Meta si hay veredictos nuevos, as\xED que lo que ves es lo \xFAltimo que sabemos. Vuelve a abrir esta pesta\xF1a dentro de un rato.",
-    metaOnlyTemplates: "WhatsApp Manager tiene plantillas que no est\xE1n en esta lista, porque se crearon all\xED: {names}",
+    metaOnlyTemplates: "Estas plantillas de WhatsApp Manager todav\xEDa no se pueden traer a esta lista (llevan cabecera con imagen, v\xEDdeo o documento, botones, variables con nombre o una variable en la cabecera). Gesti\xF3nalas en WhatsApp Manager: {names}",
     doorRefusal: {
       invalid_name: "Meta no ha aceptado el nombre. Usa solo min\xFAsculas, n\xFAmeros y guiones bajos \u2014sin espacios ni acentos\u2014 y vuelve a intentarlo.",
       invalid_category: "Meta no ha aceptado la categor\xEDa. Elige Utilidad, Marketing o Autenticaci\xF3n y vuelve a enviarla.",
@@ -3908,6 +3908,7 @@ var es_default = {
     "whatsapp_inbox.request_not_fulfillable": "Solo una solicitud confirmada se puede marcar como atendida.",
     "whatsapp_inbox.request_not_pending": "Esa solicitud no est\xE1 pendiente de revisi\xF3n: no existe en este negocio, o ya se aprob\xF3, rechaz\xF3 o atendi\xF3.",
     "whatsapp_inbox.request_unreadable": "No se ha podido leer la solicitud, as\xED que no se ha cambiado nada. Prueba otra vez.",
+    "whatsapp_inbox.template_already_here": "Este negocio ya tiene una plantilla con ese nombre e idioma (viva o borrada aqu\xED), as\xED que no se ha tra\xEDdo nada.",
     "whatsapp_inbox.template_not_found": "Esa plantilla no existe en este negocio."
   }
 };
@@ -4081,7 +4082,7 @@ var en_default = {
     doorRefusalNoCode: "The template could not be registered with Meta. It is saved here: try saving it again in a moment.",
     metaRejectedReason: "Meta's reason: {reason}",
     metaSyncUnavailable: "We could not check with Meta for new verdicts, so what you see is the last we know. Open this tab again in a while.",
-    metaOnlyTemplates: "WhatsApp Manager has templates that are not in this list, because they were created there: {names}",
+    metaOnlyTemplates: "These WhatsApp Manager templates cannot be brought into this list yet (they use an image, video or document header, buttons, named variables, or a variable in the header). Manage them in WhatsApp Manager: {names}",
     doorRefusal: {
       invalid_name: "Meta did not accept the name. Use lowercase letters, numbers and underscores only \u2014 no spaces or accents \u2014 and try again.",
       invalid_category: "Meta did not accept the category. Pick Utility, Marketing or Authentication and send it again.",
@@ -4112,6 +4113,7 @@ var en_default = {
     "whatsapp_inbox.request_not_fulfillable": "Only a confirmed request can be marked as handled.",
     "whatsapp_inbox.request_not_pending": "That request is not waiting for review: it does not exist in this business, or it was already approved, rejected or handled.",
     "whatsapp_inbox.request_unreadable": "That request could not be read, so nothing was changed. Try again.",
+    "whatsapp_inbox.template_already_here": "This business already holds a template with that name and language (live or deleted here), so nothing was brought in.",
     "whatsapp_inbox.template_not_found": "That template does not exist in this business."
   }
 };
@@ -4120,8 +4122,8 @@ var en_default = {
 var SOURCE_LANG = "en";
 function textFor(catalog, lang, code) {
   const dict = catalog[lang];
-  const text = dict?.errors?.[code];
-  return typeof text === "string" && text.trim() ? text : "";
+  const text2 = dict?.errors?.[code];
+  return typeof text2 === "string" && text2.trim() ? text2 : "";
 }
 function alreadySpoken(catalog, code, message) {
   if (!message) return false;
@@ -4138,11 +4140,11 @@ function alreadySpoken(catalog, code, message) {
 function domainErrorText(catalog, locale, e5) {
   const code = e5?.code;
   if (typeof code !== "string" || !code) return "";
-  const text = textFor(catalog, locale, code) || textFor(catalog, SOURCE_LANG, code);
-  if (!text.includes("{message}")) return text;
+  const text2 = textFor(catalog, locale, code) || textFor(catalog, SOURCE_LANG, code);
+  if (!text2.includes("{message}")) return text2;
   const message = e5 instanceof Error ? e5.message : "";
   if (alreadySpoken(catalog, code, message)) return message;
-  return text.replaceAll("{message}", message);
+  return text2.replaceAll("{message}", message);
 }
 
 // ui/components/erp-whatsapp-inbox-inbox/erp-whatsapp-inbox-inbox.ts
@@ -5610,14 +5612,14 @@ function doorErrorCode(e5) {
 function textFor2(catalog, lang, key) {
   const ui = catalog[lang]?.ui;
   const bucket = ui?.doorRefusal;
-  const text = key ? bucket?.[key] : void 0;
-  return typeof text === "string" && text.trim() ? text : "";
+  const text2 = key ? bucket?.[key] : void 0;
+  return typeof text2 === "string" && text2.trim() ? text2 : "";
 }
 function unknownText(catalog, lang, key, code) {
   const ui = catalog[lang]?.ui;
-  const text = ui?.[key];
-  if (typeof text !== "string" || !text.trim()) return "";
-  return text.replaceAll("{code}", code);
+  const text2 = ui?.[key];
+  if (typeof text2 !== "string" || !text2.trim()) return "";
+  return text2.replaceAll("{code}", code);
 }
 function doorRefusalText(catalog, locale, e5) {
   const code = doorErrorCode(e5);
@@ -5654,6 +5656,62 @@ function metaTemplateState(raw) {
 function metaTemplateView(raw) {
   const state = metaTemplateState(raw);
   return { state, ...VIEWS[state] };
+}
+
+// ui/lib/meta-template-import.ts
+var CATEGORIES = /* @__PURE__ */ new Set(["MARKETING", "UTILITY", "AUTHENTICATION"]);
+var text = (value) => typeof value === "string" ? value : "";
+function placeholders(value) {
+  return new Set([...value.matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map((m4) => m4[1])).size;
+}
+function hasNamedPlaceholders(value) {
+  return [...value.matchAll(/\{\{\s*([^{}]*?)\s*\}\}/g)].some((m4) => !/^\d+$/.test(m4[1]));
+}
+function templateFromMeta(template) {
+  const refused = { ok: false };
+  const name = text(template.name).trim();
+  const language = text(template.language).trim();
+  const category = text(template.category).trim().toUpperCase();
+  const status = text(template.status).trim();
+  if (!name || !language || !status || !CATEGORIES.has(category)) return refused;
+  if (!Array.isArray(template.components)) return refused;
+  let header = "";
+  let body = "";
+  let footer = "";
+  let examples = [];
+  for (const raw of template.components) {
+    if (!raw || typeof raw !== "object") return refused;
+    const part = raw;
+    const type = text(part.type).trim().toUpperCase();
+    if (type === "HEADER") {
+      const format = text(part.format).trim().toUpperCase() || "TEXT";
+      header = text(part.text);
+      if (format !== "TEXT" || placeholders(header) > 0 || hasNamedPlaceholders(header)) return refused;
+    } else if (type === "BODY") {
+      body = text(part.text);
+      const example = part.example?.body_text;
+      const first = Array.isArray(example) ? example[0] : void 0;
+      examples = Array.isArray(first) ? first : [];
+    } else if (type === "FOOTER") {
+      footer = text(part.text);
+    } else {
+      return refused;
+    }
+  }
+  if (!body.trim() || hasNamedPlaceholders(body)) return refused;
+  const variables = Array.from(
+    { length: placeholders(body) },
+    (_2, i7) => text(examples[i7]).trim() || `var${i7 + 1}`
+  );
+  return {
+    ok: true,
+    fields: { name, language, category, header, body, footer, variables: JSON.stringify(variables) },
+    meta: {
+      meta_template_id: text(template.meta_id).trim(),
+      meta_status: status,
+      meta_rejected_reason: text(template.rejected_reason)
+    }
+  };
 }
 
 // ui/components/erp-whatsapp-inbox-templates/erp-whatsapp-inbox-templates.ts
@@ -5847,11 +5905,11 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     const listed = Array.isArray(answer?.templates) ? answer.templates : [];
     for (const template of listed) atMeta.set(metaKey(template?.name, template?.language), template);
     const absenceIsDeletion = answer?.stale !== true && listed.length > 0;
-    const text = (value) => typeof value === "string" ? value : "";
+    const text2 = (value) => typeof value === "string" ? value : "";
     let written = 0;
     for (const row of rows) {
       const answered = atMeta.get(metaKey(row.name, row.language));
-      const knownId = text(row.meta_template_id).trim();
+      const knownId = text2(row.meta_template_id).trim();
       let verdict;
       if (answered) {
         verdict = answered;
@@ -5860,12 +5918,12 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
       } else {
         continue;
       }
-      const status = text(verdict.status).trim();
+      const status = text2(verdict.status).trim();
       if (!status) continue;
-      const metaId = text(verdict.meta_id).trim() || text(row.meta_template_id);
-      const reason = text(verdict.rejected_reason);
+      const metaId = text2(verdict.meta_id).trim() || text2(row.meta_template_id);
+      const reason = text2(verdict.rejected_reason);
       const projected = metaId ? status.toLowerCase() : "not_sent";
-      if (projected === text(row.meta_status) && reason === text(row.meta_rejected_reason) && metaId === text(row.meta_template_id)) {
+      if (projected === text2(row.meta_status) && reason === text2(row.meta_rejected_reason) && metaId === text2(row.meta_template_id)) {
         continue;
       }
       try {
@@ -5889,9 +5947,31 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
         this.metaSyncNotice = domainErrorText4(e5, "ui.errUpdateTemplate");
       }
     }
-    if (written) await this.ctrl.load();
     const here = new Set(rows.map((row) => metaKey(row.name, row.language)));
-    this.metaOnly = listed.filter((template) => text(template?.name).trim() && !here.has(metaKey(template.name, template.language))).map((template) => `${text(template.name).trim()} (${text(template.language).trim()})`);
+    const notBrought = [];
+    for (const template of listed) {
+      if (!text2(template?.name).trim() || here.has(metaKey(template.name, template.language))) continue;
+      here.add(metaKey(template.name, template.language));
+      const label = `${text2(template.name).trim()} (${text2(template.language).trim()})`;
+      const imported = templateFromMeta(template);
+      if (!imported.ok) {
+        notBrought.push(label);
+        continue;
+      }
+      try {
+        await erplora4().command("whatsapp_inbox.templates.import_from_meta", {
+          ...imported.fields,
+          ...imported.meta
+        });
+        written += 1;
+      } catch (e5) {
+        if (e5?.code === "whatsapp_inbox.template_already_here") continue;
+        notBrought.push(label);
+        this.metaSyncNotice = domainErrorText4(e5, "ui.errCreateTemplate");
+      }
+    }
+    if (written) await this.ctrl.load();
+    this.metaOnly = notBrought;
   }
   disconnectedCallback() {
     window.removeEventListener("erplora:locale-changed", this.onLocaleChange);
@@ -5933,8 +6013,8 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
       this.formError = doorRefusalText(CATALOG4, erplora4().locale, e5);
       return;
     }
-    const text = (value) => typeof value === "string" ? value : "";
-    const status = text(verdict?.status).trim();
+    const text2 = (value) => typeof value === "string" ? value : "";
+    const status = text2(verdict?.status).trim();
     if (!status || !templateId) {
       this.formError = doorRefusalText(CATALOG4, erplora4().locale, null);
       return;
@@ -5942,9 +6022,9 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     try {
       await erplora4().command("whatsapp_inbox.templates.record_meta_answer", {
         template_id: templateId,
-        meta_template_id: text(verdict.meta_id),
+        meta_template_id: text2(verdict.meta_id),
         meta_status: status,
-        meta_rejected_reason: text(verdict.rejected_reason),
+        meta_rejected_reason: text2(verdict.rejected_reason),
         ...reviewed
       });
     } catch (e5) {

@@ -14,6 +14,7 @@ import {
   metaTemplateView,
 } from '../../lib/meta-template-status';
 import type { MetaTemplateView } from '../../lib/meta-template-status';
+import { templateFromMeta } from '../../lib/meta-template-import';
 const CATALOG: Record<string, unknown> = { es: esLocale, en: enLocale };
 
 /** One template as the door describes it: Meta's own verdict, in the SaaS's field names. The door
@@ -24,6 +25,8 @@ interface MetaTemplate {
   status?: unknown;
   rejected_reason?: unknown;
   meta_id?: unknown;
+  /** The template's text in Meta's own shape (ERPlora/saas#2253), read by `templateFromMeta`. */
+  components?: unknown;
 }
 
 /** The door to the business's templates at Meta (hub#1682): the ONLY way a module reaches them,
@@ -187,9 +190,10 @@ export class ErpWhatsappInboxTemplates extends LitElement {
    *  list on screen is still worth reading — it is just not guaranteed to be today's. */
   @state() metaSyncNotice = '';
 
-  /** Templates Meta holds and this hub does not — created in WhatsApp Manager (whatsapp_inbox#140) —
-   *  as `name (language)`, the two halves of Meta's identity. Named, never imported: the door does
-   *  not carry their text, and a row here without the text the owner wrote would be invented. */
+  /** Templates Meta holds that this hub could NOT bring in (whatsapp_inbox#140, #179), as
+   *  `name (language)`, the two halves of Meta's identity: parts this module has no field for
+   *  (media header, buttons, header or named variables), no text from the door, or a failed write. The ones
+   *  that fit are imported with their text and never listed here. */
   @state() metaOnly: string[] = [];
 
   /** Meta's verdict on the template being edited, and the move it asks for. `null` while the panel
@@ -406,13 +410,38 @@ export class ErpWhatsappInboxTemplates extends LitElement {
         this.metaSyncNotice = domainErrorText(e, 'ui.errUpdateTemplate');
       }
     }
-    if (written) await this.ctrl.load();
-
     // The other half of #140: what Meta holds and this hub does not. Same answer, no extra call.
+    // Since whatsapp_inbox#179 the door carries each template's text, so it is BROUGHT here instead
+    // of only named. What does not fit this module's fields (a media header, buttons…) stays named
+    // in the notice: imported without that part, the next «Guardar» would strip it at Meta.
     const here = new Set(rows.map((row) => metaKey(row.name, row.language)));
-    this.metaOnly = listed
-      .filter((template) => text(template?.name).trim() && !here.has(metaKey(template.name, template.language)))
-      .map((template) => `${text(template.name).trim()} (${text(template.language).trim()})`);
+    const notBrought: string[] = [];
+    for (const template of listed) {
+      if (!text(template?.name).trim() || here.has(metaKey(template.name, template.language))) continue;
+      here.add(metaKey(template.name, template.language)); // Meta listing it twice is one import
+      const label = `${text(template.name).trim()} (${text(template.language).trim()})`;
+      const imported = templateFromMeta(template as Record<string, unknown>);
+      if (!imported.ok) {
+        notBrought.push(label);
+        continue;
+      }
+      try {
+        await erplora().command('whatsapp_inbox.templates.import_from_meta', {
+          ...imported.fields,
+          ...imported.meta,
+        });
+        written += 1;
+      } catch (e) {
+        // The list hides deleted rows, so a template the owner deleted here is asked for on every
+        // open and the command's gate answers `template_already_here`: nothing to say, nothing to
+        // reload. Any other refusal is a failure the owner has to hear about.
+        if ((e as { code?: unknown } | null)?.code === 'whatsapp_inbox.template_already_here') continue;
+        notBrought.push(label);
+        this.metaSyncNotice = domainErrorText(e, 'ui.errCreateTemplate');
+      }
+    }
+    if (written) await this.ctrl.load();
+    this.metaOnly = notBrought;
   }
 
   disconnectedCallback() {

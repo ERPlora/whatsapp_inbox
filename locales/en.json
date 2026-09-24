@@ -166,7 +166,7 @@
     "doorRefusalNoCode": "The template could not be registered with Meta. It is saved here: try saving it again in a moment.",
     "metaRejectedReason": "Meta's reason: {reason}",
     "metaSyncUnavailable": "We could not check with Meta for new verdicts, so what you see is the last we know. Open this tab again in a while.",
-    "metaOnlyTemplates": "WhatsApp Manager has templates that are not in this list, because they were created there: {names}",
+    "metaOnlyTemplates": "These WhatsApp Manager templates cannot be brought into this list yet (they use an image, video or document header, buttons, named variables, or a variable in the header). Manage them in WhatsApp Manager: {names}",
     "doorRefusal": {
       "invalid_name": "Meta did not accept the name. Use lowercase letters, numbers and underscores only — no spaces or accents — and try again.",
       "invalid_category": "Meta did not accept the category. Pick Utility, Marketing or Authentication and send it again.",
@@ -197,6 +197,7 @@
     "whatsapp_inbox.request_not_fulfillable": "Only a confirmed request can be marked as handled.",
     "whatsapp_inbox.request_not_pending": "That request is not waiting for review: it does not exist in this business, or it was already approved, rejected or handled.",
     "whatsapp_inbox.request_unreadable": "That request could not be read, so nothing was changed. Try again.",
+    "whatsapp_inbox.template_already_here": "This business already holds a template with that name and language (live or deleted here), so nothing was brought in.",
     "whatsapp_inbox.template_not_found": "That template does not exist in this business."
   }
 }

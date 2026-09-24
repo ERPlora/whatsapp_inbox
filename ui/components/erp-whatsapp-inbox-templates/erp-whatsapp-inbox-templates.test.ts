@@ -1064,3 +1064,145 @@ describe('lo que se crea o se borra en WhatsApp Manager se ve en la pestaña (wh
     ).toHaveLength(0);
   });
 });
+
+// whatsapp_inbox#179 — the door now carries each template's TEXT (Meta's `components`,
+// ERPlora/saas#2253), so a template created in WhatsApp Manager is no longer just named in a
+// notice: it is brought into the list, with its text and Meta's verdict, ready to be used.
+describe('lo creado en WhatsApp Manager se trae a la lista con su texto (whatsapp_inbox#179)', () => {
+  const ENVIADA = {
+    id: 't1', name: 'recordatorio_cita', language: 'es', category: 'UTILITY', header: '',
+    body: 'Te esperamos el {{1}}', footer: '', variables: '["lunes"]', meta_template_id: '77',
+    meta_status: 'approved', meta_rejected_reason: '', is_active: 1,
+  };
+  const DE_META = { name: 'recordatorio_cita', language: 'es', status: 'APPROVED', meta_id: '77' };
+  const PROMO = {
+    name: 'promo_otono', language: 'es', category: 'MARKETING', status: 'APPROVED', meta_id: '90',
+    rejected_reason: '',
+    components: [
+      { type: 'HEADER', format: 'TEXT', text: 'Otoño' },
+      { type: 'BODY', text: 'Hola {{1}}, 20 % en tintes.', example: { body_text: [['Ana']] } },
+      { type: 'FOOTER', text: 'Salón Elena' },
+    ],
+  };
+  const CON_BOTONES = {
+    name: 'con_botones', language: 'es', category: 'MARKETING', status: 'APPROVED', meta_id: '91',
+    components: [{ type: 'BODY', text: 'Elige' }, { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sí' }] }],
+  };
+  const importados = () => comandos.filter((c) => c.name === 'whatsapp_inbox.templates.import_from_meta');
+  const soloEnMeta = (el: HTMLElement & { shadowRoot: ShadowRoot }) =>
+    el.shadowRoot.querySelector('[data-testid="whatsapp-templates-meta-only"]');
+
+  it('una plantilla de WhatsApp Manager se trae con su texto y su veredicto', async () => {
+    filas = [ENVIADA];
+    respondeListado = async () => ({ templates: [DE_META, PROMO], stale: false });
+
+    await montar();
+
+    expect(importados(), 'la plantilla de WhatsApp Manager no se trajo').toHaveLength(1);
+    expect(importados()[0].payload).toEqual({
+      name: 'promo_otono', language: 'es', category: 'MARKETING', header: 'Otoño',
+      body: 'Hola {{1}}, 20 % en tintes.', footer: 'Salón Elena', variables: '["Ana"]',
+      meta_template_id: '90', meta_status: 'APPROVED', meta_rejected_reason: '',
+    });
+    expect(
+      comandos.filter((c) => c.name === 'whatsapp_inbox.templates.create'),
+      'importar NO es crear: `create` nace `pending` y sin el id de Meta',
+    ).toHaveLength(0);
+  });
+
+  it('una traída ya no sale en el aviso; la que no cabe (botones) sí, con su idioma', async () => {
+    filas = [ENVIADA];
+    respondeListado = async () => ({ templates: [DE_META, PROMO, CON_BOTONES], stale: false });
+
+    const el = await montar();
+
+    expect(importados().map((c) => c.payload.name), 'se importó una plantilla con botones sin ellos').toEqual(['promo_otono']);
+    const texto = soloEnMeta(el)?.textContent ?? '';
+    expect(texto).toContain('con_botones (es)');
+    expect(texto, 'se sigue avisando de una plantilla que ya se trajo').not.toContain('promo_otono');
+  });
+
+  it('la misma plantilla listada dos veces (otra caja) se trae UNA vez', async () => {
+    filas = [ENVIADA];
+    respondeListado = async () => ({
+      templates: [DE_META, PROMO, { ...PROMO, name: 'Promo_Otono', language: 'ES' }],
+      stale: false,
+    });
+
+    await montar();
+
+    expect(importados(), 'Meta nombra por nombre + idioma: dos entradas iguales son una plantilla').toHaveLength(1);
+  });
+
+  it('si todas se traen, no queda aviso', async () => {
+    filas = [ENVIADA];
+    respondeListado = async () => ({ templates: [DE_META, PROMO], stale: false });
+
+    const el = await montar();
+
+    expect(soloEnMeta(el), 'aviso de «solo en Meta» cuando ya no queda ninguna por traer').toBeNull();
+  });
+
+  it('lo traído se ve: la lista se recarga', async () => {
+    filas = [ENVIADA];
+    respondeListado = async () => ({ templates: [DE_META, PROMO], stale: false });
+    let paginas = 0;
+    (globalThis as Record<string, unknown>).erplora = {
+      ...((globalThis as Record<string, unknown>).erplora as Record<string, unknown>),
+      queryPage: async () => {
+        paginas += 1;
+        return { rows: filas, total: filas.length };
+      },
+    };
+
+    await montar();
+
+    expect(paginas, 'se trajo una plantilla y nadie volvió a leer la lista').toBeGreaterThan(1);
+  });
+
+  it('una que este hub ya tiene (la dueña la borró aquí) no es un fallo: ni aviso, ni recarga, ni evento', async () => {
+    // The list hides deleted rows, so the tab asks to import it on every open; the command
+    // refuses with `template_already_here` and the tab takes that as the normal answer it is.
+    filas = [ENVIADA];
+    respondeListado = async () => ({ templates: [DE_META, PROMO], stale: false });
+    let paginas = 0;
+    const base = (globalThis as Record<string, unknown>).erplora as Record<string, unknown>;
+    (globalThis as Record<string, unknown>).erplora = {
+      ...base,
+      queryPage: async () => {
+        paginas += 1;
+        return { rows: filas, total: filas.length };
+      },
+      command: async (name: string, payload: Record<string, unknown>) => {
+        comandos.push({ name, payload });
+        if (name === 'whatsapp_inbox.templates.import_from_meta') throw refusal('whatsapp_inbox.template_already_here');
+        return { ok: true };
+      },
+    };
+
+    const el = await montar();
+
+    expect((el as unknown as { metaSyncNotice: string }).metaSyncNotice, 'una fila que ya existe se contó como fallo').toBe('');
+    expect(soloEnMeta(el), 'una plantilla borrada aquí volvió al aviso').toBeNull();
+    expect(paginas, 'nada se trajo y la lista se releyó igual').toBe(1);
+  });
+
+  it('si el hub no puede guardarla, se dice y sigue en el aviso', async () => {
+    filas = [ENVIADA];
+    respondeListado = async () => ({ templates: [DE_META, PROMO], stale: false });
+    const base = (globalThis as Record<string, unknown>).erplora as Record<string, unknown>;
+    (globalThis as Record<string, unknown>).erplora = {
+      ...base,
+      command: async (name: string, payload: Record<string, unknown>) => {
+        comandos.push({ name, payload });
+        if (name === 'whatsapp_inbox.templates.import_from_meta') throw refusal('permission_denied');
+        return { ok: true };
+      },
+    };
+
+    const el = await montar();
+
+    expect((el as unknown as { metaSyncNotice: string }).metaSyncNotice, 'el fallo al traerla se calló').toBeTruthy();
+    expect(soloEnMeta(el)?.textContent ?? '', 'la que no se pudo traer desapareció sin rastro').toContain('promo_otono (es)');
+  });
+});

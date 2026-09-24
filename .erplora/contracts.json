@@ -23,6 +23,7 @@
       "whatsapp_inbox.requests.reject",
       "whatsapp_inbox.templates.create",
       "whatsapp_inbox.templates.delete",
+      "whatsapp_inbox.templates.import_from_meta",
       "whatsapp_inbox.templates.record_meta_answer",
       "whatsapp_inbox.templates.update"
     ],
