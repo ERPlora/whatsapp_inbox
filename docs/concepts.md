@@ -109,7 +109,7 @@ true of who a conversation is assigned to.
 ## A message from a number on file tells the inbox whose the conversation is
 
 No automation is needed. Every time a message arrives, the inbox looks for a customer whose phone
-is **exactly** the number that wrote (a longer number that merely contains it is somebody else) and
+is **the same number** as the one that wrote (a longer number that merely contains it is somebody else) and
 links the conversation to her. The number is compared as a number, not as text: the card may say
 `+34600111222`, `+34 600-111-222`, `0034 600 111 222` or just `600 111 222` without the country
 code, and it is still her (whatsapp_inbox#162). Numbers shorter than 7 digits never identify
