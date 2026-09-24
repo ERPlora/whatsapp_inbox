@@ -167,7 +167,7 @@
     "doorRefusalNoCode": "No se ha podido registrar la plantilla en Meta. Queda guardada aquí: prueba a guardarla otra vez dentro de un rato.",
     "metaRejectedReason": "Motivo de Meta: {reason}",
     "metaSyncUnavailable": "No hemos podido comprobar con Meta si hay veredictos nuevos, así que lo que ves es lo último que sabemos. Vuelve a abrir esta pestaña dentro de un rato.",
-    "metaOnlyTemplates": "WhatsApp Manager tiene plantillas que no están en esta lista, porque se crearon allí: {names}",
+    "metaOnlyTemplates": "Estas plantillas de WhatsApp Manager todavía no se pueden traer a esta lista (llevan cabecera con imagen, vídeo o documento, botones o una variable en la cabecera). Gestiónalas en WhatsApp Manager: {names}",
     "doorRefusal": {
       "invalid_name": "Meta no ha aceptado el nombre. Usa solo minúsculas, números y guiones bajos —sin espacios ni acentos— y vuelve a intentarlo.",
       "invalid_category": "Meta no ha aceptado la categoría. Elige Utilidad, Marketing o Autenticación y vuelve a enviarla.",

@@ -609,6 +609,17 @@
         "description": "Records what Meta answered about a template (its id, verdict and refusal reason). Called by the screen right after registering the template with Meta, never on its own"
       }
     },
+    "whatsapp_inbox.templates.import_from_meta": {
+      "permission": "whatsapp_inbox.manage_settings",
+      "transaction": true,
+      "sql": [
+        "commands/template_import_from_meta.sql"
+      ],
+      "schema": "schemas/template_import_from_meta.json",
+      "emit": [
+        "whatsapp_inbox.template.created"
+      ]
+    },
     "whatsapp_inbox.templates.delete": {
       "permission": "whatsapp_inbox.manage_settings",
       "transaction": true,

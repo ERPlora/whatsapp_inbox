@@ -166,7 +166,7 @@
     "doorRefusalNoCode": "The template could not be registered with Meta. It is saved here: try saving it again in a moment.",
     "metaRejectedReason": "Meta's reason: {reason}",
     "metaSyncUnavailable": "We could not check with Meta for new verdicts, so what you see is the last we know. Open this tab again in a while.",
-    "metaOnlyTemplates": "WhatsApp Manager has templates that are not in this list, because they were created there: {names}",
+    "metaOnlyTemplates": "These WhatsApp Manager templates cannot be brought into this list yet (they use an image, video or document header, buttons, or a variable in the header). Manage them in WhatsApp Manager: {names}",
     "doorRefusal": {
       "invalid_name": "Meta did not accept the name. Use lowercase letters, numbers and underscores only — no spaces or accents — and try again.",
       "invalid_category": "Meta did not accept the category. Pick Utility, Marketing or Authentication and send it again.",
