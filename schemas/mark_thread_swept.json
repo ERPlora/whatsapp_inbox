@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "whatsapp_inbox._mark_thread_swept",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["conversation_id"],
+  "properties": {
+    "conversation_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The conversation the link sweep has just handed over to the link listener"
+    }
+  }
+}

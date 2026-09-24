@@ -247,3 +247,86 @@ async fn a_national_card_and_an_international_twin_leave_the_thread_for_a_human(
     assert_eq!(thread_customer(&rt).await, Value::Null, "two cards, one number: nobody");
     nothing_dead_lettered(&rt).await;
 }
+
+// ── whatsapp_inbox#163: the threads from before the automatic link, swept once ────────────────────
+
+/// A thread as an older version of the module left it: written before the link existed, so it has
+/// no customer and the sweep has never seen it. Nothing emits an event for it — that is the bug.
+async fn a_thread_from_before_the_update(rt: &Runtime, id: &str, wa_contact_id: &str) {
+    rt.db_for_test()
+        .execute(
+            &format!(
+                "INSERT INTO whatsapp_inbox_conversation (id, hub_id, wa_contact_id, contact_name, \
+                 contact_phone, created_at) VALUES ('{id}', '{HUB}', '{wa_contact_id}', 'x', \
+                 '+{wa_contact_id}', '2026-01-01T09:00:00+00:00')"
+            ),
+            &Params::new(),
+        )
+        .await
+        .unwrap();
+}
+
+/// The module's scheduled sweep, run the way the relay loop runs it once its cron is due.
+async fn the_sweep_runs(rt: &Runtime) -> usize {
+    rt.db_for_test()
+        .execute(
+            "UPDATE _scheduled_tasks SET next_run = '2000-01-01T00:00:00+00:00' \
+             WHERE module_id = 'whatsapp_inbox' AND name = 'sweep_unlinked_threads'",
+            &Params::new(),
+        )
+        .await
+        .unwrap();
+    let ran = rt.process_scheduler(HUB).await.unwrap();
+    rt.drain_outbox().await.unwrap();
+    ran
+}
+
+async fn customer_of(rt: &Runtime, id: &str) -> Value {
+    rows(rt, &format!("SELECT customer_id FROM whatsapp_inbox_conversation WHERE id = '{id}'")).await[0]
+        ["customer_id"]
+        .clone()
+}
+
+#[tokio::test]
+async fn an_old_thread_is_linked_by_the_sweep_without_her_writing_or_her_card_being_saved() {
+    let rt = runtime().await;
+    customer_on_file(&rt, "Eva", "+34600999888").await;
+    let ana = customer_on_file(&rt, "Ana", "600 111 222").await;
+    rt.drain_outbox().await.unwrap(); // her card was saved long ago: nothing to claim back then
+    a_thread_from_before_the_update(&rt, "t-old", WA_ID).await;
+    a_thread_from_before_the_update(&rt, "t-stranger", "34611000000").await;
+
+    assert_eq!(the_sweep_runs(&rt).await, 1, "the module's sweep is scheduled and due");
+
+    assert_eq!(customer_of(&rt, "t-old").await, json!(ana), "the sweep linked the old thread");
+    assert_eq!(customer_of(&rt, "t-stranger").await, Value::Null, "nobody on file: nobody linked");
+    nothing_dead_lettered(&rt).await;
+}
+
+#[tokio::test]
+async fn the_sweep_asks_once_and_never_overrides_a_link_or_picks_between_twins() {
+    let rt = runtime().await;
+    let eva = customer_on_file(&rt, "Eva", "+34600999888").await;
+    customer_on_file(&rt, "Ana", "+34600111222").await;
+    customer_on_file(&rt, "Ana bis", "600 111 222").await;
+    rt.drain_outbox().await.unwrap();
+    a_thread_from_before_the_update(&rt, "t-twins", WA_ID).await;
+    a_thread_from_before_the_update(&rt, "t-by-hand", "34600555444").await;
+    rt.db_for_test()
+        .execute(&format!("UPDATE whatsapp_inbox_conversation SET customer_id = '{eva}' WHERE id = 't-by-hand'"), &Params::new())
+        .await
+        .unwrap();
+
+    the_sweep_runs(&rt).await;
+    assert_eq!(customer_of(&rt, "t-twins").await, Value::Null, "two cards, one number: a human decides");
+    assert_eq!(customer_of(&rt, "t-by-hand").await, json!(eva), "a link somebody made is kept");
+
+    let swept = rows(&rt, "SELECT id FROM whatsapp_inbox_conversation WHERE link_swept_at IS NOT NULL").await;
+    assert_eq!(swept.len(), 1, "only the unlinked thread was asked about: {swept:?}");
+    let asked = rows(&rt, "SELECT id FROM _event_outbox WHERE event_name = 'whatsapp_inbox.conversation.link_pending'").await;
+    the_sweep_runs(&rt).await;
+    let asked_again = rows(&rt, "SELECT id FROM _event_outbox WHERE event_name = 'whatsapp_inbox.conversation.link_pending'").await;
+    assert_eq!(asked.len(), 1, "one lookup for the one unlinked thread");
+    assert_eq!(asked_again.len(), asked.len(), "a swept thread is not asked about again");
+    nothing_dead_lettered(&rt).await;
+}

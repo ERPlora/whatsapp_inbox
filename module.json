@@ -86,7 +86,8 @@
       "migrations/postgres/005_message_dedup.sql",
       "migrations/postgres/006_message_source.sql",
       "migrations/postgres/007_meta_rejected_reason.sql",
-      "migrations/postgres/008_quota_usage.sql"
+      "migrations/postgres/008_quota_usage.sql",
+      "migrations/postgres/009_link_sweep.sql"
     ]
   },
   "queries": {
@@ -349,6 +350,11 @@
       "ai": {
         "description": "Inbound WhatsApp messages consumed this calendar month and the monthly allowance of the plan (0 = no cap). Read-only: the allowance is set by billing, never from the hub."
       }
+    },
+    "whatsapp_inbox.conversations.unlinked": {
+      "permission": "whatsapp_inbox.manage_connections",
+      "sql": "queries/conversations_unlinked.sql",
+      "schema": "schemas/conversations_unlinked.json"
     }
   },
   "commands": {
@@ -704,6 +710,30 @@
         "commands/quota_set.sql"
       ],
       "schema": "schemas/quota_set.json"
+    },
+    "whatsapp_inbox._sweep_unlinked_threads": {
+      "permission": "whatsapp_inbox.manage_connections",
+      "internal": true,
+      "schema": "schemas/sweep_unlinked_threads.json",
+      "handler": {
+        "type": "wasm",
+        "file": "dist/handler.wasm",
+        "function": "sweep_unlinked_threads"
+      },
+      "reads": [
+        {
+          "query": "whatsapp_inbox.conversations.unlinked"
+        }
+      ]
+    },
+    "whatsapp_inbox._mark_thread_swept": {
+      "permission": "whatsapp_inbox.manage_connections",
+      "internal": true,
+      "transaction": true,
+      "sql": [
+        "commands/_mark_thread_swept.sql"
+      ],
+      "schema": "schemas/mark_thread_swept.json"
     }
   },
   "errors": {
@@ -735,6 +765,9 @@
       },
       "customer.updated": {
         "command": "whatsapp_inbox._link_customer_threads"
+      },
+      "whatsapp_inbox.conversation.link_pending": {
+        "command": "whatsapp_inbox._link_known_customer"
       }
     },
     "emits": [
@@ -748,9 +781,18 @@
       "whatsapp_inbox.template.created",
       "whatsapp_inbox.template.updated",
       "whatsapp_inbox.template.deleted",
-      "whatsapp_inbox.settings.updated"
+      "whatsapp_inbox.settings.updated",
+      "whatsapp_inbox.conversation.link_pending"
     ]
   },
+  "scheduled_tasks": [
+    {
+      "name": "sweep_unlinked_threads",
+      "command": "whatsapp_inbox._sweep_unlinked_threads",
+      "cron": "*/15 * * * *",
+      "catch_up": "collapse"
+    }
+  ],
   "ui": {
     "entry": "dist/whatsapp_inbox.esm.js"
   },
