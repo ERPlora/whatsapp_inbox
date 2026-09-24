@@ -793,6 +793,10 @@ async fn when_her_card_cannot_be_created_she_is_still_answered() {
         rows(&rt, "SELECT id FROM customers_customer").await.is_empty(),
         "the premise: nobody is on file"
     );
+    assert!(
+        !seen.is_empty(),
+        "the run ended before the step that writes to her ever ran: {steps:?}"
+    );
     let resolved = step(&seen, "resolve_customer");
     assert_eq!(resolved.output["found"], json!(false), "{resolved:?}");
     assert_eq!(
