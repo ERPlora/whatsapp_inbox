@@ -1844,8 +1844,24 @@ def floor_read_column_problems(name, doc, floor_columns):
     return problems
 
 
+def neighbour_operations(step):
+    """The operation names ONE step makes the hub run: its `query`, its `command`, and every tool
+    an `ai` step is handed (`tools.queries` + `tools.commands`), in document order."""
+    kind = step.get("kind")
+    if kind == "query":
+        names = [step.get("query")]
+    elif kind == "command":
+        names = [step.get("command")]
+    elif kind == "ai":
+        tools = step.get("tools") or {}
+        names = list(tools.get("queries") or []) + list(tools.get("commands") or [])
+    else:
+        names = []
+    return [n for n in names if isinstance(n, str) and "." in n]
+
+
 def unfloored_read_problems(name, doc, floors):
-    """Every NEIGHBOUR a family reads through a `query` step has a floor in its `requires.json`.
+    """Every NEIGHBOUR a family runs an operation of has a floor in its `requires.json`.
 
     The floor rules above only ever read what the family declares, so deleting a neighbour from
     `requires.json` did not make them fail — it made them silent: nothing to read against, nothing
@@ -1854,25 +1870,32 @@ def unfloored_read_problems(name, doc, floors):
     `flow_template_floor_is_met` decides with it whether the recipe is OFFERED — a neighbour with no
     floor is a recipe offered next to ANY copy of it, including one where the read does not exist.
 
-    `floors` is the `modules` map of the family's `requires.json`. Reads of this module's own
-    queries owe no floor: they ship in the same zip as the recipe.
+    🔴 whatsapp_inbox#197: this rule first read only `query` steps, and the booking recipe hands its
+    assistant `services.services.list`, `staff.members.list` and `staff.schedules.list_for_member`
+    as TOOLS — so the recipe was offered next to any Services or Staff, and on one without those
+    reads the assistant fails at the first question and the customer is left without her
+    appointment. A tool is an operation the hub runs for the recipe exactly like a step is, so the
+    `ai` step's `tools.queries`/`tools.commands` and every `command` step owe the same floor.
+
+    `floors` is the `modules` map of the family's `requires.json`. This module's own operations owe
+    no floor: they ship in the same zip as the recipe. One problem per neighbour per step.
     """
     own = MANIFEST.get("id")
     problems = []
     for step in doc.get("steps") or []:
-        if not isinstance(step, dict) or step.get("kind") != "query":
+        if not isinstance(step, dict):
             continue
-        qid = step.get("query")
-        if not isinstance(qid, str) or "." not in qid:
-            continue
-        owner = qid.split(".", 1)[0]
-        if owner == own or owner in floors:
-            continue
-        problems.append(
-            f"{name} step `{step.get('id')}` reads `{qid}`, and `{name.split('.')[0]}.requires.json` "
-            f"declares no floor for `{owner}`: the hub offers this recipe next to ANY copy of it, "
-            f"and no floor rule of this battery checks the read — add `{owner}` to its `modules`"
-        )
+        reported = set()
+        for op in neighbour_operations(step):
+            owner = op.split(".", 1)[0]
+            if owner == own or owner in floors or owner in reported:
+                continue
+            reported.add(owner)
+            problems.append(
+                f"{name} step `{step.get('id')}` runs `{op}`, and `{name.split('.')[0]}.requires.json` "
+                f"declares no floor for `{owner}`: the hub offers this recipe next to ANY copy of it, "
+                f"including one without that operation — add `{owner}` to its `modules`"
+            )
     return problems
 
 
@@ -7970,6 +7993,16 @@ FLOOR_READ_CASES = [
 ]
 
 
+def _assistant_with_tools(queries=(), commands=()):
+    """One `ai` step handed these tools — the shape of `book_appointment` (whatsapp_inbox#197)."""
+    tools = {}
+    if queries:
+        tools["queries"] = list(queries)
+    if commands:
+        tools["commands"] = list(commands)
+    return {"steps": [{"id": "book", "kind": "ai", "prompt": "Book it.", "tools": tools}]}
+
+
 UNFLOORED_READ_CASES = [
     (
         "every neighbour the recipe reads through a `query` step has its floor",
@@ -7988,6 +8021,41 @@ UNFLOORED_READ_CASES = [
         "a floor for some OTHER neighbour does not cover this one",
         _confirmation(),
         {"customers": "2.3.45"},
+        1,
+    ),
+    (
+        "🔴 whatsapp_inbox#197: the assistant is handed a neighbour's QUERY as a tool and that "
+        "neighbour has no floor — the hub offers the recipe next to a copy without the read",
+        _assistant_with_tools(queries=["services.services.list"]),
+        {},
+        1,
+    ),
+    (
+        "🔴 whatsapp_inbox#197: the assistant is handed a neighbour's COMMAND as a tool and that "
+        "neighbour has no floor",
+        _assistant_with_tools(commands=["customers.create"]),
+        {},
+        1,
+    ),
+    (
+        "every neighbour behind the assistant's tools has its floor; its own tools owe none",
+        _assistant_with_tools(
+            queries=["services.services.list", "whatsapp_inbox.conversations.last_offer"],
+            commands=["customers.create", "whatsapp_inbox.conversations.remember_offer"],
+        ),
+        {"services": "1.1.7", "customers": "2.3.45"},
+        0,
+    ),
+    (
+        "one problem per unfloored neighbour, not one per tool it hands over",
+        _assistant_with_tools(queries=["staff.members.list", "staff.schedules.list_for_member"]),
+        {},
+        1,
+    ),
+    (
+        "🔴 a neighbour's `command` step with no floor is the same hole as a read",
+        {"steps": [{"id": "book", "kind": "command", "command": "appointments.appointments.create"}]},
+        {},
         1,
     ),
 ]
