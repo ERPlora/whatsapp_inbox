@@ -1,0 +1,21 @@
+-- The example of a template's header variable (whatsapp_inbox#230).
+--
+-- A template created in WhatsApp Manager may carry ONE variable in its text header, as in
+-- «Tu cita del {{1}}». Meta reviews it with an example of that variable, and registering the
+-- template again (the panel's «Guardar») must send that example back or the SaaS refuses the save
+-- with missing_example (ERPlora/saas, whatsapp_inbox#226). The body's examples already live in
+-- `variables`. The header's one needs a column of its own because the SaaS sends it to Meta apart,
+-- as example.header_text or header_text_named_params.
+--
+-- Additive only (`expand`, ADR-0269): one column whose default describes every row that exists
+-- today exactly (a header with no variable has no example), no DROP and no DELETE.
+-- DOWN, run once by tests/meta_template_import.pg.test.py:
+--   ALTER TABLE whatsapp_inbox_template DROP COLUMN header_example
+-- It only removes this column, and no code older than this migration reads it.
+--
+-- No index. Nobody filters or sorts by it: it is read in the panel of one template.
+--
+-- WARNING No semicolons in this header. The migration guard that runs on the fleet splits
+-- statements by the semicolon without understanding comments (printing#23).
+ALTER TABLE whatsapp_inbox_template
+  ADD COLUMN IF NOT EXISTS header_example TEXT NOT NULL DEFAULT '';

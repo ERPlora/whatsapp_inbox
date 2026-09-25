@@ -21,6 +21,7 @@
 --
 -- `header_format` and `buttons` travel too (whatsapp_inbox#180): the panel shows what a template
 -- brought in from WhatsApp Manager carries, and keeps its text read-only when it carries either.
+-- `header_example` too (whatsapp_inbox#230): the panel sends it back to the registry on «Guardar».
 SELECT id, name, language, category, header, body, footer,
        meta_template_id,
        CASE
@@ -28,6 +29,6 @@ SELECT id, name, language, category, header, body, footer,
          ELSE LOWER(meta_status)
        END AS meta_status,
        COALESCE(meta_rejected_reason, '') AS meta_rejected_reason,
-       variables, header_format, buttons, is_active, created_at, updated_at
+       variables, header_format, buttons, header_example, is_active, created_at, updated_at
 FROM whatsapp_inbox_template
 WHERE hub_id = :hub_id AND is_deleted = 0

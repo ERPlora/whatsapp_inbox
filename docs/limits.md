@@ -8,7 +8,7 @@
 | **Receiving messages automatically** | ❌ No webhook and no declared network access to Meta |
 | **Auto-replies, greetings, out-of-hours messages** | ❌ Not here — what an automatic reply says is written in the flow that answers (Automations); the old settings that never sent anything were retired (#127) |
 | **Requests (parsed bookings waiting for approval)** | ❌ Retired (#206) — a booking asked for over WhatsApp is made by the recipes in `flows/` directly in Appointments or Reservations, and one waiting for a person is confirmed there |
-| **Syncing template status with Meta** | ✅ Each time the Templates tab opens (never on a timer). A template deleted in WhatsApp Manager is marked «Deleted in WhatsApp Manager», not removed; one created there is imported with its text and verdict (#179) — image/video/document headers and quick reply, link and call buttons included (#180), and named body variables (`{{name}}`, #186), shown read-only in its panel — unless it uses a carousel, a limited-time offer, a copy-code or Flow button, a location header or a header variable — those are named in a notice |
+| **Syncing template status with Meta** | ✅ Each time the Templates tab opens (never on a timer). A template deleted in WhatsApp Manager is marked «Deleted in WhatsApp Manager», not removed; one created there is imported with its text and verdict (#179) — image/video/document headers and quick reply, link and call buttons included (#180), and named body variables (`{{name}}`, #186), shown read-only in its panel — unless it uses a carousel, a limited-time offer, a copy-code or Flow button, a location header or more than one header variable — those are named in a notice; a text header with ONE variable is imported with its example, which «Save» sends back to Meta (#230) |
 | **Per-employee routing** | ❌ Table exists; no command, no screen |
 | **Ingesting a message** | ✅ Works |
 | **Templates CRUD** | ✅ Works |
@@ -98,8 +98,9 @@ brought in with its text, its media header kind and its quick reply, link and ca
 template with buttons or a media header is read-only here: change its wording in WhatsApp Manager
 («Guardar» would register it at Meta without them, and creating one here is ERPlora/whatsapp_inbox#185).
 If it uses a carousel, a limited-time offer, a copy-code or Flow button, a location header, named
-variables (`{{name}}` instead of `{{1}}`) or a variable in the header, it is named in a notice above
-the table instead; manage it in WhatsApp Manager. If you deleted it here before, it is not brought back.
+variables (`{{name}}` instead of `{{1}}`) or more than one variable in the header, it is named in a
+notice above the table instead; manage it in WhatsApp Manager. A header with ONE variable («Your
+appointment on {{1}}») is brought in with the example Meta reviewed, and «Save» sends it back (#230). If you deleted it here before, it is not brought back.
 
 **"A photo or voice note says it cannot be shown here yet."** WhatsApp sends an attachment's id,
 not the file, and the hub fetches it through the platform. Until the hub offers that door

@@ -85,7 +85,8 @@
         "file": "migrations/postgres/013_retire_requests_pipeline.sql",
         "kind": "contract",
         "since": "2.1.83"
-      }
+      },
+      "migrations/postgres/014_template_header_example.sql"
     ]
   },
   "queries": {

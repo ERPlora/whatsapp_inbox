@@ -144,7 +144,7 @@
     "buttonPhone": "Llama al número",
     "templateManagedInMeta": "Esta plantilla lleva botones o una imagen, vídeo o documento en la cabecera, así que su texto se cambia en WhatsApp Manager. Al volver a abrir esta pestaña verás lo que diga Meta.",
     "templateNamedVariablesInMeta": "Esta plantilla usa variables con nombre ({{nombre}}), que ERPlora aún no puede registrar en Meta, así que su texto se cambia en WhatsApp Manager. Al volver a abrir esta pestaña verás lo que diga Meta.",
-    "metaOnlyTemplates": "Estas plantillas de WhatsApp Manager todavía no se pueden traer a esta lista (llevan un carrusel, una oferta por tiempo limitado, un botón de copiar código o de WhatsApp Flow, una ubicación en la cabecera o una variable en la cabecera). Gestiónalas en WhatsApp Manager: {names}",
+    "metaOnlyTemplates": "Estas plantillas de WhatsApp Manager todavía no se pueden traer a esta lista (llevan un carrusel, una oferta por tiempo limitado, un botón de copiar código o de WhatsApp Flow, una ubicación en la cabecera o más de una variable en la cabecera). Gestiónalas en WhatsApp Manager: {names}",
     "doorRefusal": {
       "invalid_name": "Meta no ha aceptado el nombre. Usa solo minúsculas, números y guiones bajos —sin espacios ni acentos— y vuelve a intentarlo.",
       "invalid_category": "Meta no ha aceptado la categoría. Elige Utilidad, Marketing o Autenticación y vuelve a enviarla.",
