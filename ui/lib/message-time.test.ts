@@ -16,6 +16,10 @@ describe('formatMessageTime — list form (compact)', () => {
     expect(formatMessageTime('2026-09-02T08:00:00.123456+00:00', MADRID)).toBe('10:00');
   });
 
+  it('reads the shape the engine really sends (space separator, `+00` offset — measured on hub:stable)', () => {
+    expect(formatMessageTime('2026-09-02 08:00:00.33073+00', MADRID)).toBe('10:00');
+  });
+
   it('the previous business day shows the «yesterday» label', () => {
     expect(formatMessageTime('2026-09-01T08:00:00+00:00', MADRID)).toBe('Ayer');
   });
