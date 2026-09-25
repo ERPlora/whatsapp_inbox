@@ -6,8 +6,6 @@
       "whatsapp_inbox.conversations.get",
       "whatsapp_inbox.conversations.list",
       "whatsapp_inbox.messages.list",
-      "whatsapp_inbox.requests.get",
-      "whatsapp_inbox.requests.list",
       "whatsapp_inbox.templates.list"
     ],
     "optional_queries": [
@@ -17,10 +15,6 @@
     ],
     "commands": [
       "whatsapp_inbox.conversations.assign",
-      "whatsapp_inbox.requests.approve",
-      "whatsapp_inbox.requests.delete",
-      "whatsapp_inbox.requests.fulfill",
-      "whatsapp_inbox.requests.reject",
       "whatsapp_inbox.templates.create",
       "whatsapp_inbox.templates.delete",
       "whatsapp_inbox.templates.import_from_meta",
@@ -32,20 +26,12 @@
       "reservations.settings.set_auto_confirm"
     ],
     "events": [
-      "appointments.booking_request.failed",
-      "appointments.booking_request.fulfilled",
       "whatsapp_inbox.conversation.assigned",
       "whatsapp_inbox.message.received",
-      "whatsapp_inbox.request.approved",
-      "whatsapp_inbox.request.deleted",
-      "whatsapp_inbox.request.fulfilled",
-      "whatsapp_inbox.request.rejected",
       "whatsapp_inbox.template.created",
       "whatsapp_inbox.template.deleted",
       "whatsapp_inbox.template.updated"
     ],
-    "slots": [
-      "whatsapp_inbox.request.booking"
-    ]
+    "slots": []
   }
 }

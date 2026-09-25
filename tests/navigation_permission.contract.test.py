@@ -21,7 +21,6 @@ WHAT THIS PINS, per tab:
      menu and the door cannot disagree about who may enter. The mapping is written here as the
      contract, from the query the screen binds first (the WC's first `queryPage`/`query` call):
        inbox     → conversations.list → view_conversation
-       requests  → requests.list      → view_request
 
 🔴 AND ONE TAB IS NO LONGER GATED BY A QUERY OF THIS MODULE (whatsapp_inbox#123, ADR-0470). The
 Settings screen used to open on `whatsapp_inbox.settings.get`, and that read is gone: what it does
@@ -58,7 +57,6 @@ MANIFEST = json.loads((MODULE_DIR / "module.json").read_text())
 # the gate the runtime enforces on that read.
 TAB_TO_PRIMARY_QUERY = {
     "inbox": ("erp-whatsapp-inbox-inbox", "whatsapp_inbox.conversations.list"),
-    "requests": ("erp-whatsapp-inbox-requests", "whatsapp_inbox.requests.list"),
 }
 
 # Tab → (screen, the kernel call it opens on, the permission the menu declares). See §4 above: the
@@ -80,6 +78,17 @@ ADMIN_ROLES = {"admin"}
 # that ships to every hub and can never be opened.
 EMBEDDED_SCREENS = {
     "erp-whatsapp-inbox-templates": "erp-whatsapp-inbox-settings",
+}
+
+# Tabs that were retired on purpose, and must not come back by accident. Each one is a screen that
+# nothing fed: the menu offered the owner a list that was always empty, which reads as «something is
+# broken» or «I am losing messages». Retiring it means ALL of it: no `navigation` entry (by id or by
+# component), no source under `ui/components/`, and nothing of it left in the bundle that ships.
+RETIRED_SCREENS = {
+    # whatsapp_inbox#193 (ADR-0470): the WhatsApp recipes book straight into Appointments or
+    # Reservations; a booking waiting for the owner's OK is a pending appointment, confirmed in
+    # Appointments (`appointments.count_to_confirm` / `appointments.confirm`), like Square does.
+    "erp-whatsapp-inbox-requests": "requests",
 }
 
 failures: list[str] = []
@@ -223,6 +232,24 @@ def main() -> int:
             )
         else:
             print(f"  ok: `{screen}` has no tab of its own and `{host}` embeds it")
+
+    # A retired screen stays retired: not in the menu, not in the source, not in the bundle.
+    bundle = (MODULE_DIR / "dist" / "whatsapp_inbox.esm.js").read_text()
+    for screen, tab in RETIRED_SCREENS.items():
+        back = []
+        if tab in entries or any(e.get("component") == screen for e in entries.values()):
+            back.append("`navigation` offers it again")
+        if (MODULE_DIR / "ui" / "components" / screen).exists():
+            back.append(f"`ui/components/{screen}/` still exists")
+        if screen in bundle:
+            back.append("`dist/whatsapp_inbox.esm.js` still ships it (rebake `dist/`)")
+        if back:
+            failures.append(
+                f"`{screen}` was retired (nothing feeds it: an always-empty tab) but "
+                + "; ".join(back)
+            )
+        else:
+            print(f"  ok: `{screen}` is retired — not in the menu, the source or the bundle")
 
     # Absent = visible-to-all is the field's contract for PRE-EXISTING manifests; this module
     # has no tab that is honestly for everybody (the two reads are permission-gated), so a fifth

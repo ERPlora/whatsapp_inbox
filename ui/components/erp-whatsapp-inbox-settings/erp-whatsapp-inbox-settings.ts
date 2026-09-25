@@ -68,8 +68,8 @@ const CATALOG: Record<string, unknown> = { es: esLocale, en: enLocale };
 // It is an INLINE panel instead. `ion-alert`'s buttons travel as a JS property, so they exist
 // nowhere in the DOM until Ionic builds the overlay: they cannot be found or pressed in the test
 // environment, which would leave the single most important tap of this screen — the consent — with
-// no guard at all. The module already answers this the same way in `erp-whatsapp-inbox-requests.ts`
-// (the delete confirmation) and in `…-templates.ts`, so this is the existing pattern, not a new one.
+// no guard at all. The module already answers this the same way in `…-templates.ts` (the delete
+// confirmation), so this is the existing pattern, not a new one.
 // For the owner it is the same two buttons under the same sentence, and it never gets swallowed by a
 // POS webview the way a native dialog can.
 

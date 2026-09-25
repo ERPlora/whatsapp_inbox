@@ -3715,9 +3715,6 @@ var es_default = {
     inbox: {
       label: "Bandeja de entrada"
     },
-    requests: {
-      label: "Solicitudes"
-    },
     settings: {
       label: "Ajustes"
     }
@@ -3735,7 +3732,6 @@ var es_default = {
   },
   ui: {
     inboxTitle: "Bandeja de WhatsApp",
-    requestsTitle: "Solicitudes",
     templatesTitle: "Plantillas de WhatsApp",
     colContact: "Contacto",
     colPhone: "Tel\xE9fono",
@@ -3743,10 +3739,6 @@ var es_default = {
     colUnread: "Sin leer",
     yesterday: "Ayer",
     colLastMessage: "\xDAltimo mensaje",
-    colReference: "Referencia",
-    colType: "Tipo",
-    colConfidence: "Confianza",
-    colFlag: "Aviso",
     colActions: "Acciones",
     colName: "Nombre",
     colLanguage: "Idioma",
@@ -3756,17 +3748,6 @@ var es_default = {
     colBody: "Cuerpo",
     statusActive: "Activa",
     statusClosed: "Cerrada",
-    typeOrder: "Pedido",
-    typeReservation: "Reserva",
-    typeAppointment: "Cita",
-    typeQuote: "Presupuesto",
-    typeTransport: "Transporte",
-    typeCustom: "Otro",
-    requestStatusPending: "Pendientes",
-    requestStatusConfirmed: "Confirmadas",
-    requestStatusFulfilled: "Cumplidas",
-    requestStatusRejected: "Rechazadas",
-    requestStatusCancelled: "Canceladas",
     categoryUtility: "Utility",
     categoryMarketing: "Marketing",
     categoryAuthentication: "Authentication",
@@ -3788,17 +3769,10 @@ var es_default = {
     yes: "S\xED",
     no: "No",
     searchInbox: "Filtrar contacto o tel\xE9fono\u2026",
-    searchRequests: "Buscar referencia o contacto\u2026",
     searchTemplates: "Buscar nombre o categor\xEDa\u2026",
     emptyInbox: "Sin conversaciones.",
-    emptyRequests: "Sin solicitudes.",
     emptyTemplates: "Sin plantillas.",
     loading: "Cargando\u2026",
-    pendingReview: "Pendientes de revisi\xF3n",
-    approve: "Aprobar",
-    reject: "Rechazar",
-    errApprove: "No se pudo aprobar",
-    errReject: "No se pudo rechazar",
     errCreateTemplate: "No se pudo crear la plantilla",
     placeholderName: "Nombre",
     placeholderLanguage: "Idioma (es)",
@@ -3806,10 +3780,6 @@ var es_default = {
     placeholderBody: "Cuerpo del mensaje",
     saving: "Guardando\u2026",
     add: "A\xF1adir",
-    bookingOpen: "Reservar",
-    bookingClose: "Cerrar",
-    bookingRetry: "Reservar de nuevo",
-    bookingFailedTitle: "La reserva no se pudo hacer",
     openConversation: "Abrir",
     closeView: "Cerrar",
     emptyThread: "Esta conversaci\xF3n todav\xEDa no tiene mensajes.",
@@ -3822,11 +3792,7 @@ var es_default = {
     errLoadThread: "No se pudo cargar la conversaci\xF3n",
     errAssign: "No se pudo asignar la conversaci\xF3n",
     delete: "Borrar",
-    confirmDeleteRequest: "\xBFBorrar esta solicitud? Una solicitud cumplida no se puede borrar.",
-    errDeleteRequest: "No se pudo borrar la solicitud",
-    markFulfilled: "Marcar como atendida",
     confirmFulfil: "\xBFMarcar la solicitud como atendida? No se crea nada en otro m\xF3dulo: es una nota de que alguien la resolvi\xF3.",
-    errFulfil: "No se pudo marcar la solicitud como atendida",
     edit: "Editar",
     save: "Guardar",
     cancel: "Cancelar",
@@ -3836,12 +3802,7 @@ var es_default = {
     errDeleteTemplate: "No se pudo borrar la plantilla",
     settingsTitle: "Ajustes del canal",
     helpConnectNeedsNewerHub: "Este hub es demasiado antiguo para conectar el n\xFAmero desde aqu\xED. Actualiza el hub y vuelve a esta pantalla.",
-    open: "Abrir",
     requestDetail: "Petici\xF3n",
-    labelParsedData: "Lo que entendi\xF3 el asistente",
-    labelNotes: "Notas",
-    labelLinkedObject: "Registro creado",
-    errLoadRequest: "No se ha podido cargar la petici\xF3n",
     useAppointmentsName: "Reservar citas",
     useAppointmentsSummary: "Una clienta pide cita por WhatsApp, el asistente le ofrece las horas que de verdad tienes libres y le reserva la que elija; luego le dice que ya est\xE1, y le avisa cuando t\xFA confirmas su cita.",
     usesGoToApps: "Ver aplicaciones",
@@ -3945,9 +3906,6 @@ var en_default = {
     inbox: {
       label: "Inbox"
     },
-    requests: {
-      label: "Requests"
-    },
     settings: {
       label: "Settings"
     }
@@ -3965,7 +3923,6 @@ var en_default = {
   },
   ui: {
     inboxTitle: "WhatsApp Inbox",
-    requestsTitle: "Requests",
     templatesTitle: "WhatsApp Templates",
     colContact: "Contact",
     colPhone: "Phone",
@@ -3973,10 +3930,6 @@ var en_default = {
     colUnread: "Unread",
     yesterday: "Yesterday",
     colLastMessage: "Last message",
-    colReference: "Reference",
-    colType: "Type",
-    colConfidence: "Confidence",
-    colFlag: "Attention",
     colActions: "Actions",
     colName: "Name",
     colLanguage: "Language",
@@ -3986,17 +3939,6 @@ var en_default = {
     colBody: "Body",
     statusActive: "Active",
     statusClosed: "Closed",
-    typeOrder: "Order",
-    typeReservation: "Reservation",
-    typeAppointment: "Appointment",
-    typeQuote: "Quote",
-    typeTransport: "Transport",
-    typeCustom: "Other",
-    requestStatusPending: "Pending",
-    requestStatusConfirmed: "Confirmed",
-    requestStatusFulfilled: "Fulfilled",
-    requestStatusRejected: "Rejected",
-    requestStatusCancelled: "Cancelled",
     categoryUtility: "Utility",
     categoryMarketing: "Marketing",
     categoryAuthentication: "Authentication",
@@ -4018,17 +3960,10 @@ var en_default = {
     yes: "Yes",
     no: "No",
     searchInbox: "Filter contact or phone\u2026",
-    searchRequests: "Search reference or contact\u2026",
     searchTemplates: "Search name or category\u2026",
     emptyInbox: "No conversations.",
-    emptyRequests: "No requests.",
     emptyTemplates: "No templates.",
     loading: "Loading\u2026",
-    pendingReview: "Pending review",
-    approve: "Approve",
-    reject: "Reject",
-    errApprove: "Could not approve",
-    errReject: "Could not reject",
     errCreateTemplate: "Could not create template",
     placeholderName: "Name",
     placeholderLanguage: "Language (es)",
@@ -4036,10 +3971,6 @@ var en_default = {
     placeholderBody: "Message body",
     saving: "Saving\u2026",
     add: "Add",
-    bookingOpen: "Book",
-    bookingClose: "Close",
-    bookingRetry: "Book again",
-    bookingFailedTitle: "The booking did not go through",
     openConversation: "Open",
     closeView: "Close",
     emptyThread: "No messages in this conversation yet.",
@@ -4052,11 +3983,7 @@ var en_default = {
     errLoadThread: "Could not load the conversation",
     errAssign: "Could not assign the conversation",
     delete: "Delete",
-    confirmDeleteRequest: "Delete this request? A fulfilled request cannot be deleted.",
-    errDeleteRequest: "Could not delete the request",
-    markFulfilled: "Mark as handled",
     confirmFulfil: "Mark this request as handled? Nothing is created in another module \u2014 it is a note that somebody dealt with it.",
-    errFulfil: "Could not mark the request as handled",
     edit: "Edit",
     save: "Save",
     cancel: "Cancel",
@@ -4066,12 +3993,7 @@ var en_default = {
     errDeleteTemplate: "Could not delete the template",
     settingsTitle: "Channel settings",
     helpConnectNeedsNewerHub: "This hub is too old to connect the number from here. Update the hub and come back to this screen.",
-    open: "Open",
     requestDetail: "Request",
-    labelParsedData: "What the assistant understood",
-    labelNotes: "Notes",
-    labelLinkedObject: "Created record",
-    errLoadRequest: "Could not load the request",
     useAppointmentsName: "Book appointments",
     useAppointmentsSummary: "A customer asks for an appointment on WhatsApp, the assistant offers the hours you actually have free, and books the one they pick \u2014 then tells them it is done, and tells them when you confirm their appointment.",
     usesGoToApps: "See apps",
@@ -4855,480 +4777,6 @@ __decorateClass4([
 ], OkInlineFeedback.prototype, "hasActions");
 define("ok-inline-feedback", OkInlineFeedback);
 
-// ui/components/erp-whatsapp-inbox-requests/erp-whatsapp-inbox-requests.ts
-var CATALOG2 = { es: es_default, en: en_default };
-var BOOKABLE_TYPES = /* @__PURE__ */ new Set(["appointment", "reservation"]);
-function erplora2() {
-  const c5 = globalThis.erplora;
-  if (!c5) throw new Error("erplora SDK no inicializado por el shell");
-  return c5;
-}
-var TYPE_KEYS = {
-  order: "ui.typeOrder",
-  reservation: "ui.typeReservation",
-  appointment: "ui.typeAppointment",
-  quote: "ui.typeQuote",
-  transport: "ui.typeTransport",
-  custom: "ui.typeCustom"
-};
-var STATUS_KEYS2 = {
-  pending_review: "ui.requestStatusPending",
-  confirmed: "ui.requestStatusConfirmed",
-  fulfilled: "ui.requestStatusFulfilled",
-  rejected: "ui.requestStatusRejected",
-  cancelled: "ui.requestStatusCancelled"
-};
-function typeLabel(value) {
-  const key = TYPE_KEYS[value];
-  return key ? erplora2().t(CATALOG2, key) : value;
-}
-function statusLabel(value) {
-  const key = STATUS_KEYS2[value];
-  return key ? erplora2().t(CATALOG2, key) : value;
-}
-function domainErrorText3(e5, fallbackKey) {
-  const declared = domainErrorText(CATALOG2, erplora2().locale, e5);
-  if (declared) return declared;
-  return (e5 instanceof Error ? e5.message : "") || erplora2().t(CATALOG2, fallbackKey);
-}
-var ErpWhatsappInboxRequests = class extends i3 {
-  constructor() {
-    super(...arguments);
-    this.formError = "";
-    this.busyId = "";
-    this.bookingFor = "";
-    this.pendingDelete = null;
-    this.openRequest = null;
-    /** HOST of the `whatsapp_inbox.request.booking` slot (ADR-0043 §3bis). Resolved once, mounted on
-     *  demand, told WHICH request is open by a `CustomEvent` on the filler element — never by props
-     *  or calls, and never by importing anything of the module that fills it. */
-    this.bookingFillers = [];
-    this.bookingSlotResolved = false;
-    this.onLocaleChange = () => this.requestUpdate();
-  }
-  static {
-    this.styles = i`
-    :host { display:block; font-family: system-ui, sans-serif; color: var(--ion-text-color, #1c1b18); }
-    header { display:flex; gap:.5rem; align-items:center; margin-bottom:.75rem; }
-    h2 { margin:0; font-size:1.15rem; flex:1; }
-    .err { color:#d9480f; font-weight:600; }
-    .actions { display:flex; gap:.35rem; align-items:center; flex-wrap:wrap; }
-    .pending-row { border:1px solid var(--ion-color-step-150, #e5e3df); border-radius:.5rem; padding:.6rem .7rem; margin:.45rem 0; }
-    .who { display:flex; gap:.4rem; align-items:baseline; flex-wrap:wrap; }
-    .ref { font-weight:600; }
-    .summary { margin:.25rem 0 .5rem; color: var(--ion-color-step-600, #5b5852); }
-    /* 44px minimum touch target: this screen is used one-handed, at a counter. */
-    ion-button { --min-height: 44px; }
-    /* pm#392 — the tone of a button is declared HERE, never with \`color="…"\`: Ionic resolves
-       \`color=\` through a GLOBAL \`.ion-color-*\` rule that does not reach inside this shadow root,
-       so a solid button came out as white text on a transparent background (invisible). Custom
-       properties do inherit through the boundary, so the theme token still applies. */
-    ion-button.tone-danger:not([fill]) {
-      --background: var(--ion-color-danger, #c5000f);
-      --background-activated: var(--ion-color-danger-shade, #ad000d);
-      --background-focused: var(--ion-color-danger-shade, #ad000d);
-      --background-hover: var(--ion-color-danger-tint, #cb1a27);
-      --color: var(--ion-color-danger-contrast, #fff);
-    }
-    ion-button.tone-medium:not([fill]) {
-      --background: var(--ion-color-medium, #636469);
-      --background-activated: var(--ion-color-medium-shade, #57585c);
-      --background-focused: var(--ion-color-medium-shade, #57585c);
-      --background-hover: var(--ion-color-medium-tint, #737478);
-      --color: var(--ion-color-medium-contrast, #fff);
-    }
-    .booking-slot { margin-top:.5rem; }
-    .booking-slot:empty { display:none; }
-    .detail { border:1px solid var(--ion-border-color,#e7e2d6); border-radius: var(--ok-radius-sm, 10px);
-      padding:.75rem 1rem; margin:0 0 1rem; background:var(--ok-surface-2, var(--ion-color-step-50, rgba(0,0,0,.04))); }
-    .detail h4 { margin:.6rem 0 .2rem; font-size:.85rem; color: var(--ion-color-medium,#6b6557); }
-    .parsed { display:grid; grid-template-columns:auto 1fr; gap:.15rem .75rem; margin:0; }
-    .parsed dt { font-weight:600; }
-    .parsed dd { margin:0; }
-    .confirm { border:1px solid var(--ion-border-color,#e7e2d6); border-radius: var(--ok-radius-sm, 10px);
-      padding:.75rem 1rem; margin:0 0 1rem; background:var(--ok-surface-2, var(--ion-color-step-50, rgba(0,0,0,.04))); }
-  `;
-  }
-  /** Row actions of the table — the doors `requests.delete` and `requests.fulfill` never had.
-   *
-   *  Both are `disabled` and not hidden when the state does not allow them. The guard is the SQL's
-   *  and stays there (`request_delete.sql` refuses a `fulfilled` row, `_fulfill_transition.sql`
-   *  only moves a `confirmed` one); what the table does is refrain from OFFERING what the guard
-   *  would silently refuse — a command that affects 0 rows explains nothing to the person who
-   *  pressed it. Keeping the button visible teaches the rule instead of hiding it. */
-  get rowActions() {
-    const t5 = (k2) => erplora2().t(CATALOG2, k2);
-    return [
-      {
-        id: "open",
-        label: t5("ui.open"),
-        icon: "open-outline",
-        color: "primary"
-      },
-      {
-        id: "fulfil",
-        label: t5("ui.markFulfilled"),
-        icon: "checkmark-done-outline",
-        color: "success",
-        disabled: (row) => String(row.status ?? "") !== "confirmed"
-      },
-      {
-        id: "delete",
-        label: t5("ui.delete"),
-        icon: "trash-outline",
-        color: "danger",
-        disabled: (row) => String(row.status ?? "") === "fulfilled"
-      }
-    ];
-  }
-  get columns() {
-    const t5 = (k2) => erplora2().t(CATALOG2, k2);
-    return [
-      { key: "reference_number", header: t5("ui.colReference"), sortable: true, filterable: true, filterType: "text" },
-      {
-        key: "request_type",
-        header: t5("ui.colType"),
-        sortable: true,
-        filterable: true,
-        filterType: "select",
-        options: [
-          { value: "order", label: t5("ui.typeOrder") },
-          { value: "reservation", label: t5("ui.typeReservation") },
-          { value: "appointment", label: t5("ui.typeAppointment") },
-          { value: "quote", label: t5("ui.typeQuote") },
-          { value: "transport", label: t5("ui.typeTransport") },
-          { value: "custom", label: t5("ui.typeCustom") }
-        ],
-        // whatsapp_inbox#41 — the cell used to paint the raw enum; the label is the same map the
-        // filter select reads, so the column and its filter can never disagree.
-        format: (r6) => typeLabel(String(r6.request_type ?? ""))
-      },
-      { key: "contact_name", header: t5("ui.colContact"), sortable: true, filterable: true, filterType: "text" },
-      {
-        key: "status",
-        header: t5("ui.colStatus"),
-        sortable: true,
-        filterable: true,
-        filterType: "select",
-        options: [
-          { value: "pending_review", label: t5("ui.requestStatusPending") },
-          { value: "confirmed", label: t5("ui.requestStatusConfirmed") },
-          { value: "fulfilled", label: t5("ui.requestStatusFulfilled") },
-          { value: "rejected", label: t5("ui.requestStatusRejected") },
-          { value: "cancelled", label: t5("ui.requestStatusCancelled") }
-        ],
-        format: (r6) => statusLabel(String(r6.status ?? ""))
-      },
-      {
-        key: "confidence_score",
-        header: t5("ui.colConfidence"),
-        align: "right",
-        sortable: true,
-        filterable: true,
-        filterType: "range",
-        format: (r6) => `${Math.round((Number(r6.confidence_score) || 0) * 100)}%`
-      },
-      {
-        key: "id",
-        // whatsapp_inbox#41 — this column is the attention FLAG (⚠ a booking that did not happen,
-        // ⏳ a request waiting for review), not the actions: `ok-data-table` labels its own
-        // row-actions column «Acciones», and this header said the same, so the row read
-        // «Acciones … Acciones» and neither column was what it claimed.
-        header: t5("ui.colFlag"),
-        // A booking that did not happen must not read like a request that simply arrived: the row
-        // says so in the table too, not only inside the pending block.
-        format: (r6) => r6.failure_reason ? "\u26A0" : r6.status === "pending_review" ? "\u23F3" : ""
-      }
-    ];
-  }
-  // TODO-LIT: componentWillLoad → connectedCallback. Recuerda: connectedCallback se dispara
-  // en CADA reconexión al DOM (no solo en el primer montaje). Si la init debe correr una
-  // sola vez tras el primer render, considera firstUpdated() en su lugar.
-  async connectedCallback() {
-    super.connectedCallback();
-    window.addEventListener("erplora:locale-changed", this.onLocaleChange);
-    this.ctrl = createListController(erplora2(), "whatsapp_inbox.requests.list", () => this.requestUpdate(), {
-      pageSize: 50,
-      sort: "created_at",
-      dir: "desc"
-    });
-    await this.ctrl.load();
-    void this.resolveBookingSlot();
-    try {
-      const offs = [
-        erplora2().on("whatsapp_inbox.request.approved", () => this.ctrl.load()),
-        erplora2().on("whatsapp_inbox.request.rejected", () => this.ctrl.load()),
-        erplora2().on("whatsapp_inbox.request.fulfilled", () => this.ctrl.load()),
-        erplora2().on("whatsapp_inbox.request.deleted", () => this.ctrl.load()),
-        // The answers from whoever books. They arrive SECONDS after the approval (the outbox relay
-        // is asynchronous), so without these the screen would show `confirmed` and the operator
-        // would never see the refusal that reopened the request under their nose.
-        erplora2().on("appointments.booking_request.fulfilled", () => this.ctrl.load()),
-        erplora2().on("appointments.booking_request.failed", () => this.ctrl.load())
-      ];
-      this.unsub = () => offs.forEach((o7) => o7());
-    } catch {
-    }
-  }
-  disconnectedCallback() {
-    window.removeEventListener("erplora:locale-changed", this.onLocaleChange);
-    super.disconnectedCallback();
-    this.unsub?.();
-  }
-  /** Resolves the fillers ONCE. No filler (no diary installed) = no booking panel, plain Approve. */
-  async resolveBookingSlot() {
-    if (this.bookingSlotResolved) return;
-    this.bookingSlotResolved = true;
-    const sdk = erplora2();
-    if (!sdk.loadSlot) return;
-    let resolved = [];
-    try {
-      resolved = await sdk.loadSlot("whatsapp_inbox.request.booking") ?? [];
-    } catch {
-      resolved = [];
-    }
-    this.bookingFillers = resolved.map((f3) => {
-      const el = document.createElement(f3.component);
-      el.addEventListener("erp:booking-resolved", (ev) => {
-        const detail = ev.detail;
-        void this.approve(detail.request_id, detail);
-      });
-      el.addEventListener("erp:booking-cancelled", () => {
-        this.bookingFor = "";
-      });
-      return { component: f3.component, el };
-    });
-    this.requestUpdate();
-  }
-  get canBook() {
-    return this.bookingFillers.length > 0;
-  }
-  /** (Re)mounts the fillers under the open request and tells them which one it is. Idempotent. */
-  ensureBookingSlotMounted() {
-    const host = this.renderRoot.querySelector(".booking-slot");
-    if (!host || !this.bookingFor) return;
-    const row = (this.ctrl?.rows ?? []).find((r6) => r6.id === this.bookingFor);
-    if (!row) return;
-    for (const f3 of this.bookingFillers) {
-      if (f3.el.parentElement !== host) host.appendChild(f3.el);
-      f3.el.dispatchEvent(new CustomEvent("erp:whatsapp-request", {
-        detail: {
-          request_id: row.id,
-          request_type: row.request_type,
-          customer_id: row.customer_id ?? "",
-          contact_name: row.contact_name,
-          contact_phone: row.contact_phone,
-          raw_summary: row.raw_summary
-        },
-        bubbles: false
-      }));
-    }
-  }
-  updated() {
-    this.ensureBookingSlotMounted();
-  }
-  /** Approves, optionally BOUND to the records a person chose. Bare = nothing to materialise. */
-  async approve(id, booking) {
-    this.busyId = id;
-    this.formError = "";
-    try {
-      await erplora2().command("whatsapp_inbox.requests.approve", { request_id: id, ...booking ?? {} });
-      this.bookingFor = "";
-      await this.ctrl.load();
-    } catch (e5) {
-      this.formError = domainErrorText3(e5, "ui.errApprove");
-    } finally {
-      this.busyId = "";
-    }
-  }
-  async reject(id) {
-    this.busyId = id;
-    this.formError = "";
-    try {
-      await erplora2().command("whatsapp_inbox.requests.reject", { request_id: id });
-      await this.ctrl.load();
-    } catch (e5) {
-      this.formError = domainErrorText3(e5, "ui.errReject");
-    } finally {
-      this.busyId = "";
-    }
-  }
-  /** Marks a request as handled. NEVER `create_linked_object`: that branch is forbidden on purpose
-   *  (hub#659, ADR-0283 §7) and returns `cross_module_dispatch_unsupported`. Materialising a
-   *  request into another module is a flow with an explicit grant — auditable and revocable — or,
-   *  for an appointment, the booking panel above. */
-  async fulfil(r6) {
-    this.busyId = r6.id;
-    this.formError = "";
-    try {
-      await erplora2().command("whatsapp_inbox.requests.fulfill", { request_id: r6.id });
-      await this.ctrl.load();
-    } catch (e5) {
-      this.formError = domainErrorText3(e5, "ui.errFulfil");
-    } finally {
-      this.busyId = "";
-    }
-  }
-  /** Reads the request in full. The permission is the same `view_request` the list already needed,
-   *  so this opens no door that was not open. */
-  async openDetail(row) {
-    this.busyId = row.id;
-    this.formError = "";
-    try {
-      const rows = await erplora2().query("whatsapp_inbox.requests.get", { request_id: row.id });
-      const detail = Array.isArray(rows) ? rows[0] : rows;
-      this.openRequest = detail ?? null;
-    } catch (e5) {
-      this.formError = e5 instanceof Error ? e5.message : erplora2().t(CATALOG2, "ui.errLoadRequest");
-    } finally {
-      this.busyId = "";
-    }
-  }
-  /** Deleting asks first, in the page — never `window.confirm`, which a POS webview swallows. */
-  async confirmDelete() {
-    const r6 = this.pendingDelete;
-    if (!r6) return;
-    this.busyId = r6.id;
-    this.formError = "";
-    try {
-      await erplora2().command("whatsapp_inbox.requests.delete", { request_id: r6.id });
-      this.pendingDelete = null;
-      await this.ctrl.load();
-    } catch (e5) {
-      this.formError = domainErrorText3(e5, "ui.errDeleteRequest");
-    } finally {
-      this.busyId = "";
-    }
-  }
-  onRowAction(ev) {
-    const row = ev.detail.row;
-    if (ev.detail.actionId === "open") void this.openDetail(row);
-    if (ev.detail.actionId === "fulfil") void this.fulfil(row);
-    if (ev.detail.actionId === "delete") {
-      this.pendingDelete = row;
-      this.formError = "";
-    }
-  }
-  renderDeleteConfirm() {
-    if (!this.pendingDelete) return A;
-    const t5 = (k2) => erplora2().t(CATALOG2, k2);
-    return b2`<section class="confirm">
-      <p>${t5("ui.confirmDeleteRequest")} <strong>${this.pendingDelete.reference_number}</strong></p>
-      <ion-button data-testid="whatsapp-requests-delete-confirm" size="small" class="tone-danger" ?disabled=${this.busyId === this.pendingDelete.id}
-        @click=${() => this.confirmDelete()}>${t5("ui.delete")}</ion-button>
-      <ion-button data-testid="whatsapp-requests-delete-cancel" size="small" fill="clear" @click=${() => this.pendingDelete = null}>${t5("ui.cancel")}</ion-button>
-    </section>`;
-  }
-  /** The parsed payload, field by field. It is free JSON by design (the schema is dynamic), so it
-   *  is rendered as the pairs it is — inventing a shape here would hide whatever the assistant
-   *  actually stored, which is the one thing this panel exists to show. */
-  renderParsed(raw) {
-    let parsed;
-    try {
-      parsed = JSON.parse(raw || "{}");
-    } catch {
-      parsed = null;
-    }
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return raw ? b2`<p class="summary">${raw}</p>` : A;
-    }
-    const pairs = Object.entries(parsed);
-    if (pairs.length === 0) return A;
-    return b2`<dl class="parsed">
-      ${pairs.map(([k2, v3]) => b2`<dt>${k2}</dt><dd>${typeof v3 === "object" ? JSON.stringify(v3) : String(v3)}</dd>`)}
-    </dl>`;
-  }
-  renderDetail() {
-    const r6 = this.openRequest;
-    if (!r6) return A;
-    const t5 = (k2) => erplora2().t(CATALOG2, k2);
-    return b2`<section class="detail">
-      <div class="who">
-        <span class="ref">${r6.reference_number}</span>
-        <span>·</span>
-        <span>${typeLabel(r6.request_type)}</span>
-        <span>·</span>
-        <span>${r6.contact_name}</span>
-      </div>
-      ${r6.raw_summary ? b2`<p class="summary">${r6.raw_summary}</p>` : A}
-      <h4>${t5("ui.labelParsedData")}</h4>
-      ${this.renderParsed(r6.data)}
-      ${r6.notes ? b2`<h4>${t5("ui.labelNotes")}</h4><p class="summary">${r6.notes}</p>` : A}
-      ${r6.failure_reason ? b2`<ok-inline-feedback data-testid="whatsapp-requests-detail-booking-failed" tone="warning" heading=${t5("ui.bookingFailedTitle")}>
-        ${r6.failure_reason}
-      </ok-inline-feedback>` : A}
-      ${r6.linked_object_id ? b2`<p class="summary">${t5("ui.labelLinkedObject")}: ${r6.linked_module} · ${r6.linked_object_id}</p>` : A}
-      <ion-button data-testid="whatsapp-requests-detail-close" size="small" fill="clear" @click=${() => {
-      this.openRequest = null;
-    }}>${t5("ui.closeView")}</ion-button>
-    </section>`;
-  }
-  renderPending(r6) {
-    const t5 = (k2) => erplora2().t(CATALOG2, k2);
-    const bookable = BOOKABLE_TYPES.has(r6.request_type) && this.canBook;
-    const open = this.bookingFor === r6.id;
-    return b2`<div class="pending-row">
-      ${r6.failure_reason ? b2`<ok-inline-feedback data-testid=${`whatsapp-requests-pending-failed-${r6.id}`} tone="warning" heading=${t5("ui.bookingFailedTitle")}>
-        ${r6.failure_reason}
-      </ok-inline-feedback>` : A}
-      <div class="who">
-        <span class="ref">${r6.reference_number}</span>
-        <span>·</span>
-        <span>${typeLabel(r6.request_type)}</span>
-        <span>·</span>
-        <span>${r6.contact_name}</span>
-      </div>
-      ${r6.raw_summary ? b2`<p class="summary">${r6.raw_summary}</p>` : A}
-      <div class="actions">
-        ${bookable ? b2`<ion-button data-testid=${`whatsapp-requests-pending-book-${r6.id}`} size="small" ?disabled=${this.busyId === r6.id}
-              @click=${() => {
-      this.bookingFor = open ? "" : r6.id;
-    }}>
-              ${open ? t5("ui.bookingClose") : r6.failure_reason ? t5("ui.bookingRetry") : t5("ui.bookingOpen")}
-            </ion-button>` : b2`<ion-button data-testid=${`whatsapp-requests-pending-approve-${r6.id}`} size="small" ?disabled=${this.busyId === r6.id}
-              @click=${() => this.approve(r6.id)}>${t5("ui.approve")}</ion-button>`}
-        <ion-button data-testid=${`whatsapp-requests-pending-reject-${r6.id}`} size="small" class="tone-medium" ?disabled=${this.busyId === r6.id}
-          @click=${() => this.reject(r6.id)}>${t5("ui.reject")}</ion-button>
-      </div>
-      ${open ? b2`<div class="booking-slot"></div>` : A}
-    </div>`;
-  }
-  render() {
-    const t5 = (k2) => erplora2().t(CATALOG2, k2);
-    const pending = (this.ctrl?.rows ?? []).filter((r6) => r6.status === "pending_review");
-    return b2`<div>
-        <header>
-          <h2>${t5("ui.requestsTitle")}</h2>
-        </header>
-        ${this.formError ? b2`<p class="err" data-testid="whatsapp-requests-form-error">${this.formError}</p>` : A}
-        ${this.ctrl?.error ? b2`<p class="err" data-testid="whatsapp-requests-load-error">${this.ctrl.error}</p>` : A}
-        ${this.renderDeleteConfirm()}
-        ${this.renderDetail()}
-        ${pending.length > 0 ? b2`<div>
-          <h3>${t5("ui.pendingReview")}</h3>
-          ${pending.map((r6) => this.renderPending(r6))}
-        </div>` : A}
-        <ok-data-table testid="whatsapp-requests-table" .serverSide=${true} .views=${true} .actions=${this.rowActions} .rowClickable=${true} .cardTitle=${(row) => String(row.reference_number ?? row.contact_name ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "desc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchRequests")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyRequests")} @rowAction=${(e5) => this.onRowAction(e5)} @rowClick=${(e5) => this.onRowAction({ detail: { actionId: "open", row: e5.detail.row } })} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @pageSizeChange=${(e5) => this.ctrl.setPageSize(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}></ok-data-table>
-      </div>`;
-  }
-};
-__decorateClass([
-  r5()
-], ErpWhatsappInboxRequests.prototype, "formError", 2);
-__decorateClass([
-  r5()
-], ErpWhatsappInboxRequests.prototype, "busyId", 2);
-__decorateClass([
-  r5()
-], ErpWhatsappInboxRequests.prototype, "bookingFor", 2);
-__decorateClass([
-  r5()
-], ErpWhatsappInboxRequests.prototype, "pendingDelete", 2);
-__decorateClass([
-  r5()
-], ErpWhatsappInboxRequests.prototype, "openRequest", 2);
-define("erp-whatsapp-inbox-requests", ErpWhatsappInboxRequests);
-
 // ui/lib/whatsapp-uses.ts
 var MODULE_ID = "whatsapp_inbox";
 var WHATSAPP_USES = [
@@ -5423,14 +4871,14 @@ var APPS_PATH = "/apps";
 var AUTOMATIONS_PATH = `/m/${AUTOMATIONS_MODULE}/automations`;
 
 // ui/components/erp-whatsapp-inbox-settings/erp-whatsapp-inbox-settings.ts
-var CATALOG3 = { es: es_default, en: en_default };
-function erplora3() {
+var CATALOG2 = { es: es_default, en: en_default };
+function erplora2() {
   const c5 = globalThis.erplora;
   if (!c5) throw new Error("erplora SDK no inicializado por el shell");
   return c5;
 }
 function door() {
-  const client = erplora3();
+  const client = erplora2();
   if (typeof client.forModule !== "function") return null;
   const flows = client.forModule(MODULE_ID).flows;
   if (typeof flows?.activateTemplate !== "function") return null;
@@ -5488,7 +4936,7 @@ var ErpWhatsappInboxSettings = class extends i3 {
   }
   /** One round: what is built, which neighbours are here, and the policy of whatever is running. */
   async load() {
-    const client = erplora3();
+    const client = erplora2();
     const flows = door();
     this.hubTooOld = flows === null;
     if (flows) {
@@ -5526,14 +4974,14 @@ var ErpWhatsappInboxSettings = class extends i3 {
   async loadPolicy(use) {
     if (this.missing.has(use.module)) return;
     try {
-      const answer = await readBookingPolicy(erplora3(), use);
+      const answer = await readBookingPolicy(erplora2(), use);
       this.policy = { ...this.policy, [use.family]: bookingPolicyOn(answer, use) };
     } catch {
       this.policy = { ...this.policy, [use.family]: use.policy.defaultOn };
     }
   }
   t(key) {
-    return erplora3().t(CATALOG3, key);
+    return erplora2().t(CATALOG2, key);
   }
   go(path) {
     window.history.pushState({}, "", path);
@@ -5633,7 +5081,7 @@ var ErpWhatsappInboxSettings = class extends i3 {
   async setPolicy(use, on) {
     this.policyFailed = { ...this.policyFailed, [use.family]: false };
     try {
-      await writeBookingPolicy(erplora3(), use, on);
+      await writeBookingPolicy(erplora2(), use, on);
       this.policy = { ...this.policy, [use.family]: on };
     } catch {
       this.policyFailed = { ...this.policyFailed, [use.family]: true };
@@ -6013,7 +5461,7 @@ function templateFromMeta(template) {
 }
 
 // ui/components/erp-whatsapp-inbox-templates/erp-whatsapp-inbox-templates.ts
-var CATALOG4 = { es: es_default, en: en_default };
+var CATALOG3 = { es: es_default, en: en_default };
 function storedButtons(raw) {
   if (typeof raw !== "string" || !raw.trim()) return [];
   try {
@@ -6037,19 +5485,19 @@ function metaKey(name, language) {
   const word = (value) => String(value ?? "").trim().toLowerCase();
   return `${word(name)}\0${word(language)}`;
 }
-function erplora4() {
+function erplora3() {
   const c5 = globalThis.erplora;
   if (!c5) throw new Error("erplora SDK no inicializado por el shell");
   return c5;
 }
-function domainErrorText4(e5, fallbackKey) {
-  const declared = domainErrorText(CATALOG4, erplora4().locale, e5);
+function domainErrorText3(e5, fallbackKey) {
+  const declared = domainErrorText(CATALOG3, erplora3().locale, e5);
   if (declared) return declared;
-  return (e5 instanceof Error ? e5.message : "") || erplora4().t(CATALOG4, fallbackKey);
+  return (e5 instanceof Error ? e5.message : "") || erplora3().t(CATALOG3, fallbackKey);
 }
 function metaStatusLabel(status) {
   const { labelKey } = metaTemplateView(status);
-  return labelKey ? erplora4().t(CATALOG4, labelKey) : status;
+  return labelKey ? erplora3().t(CATALOG3, labelKey) : status;
 }
 var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
   constructor() {
@@ -6137,14 +5585,14 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     return !!this.editingId && namedVariables(this.newBody).length > 0;
   }
   get rowActions() {
-    const t5 = (k2) => erplora4().t(CATALOG4, k2);
+    const t5 = (k2) => erplora3().t(CATALOG3, k2);
     return [
       { id: "edit", label: t5("ui.edit"), icon: "create-outline", color: "primary" },
       { id: "delete", label: t5("ui.delete"), icon: "trash-outline", color: "danger" }
     ];
   }
   get columns() {
-    const t5 = (k2) => erplora4().t(CATALOG4, k2);
+    const t5 = (k2) => erplora3().t(CATALOG3, k2);
     return [
       { key: "name", header: t5("ui.colName"), sortable: true, filterable: true, filterType: "text" },
       { key: "language", header: t5("ui.colLanguage"), sortable: true, filterable: true, filterType: "text" },
@@ -6192,7 +5640,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
   async connectedCallback() {
     super.connectedCallback();
     window.addEventListener("erplora:locale-changed", this.onLocaleChange);
-    this.ctrl = createListController(erplora4(), "whatsapp_inbox.templates.list", () => this.requestUpdate(), {
+    this.ctrl = createListController(erplora3(), "whatsapp_inbox.templates.list", () => this.requestUpdate(), {
       pageSize: 50,
       sort: "created_at",
       dir: "desc"
@@ -6200,9 +5648,9 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     await this.ctrl.load();
     try {
       const offs = [
-        erplora4().on("whatsapp_inbox.template.created", () => this.ctrl.load()),
-        erplora4().on("whatsapp_inbox.template.updated", () => this.ctrl.load()),
-        erplora4().on("whatsapp_inbox.template.deleted", () => this.ctrl.load())
+        erplora3().on("whatsapp_inbox.template.created", () => this.ctrl.load()),
+        erplora3().on("whatsapp_inbox.template.updated", () => this.ctrl.load()),
+        erplora3().on("whatsapp_inbox.template.deleted", () => this.ctrl.load())
       ];
       this.unsub = () => offs.forEach((o7) => o7());
     } catch {
@@ -6231,13 +5679,13 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     let answer;
     let rows;
     try {
-      answer = await erplora4().forModule("whatsapp_inbox").whatsappTemplates.list();
-      rows = await erplora4().queryAll("whatsapp_inbox.templates.list");
+      answer = await erplora3().forModule("whatsapp_inbox").whatsappTemplates.list();
+      rows = await erplora3().queryAll("whatsapp_inbox.templates.list");
     } catch {
-      this.metaSyncNotice = erplora4().t(CATALOG4, "ui.metaSyncUnavailable");
+      this.metaSyncNotice = erplora3().t(CATALOG3, "ui.metaSyncUnavailable");
       return;
     }
-    if (answer?.stale === true) this.metaSyncNotice = erplora4().t(CATALOG4, "ui.metaSyncUnavailable");
+    if (answer?.stale === true) this.metaSyncNotice = erplora3().t(CATALOG3, "ui.metaSyncUnavailable");
     const atMeta = /* @__PURE__ */ new Map();
     const listed = Array.isArray(answer?.templates) ? answer.templates : [];
     for (const template of listed) atMeta.set(metaKey(template?.name, template?.language), template);
@@ -6264,7 +5712,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
         continue;
       }
       try {
-        await erplora4().command("whatsapp_inbox.templates.record_meta_answer", {
+        await erplora3().command("whatsapp_inbox.templates.record_meta_answer", {
           template_id: row.id,
           meta_template_id: metaId,
           meta_status: status,
@@ -6281,7 +5729,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
         });
         written += 1;
       } catch (e5) {
-        this.metaSyncNotice = domainErrorText4(e5, "ui.errUpdateTemplate");
+        this.metaSyncNotice = domainErrorText3(e5, "ui.errUpdateTemplate");
       }
     }
     const here = new Set(rows.map((row) => metaKey(row.name, row.language)));
@@ -6296,7 +5744,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
         continue;
       }
       try {
-        await erplora4().command("whatsapp_inbox.templates.import_from_meta", {
+        await erplora3().command("whatsapp_inbox.templates.import_from_meta", {
           ...imported.fields,
           ...imported.meta
         });
@@ -6304,7 +5752,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
       } catch (e5) {
         if (e5?.code === "whatsapp_inbox.template_already_here") continue;
         notBrought.push(label);
-        this.metaSyncNotice = domainErrorText4(e5, "ui.errCreateTemplate");
+        this.metaSyncNotice = domainErrorText3(e5, "ui.errCreateTemplate");
       }
     }
     if (written) await this.ctrl.load();
@@ -6345,19 +5793,19 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
   async registerWithMeta(templateId, reviewed) {
     let verdict;
     try {
-      verdict = await erplora4().forModule("whatsapp_inbox").whatsappTemplates.register({ ...reviewed });
+      verdict = await erplora3().forModule("whatsapp_inbox").whatsappTemplates.register({ ...reviewed });
     } catch (e5) {
-      this.formError = doorRefusalText(CATALOG4, erplora4().locale, e5);
+      this.formError = doorRefusalText(CATALOG3, erplora3().locale, e5);
       return;
     }
     const text3 = (value) => typeof value === "string" ? value : "";
     const status = text3(verdict?.status).trim();
     if (!status || !templateId) {
-      this.formError = doorRefusalText(CATALOG4, erplora4().locale, null);
+      this.formError = doorRefusalText(CATALOG3, erplora3().locale, null);
       return;
     }
     try {
-      await erplora4().command("whatsapp_inbox.templates.record_meta_answer", {
+      await erplora3().command("whatsapp_inbox.templates.record_meta_answer", {
         template_id: templateId,
         meta_template_id: text3(verdict.meta_id),
         meta_status: status,
@@ -6365,7 +5813,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
         ...reviewed
       });
     } catch (e5) {
-      this.formError = domainErrorText4(e5, "ui.errUpdateTemplate");
+      this.formError = domainErrorText3(e5, "ui.errUpdateTemplate");
     }
   }
   /** The id of the row a declarative create just inserted: the runtime answers `new_ids`, whose
@@ -6386,13 +5834,13 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     this.formError = "";
     const reviewed = this.reviewedFields();
     try {
-      const created = await erplora4().command("whatsapp_inbox.templates.create", reviewed);
+      const created = await erplora3().command("whatsapp_inbox.templates.create", reviewed);
       await this.registerWithMeta(_ErpWhatsappInboxTemplates.newId(created), reviewed);
       this.resetForm();
       this.dataTable()?.close();
       await this.ctrl.load();
     } catch (e5) {
-      this.formError = e5 instanceof Error ? e5.message : erplora4().t(CATALOG4, "ui.errCreateTemplate");
+      this.formError = e5 instanceof Error ? e5.message : erplora3().t(CATALOG3, "ui.errCreateTemplate");
     } finally {
       this.saving = false;
     }
@@ -6456,7 +5904,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     const reviewed = this.reviewedFields();
     const templateId = this.editingId;
     try {
-      await erplora4().command("whatsapp_inbox.templates.update", {
+      await erplora3().command("whatsapp_inbox.templates.update", {
         template_id: templateId,
         ...reviewed,
         is_active: this.editingRest.is_active
@@ -6466,7 +5914,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
       this.dataTable()?.close();
       await this.ctrl.load();
     } catch (e5) {
-      this.formError = domainErrorText4(e5, "ui.errUpdateTemplate");
+      this.formError = domainErrorText3(e5, "ui.errUpdateTemplate");
     } finally {
       this.saving = false;
     }
@@ -6479,12 +5927,12 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     this.saving = true;
     this.formError = "";
     try {
-      await erplora4().command("whatsapp_inbox.templates.delete", { template_id: row.id });
+      await erplora3().command("whatsapp_inbox.templates.delete", { template_id: row.id });
       if (this.editingId === row.id) this.resetForm();
       this.pendingDelete = null;
       await this.ctrl.load();
     } catch (e5) {
-      this.formError = domainErrorText4(e5, "ui.errDeleteTemplate");
+      this.formError = domainErrorText3(e5, "ui.errDeleteTemplate");
     } finally {
       this.saving = false;
     }
@@ -6505,19 +5953,19 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
    *  it is supposed to explain. */
   renderMetaVerdict() {
     if (!this.editingMeta) return A;
-    const t5 = (k2) => erplora4().t(CATALOG4, k2);
+    const t5 = (k2) => erplora3().t(CATALOG3, k2);
     const { state, labelKey, actionKey } = this.editingMeta;
     return b2`<div class="meta" data-testid="whatsapp-templates-meta-verdict" data-state=${state}>
       <strong>${t5("ui.colMetaStatus")}: ${labelKey ? t5(labelKey) : this.editingMetaCode}</strong>
       <p>${t5(actionKey)}</p>
-      ${this.editingMetaReason ? b2`<p>${erplora4().t(CATALOG4, "ui.metaRejectedReason", { reason: this.editingMetaReason })}</p>` : A}
+      ${this.editingMetaReason ? b2`<p>${erplora3().t(CATALOG3, "ui.metaRejectedReason", { reason: this.editingMetaReason })}</p>` : A}
     </div>`;
   }
   /** The media header and the buttons of a template brought from WhatsApp Manager, and why its
    *  text is not saved from here (whatsapp_inbox#180, #186). Nothing for a text-only template. */
   renderRichParts() {
     if (!this.managedInMeta) return A;
-    const t5 = (k2) => erplora4().t(CATALOG4, k2);
+    const t5 = (k2) => erplora3().t(CATALOG3, k2);
     const media = HEADER_MEDIA_LABEL[this.editingHeaderFormat];
     return b2`<div class="rich">
       ${media ? b2`<p data-testid="whatsapp-templates-header-media" data-format=${this.editingHeaderFormat}>${t5(media)}</p>` : A}
@@ -6535,7 +5983,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
   }
   renderDeleteConfirm() {
     if (!this.pendingDelete) return A;
-    const t5 = (k2) => erplora4().t(CATALOG4, k2);
+    const t5 = (k2) => erplora3().t(CATALOG3, k2);
     return b2`<section class="panel">
       <p>${t5("ui.confirmDeleteTemplate")} <strong>${this.pendingDelete.name}</strong></p>
       <ion-button data-testid="whatsapp-templates-delete-confirm" size="small" class="tone-danger" ?disabled=${this.saving}
@@ -6544,13 +5992,13 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     </section>`;
   }
   render() {
-    const t5 = (k2) => erplora4().t(CATALOG4, k2);
+    const t5 = (k2) => erplora3().t(CATALOG3, k2);
     const locked = this.managedInMeta;
     return b2`<div class="page">
         ${this.formError ? b2`<p class="err" data-testid="whatsapp-templates-form-error">${this.formError}</p>` : A}
         ${this.ctrl?.error ? b2`<p class="err" data-testid="whatsapp-templates-load-error">${this.ctrl.error}</p>` : A}
         ${this.metaSyncNotice ? b2`<section class="panel"><p data-testid="whatsapp-templates-meta-sync-notice">${this.metaSyncNotice}</p></section>` : A}
-        ${this.metaOnly.length ? b2`<section class="panel"><p data-testid="whatsapp-templates-meta-only">${erplora4().t(CATALOG4, "ui.metaOnlyTemplates", { names: this.metaOnly.join(", ") })}</p></section>` : A}
+        ${this.metaOnly.length ? b2`<section class="panel"><p data-testid="whatsapp-templates-meta-only">${erplora3().t(CATALOG3, "ui.metaOnlyTemplates", { names: this.metaOnly.join(", ") })}</p></section>` : A}
         ${this.renderDeleteConfirm()}
         <ok-data-table testid="whatsapp-templates-table" .serverSide=${true} .fill=${true} .primaryAction=${{ label: t5("ui.add"), icon: "add" }} @primaryAction=${() => this.openCreate()} .views=${true} .actions=${this.rowActions} .rowClickable=${true} .cardTitle=${(row) => String(row.name ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "desc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchTemplates")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyTemplates")} @rowAction=${(e5) => this.onRowAction(e5)} @rowClick=${(e5) => this.onRowAction({ detail: { actionId: "edit", row: e5.detail.row } })} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @pageSizeChange=${(e5) => this.ctrl.setPageSize(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}>
           <!-- Alta: se proyecta SIEMPRE (aunque el panel esté cerrado). Si solo se renderizara con el

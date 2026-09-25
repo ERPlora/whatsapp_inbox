@@ -63,13 +63,6 @@
       "permission": "whatsapp_inbox.view_conversation"
     },
     {
-      "id": "requests",
-      "label": "Requests",
-      "icon": "clipboard-outline",
-      "component": "erp-whatsapp-inbox-requests",
-      "permission": "whatsapp_inbox.view_request"
-    },
-    {
       "id": "settings",
       "label": "Settings",
       "icon": "settings-outline",

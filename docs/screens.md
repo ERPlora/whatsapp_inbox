@@ -66,52 +66,13 @@ leaves one row and one unread bump.
 
 There is still no webhook receiver and no network access to Meta declared here.
 
-## Requests
+## Requests — retired
 
-The structured requests extracted from conversations (`whatsapp_inbox.requests.list`, 50 rows per
-page). Requires `whatsapp_inbox.view_request`.
-
-Each request carries its reference `WA-YYYYMMDD-NNNN`, its **type**, its **status**, the structured
-data, a plain-language summary, a confidence score, and the link fields for the object it would have
-created.
-
-### How a request is created
-
-The ingest command takes an already-parsed payload and:
-
-1. validates it against the hub's **dynamic request schema** — the required fields and the field
-   types configured in settings;
-2. clamps the confidence score to a value between 0 and 1;
-3. normalises the type, turning anything unknown into `custom`;
-4. allocates the reference and writes the request, with its starting status decided by the hub's
-   **approval mode** — `auto` starts it confirmed, `manual` leaves it for review.
-
-Requires `whatsapp_inbox.manage_connections` — **admin only**.
-
-### Approve or reject a request
-
-Both are guarded by the request's current status and both emit their event. Requires
-`whatsapp_inbox.change_request` — a manager has it, an employee does not.
-
-### Mark a request as handled
-
-The **Mark as handled** row action moves the request to `fulfilled`, and only from `confirmed` — on
-any other status the button is visible but disabled, because the guard lives in the SQL and a
-command that matches 0 rows explains nothing to whoever pressed it.
-
-> ⚠️ **Nothing is created in another module,** and that is by design, not a gap waiting to be
-> filled: cross-module dispatch from a handler is forbidden (hub#659, ADR-0283 §7) precisely because
-> it would be a capability with no owner. The link fields stay empty, and a fulfilled request means
-> *somebody dealt with this by hand*. To materialise a request, use a flow with an explicit grant —
-> auditable and revocable — or, for an appointment, the booking panel above.
-
-Requires `whatsapp_inbox.change_request`.
-
-### Delete a request
-
-The **Delete** row action asks for confirmation in the page, then soft-deletes it. **A request that
-is already fulfilled cannot be deleted** (the audit chain to the linked object has to survive), so
-the action is disabled on those rows. Requires `whatsapp_inbox.delete_request` — **admin only**.
+There is no «Requests» tab any more (whatsapp_inbox#193). Nothing fed it: the WhatsApp recipes book
+straight into Appointments or Reservations, so the owner saw a list that was always empty. A booking
+that waits for the owner's OK is a **pending appointment**, and it is confirmed in Appointments, next
+to the rest of the diary. The requests commands, queries and table still ship without a screen until
+they are retired too (whatsapp_inbox#206).
 
 ## Templates
 

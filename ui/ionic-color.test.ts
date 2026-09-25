@@ -107,12 +107,6 @@ function expectSolidTone(css: string, tone: string) {
   expect(solid, `${tone} solid: text`).toMatch(new RegExp(`--color:\\s*var\\(--ion-color-${tone}-contrast\\b`));
 }
 
-const REQUEST = {
-  id: 'r1', reference_number: 'WA-20260820-0001', request_type: 'order',
-  status: 'pending_review', contact_name: 'Ana', contact_phone: '+34600111222',
-  customer_id: null, raw_summary: 'Two coffees', confidence_score: 0.8,
-  failure_code: '', failure_reason: '', created_at: '2026-08-20T09:00:00+00:00',
-};
 const TEMPLATE = {
   id: 't1', name: 'appointment_reminder', language: 'es', category: 'UTILITY',
   meta_status: 'approved', meta_rejected_reason: '', is_active: 1,
@@ -153,34 +147,6 @@ async function mount(tag: string): Promise<Wc> {
 }
 
 const byTestId = (el: Wc, id: string) => el.shadowRoot.querySelector(`[data-testid="${id}"]`);
-
-describe('pm#392: the requests screen paints its buttons from inside the shadow root', () => {
-  it('declares the danger and medium tones from the theme token', async () => {
-    await import('./components/erp-whatsapp-inbox-requests/erp-whatsapp-inbox-requests');
-    const css = cssOf('erp-whatsapp-inbox-requests');
-    expectSolidTone(css, 'danger');
-    expectSolidTone(css, 'medium');
-  });
-
-  it('«Reject» of a pending request and «Delete» of the confirmation carry their tone', async () => {
-    await import('./components/erp-whatsapp-inbox-requests/erp-whatsapp-inbox-requests');
-    rows = [REQUEST];
-    const el = await mount('erp-whatsapp-inbox-requests');
-    const reject = byTestId(el, 'whatsapp-requests-pending-reject-r1');
-    expect(reject, 'the pending card is rendered').not.toBeNull();
-    expect(reject!.hasAttribute('fill'), 'reject is a solid button').toBe(false);
-    expect(reject!.classList.contains('tone-medium')).toBe(true);
-    expect(reject!.hasAttribute('color')).toBe(false);
-
-    el.pendingDelete = REQUEST;
-    await el.updateComplete;
-    const confirm = byTestId(el, 'whatsapp-requests-delete-confirm');
-    expect(confirm, 'the confirmation is rendered').not.toBeNull();
-    expect(confirm!.hasAttribute('fill'), 'delete is a solid button').toBe(false);
-    expect(confirm!.classList.contains('tone-danger')).toBe(true);
-    expect(confirm!.hasAttribute('color')).toBe(false);
-  });
-});
 
 describe('pm#392: the templates screen paints its delete from inside the shadow root', () => {
   it('declares the danger tone from the theme token', async () => {
