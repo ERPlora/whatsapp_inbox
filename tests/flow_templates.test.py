@@ -3024,6 +3024,45 @@ def moving_problems(name, doc):
     return problems
 
 
+# What a release of `customers.by_phone` has to MENTION to read a number as one of the BUSINESS's
+# country (customers#81, first published in customers 2.3.47): the core's `hub_settings` row keyed
+# `country_code`. Before it the query let any 1-3 digit prefix through.
+HOME_COUNTRY_MARKERS = frozenset({"hub_settings", "country_code"})
+
+
+def home_country_match_problems(name, doc, floor_columns):
+    """The customer this family finds by the number she writes from is one of the BUSINESS's
+    country at the floor it declares — whatsapp_inbox#202.
+
+    The recipes read `customers.by_phone` with `result: first` and book on that card. Until
+    customers#81 the query let ANY 1-3 digit prefix through, so a French `33 600 111 222` writing
+    to a Spanish salon came back as the local card `600 111 222` — and the appointment or the
+    table went on a stranger's record. The inbox's own listeners re-decide every row
+    (`same_number` in the handler); a recipe cannot, so the only thing between that stranger and
+    the card is the floor: the hub OFFERS the recipe (hub#1611) only to copies of Customers at or
+    above it.
+
+    🔴 The release is judged by what its SQL MENTIONS (`HOME_COUNTRY_MARKERS`), and a release
+    that does not mention them is a release that does not know the country — «unknown», never
+    «probably fine». A floor nobody could read, or where the query is missing altogether, is
+    somebody else's answer (`main()`'s skip and `floor_read_column_problems`) and stays silent.
+    """
+    problems = []
+    names = floor_columns.get(RESOLVER_QUERY)
+    if names is None or names is ABSENT_AT_FLOOR or HOME_COUNTRY_MARKERS <= names:
+        return problems
+    for _, step in _query_steps(doc, RESOLVER_QUERY):
+        problems.append(
+            f"{name} step `{step.get('id')}` finds the customer with `{RESOLVER_QUERY}`, and at "
+            f"the floor this family declares that query does not read the business's country "
+            f"(no {' + '.join(sorted(HOME_COUNTRY_MARKERS))}): somebody writing from ANOTHER "
+            f"country with the same national digits is taken for the local customer and booked "
+            f"on her card — raise `customers` in `{name.split('.')[0]}.requires.json` to the "
+            f"release of customers#81 (2.3.47)"
+        )
+    return problems
+
+
 def _query_steps(doc, query):
     """`(index, step)` of every deterministic `query` step (hub#954) reading `query`."""
     return [
@@ -3851,6 +3890,7 @@ def unknown_step_key_problems(name, doc):
 
 DOCUMENT_RULES = (
     floor_read_column_problems,
+    home_country_match_problems,
     unfloored_read_problems,
     family_trigger_problems,
     confirmation_notice_problems,
@@ -3891,6 +3931,7 @@ DOCUMENT_RULES = (
 # REQUIRED to apply, and that is asserted rather than assumed.
 SELF_CHECKED_RULES = (
     floor_read_column_problems,
+    home_country_match_problems,
     unfloored_read_problems,
     family_trigger_problems,
     confirmation_notice_problems,
@@ -8003,6 +8044,68 @@ def _assistant_with_tools(queries=(), commands=()):
     return {"steps": [{"id": "book", "kind": "ai", "prompt": "Book it.", "tools": tools}]}
 
 
+def _finds_customer(query="customers.by_phone"):
+    """The two deterministic lookups of the appointments recipe — `find_customer` and
+    `resolve_customer` — reading the customer by the number she writes from."""
+    return {
+        "steps": [
+            {"id": sid, "kind": "query", "query": query, "params": {"phone": "{{input.from}}"},
+             "result": "first", "limit": 1}
+            for sid in ("find_customer", "resolve_customer")
+        ]
+    }
+
+
+# What `customers.by_phone` MENTIONED in the two releases around customers#81 (read off the real
+# trees: `f6b0a35` = v2.3.46 and `120185f` = v2.3.47).
+_BY_PHONE_2_3_46 = {"WITH", "wanted", "regexp_replace", "phone", "customers", "hub_id", "ltrim"}
+_BY_PHONE_2_3_47 = _BY_PHONE_2_3_46 | {"hub_settings", "country_code", "calling_codes", "iso"}
+
+HOME_COUNTRY_CASES = [
+    (
+        "the floor reads the business's country: a French number is not the local card",
+        _finds_customer(),
+        {"customers.by_phone": _BY_PHONE_2_3_47},
+        0,
+    ),
+    (
+        "🔴 whatsapp_inbox#202: the floor is a release whose `by_phone` lets ANY prefix through — "
+        "`first` hands the French `33 600 111 222` the Spanish card `600 111 222`, and the "
+        "appointment is booked on a stranger's record (one problem per step that reads it)",
+        _finds_customer(),
+        {"customers.by_phone": _BY_PHONE_2_3_46},
+        2,
+    ),
+    (
+        "🔴 only HALF the marker — a release that names `country_code` without the core's "
+        "`hub_settings` did not learn the business's country from the one place that holds it",
+        _finds_customer(),
+        {"customers.by_phone": _BY_PHONE_2_3_46 | {"country_code"}},
+        2,
+    ),
+    (
+        "the floor could not be read — `main()` skipped it out loud; guessing here would invent "
+        "a floor",
+        _finds_customer(),
+        {},
+        0,
+    ),
+    (
+        "the query does not exist at the floor at all — `floor_read_column_problems` already "
+        "says so, once; saying it twice is noise",
+        _finds_customer(),
+        {"customers.by_phone": ABSENT_AT_FLOOR},
+        0,
+    ),
+    (
+        "a step reading ANOTHER customers query is not a number match and demands nothing here",
+        _finds_customer(query="customers.get"),
+        {"customers.get": {"id", "name"}},
+        0,
+    ),
+]
+
+
 UNFLOORED_READ_CASES = [
     (
         "every neighbour the recipe reads through a `query` step has its floor",
@@ -8319,6 +8422,13 @@ def self_check():
             problems.append(
                 f"the battery's own «the floor already answers the columns we read» rule is "
                 f"wrong — {label}: expected {expected} problem(s), got {len(got)}: {got}"
+            )
+    for label, doc, floor_columns, expected in HOME_COUNTRY_CASES:
+        got = home_country_match_problems("(self-check)", doc, floor_columns)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «the floor reads the business's country» rule is wrong — "
+                f"{label}: expected {expected} problem(s), got {len(got)}: {got}"
             )
     for label, doc, floors, expected in UNFLOORED_READ_CASES:
         got = unfloored_read_problems("(self-check)", doc, floors)
@@ -8698,6 +8808,15 @@ def main():
                 doc,
                 {q: c for q, c in cached.items() if c is not None},
             )
+            # …and the customer it finds by her number is one of the BUSINESS's country at that
+            # floor (whatsapp_inbox#202): same reading, so it rides the same cache.
+            problems += applied(
+                ledger,
+                home_country_match_problems,
+                path.name,
+                doc,
+                {q: c for q, c in cached.items() if c is not None},
+            )
 
         # 3b) Every parameter is a word the query it addresses actually knows.
         #
@@ -8772,6 +8891,7 @@ def main():
             floor_field_problems.__name__,
             floor_trigger_problems.__name__,
             floor_read_column_problems.__name__,
+            home_country_match_problems.__name__,
             parking_producer_problems.__name__,
         }
         if commands_def is None

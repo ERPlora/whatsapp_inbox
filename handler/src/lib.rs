@@ -646,9 +646,13 @@ fn home_calling_code(input: &Value) -> Option<Home> {
 /// somebody else, even with the same national digits (whatsapp_inbox#167): 33 600 111 222 is not
 /// the Spanish shop's «600 111 222». With no known home country, only the exact number counts.
 ///
-/// `customers.by_phone` (customers/queries/by_phone.sql) lets through any 1-3 digit prefix: the
-/// read narrows, this decides, and `_link_customer_threads_write.sql` lands exactly the numbers
-/// `home_country_number` names here.
+/// `customers.by_phone` (customers/queries/by_phone.sql) applies this same rule since customers#81
+/// (only the business's calling code, read from `hub_settings.country_code`) and keeps the leading
+/// `0` in the same countries since customers#82 (its `keeps_zero` is `keeps_leading_zero` here).
+/// This still decides every row: the hub may run an older Customers whose read lets any prefix
+/// through. `_link_customer_threads_write.sql` lands exactly the numbers `home_country_number`
+/// names here. The ISO → calling code table (`calling_code`) and the keep-the-zero list are COPIES
+/// of the ones in that query: change one, change the other in the same release.
 fn same_number(a_digits: &str, b_digits: &str, home: Option<Home>) -> bool {
     let (a, b) = (number_of(a_digits), number_of(b_digits));
     if a.len() < MIN_NUMBER_DIGITS || b.len() < MIN_NUMBER_DIGITS {
