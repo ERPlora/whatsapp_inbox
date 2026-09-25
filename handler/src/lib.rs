@@ -1179,6 +1179,17 @@ mod tests {
     }
 
     #[test]
+    fn a_national_card_saved_next_to_its_international_twin_claims_nothing() {
+        // Ana is saved as «600 111 222» while Eva is already on file as «+34 600 111 222»: in a
+        // Spanish shop they are the same number, so the thread is left for a human.
+        let input = input_with(
+            customer_created("600 111 222"),
+            json!({ "customers.by_phone": [customer("cu-ana", "600 111 222"), customer("cu-eva", "+34 600 111 222")] }),
+        );
+        untouched(&link_customer_threads_pure(input).unwrap());
+    }
+
+    #[test]
     fn a_saved_card_in_a_hub_without_a_country_claims_only_its_exact_number() {
         let input = input_in(
             "",
