@@ -74,9 +74,10 @@
 -- runtime clock: the poll drains every few seconds, and `:now` is the clock every other timestamp of
 -- this hub is ordered by. For the coexistence backlog (`source = 'history'`) it is NOT: the backfill
 -- lands 180 days of messages within seconds, and stamping them with `:now` dated a March «hola» as
--- today and read it below this morning's answer. Meta's own `message.timestamp` (epoch seconds, as
+-- today and read it below the answer of this morning. The `message.timestamp` of Meta (epoch seconds, as
 -- text) is the time it was sent, rendered in the SAME text shape `:now` has (`…+00:00`, UTC) so the
--- column keeps sorting as text. `received_at` would be wrong: it is the SaaS poll cursor. A backlog
+-- column keeps sorting as text (the `FROM (…) sent` block below does it portably). `received_at`
+-- would be wrong: it is the SaaS poll cursor. A backlog
 -- message with no usable timestamp (no object, not digits) falls back to `:now` instead of being
 -- refused — dead-lettering a message the customer did send is worse than dating it on arrival.
 -- `updated_at` stays `:now`: it is when THIS row was written.
@@ -103,15 +104,48 @@ SELECT
   '',
   'received',
   0, :current_user_id, :current_user_id,
-  CASE
-    WHEN COALESCE(NULLIF((:source)::text, ''), 'live') = 'history'
-     AND ((:message)::text::jsonb ->> 'timestamp') ~ '^[0-9]{1,11}$'
-    THEN to_char(
-      to_timestamp(((:message)::text::jsonb ->> 'timestamp')::bigint) AT TIME ZONE 'UTC',
-      'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
-    ELSE :now
-  END,
+  COALESCE(
+    erp_pad(sent.y, 4) || '-' || erp_pad(sent.m, 2) || '-' || erp_pad(sent.d, 2)
+      || 'T' || erp_pad(sent.sod / 3600, 2) || ':' || erp_pad((sent.sod % 3600) / 60, 2)
+      || ':' || erp_pad(sent.sod % 60, 2) || '+00:00',
+    :now),
   :now
+FROM (
+  -- Epoch seconds → civil UTC date (the `civil_from_days` of H. Hinnant), in integer arithmetic only:
+  -- `to_char`/`to_timestamp` are not portable (ADR-0007), and a `timestamptz` rendered to text
+  -- takes the TimeZone/DateStyle of the session, which would break sorting against `:now` as text.
+  -- `ts` is NULL (→ every column NULL → `:now` above) unless this is a backlog message with a
+  -- usable timestamp: 1 to 11 digits, nothing else.
+  SELECT e.y + CASE WHEN e.mp >= 10 THEN 1 ELSE 0 END AS y,
+         CASE WHEN e.mp < 10 THEN e.mp + 3 ELSE e.mp - 9 END AS m,
+         e.doy - (153 * e.mp + 2) / 5 + 1 AS d,
+         e.sod
+  FROM (
+    SELECT c.yoe + c.era * 400 AS y, c.sod, c.doy, (5 * c.doy + 2) / 153 AS mp
+    FROM (
+      SELECT b.era, b.sod, b.yoe, b.doe - (365 * b.yoe + b.yoe / 4 - b.yoe / 100) AS doy
+      FROM (
+        SELECT a.era, a.sod, a.doe,
+               (a.doe - a.doe / 1460 + a.doe / 36524 - a.doe / 146096) / 365 AS yoe
+        FROM (
+          SELECT t.z / 146097 AS era, t.z - (t.z / 146097) * 146097 AS doe, t.sod
+          FROM (
+            SELECT r.ts / 86400 + 719468 AS z, r.ts % 86400 AS sod
+            FROM (
+              SELECT CASE
+                WHEN COALESCE(NULLIF((:source)::text, ''), 'live') = 'history'
+                 AND length(m.raw) BETWEEN 1 AND 11
+                 AND ltrim(m.raw, '0123456789') = ''
+                THEN CAST(m.raw AS BIGINT)
+              END AS ts
+              FROM (SELECT (:message)::text::jsonb ->> 'timestamp' AS raw) m
+            ) r
+          ) t
+        ) a
+      ) b
+    ) c
+  ) e
+) sent
 WHERE (
   COALESCE(NULLIF((:direction)::text, ''), 'inbound') <> 'inbound'
   OR COALESCE(NULLIF((:source)::text, ''), 'live') <> 'live'

@@ -934,6 +934,43 @@ def check_a_history_message_without_a_usable_time_falls_back(db, command):
     return problems
 
 
+def check_the_backlog_date_arithmetic_matches_the_calendar(db, command):
+    """The epoch → date conversion is integer arithmetic (portable SQL, ADR-0007), so it is checked
+    against the real calendar on its edges: a leap day, the last second of a year, the first of the
+    next one, the epoch itself and the widest timestamp the guard accepts (11 digits).
+    """
+    import datetime
+
+    hub = "h-history-calendar"
+    now = "2026-09-02T12:00:00+00:00"
+    epochs = ["1709251199", "1709164800", "1767225599", "1767225600", "0", "951782400", "99999999999"]
+    problems = []
+    for n, epoch in enumerate(epochs):
+        problems += run_listener(
+            db,
+            command,
+            served_payload(
+                f"wamid.T92C{n}", f"cal {n}", now, source="history", timestamp=epoch,
+                contact=f"3460000{n:04d}", sender=f"3460000{n:04d}",
+            ),
+            hub_id=hub,
+            now=now,
+        )
+    if problems:
+        return problems
+    for n, epoch in enumerate(epochs):
+        got = scalar(
+            db,
+            "SELECT created_at FROM whatsapp_inbox_message"
+            f" WHERE hub_id = {sql_literal(hub)} AND wa_message_id = 'wamid.T92C{n}';",
+        )
+        when = datetime.datetime.fromtimestamp(int(epoch), tz=datetime.timezone.utc)
+        expected = f"{when.year:04d}-{when:%m-%dT%H:%M:%S}+00:00"
+        if got != expected:
+            problems.append(f"epoch {epoch} was dated [{got}], the calendar says [{expected}]")
+    return problems
+
+
 def check_a_hub_before_1612_still_ingests(db, command):
     """A hub that sends no `direction`/`contact`/`source` keeps working exactly as before.
 
@@ -1019,6 +1056,7 @@ def main():
         problems += check_a_hub_before_1612_still_ingests(db, command)
         problems += check_the_history_keeps_when_it_was_said(db, command)
         problems += check_a_history_message_without_a_usable_time_falls_back(db, command)
+        problems += check_the_backlog_date_arithmetic_matches_the_calendar(db, command)
         for p in problems:
             print(f"FAIL  {p}")
         if problems:
