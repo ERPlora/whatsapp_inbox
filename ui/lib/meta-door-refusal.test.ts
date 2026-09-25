@@ -77,6 +77,8 @@ describe('la lista de códigos es la de la puerta, no una invención', () => {
       'invalid_language',
       'invalid_placeholders',
       'invalid_header_placeholders',
+      'mixed_placeholders',
+      'invalid_named_placeholders',
       'invalid_variables',
       'missing_body',
       'missing_example',
