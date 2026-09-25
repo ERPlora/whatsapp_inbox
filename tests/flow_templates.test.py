@@ -1554,12 +1554,16 @@ def emits_at_version(module_dir, version):
     return {e for e in emits if isinstance(e, str)} if isinstance(emits, list) else set(), None
 
 
+# `sql_names_at_version`'s answer when the query does not exist in the release published as the
+# floor — an ANSWER, the opposite of «could not look» (whatsapp_inbox#173).
+ABSENT_AT_FLOOR = object()
+
 SQL_COMMENT = re.compile(r"--[^\n]*|/\*.*?\*/", re.S)
 SQL_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
-def sql_names_at_version(module_dir, version, rel):
-    """Every identifier a query's SQL MENTIONS in the tree published as `version`, comments out.
+def sql_names_at_version(module_dir, version, qid):
+    """Every identifier query `qid`'s SQL MENTIONS in the tree published as `version`, comments out.
 
     «Mentions», not «selects», on purpose: telling an output column from a filter would need a SQL
     parser, and the names a template reads are output aliases (`… AS start_date_label`) that only
@@ -1567,19 +1571,39 @@ def sql_names_at_version(module_dir, version, rel):
     a name the query only filters by — never a false red. Comments are stripped because a release
     note can name a column before the SELECT does.
 
-    Returns `(names, None)` or `(None, reason)`: «not there» and «could not look» stay apart.
+    The query is looked up in the manifest OF THAT RELEASE, not in today's: what the hub installs at
+    the floor is that zip, and its `sql` path is the one that answers.
+
+    Returns `(names, None)`, `(ABSENT_AT_FLOOR, None)` or `(None, reason)`. 🔴 «The release does not
+    declare the query, or declares it over a file its tree does not carry» is an ANSWER — the read
+    does not exist at the floor, so the step fails on every run — and only «I could not look» (no
+    checkout, no such release, a manifest that is not JSON) is a reason. Until whatsapp_inbox#173
+    both came back as a reason and a floor BELOW the query was printed as a skip, green.
     """
     sha, why = release_commit(module_dir, version)
     if sha is None:
         return None, why
-    blob, why = git_in(module_dir, "show", f"{sha}:{rel}")
+    blob, why = git_in(module_dir, "show", f"{sha}:module.json")
     if blob is None:
-        return None, f"{module_dir.name}/{rel} is not in the tree of {version} ({why})"
+        return None, f"{module_dir.name}/module.json could not be read at {version} ({why})"
+    try:
+        qdef = ((json.loads(blob) or {}).get("queries") or {}).get(qid)
+    except ValueError as e:
+        return None, f"{module_dir.name}/module.json at {version} is not readable JSON ({e})"
+    if not isinstance(qdef, dict):
+        return ABSENT_AT_FLOOR, None
+    rel = qdef.get("sql")
+    if not isinstance(rel, str):
+        return None, f"`{qid}` declares no `sql` file at {version}, so what it answered could not be read"
+    blob, _ = git_in(module_dir, "show", f"{sha}:{rel}")
+    if blob is None:
+        return ABSENT_AT_FLOOR, None
     return set(SQL_NAME.findall(SQL_COMMENT.sub(" ", blob))), None
 
 
 def floor_read_columns(floors, definitions, resolved, qids):
-    """`query id -> {names its SQL mentions}` AS OF the floor, for the `qids` a family reads.
+    """`query id -> {names its SQL mentions}` AS OF the floor, for the `qids` a family reads —
+    or `ABSENT_AT_FLOOR` when that release has no such query (whatsapp_inbox#173).
 
     Returns the map and the floors it could not read, printed as skips by `main()` — an unreadable
     floor and a floor that is high enough look identical from here.
@@ -1591,15 +1615,8 @@ def floor_read_columns(floors, definitions, resolved, qids):
         target = definitions.get(qid)
         if floor is None or target is None or module_id not in resolved:
             continue  # unfloored, or already reported as a name no module declares
-        module_dir, qdef = target
-        rel = qdef.get("sql")
-        if not isinstance(rel, str):
-            skipped.append(
-                f"`{qid}` declares no `sql` file, so what it answered at {floor} could not be read "
-                f"— the columns these templates read from it were NOT verified"
-            )
-            continue
-        names, why = sql_names_at_version(module_dir, floor, rel)
+        module_dir, _ = target
+        names, why = sql_names_at_version(module_dir, floor, qid)
         if names is None:
             skipped.append(
                 f"what `{qid}` answered as of the declared floor {floor} could not be read "
@@ -1802,10 +1819,20 @@ def floor_read_column_problems(name, doc, floor_columns):
         if isinstance(s, dict) and s.get("kind") == "query"
     }
     problems = []
+    absent = set()
+    for step_id, qid in sorted(readers.items(), key=lambda kv: str(kv[0])):
+        if floor_columns.get(qid) is ABSENT_AT_FLOOR:
+            absent.add(step_id)
+            problems.append(
+                f"{name} step `{step_id}` reads `{qid}`, and the release this family declares as "
+                f"its floor does not have that query: the hub OFFERS this recipe to a copy where "
+                f"the step fails on every run and nobody is answered — raise `modules` in "
+                f"`{name.split('.')[0]}.requires.json` to the release that ships `{qid}`"
+            )
     for step_id, field in sorted(step_field_references(doc)):
         qid = readers.get(step_id)
         columns = floor_columns.get(qid)
-        if columns is None or field in QUERY_CONTRACT_KEYS or field in columns:
+        if step_id in absent or columns is None or field in QUERY_CONTRACT_KEYS or field in columns:
             continue
         problems.append(
             f"{name} reads `steps.{step_id}.{field}` off `{qid}`, and the SQL of that query at "
@@ -1813,6 +1840,38 @@ def floor_read_column_problems(name, doc, floor_columns):
             f"copy where the value resolves to nothing — a guard over `null`, or a customer "
             f"receiving an empty gap where the data should be — raise `modules` in "
             f"`{name.split('.')[0]}.requires.json` to the release that started answering it"
+        )
+    return problems
+
+
+def unfloored_read_problems(name, doc, floors):
+    """Every NEIGHBOUR a family reads through a `query` step has a floor in its `requires.json`.
+
+    The floor rules above only ever read what the family declares, so deleting a neighbour from
+    `requires.json` did not make them fail — it made them silent: nothing to read against, nothing
+    to report (whatsapp_inbox#173, measured by deleting `customers` from the reservation family).
+    And the floor is not a note for this battery: it travels to the hub (hub#1611), where
+    `flow_template_floor_is_met` decides with it whether the recipe is OFFERED — a neighbour with no
+    floor is a recipe offered next to ANY copy of it, including one where the read does not exist.
+
+    `floors` is the `modules` map of the family's `requires.json`. Reads of this module's own
+    queries owe no floor: they ship in the same zip as the recipe.
+    """
+    own = MANIFEST.get("id")
+    problems = []
+    for step in doc.get("steps") or []:
+        if not isinstance(step, dict) or step.get("kind") != "query":
+            continue
+        qid = step.get("query")
+        if not isinstance(qid, str) or "." not in qid:
+            continue
+        owner = qid.split(".", 1)[0]
+        if owner == own or owner in floors:
+            continue
+        problems.append(
+            f"{name} step `{step.get('id')}` reads `{qid}`, and `{name.split('.')[0]}.requires.json` "
+            f"declares no floor for `{owner}`: the hub offers this recipe next to ANY copy of it, "
+            f"and no floor rule of this battery checks the read — add `{owner}` to its `modules`"
         )
     return problems
 
@@ -3769,6 +3828,7 @@ def unknown_step_key_problems(name, doc):
 
 DOCUMENT_RULES = (
     floor_read_column_problems,
+    unfloored_read_problems,
     family_trigger_problems,
     confirmation_notice_problems,
     policy_problems,
@@ -3808,6 +3868,7 @@ DOCUMENT_RULES = (
 # REQUIRED to apply, and that is asserted rather than assumed.
 SELF_CHECKED_RULES = (
     floor_read_column_problems,
+    unfloored_read_problems,
     family_trigger_problems,
     confirmation_notice_problems,
     policy_problems,
@@ -7048,15 +7109,25 @@ def _floor_read_reading_problems():
                 )
             return done.returncode == 0
 
-        def commit(version, sql):
-            (root / "module.json").write_text(json.dumps({"id": "appointments", "version": version}))
-            (root / "queries" / "appointment_get.sql").write_text(sql)
+        rel = "queries/appointment_get.sql"
+
+        def commit(version, sql, declared=rel):
+            queries = {} if declared is None else {APPOINTMENT_READ: {"sql": declared}}
+            (root / "module.json").write_text(
+                json.dumps({"id": "appointments", "version": version, "queries": queries})
+            )
+            if sql is not None:
+                (root / "queries" / "appointment_get.sql").write_text(sql)
             return run("add", "-A") and run(
                 "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false",
                 "commit", "-q", "-m", f"chore(release): v{version}",
             )
 
         if not run("init", "-q"):
+            return problems
+        # whatsapp_inbox#173: the release BEFORE the query existed at all — its manifest does not
+        # declare it and its tree carries no SQL for it.
+        if not commit("1.1.75", None, declared=None):
             return problems
         if not commit(
             "1.1.76",
@@ -7070,8 +7141,15 @@ def _floor_read_reading_problems():
             "w.d AS start_date_label FROM a",
         ):
             return problems
+        # …and a release whose manifest declares the query over a file its tree does not carry:
+        # that zip answers the read with nothing either.
+        if not commit(
+            "1.1.78",
+            "SELECT a.customer_phone FROM a",
+            declared="queries/nowhere.sql",
+        ):
+            return problems
 
-        rel = "queries/appointment_get.sql"
         for label, version, present, absent in [
             (
                 "the release below the labels — they are only in its COMMENTS, and a reader that "
@@ -7082,21 +7160,32 @@ def _floor_read_reading_problems():
             ),
             ("the release that answers them", "1.1.77", {WHEN_DATE, WHEN_TIME}, set()),
         ]:
-            got, why = sql_names_at_version(root, version, rel)
-            if got is None or not present <= got or absent & got:
+            got, why = sql_names_at_version(root, version, APPOINTMENT_READ)
+            if got is None or got is ABSENT_AT_FLOOR or not present <= got or absent & got:
                 problems.append(
                     f"the battery's own reading of a released query is wrong — {label}: wanted "
                     f"{sorted(present)} in and {sorted(absent)} out, got "
                     f"{got if got is None else sorted(got)} ({why})"
                 )
-        for label, version, rel_ in [
-            ("a version nobody released — a typo in `requires.json`", "9.9.9", rel),
-            ("a query file absent from the release", "1.1.77", "queries/nowhere.sql"),
+        got, why = sql_names_at_version(root, "9.9.9", APPOINTMENT_READ)
+        if got is not None or not why:
+            problems.append(
+                f"the battery reads a version nobody released — a typo in `requires.json` — as an "
+                f"answer instead of a skip: got {got} ({why})"
+            )
+        # 🔴 whatsapp_inbox#173: «the query is not there at the floor» is an ANSWER, and the
+        # opposite one from «I could not look». Read as a skip, lowering `customers` to 2.3.44 in a
+        # `requires.json` left the battery green while the hub offered the recipe to copies where
+        # `customers.by_phone` does not exist — every message failing, nobody answered.
+        for label, version in [
+            ("the release before the query existed — its manifest does not declare it", "1.1.75"),
+            ("a release that declares the query over a SQL file its tree does not carry", "1.1.78"),
         ]:
-            got, why = sql_names_at_version(root, version, rel_)
-            if got is not None or not why:
+            got, why = sql_names_at_version(root, version, APPOINTMENT_READ)
+            if got is not ABSENT_AT_FLOOR or why:
                 problems.append(
-                    f"the battery reads {label} as an answer instead of a skip: got {got} ({why})"
+                    f"the battery reads {label} as something other than «absent at the floor»: "
+                    f"got {got} ({why}) — a floor below the query stays green"
                 )
 
         definitions = {APPOINTMENT_READ: (root, {"sql": rel})}
@@ -7105,9 +7194,20 @@ def _floor_read_reading_problems():
             ("the floor that answers the labels", {"appointments": "1.1.77"}, True, 0),
             ("a floor no release ever carried", {"appointments": "9.9.9"}, False, 1),
             ("the family pins no floor for that module", {}, False, 0),
+            (
+                "🔴 a floor that predates the query — an ANSWER («absent»), never a skip",
+                {"appointments": "1.1.75"},
+                ABSENT_AT_FLOOR,
+                0,
+            ),
         ]:
             got, skips = floor_read_columns(floors, definitions, resolved, {APPOINTMENT_READ})
-            if (APPOINTMENT_READ in got) != want or len(skips) != want_skips:
+            reading = (
+                got.get(APPOINTMENT_READ) is ABSENT_AT_FLOOR
+                if want is ABSENT_AT_FLOOR
+                else (APPOINTMENT_READ in got and got[APPOINTMENT_READ] is not ABSENT_AT_FLOOR)
+            )
+            if reading != bool(want) or len(skips) != want_skips:
                 problems.append(
                     f"the battery's own collection of floor reads is wrong — {label}: expected "
                     f"{'a reading' if want else 'none'} and {want_skips} skip(s), got "
@@ -7860,6 +7960,36 @@ FLOOR_READ_CASES = [
         {CONVERSATIONS_READ: set()} | _READS_1_1_77,
         0,
     ),
+    (
+        "🔴 whatsapp_inbox#173: the query itself does not exist at the declared floor — one "
+        "problem for the step that reads it, however many of its columns the recipe uses",
+        _confirmation(),
+        {APPOINTMENT_READ: ABSENT_AT_FLOOR},
+        1,
+    ),
+]
+
+
+UNFLOORED_READ_CASES = [
+    (
+        "every neighbour the recipe reads through a `query` step has its floor",
+        _confirmation(),
+        {"appointments": "1.1.77"},
+        0,
+    ),
+    (
+        "🔴 whatsapp_inbox#173: the neighbour's floor was deleted from `requires.json` — the hub "
+        "offers the recipe to ANY copy of it, and the floor rules above read nothing to fail on",
+        _confirmation(),
+        {},
+        1,
+    ),
+    (
+        "a floor for some OTHER neighbour does not cover this one",
+        _confirmation(),
+        {"customers": "2.3.45"},
+        1,
+    ),
 ]
 
 
@@ -8121,6 +8251,13 @@ def self_check():
             problems.append(
                 f"the battery's own «the floor already answers the columns we read» rule is "
                 f"wrong — {label}: expected {expected} problem(s), got {len(got)}: {got}"
+            )
+    for label, doc, floors, expected in UNFLOORED_READ_CASES:
+        got = unfloored_read_problems("(self-check)", doc, floors)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «every neighbour we read has a floor» rule is wrong — "
+                f"{label}: expected {expected} problem(s), got {len(got)}: {got}"
             )
 
     for label, name, doc, expected in POLICY_CASES:
@@ -8461,6 +8598,13 @@ def main():
             problems += applied(
                 ledger, floor_trigger_problems, path.name, doc, floor_emits_by_family[fpath]
             )
+
+        # 3a-vi-septies) …and every neighbour this family reads HAS a floor to hold it to
+        # (whatsapp_inbox#173). Pure — it reads the document and its `requires.json`, never a
+        # neighbour — so it runs with or without the workspace next door.
+        fpath = floors_of(path)
+        declared = (json.loads(fpath.read_text()) or {}).get("modules") or {} if fpath.is_file() else {}
+        problems += applied(ledger, unfloored_read_problems, path.name, doc, declared)
 
         # 3a-vi-sexies) …and the neighbour already ANSWERED the columns this family reads back at
         # that same floor (whatsapp_inbox#146): a column the floor lacks resolves to nothing, and
