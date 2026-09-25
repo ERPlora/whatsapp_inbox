@@ -590,5 +590,12 @@ describe('the thread SHOWS what the customer sent (whatsapp_inbox#192)', () => {
     (el as unknown as { closeDetail: () => void }).closeDetail();
     await esperar(el);
     expect(visor(el)?.open ?? false, 'the viewer outlives the thread it belongs to').toBe(false);
+
+    // Opening the same conversation again downloads the photo again: it must not pop up large
+    // on its own because it was the last one looked at.
+    await abrirConversacion(el);
+    await esperar(el);
+    expect(burbuja(el).querySelector('img'), 'the thread did not reopen').toBeTruthy();
+    expect(visor(el)?.open ?? false, 'reopening the thread opened the photo large by itself').toBe(false);
   });
 });
