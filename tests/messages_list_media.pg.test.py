@@ -147,8 +147,10 @@ def main():
         ["docker", "exec", CONTAINER, "createdb", "-U", "postgres", db], check=True
     )
     try:
-        for rel in MANIFEST["migrations"]["postgres"]:
-            r = dedup.psql(db, (MODULE_DIR / rel).read_text())
+        # Both shapes of `MigrationEntry` and the contract→`_deprecated_*` rewrite, like the runtime
+        # (tests/module_migrations.py): the raw list crashes on the 012 object entry.
+        for rel, migration in dedup.declared_migrations():
+            r = dedup.psql(db, migration)
             if r.returncode != 0:
                 print(f"FAIL: migration {rel} does not apply\n{r.stderr}")
                 return 1
