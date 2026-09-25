@@ -1819,10 +1819,8 @@ def floor_read_column_problems(name, doc, floor_columns):
         if isinstance(s, dict) and s.get("kind") == "query"
     }
     problems = []
-    absent = set()
     for step_id, qid in sorted(readers.items(), key=lambda kv: str(kv[0])):
         if floor_columns.get(qid) is ABSENT_AT_FLOOR:
-            absent.add(step_id)
             problems.append(
                 f"{name} step `{step_id}` reads `{qid}`, and the release this family declares as "
                 f"its floor does not have that query: the hub OFFERS this recipe to a copy where "
@@ -1832,7 +1830,9 @@ def floor_read_column_problems(name, doc, floor_columns):
     for step_id, field in sorted(step_field_references(doc)):
         qid = readers.get(step_id)
         columns = floor_columns.get(qid)
-        if step_id in absent or columns is None or field in QUERY_CONTRACT_KEYS or field in columns:
+        if columns is None or columns is ABSENT_AT_FLOOR:
+            continue  # unfloored, unreadable, or already reported above as a missing query
+        if field in QUERY_CONTRACT_KEYS or field in columns:
             continue
         problems.append(
             f"{name} reads `steps.{step_id}.{field}` off `{qid}`, and the SQL of that query at "
