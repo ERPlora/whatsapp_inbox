@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "whatsapp_inbox.templates.record_meta_answer",
-  "description": "What Meta answered about a template, as the runtime's door handed it back. The seven reviewed fields are the text the door SENT: the write only lands if the row still holds it.",
+  "description": "What Meta answered about a template, as the runtime's door handed it back. The eight reviewed fields are the text the door SENT: the write only lands if the row still holds it.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -15,7 +15,8 @@
     "header",
     "body",
     "footer",
-    "variables"
+    "variables",
+    "buttons"
   ],
   "properties": {
     "template_id": { "type": "string", "minLength": 1 },
@@ -41,6 +42,7 @@
     "header": { "type": "string" },
     "body": { "type": "string" },
     "footer": { "type": "string" },
-    "variables": { "type": "string", "description": "JSON array de nombres de variable" }
+    "variables": { "type": "string", "description": "JSON array de nombres de variable" },
+    "buttons": { "type": "string", "description": "JSON array of the template's buttons in Meta's order: {type: QUICK_REPLY|URL|PHONE_NUMBER, text, url?|phone_number?} (whatsapp_inbox#185)" }
   }
 }

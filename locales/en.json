@@ -143,7 +143,7 @@
     "buttonQuickReply": "Quick reply",
     "buttonUrl": "Opens a link",
     "buttonPhone": "Calls the number",
-    "templateManagedInMeta": "This template has buttons or an image, video or document header, so its wording is changed in WhatsApp Manager. Open this tab again to see what Meta says.",
+    "templateManagedInMeta": "This template has an image, video or document header, or a link button with a variable, so its wording is changed in WhatsApp Manager. Open this tab again to see what Meta says.",
     "templateNamedVariablesInMeta": "This template uses named variables ({{name}}), which ERPlora cannot register at Meta yet, so its wording is changed in WhatsApp Manager. Open this tab again to see what Meta says.",
     "metaOnlyTemplates": "These WhatsApp Manager templates cannot be brought into this list yet (they use a carousel, a limited-time offer, a copy-code or WhatsApp Flow button, a location header, or a variable in the header). Manage them in WhatsApp Manager: {names}",
     "doorRefusal": {
@@ -165,7 +165,14 @@
       "cloud_unreachable": "This till could not reach erplora.com. The template is saved here; check the internet connection and save it again to send it for review.",
       "cloud_unreadable": "erplora.com answered something this till could not read. The template is saved here — try again in a moment.",
       "hub_not_enrolled": "This till is not yet paired with erplora.com, so it cannot send templates to Meta. Contact support.",
-      "capability_denied": "WhatsApp Inbox is not allowed to send WhatsApp messages on this hub. Grant it in Settings → Permissions and save the template again."
+      "capability_denied": "WhatsApp Inbox is not allowed to send WhatsApp messages on this hub. Grant it in Settings → Permissions and save the template again.",
+      "invalid_buttons": "Meta did not accept the buttons. Each one has to be a quick reply, a link or a call — check them and save again.",
+      "invalid_button_text": "Meta did not accept a button: every button needs a label of up to 25 characters.",
+      "invalid_button_url": "Meta did not accept a link button. Write the full address, starting with https://, and without {{1}}-style variables.",
+      "invalid_button_phone": "Meta did not accept a call button. Write the number with its country code, for example +34600111222.",
+      "too_many_buttons": "Meta did not accept the buttons: a template takes at most 10, with no more than 2 links and 1 call button.",
+      "buttons_not_grouped": "Meta did not accept the order of the buttons: quick replies go together, and links and calls go together.",
+      "buttons_not_allowed_for_category": "Authentication templates cannot carry buttons from here. Remove the buttons or choose another category."
     },
     "mediaKind": {
       "image": "Photo",
@@ -181,7 +188,14 @@
     "mediaPlay": "Play",
     "mediaDownload": "Download",
     "mediaOpen": "Open",
-    "threadRepliesElsewhere": "Replies are not sent from this screen: answer from WhatsApp on your phone, or let an automation reply."
+    "threadRepliesElsewhere": "Replies are not sent from this screen: answer from WhatsApp on your phone, or let an automation reply.",
+    "buttonsHint": "Optional. Up to 10 buttons: quick replies, up to 2 links and 1 call button. Quick replies are kept together.",
+    "buttonType": "Button type",
+    "buttonText": "Button text",
+    "buttonUrlField": "Link (https://…)",
+    "buttonPhoneField": "Phone number with country code",
+    "addButton": "Add button",
+    "removeButton": "Remove button"
   },
   "errors": {
     "whatsapp_inbox.conversation_not_found": "That conversation does not exist in this business.",

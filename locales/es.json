@@ -144,7 +144,7 @@
     "buttonQuickReply": "Respuesta rápida",
     "buttonUrl": "Abre un enlace",
     "buttonPhone": "Llama al número",
-    "templateManagedInMeta": "Esta plantilla lleva botones o una imagen, vídeo o documento en la cabecera, así que su texto se cambia en WhatsApp Manager. Al volver a abrir esta pestaña verás lo que diga Meta.",
+    "templateManagedInMeta": "Esta plantilla lleva una imagen, vídeo o documento en la cabecera, o un botón de enlace con variable, así que su texto se cambia en WhatsApp Manager. Al volver a abrir esta pestaña verás lo que diga Meta.",
     "templateNamedVariablesInMeta": "Esta plantilla usa variables con nombre ({{nombre}}), que ERPlora aún no puede registrar en Meta, así que su texto se cambia en WhatsApp Manager. Al volver a abrir esta pestaña verás lo que diga Meta.",
     "metaOnlyTemplates": "Estas plantillas de WhatsApp Manager todavía no se pueden traer a esta lista (llevan un carrusel, una oferta por tiempo limitado, un botón de copiar código o de WhatsApp Flow, una ubicación en la cabecera o una variable en la cabecera). Gestiónalas en WhatsApp Manager: {names}",
     "doorRefusal": {
@@ -166,7 +166,14 @@
       "cloud_unreachable": "Esta caja no ha podido conectar con erplora.com. La plantilla queda guardada aquí; revisa la conexión a internet y vuelve a guardarla para enviarla a revisión.",
       "cloud_unreadable": "erplora.com ha contestado algo que esta caja no ha sabido leer. La plantilla queda guardada aquí: inténtalo dentro de un rato.",
       "hub_not_enrolled": "Esta caja todavía no está emparejada con erplora.com, así que no puede enviar plantillas a Meta. Avisa a soporte.",
-      "capability_denied": "WhatsApp no tiene permiso para enviar mensajes desde este hub. Concédeselo en Ajustes → Permisos y vuelve a guardar la plantilla."
+      "capability_denied": "WhatsApp no tiene permiso para enviar mensajes desde este hub. Concédeselo en Ajustes → Permisos y vuelve a guardar la plantilla.",
+      "invalid_buttons": "Meta no ha aceptado los botones. Cada uno tiene que ser una respuesta rápida, un enlace o una llamada: revísalos y vuelve a guardar.",
+      "invalid_button_text": "Meta no ha aceptado un botón: todos necesitan un texto de 25 caracteres como mucho.",
+      "invalid_button_url": "Meta no ha aceptado un botón de enlace. Escribe la dirección completa, empezando por https://, y sin variables tipo {{1}}.",
+      "invalid_button_phone": "Meta no ha aceptado un botón de llamada. Escribe el número con su prefijo de país, por ejemplo +34600111222.",
+      "too_many_buttons": "Meta no ha aceptado los botones: una plantilla lleva 10 como mucho, y no más de 2 enlaces y 1 botón de llamada.",
+      "buttons_not_grouped": "Meta no ha aceptado el orden de los botones: las respuestas rápidas van juntas, y los enlaces y llamadas, juntos.",
+      "buttons_not_allowed_for_category": "Las plantillas de autenticación no pueden llevar botones desde aquí. Quita los botones o elige otra categoría."
     },
     "mediaKind": {
       "image": "Foto",
@@ -182,7 +189,14 @@
     "mediaPlay": "Reproducir",
     "mediaDownload": "Descargar",
     "mediaOpen": "Abrir",
-    "threadRepliesElsewhere": "Desde esta pantalla no se contesta: responde desde el WhatsApp de tu móvil o deja que conteste una automatización."
+    "threadRepliesElsewhere": "Desde esta pantalla no se contesta: responde desde el WhatsApp de tu móvil o deja que conteste una automatización.",
+    "buttonsHint": "Opcional. Hasta 10 botones: respuestas rápidas, hasta 2 enlaces y 1 botón de llamada. Las respuestas rápidas se mantienen juntas.",
+    "buttonType": "Tipo de botón",
+    "buttonText": "Texto del botón",
+    "buttonUrlField": "Enlace (https://…)",
+    "buttonPhoneField": "Teléfono con prefijo de país",
+    "addButton": "Añadir botón",
+    "removeButton": "Quitar botón"
   },
   "errors": {
     "whatsapp_inbox.conversation_not_found": "Esa conversación no existe en este negocio.",

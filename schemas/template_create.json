@@ -15,6 +15,7 @@
     "header": { "type": "string", "default": "" },
     "body": { "type": "string", "default": "" },
     "footer": { "type": "string", "default": "" },
-    "variables": { "type": "string", "default": "[]", "description": "JSON array de nombres de variable" }
+    "variables": { "type": "string", "default": "[]", "description": "JSON array de nombres de variable" },
+    "buttons": { "type": "string", "default": "[]", "description": "JSON array of the template's buttons in Meta's order: {type: QUICK_REPLY|URL|PHONE_NUMBER, text, url?|phone_number?} (whatsapp_inbox#185)" }
   }
 }

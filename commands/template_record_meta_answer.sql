@@ -16,7 +16,7 @@
 -- verdict next to a text Meta never received, which is precisely the failure whatsapp_inbox#65
 -- removed from the tab and `commands/template_update.sql` removed from the edit. So the seven
 -- reviewed fields travel back with the answer and the WHERE compares them, exactly as the update
--- does — same seven, and `is_active` deliberately not among them: it is this hub's own switch and
+-- does — same eight (the buttons since whatsapp_inbox#185), and `is_active` deliberately not among them: it is this hub's own switch and
 -- Meta has never seen it.
 --
 -- A no-match is therefore a NORMAL outcome, not an error, which is why this command declares no
@@ -29,7 +29,7 @@
 -- stored. Moving them would date the owner's edit at the moment a third party replied to it.
 --
 -- The runtime lowers a repeated bind to the same `$n` (`crates/db/src/lib.rs::translate`), so
--- naming the seven fields here costs no extra parameter.
+-- naming the eight fields here costs no extra parameter.
 UPDATE whatsapp_inbox_template
 SET meta_template_id     = :meta_template_id,
     meta_status          = :meta_status,
@@ -43,4 +43,5 @@ WHERE id = :template_id
   AND header = :header
   AND body = :body
   AND footer = :footer
-  AND variables = :variables;
+  AND variables = :variables
+  AND buttons = :buttons;

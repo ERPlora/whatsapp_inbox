@@ -99,8 +99,14 @@ never blanks a header somebody set. **Delete** asks for confirmation in the page
 > command refuses with `template_already_here` and the tab takes it as the normal answer: no notice,
 > no phantom `template.created`). Since #180 an image/video/document header (its KIND —
 > `header_format`; the file is chosen when a message is sent) and quick reply, link and call buttons
-> (`buttons`, Meta's order) come in too: the panel lists them and keeps the template read-only, with
-> no «Guardar», because saving would register it at Meta without them. Those with parts this module
+> (`buttons`, Meta's order) come in too. Since #185 the panel **edits buttons**: add up to ten —
+> quick reply, link (a fixed `https://` address) or call (a number with its country code), at most two
+> links and one call — each with a label of up to 25 characters; quick replies are kept together
+> because Meta refuses them interleaved with links and calls, and «Guardar» stays off while a button
+> lacks its label, link or number. They are stored in `buttons` and registered at Meta with the rest,
+> so a template brought with plain buttons is edited here too. A media header (#218) or a link with a
+> variable (`…/{{1}}`) still keeps the template read-only, listing its parts, with no «Guardar»,
+> because saving would register it at Meta without them. Those with parts this module
 > has no field for (a carousel, a limited-time offer, a copy-code or Flow button, a location header,
 > a header variable, named `{{name}}` variables) are not imported without them: they are named in a
 > notice above the table, `name (language)`.

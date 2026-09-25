@@ -3,7 +3,7 @@
   "title": "whatsapp_inbox.templates.update",
   "type": "object",
   "additionalProperties": false,
-  "required": ["template_id", "name", "language", "category", "header", "body", "footer", "variables", "is_active"],
+  "required": ["template_id", "name", "language", "category", "header", "body", "footer", "variables", "buttons", "is_active"],
   "properties": {
     "template_id": { "type": "string", "minLength": 1 },
     "name": { "type": "string", "minLength": 1, "maxLength": 255 },
@@ -13,6 +13,7 @@
     "body": { "type": "string" },
     "footer": { "type": "string" },
     "variables": { "type": "string", "description": "JSON array de nombres de variable" },
+    "buttons": { "type": "string", "description": "JSON array of the template's buttons in Meta's order: {type: QUICK_REPLY|URL|PHONE_NUMBER, text, url?|phone_number?} (whatsapp_inbox#185)" },
     "is_active": { "type": "integer", "enum": [0, 1] }
   }
 }

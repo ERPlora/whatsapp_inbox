@@ -628,7 +628,7 @@ describe('al ABRIR la pestaña, el veredicto de Meta se pone al día (whatsapp_i
     });
   });
 
-  it('el veredicto viaja con los SIETE campos revisados: sin ellos el comando no escribe', async () => {
+  it('el veredicto viaja con los OCHO campos revisados: sin ellos el comando no escribe', async () => {
     filas = [EN_REVISION];
     respondeListado = async () => ({
       templates: [{ name: 'recordatorio_cita', language: 'es', status: 'APPROVED', meta_id: '77' }],
@@ -637,8 +637,10 @@ describe('al ABRIR la pestaña, el veredicto de Meta se pone al día (whatsapp_i
 
     await montar();
 
-    // `commands/template_record_meta_answer.sql` compara los siete en el WHERE: es la guarda de
-    // carrera que impide pegarle a la fila el veredicto de un texto que ya cambió.
+    // `commands/template_record_meta_answer.sql` compara los ocho en el WHERE: es la guarda de
+    // carrera que impide pegarle a la fila el veredicto de un texto que ya cambió. Una fila de antes
+    // de la columna `buttons` no la trae: viaja como `'[]'`, que es lo que la columna guarda por
+    // defecto (whatsapp_inbox#185).
     expect(veredicto()[0]?.payload).toMatchObject({
       name: 'recordatorio_cita',
       language: 'es',
@@ -647,6 +649,7 @@ describe('al ABRIR la pestaña, el veredicto de Meta se pone al día (whatsapp_i
       body: 'Te esperamos el {{1}}',
       footer: '',
       variables: '[]',
+      buttons: '[]',
     });
   });
 
@@ -1305,11 +1308,12 @@ describe('plantillas con botones o imagen en la cabecera (whatsapp_inbox#180)', 
     expect(puerta, 'se volvió a registrar en Meta sin sus botones').toHaveLength(0);
   });
 
-  // Each part locks the panel ON ITS OWN (rv-188): the templates the issue names — «Confirmar» /
-  // «Cambiar cita» — carry buttons and a plain TEXT header, and a guard that only looked at the
-  // header would let «Guardar» strip those buttons at Meta. Same for an image with no buttons.
+  // Each part locks the panel ON ITS OWN (rv-188). Since whatsapp_inbox#185 plain buttons are
+  // written from the panel, so what still locks it is a media header (#218) or a LINK WITH A
+  // VARIABLE (`…/{{1}}`), which needs an example and a value on every send that the panel has no
+  // field for: saving would register it without them.
   it.each([
-    ['solo botones, cabecera de texto', { header_format: 'TEXT', buttons: JSON.stringify(BOTONES) }],
+    ['un enlace con variable, cabecera de texto', { header_format: 'TEXT', buttons: JSON.stringify(BOTONES) }],
     ['solo imagen en la cabecera, sin botones', { header_format: 'IMAGE', buttons: '[]' }],
   ])('con %s el panel también queda en solo lectura', async (_caso, partes) => {
     const el = await abrir({ ...RICA, id: 't10', name: 'solo_una_parte', ...partes });
@@ -1432,5 +1436,206 @@ describe('plantillas con variables con NOMBRE, {{nombre}} (whatsapp_inbox#186)',
 
     expect(q(el, 'whatsapp-templates-submit')).toBeTruthy();
     expect(q(el, 'whatsapp-templates-named-variables')).toBeNull();
+  });
+});
+
+// whatsapp_inbox#185 — the owner adds quick reply, link and call buttons from the panel and they
+// reach Meta with the rest of the template. A template brought from WhatsApp Manager with plain
+// buttons is no longer read-only.
+describe('botones de respuesta rápida, enlace y llamada desde el panel (whatsapp_inbox#185)', () => {
+  type Boton = { type: string; text: string; url?: string; phone_number?: string };
+  type Panel = HTMLElement & {
+    shadowRoot: ShadowRoot;
+    editingButtons: Boton[];
+    addButton: () => void;
+    removeButton: (i: number) => void;
+    setButton: (i: number, patch: Partial<Boton>) => void;
+    startEdit: (r: Record<string, unknown>) => void;
+    createTemplate: (e: Event) => Promise<void>;
+    updateTemplate: () => Promise<void>;
+    updateComplete: Promise<unknown>;
+  };
+  const q = (el: Panel, id: string) => el.shadowRoot.querySelector(`[data-testid="${id}"]`);
+  const qa = (el: Panel, id: string) => [...el.shadowRoot.querySelectorAll(`[data-testid="${id}"]`)];
+  const CON_BOTONES = {
+    id: 't7', name: 'cita_confirmar', language: 'es', category: 'UTILITY', header: '',
+    body: 'Tu cita es el {{1}}', footer: '', variables: '["lunes"]', meta_template_id: '70',
+    meta_status: 'approved', meta_rejected_reason: '', is_active: 1, header_format: 'TEXT',
+    buttons: JSON.stringify([
+      { type: 'QUICK_REPLY', text: 'Confirmar' },
+      { type: 'QUICK_REPLY', text: 'Cambiar cita' },
+      { type: 'URL', text: 'Ver web', url: 'https://salon.example/reservas' },
+      { type: 'PHONE_NUMBER', text: 'Llamar', phone_number: '+34600111222' },
+    ]),
+  };
+
+  async function panel(): Promise<Panel> {
+    filas = [CON_BOTONES];
+    const el = (await montar()) as Panel;
+    const t = tabla(el)!;
+    t.open = () => {};
+    t.close = () => {};
+    return el;
+  }
+
+  async function pintar(el: Panel) {
+    await el.updateComplete;
+  }
+
+  it('en un alta se añaden botones de los tres tipos y cada uno pide lo suyo', async () => {
+    const el = await panel();
+    el.addButton();
+    el.addButton();
+    el.addButton();
+    el.setButton(0, { text: 'Confirmar' });
+    el.setButton(1, { type: 'URL', text: 'Ver web', url: 'https://salon.example' });
+    el.setButton(2, { type: 'PHONE_NUMBER', text: 'Llamar', phone_number: '+34600111222' });
+    await pintar(el);
+
+    const filasBoton = qa(el, 'whatsapp-templates-button-row');
+    expect(filasBoton, 'el alta no pinta el editor de botones').toHaveLength(3);
+    expect(filasBoton.map((f) => f.getAttribute('data-type'))).toEqual(['QUICK_REPLY', 'URL', 'PHONE_NUMBER']);
+    expect(qa(el, 'whatsapp-templates-button-url'), 'un botón de enlace no pide la dirección').toHaveLength(1);
+    expect(qa(el, 'whatsapp-templates-button-phone'), 'un botón de llamada no pide el número').toHaveLength(1);
+    expect(qa(el, 'whatsapp-templates-button-text')).toHaveLength(3);
+  });
+
+  it('guardar un alta con botones los guarda y los manda a Meta, y la respuesta viaja con ellos', async () => {
+    const el = await panel();
+    Object.assign(el, { newName: 'cita_confirmar', newBody: 'Tu cita' });
+    el.addButton();
+    el.setButton(0, { text: 'Confirmar' });
+    el.addButton();
+    el.setButton(1, { type: 'PHONE_NUMBER', text: 'Llamar', phone_number: '+34600111222' });
+    await el.createTemplate(new Event('submit'));
+
+    const esperado = JSON.stringify([
+      { type: 'QUICK_REPLY', text: 'Confirmar' },
+      { type: 'PHONE_NUMBER', text: 'Llamar', phone_number: '+34600111222' },
+    ]);
+    const alta = comandos.find((c) => c.name === 'whatsapp_inbox.templates.create');
+    expect(alta?.payload.buttons, 'el alta no guarda los botones en la fila').toBe(esperado);
+    expect(puerta[0]?.buttons, 'a Meta no le llegan los botones').toBe(esperado);
+    const respuesta = comandos.find((c) => c.name === 'whatsapp_inbox.templates.record_meta_answer');
+    expect(respuesta?.payload.buttons, 'la guarda de carrera no compara los botones').toBe(esperado);
+  });
+
+  it('sin botones viaja `[]`, como antes', async () => {
+    const el = await panel();
+    Object.assign(el, { newName: 'sin_botones', newBody: 'Hola' });
+    await el.createTemplate(new Event('submit'));
+
+    expect(comandos.find((c) => c.name === 'whatsapp_inbox.templates.create')?.payload.buttons).toBe('[]');
+    expect(puerta[0]?.buttons).toBe('[]');
+  });
+
+  it('las respuestas rápidas se agrupan solas: Meta rechaza enlaces y respuestas intercalados', async () => {
+    const el = await panel();
+    Object.assign(el, { newName: 'mezcla', newBody: 'Hola' });
+    el.addButton();
+    el.setButton(0, { text: 'Sí' });
+    el.addButton();
+    el.setButton(1, { type: 'URL', text: 'Web', url: 'https://s.example' });
+    el.addButton();
+    el.setButton(2, { text: 'No' });
+    await el.createTemplate(new Event('submit'));
+
+    const enviados = JSON.parse(String(puerta[0]?.buttons)) as Boton[];
+    expect(enviados.map((b) => b.text), 'se mandó un orden que Meta rechaza').toEqual(['Sí', 'No', 'Web']);
+  });
+
+  it('un botón sin texto, sin enlace o sin número no deja guardar: Meta lo rechazaría', async () => {
+    const el = await panel();
+    Object.assign(el, { newName: 'a_medias', newBody: 'Hola' });
+    el.addButton();
+    el.setButton(0, { type: 'URL', text: 'Web' });
+    await pintar(el);
+
+    expect(q(el, 'whatsapp-templates-submit')?.hasAttribute('disabled'), '«Añadir» se ofrece con un enlace vacío').toBe(true);
+    await el.createTemplate(new Event('submit'));
+    expect(comandos.filter((c) => c.name === 'whatsapp_inbox.templates.create'), 'se guardó con un botón a medias').toHaveLength(0);
+
+    el.setButton(0, { url: 'https://s.example' });
+    await pintar(el);
+    expect(q(el, 'whatsapp-templates-submit')?.hasAttribute('disabled')).toBe(false);
+  });
+
+  it('quitar un botón lo quita, y al llegar a diez ya no se ofrece añadir otro', async () => {
+    const el = await panel();
+    for (let i = 0; i < 10; i += 1) el.addButton();
+    await pintar(el);
+    expect(q(el, 'whatsapp-templates-button-add')?.hasAttribute('disabled'), 'se ofrece un undécimo botón').toBe(true);
+    el.addButton();
+    expect(el.editingButtons, 'se añadió un undécimo botón que Meta rechaza').toHaveLength(10);
+
+    el.removeButton(3);
+    await pintar(el);
+    expect(el.editingButtons).toHaveLength(9);
+    expect(q(el, 'whatsapp-templates-button-add')?.hasAttribute('disabled')).toBe(false);
+  });
+
+  it('cambiar el tipo deja solo lo que ese tipo lleva (un enlace no arrastra un teléfono)', async () => {
+    const el = await panel();
+    el.addButton();
+    el.setButton(0, { type: 'PHONE_NUMBER', text: 'Llamar', phone_number: '+34600111222' });
+    el.setButton(0, { type: 'URL' });
+    expect(el.editingButtons[0]).toEqual({ type: 'URL', text: 'Llamar', url: '' });
+    el.setButton(0, { type: 'QUICK_REPLY' });
+    expect(el.editingButtons[0]).toEqual({ type: 'QUICK_REPLY', text: 'Llamar' });
+  });
+
+  it('una traída de WhatsApp Manager con botones (sin variable en el enlace) ya se edita', async () => {
+    const el = await panel();
+    el.startEdit(CON_BOTONES);
+    await pintar(el);
+
+    expect(q(el, 'whatsapp-templates-submit'), 'la plantilla con botones sigue en solo lectura').toBeTruthy();
+    expect(q(el, 'whatsapp-templates-managed-in-meta')).toBeNull();
+    expect((q(el, 'whatsapp-templates-body') as HTMLElement & { disabled?: boolean })?.disabled).toBeFalsy();
+    expect(qa(el, 'whatsapp-templates-button-row'), 'sus botones no se cargan en el editor').toHaveLength(4);
+  });
+
+  it('editar sus botones los guarda y los vuelve a registrar en Meta', async () => {
+    const el = await panel();
+    el.startEdit(CON_BOTONES);
+    el.setButton(1, { text: 'Otra hora' });
+    await el.updateTemplate();
+
+    const update = comandos.find((c) => c.name === 'whatsapp_inbox.templates.update');
+    const guardados = JSON.parse(String(update?.payload.buttons)) as Boton[];
+    expect(guardados.map((b) => b.text)).toEqual(['Confirmar', 'Otra hora', 'Ver web', 'Llamar']);
+    expect(puerta[0]?.buttons, 'a Meta le llegan otros botones que a la fila').toBe(update?.payload.buttons);
+  });
+
+  it('abrir y guardar sin tocar nada manda los botones BYTE a BYTE: Meta no pierde la aprobación', async () => {
+    const el = await panel();
+    el.startEdit(CON_BOTONES);
+    await el.updateTemplate();
+
+    const update = comandos.find((c) => c.name === 'whatsapp_inbox.templates.update');
+    expect(update?.payload.buttons, 'un guardado sin cambios reescribe los botones y la plantilla vuelve a revisión').toBe(
+      CON_BOTONES.buttons,
+    );
+  });
+
+  it('el «+» después de editar una con botones empieza sin botones', async () => {
+    const el = await panel();
+    el.startEdit(CON_BOTONES);
+    tabla(el)!.dispatchEvent(new CustomEvent('primaryAction', { detail: {}, bubbles: true, composed: true }));
+    await new Promise((r) => setTimeout(r, 0));
+    await pintar(el);
+
+    expect(el.editingButtons, 'el alta hereda los botones de la plantilla anterior').toHaveLength(0);
+    expect(qa(el, 'whatsapp-templates-button-row')).toHaveLength(0);
+  });
+
+  it('una con imagen en la cabecera sigue en solo lectura (#218) y no pinta el editor', async () => {
+    const el = await panel();
+    el.startEdit({ ...CON_BOTONES, header_format: 'IMAGE' });
+    await pintar(el);
+
+    expect(q(el, 'whatsapp-templates-submit')).toBeNull();
+    expect(qa(el, 'whatsapp-templates-button-row'), 'se ofrece editar botones de una plantilla bloqueada').toHaveLength(0);
+    expect(qa(el, 'whatsapp-templates-button'), 'sus botones dejan de verse').toHaveLength(4);
   });
 });

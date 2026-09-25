@@ -9,7 +9,7 @@
 | **Receiving messages automatically** | ❌ No webhook and no declared network access to Meta |
 | **Auto-replies, greetings, out-of-hours messages** | ❌ Not here — what an automatic reply says is written in the flow that answers (Automations); the old settings that never sent anything were retired (#127) |
 | **Calling an LLM to parse a message** | ❌ Not here — the parsed data must arrive already parsed |
-| **Syncing template status with Meta** | ✅ Each time the Templates tab opens (never on a timer). A template deleted in WhatsApp Manager is marked «Deleted in WhatsApp Manager», not removed; one created there is imported with its text and verdict (#179) — image/video/document headers and quick reply, link and call buttons included (#180), and named body variables (`{{name}}`, #186), shown read-only in its panel — unless it uses a carousel, a limited-time offer, a copy-code or Flow button, a location header or a header variable — those are named in a notice |
+| **Syncing template status with Meta** | ✅ Each time the Templates tab opens (never on a timer). A template deleted in WhatsApp Manager is marked «Deleted in WhatsApp Manager», not removed; one created there is imported with its text and verdict (#179) — image/video/document headers and quick reply, link and call buttons included (#180, editable here since #185), and named body variables (`{{name}}`, #186), shown read-only in its panel — unless it uses a carousel, a limited-time offer, a copy-code or Flow button, a location header or a header variable — those are named in a notice |
 | **Per-employee routing** | ❌ Table exists; no command, no screen |
 | **Fulfilling a request** (status only) | ✅ Works |
 | **Ingesting a message and a request** | ✅ Works, when something calls it |
@@ -42,6 +42,7 @@ These fail as **silent no-ops**:
 | Account mode | `shared`, `per_employee` |
 | Approval mode | `auto`, `manual` |
 | Template category | `MARKETING`, `UTILITY`, `AUTHENTICATION` |
+| Template button | `QUICK_REPLY` (label only), `URL` (label + a fixed `http(s)://` address, no variable), `PHONE_NUMBER` (label + number with country code, `+34…`); none on an `AUTHENTICATION` template |
 | Template status at Meta | `not_sent`, `pending`, `approved`, `rejected`, `paused`, `disabled`, `deleted`; any other Meta code is shown as Meta words it |
 | Confidence score | clamped to 0–1 |
 | Free-tier monthly limit | 0 means no limit |
@@ -51,6 +52,7 @@ These fail as **silent no-ops**:
 | Limit | Value |
 |---|---|
 | Rows per page (conversations, messages, requests, templates) | 50 |
+| Buttons per template | 10 — at most 2 links and 1 call; label up to 25 characters; quick replies kept together (Meta's rule) |
 | Maximum rows a paginated request may ask for | 500 |
 | Requests per day per hub, by numbering | 9999 |
 | Conversations per contact | 1 — the ingest upserts by contact |
@@ -136,9 +138,10 @@ in the tab, or write a new one with a different name. The mark needs a fresh ans
 lists at least one template; with no WhatsApp number connected nothing is marked.
 
 **"A template I created in WhatsApp Manager is not in the list."** Open the Templates tab: it is
-brought in with its text, its media header kind and its quick reply, link and call buttons (#180). A
-template with buttons or a media header is read-only here: change its wording in WhatsApp Manager
-(«Guardar» would register it at Meta without them, and creating one here is ERPlora/whatsapp_inbox#185).
+brought in with its text, its media header kind and its quick reply, link and call buttons (#180).
+Plain buttons are edited here since #185. A template with a media header, or with a link button that
+carries a variable (`…/{{1}}`), is read-only here: change its wording in WhatsApp Manager («Guardar»
+would register it at Meta without them).
 If it uses a carousel, a limited-time offer, a copy-code or Flow button, a location header, named
 variables (`{{name}}` instead of `{{1}}`) or a variable in the header, it is named in a notice above
 the table instead; manage it in WhatsApp Manager. If you deleted it here before, it is not brought back.

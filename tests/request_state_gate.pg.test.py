@@ -271,6 +271,7 @@ TEMPLATE_PAYLOAD = {
     "body": "Tu mesa está lista",
     "footer": "",
     "variables": "[]",
+    "buttons": "[]",
     "is_active": 1,
 }
 

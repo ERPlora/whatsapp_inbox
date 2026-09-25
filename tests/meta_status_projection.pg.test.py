@@ -37,7 +37,7 @@ tonight» and «nobody receives it».
    every field, so «open it, read it, press Guardar» arrives as a full update whose values are the
    ones already stored — and until now that dropped the id Meta gave the template. Asserted in both
    directions and field by field: nothing changed (and `is_active` alone changed) keeps the id;
-   each of the seven fields Meta reviews, changed on its own, drops it.
+   each of the eight fields Meta reviews, changed on its own, drops it.
 5. **An EDIT does not claim a review Meta is not doing, and walks in through the `hub_id`
    gate** (whatsapp_inbox#87). Nothing in this
    module sends a template to Meta — the runtime door landed with ERPlora/hub#1610 (v1.1.18)
@@ -88,6 +88,7 @@ SEEDED_TEMPLATE = {
     "body": SEEDED_BODY,
     "footer": "",
     "variables": "[]",
+    "buttons": "[]",
 }
 
 
@@ -150,6 +151,7 @@ def create_binds(new_id, name, hub=HUB):
         "body": SEEDED_BODY,
         "footer": "",
         "variables": "[]",
+        "buttons": "[]",
     }
 
 
@@ -169,6 +171,7 @@ def update_binds(
         "body": body,
         "footer": "",
         "variables": "[]",
+        "buttons": "[]",
         "is_active": is_active,
     }
 
@@ -273,7 +276,7 @@ def check_tenancy(db, base):
 # What the seed leaves on `t-meta`: Meta looked at this text and said yes.
 META_ID = "1122334455"
 
-# The seven fields Meta re-reviews, each with a value that differs from the seed. `is_active` is
+# The eight fields Meta re-reviews (the buttons since whatsapp_inbox#185), each with a value that differs from the seed. `is_active` is
 # NOT here on purpose: it is this hub's own switch (whether the module uses the template) and Meta
 # has never seen it, so flipping it must not cost the approval.
 REVIEWED_FIELDS = {
@@ -284,6 +287,7 @@ REVIEWED_FIELDS = {
     "body": "Hola {{1}}, cambiamos la hora.",
     "footer": "Responde BAJA para no recibir mas",
     "variables": '["nombre"]',
+    "buttons": '[{"type":"QUICK_REPLY","text":"Confirmar"}]',
 }
 
 
@@ -343,7 +347,7 @@ def check_a_save_with_no_changes_keeps_metas_verdict(db, base):
     both halves are asserted here:
 
       · nothing changed, and `is_active` alone changed  → the id and the verdict SURVIVE;
-      · each of the seven fields Meta reviews, changed ON ITS OWN → the id is dropped.
+      · each of the eight fields Meta reviews, changed ON ITS OWN → the id is dropped.
 
     The per-field half is what stops the comparison from quietly losing a field: dropping `footer`
     from it would leave a save that rewrites the footer looking, to Meta, like a template that was
@@ -666,6 +670,33 @@ def check_metas_answer_lands_on_the_row(db, base):
             f"verdict on a text Meta never received."
         ]
 
+    # (3b) The same race when only the BUTTONS moved (whatsapp_inbox#185): they are part of the
+    #      text Meta reviews, so an answer about the old buttons must not land on the new ones.
+    problems += run_command(
+        db,
+        RECORD_COMMAND,
+        record_binds(
+            "t-new",
+            "111333",
+            "APPROVED",
+            reviewed={
+                "name": "mesa_lista",
+                "buttons": '[{"type":"QUICK_REPLY","text":"Ya no esta"}]',
+            },
+        ),
+    )
+    if problems:
+        return problems
+    got, error = raw_meta(db, "t-new")
+    if got is None:
+        return [f"could not read the row back: {error}"]
+    if got != "998877|REJECTED|INVALID_FORMAT":
+        return [
+            f"a verdict about buttons the row no longer holds LANDED: it reads {got!r}, not "
+            f"'998877|REJECTED|INVALID_FORMAT'. `commands/template_record_meta_answer.sql` must "
+            f"compare `buttons` too: Meta reviews them with the text."
+        ]
+
     # (4) A template the owner deleted while Meta was answering. Its row is still there — the
     #     delete is soft — and without the `is_deleted` gate the verdict would land on it, so a
     #     template nobody can see any more would sit in the table carrying Meta's approval. The
@@ -703,6 +734,62 @@ def check_metas_answer_lands_on_the_row(db, base):
         ]
     return []
 
+
+def check_buttons_are_stored_on_create(db, base):
+    """(8) a template created with buttons keeps them, and the list hands them back (#185).
+
+    The panel writes the buttons with the rest of the text; `templates.create` dropping them would
+    register a template at Meta with buttons the hub's row does not have, and the next «Guardar»
+    would strip them at Meta.
+    """
+    buttons = '[{"type":"QUICK_REPLY","text":"Confirmar"},{"type":"URL","text":"Web","url":"https://s.es"}]'
+    binds = create_binds("t-buttons", "con_botones")
+    binds["buttons"] = buttons
+    problems = run_command(db, CREATE_COMMAND, binds)
+    if problems:
+        return problems
+    got, error = rows(
+        db,
+        f"PREPARE b AS SELECT sub.buttons || '|' || sub.header_format FROM ({base}) sub "
+        "WHERE sub.id = 't-buttons';\n"
+        f"EXECUTE b({sql_literal(HUB)});\nDEALLOCATE b;",
+    )
+    if got is None:
+        return [f"`{LIST_QUERY}` did not run: {error}"]
+    if got != [f"{buttons}|TEXT"]:
+        return [
+            f"a template created with buttons lists {got!r}, not {[buttons + '|TEXT']!r}: "
+            f"`commands/template_create.sql` must store `:buttons`."
+        ]
+    return []
+
+
+def check_buttons_are_stored_on_update(db, base):
+    """(9) editing a template's buttons stores the new ones (#185).
+
+    The panel re-registers the template at Meta with the buttons it holds; `templates.update`
+    leaving the old ones on the row would make the next open show — and the next save send — the
+    buttons Meta no longer has.
+    """
+    buttons = '[{"type":"PHONE_NUMBER","text":"Llamar","phone_number":"+34600111222"}]'
+    binds = update_binds("t-buttons", "con_botones")
+    binds["buttons"] = buttons
+    problems = run_command(db, UPDATE_COMMAND, binds)
+    if problems:
+        return problems
+    got, error = rows(
+        db,
+        f"PREPARE b AS SELECT sub.buttons FROM ({base}) sub WHERE sub.id = 't-buttons';\n"
+        f"EXECUTE b({sql_literal(HUB)});\nDEALLOCATE b;",
+    )
+    if got is None:
+        return [f"`{LIST_QUERY}` did not run: {error}"]
+    if got != [buttons]:
+        return [
+            f"a template whose buttons were edited lists {got!r}, not {[buttons]!r}: "
+            f"`commands/template_update.sql` must SET `buttons = :buttons`."
+        ]
+    return []
 
 def main():
     if LIST_QUERY not in MANIFEST.get("queries", {}):
@@ -751,6 +838,10 @@ def main():
             )
         if not problems:
             problems += check_metas_answer_lands_on_the_row(db, base)
+        if not problems:
+            problems += check_buttons_are_stored_on_create(db, base)
+        if not problems:
+            problems += check_buttons_are_stored_on_update(db, base)
 
         for problem in problems:
             print(f"FAIL {LIST_QUERY}\n    {problem}")
@@ -762,7 +853,7 @@ def main():
             "Meta never received arrives as `not_sent`, Meta's own UPPERCASE arrives lowercased, "
             "both are filterable server-side, an edit goes back to `not_sent` instead of claiming a "
             "review Meta is not doing, a save that changed nothing keeps Meta's approval (each of "
-            "the seven reviewed fields drops it on its own), and no hub sees or edits another "
+            "the eight reviewed fields drops it on its own), and no hub sees or edits another "
             "hub's templates — and what the door brings back from Meta LANDS on the row, reason "
             "included and projected, unless the row has moved on to a text Meta never reviewed"
         )
