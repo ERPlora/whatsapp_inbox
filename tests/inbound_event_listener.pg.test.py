@@ -917,7 +917,12 @@ def check_a_history_message_without_a_usable_time_falls_back(db, command):
     )
     nulled = served_payload("wamid.T92G2", "sin objeto", now, source="history")
     nulled["message"] = None
-    for payload in (garbage, nulled):
+    # Each guard on its own: short but not digits, and digits but wider than epoch seconds can be.
+    wordy = served_payload("wamid.T92G3", "palabra", now, source="history", timestamp="ayer")
+    too_wide = served_payload(
+        "wamid.T92G4", "demasiado", now, source="history", timestamp="123456789012"
+    )
+    for payload in (garbage, nulled, wordy, too_wide):
         problems += run_listener(db, command, payload, hub_id=hub, now=now)
     if problems:
         return problems
@@ -926,7 +931,7 @@ def check_a_history_message_without_a_usable_time_falls_back(db, command):
         "SELECT string_agg(wa_message_id || '@' || created_at, ' / ' ORDER BY wa_message_id)"
         f" FROM whatsapp_inbox_message WHERE hub_id = {sql_literal(hub)};",
     )
-    expected = f"wamid.T92G1@{now} / wamid.T92G2@{now}"
+    expected = " / ".join(f"wamid.T92G{n}@{now}" for n in (1, 2, 3, 4))
     if stamped != expected:
         problems.append(
             f"backlog messages without a usable time are dated [{stamped}], expected [{expected}]"
