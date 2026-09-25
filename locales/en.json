@@ -175,7 +175,7 @@
     "buttonPhone": "Calls the number",
     "templateManagedInMeta": "This template has buttons or an image, video or document header, so its wording is changed in WhatsApp Manager. Open this tab again to see what Meta says.",
     "templateNamedVariablesInMeta": "This template uses named variables ({{name}}), which ERPlora cannot register at Meta yet, so its wording is changed in WhatsApp Manager. Open this tab again to see what Meta says.",
-    "metaOnlyTemplates": "These WhatsApp Manager templates cannot be brought into this list yet (they use a carousel, a limited-time offer, a copy-code or WhatsApp Flow button, a location header, named variables, or a variable in the header). Manage them in WhatsApp Manager: {names}",
+    "metaOnlyTemplates": "These WhatsApp Manager templates cannot be brought into this list yet (they use a carousel, a limited-time offer, a copy-code or WhatsApp Flow button, a location header, or a variable in the header). Manage them in WhatsApp Manager: {names}",
     "doorRefusal": {
       "invalid_name": "Meta did not accept the name. Use lowercase letters, numbers and underscores only — no spaces or accents — and try again.",
       "invalid_category": "Meta did not accept the category. Pick Utility, Marketing or Authentication and send it again.",
