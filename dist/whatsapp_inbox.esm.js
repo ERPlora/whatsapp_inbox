@@ -3823,6 +3823,14 @@ var es_default = {
     usesNeedsNewerHub: "Este hub es demasiado antiguo para activarlo desde aqu\xED. Actualiza el hub.",
     usesNeedBookingModule: "Instala Citas o Reservas para que WhatsApp reserve solo",
     usesNeedNewerBookingModule: "Actualiza Citas o Reservas para que WhatsApp reserve solo",
+    usesNeedMissingModule: "\xAB{use}\xBB necesita la aplicaci\xF3n {module}, y no est\xE1 instalada. Inst\xE1lala desde Aplicaciones.",
+    usesNeedPausedModule: "\xAB{use}\xBB necesita la aplicaci\xF3n {module}, y est\xE1 en pausa. React\xEDvala en Aplicaciones.",
+    usesNeedUpdatedModule: "\xAB{use}\xBB necesita la aplicaci\xF3n {module} en la versi\xF3n {floor} o posterior, y este hub tiene la {installed}. Actual\xEDzala en Aplicaciones.",
+    neighbourAppointments: "Citas",
+    neighbourCustomers: "Clientes",
+    neighbourReservations: "Reservas",
+    neighbourServices: "Servicios",
+    neighbourStaff: "Personal",
     activateForbidden: "Solo un due\xF1o o un administrador puede activarlo.",
     errActivate: "No se pudo activar. No se ha cambiado nada: int\xE9ntalo otra vez.",
     errTemplates: "No hemos podido saber qu\xE9 hay activo ahora mismo. Vuelve a cargar la pantalla.",
@@ -4014,6 +4022,14 @@ var en_default = {
     usesNeedsNewerHub: "This hub is too old to turn this on from here. Update the hub.",
     usesNeedBookingModule: "Install Appointments or Reservations so WhatsApp can book on its own",
     usesNeedNewerBookingModule: "Update Appointments or Reservations so WhatsApp can book on its own",
+    usesNeedMissingModule: "\u201C{use}\u201D needs the {module} app, and it is not installed. Install it from Apps.",
+    usesNeedPausedModule: "\u201C{use}\u201D needs the {module} app, and it is paused. Turn it back on in Apps.",
+    usesNeedUpdatedModule: "\u201C{use}\u201D needs the {module} app at version {floor} or later, and this hub has {installed}. Update it in Apps.",
+    neighbourAppointments: "Appointments",
+    neighbourCustomers: "Customers",
+    neighbourReservations: "Reservations",
+    neighbourServices: "Services",
+    neighbourStaff: "Staff",
     activateForbidden: "Only an owner or an administrator can turn this on.",
     errActivate: "It could not be turned on. Nothing was changed \u2014 try again.",
     errTemplates: "We could not find out what is already turned on. Reload the screen.",
@@ -4867,11 +4883,23 @@ function templateState(installed) {
 }
 var AUTOMATIONS_MODULE = "flows";
 var probeAutomations = (client) => client.queryOptional("flows.drafts.list");
+var NEIGHBOUR_NAME_KEYS = {
+  appointments: "ui.neighbourAppointments",
+  customers: "ui.neighbourCustomers",
+  reservations: "ui.neighbourReservations",
+  services: "ui.neighbourServices",
+  staff: "ui.neighbourStaff"
+};
 var APPS_PATH = "/apps";
 var AUTOMATIONS_PATH = `/m/${AUTOMATIONS_MODULE}/automations`;
 
 // ui/components/erp-whatsapp-inbox-settings/erp-whatsapp-inbox-settings.ts
 var CATALOG2 = { es: es_default, en: en_default };
+var DISCARD_SENTENCE = {
+  template_floor_module_missing: "ui.usesNeedMissingModule",
+  template_floor_module_paused: "ui.usesNeedPausedModule",
+  template_floor_module_too_old: "ui.usesNeedUpdatedModule"
+};
 function erplora2() {
   const c5 = globalThis.erplora;
   if (!c5) throw new Error("erplora SDK no inicializado por el shell");
@@ -4884,11 +4912,27 @@ function door() {
   if (typeof flows?.activateTemplate !== "function") return null;
   return flows;
 }
+function discardReason(use, discards, t5) {
+  for (const d3 of discards) {
+    if (d3.family !== use.family || !d3.requires) continue;
+    const sentence = DISCARD_SENTENCE[d3.code];
+    const nameKey = NEIGHBOUR_NAME_KEYS[d3.requires.module];
+    if (!sentence || !nameKey) continue;
+    return t5(sentence, {
+      use: t5(use.nameKey),
+      module: t5(nameKey),
+      floor: d3.requires.floor,
+      installed: d3.requires.installed ?? ""
+    });
+  }
+  return null;
+}
 var ErpWhatsappInboxSettings = class extends i3 {
   constructor() {
     super(...arguments);
     this.built = {};
     this.templatesFailed = false;
+    this.discards = [];
     this.missing = /* @__PURE__ */ new Set();
     this.loaded = false;
     this.asking = "";
@@ -4950,6 +4994,14 @@ var ErpWhatsappInboxSettings = class extends i3 {
         this.templatesFailed = true;
         this.built = {};
       }
+      if (typeof flows.templateDiscards === "function") {
+        try {
+          this.discards = await flows.templateDiscards();
+        } catch (e5) {
+          console.warn(`[${MODULE_ID}] could not read why the hub left recipes out`, e5);
+          this.discards = [];
+        }
+      }
     }
     const missing = /* @__PURE__ */ new Set();
     await Promise.all(
@@ -4980,8 +5032,8 @@ var ErpWhatsappInboxSettings = class extends i3 {
       this.policy = { ...this.policy, [use.family]: use.policy.defaultOn };
     }
   }
-  t(key) {
-    return erplora2().t(CATALOG2, key);
+  t(key, params) {
+    return erplora2().t(CATALOG2, key, params);
   }
   go(path) {
     window.history.pushState({}, "", path);
@@ -5120,15 +5172,21 @@ var ErpWhatsappInboxSettings = class extends i3 {
     }
     const installed = WHATSAPP_USES.filter((use) => !this.missing.has(use.module));
     const available = installed.filter((use) => this.built[use.family] !== void 0);
+    const blocked = installed.filter((use) => this.built[use.family] === void 0).map((use) => ({ use, reason: discardReason(use, this.discards, (k2, p4) => this.t(k2, p4)) })).filter((b3) => b3.reason !== null);
+    const reasons = blocked.map(
+      ({ use, reason }) => b2`<ok-inline-feedback data-testid=${`whatsapp-settings-uses-blocked-${use.family}`} tone="warning">${reason}</ok-inline-feedback>`
+    );
+    const goToApps = b2`<ion-button data-testid="whatsapp-settings-uses-go-to-apps" size="small" @click=${() => this.go(APPS_PATH)}>
+      ${this.t("ui.usesGoToApps")}
+    </ion-button>`;
     if (available.length === 0) {
+      if (blocked.length > 0) return b2`${heading}${reasons}${goToApps}`;
       const why = installed.length === 0 ? "ui.usesNeedBookingModule" : "ui.usesNeedNewerBookingModule";
       return b2`${heading}
         <ok-inline-feedback data-testid="whatsapp-settings-uses-need-module" tone="warning">${this.t(why)}</ok-inline-feedback>
-        <ion-button data-testid="whatsapp-settings-uses-go-to-apps" size="small" @click=${() => this.go(APPS_PATH)}>
-          ${this.t("ui.usesGoToApps")}
-        </ion-button>`;
+        ${goToApps}`;
     }
-    return b2`${heading}${available.map((use) => this.renderUse(use))}`;
+    return b2`${heading}${available.map((use) => this.renderUse(use))}${blocked.length > 0 ? b2`${reasons}${goToApps}` : A}`;
   }
   renderUse(use) {
     const stateOf = templateState(this.built[use.family]);
@@ -5243,6 +5301,9 @@ __decorateClass([
 __decorateClass([
   r5()
 ], ErpWhatsappInboxSettings.prototype, "templatesFailed", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxSettings.prototype, "discards", 2);
 __decorateClass([
   r5()
 ], ErpWhatsappInboxSettings.prototype, "missing", 2);

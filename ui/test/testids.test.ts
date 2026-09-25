@@ -110,6 +110,7 @@ const COVERED: Record<
       'whatsapp-settings-policy-error-',
       'whatsapp-settings-policy-review-',
       'whatsapp-settings-state-',
+      'whatsapp-settings-uses-blocked-',
     ],
   },
   // Meta's message templates, projected inside Settings under «Advanced». One panel IS the add and
