@@ -3885,6 +3885,7 @@ var es_default = {
     buttonUrl: "Abre un enlace",
     buttonPhone: "Llama al n\xFAmero",
     templateManagedInMeta: "Esta plantilla lleva botones o una imagen, v\xEDdeo o documento en la cabecera, as\xED que su texto se cambia en WhatsApp Manager. Al volver a abrir esta pesta\xF1a ver\xE1s lo que diga Meta.",
+    templateNamedVariablesInMeta: "Esta plantilla usa variables con nombre ({{nombre}}), que ERPlora a\xFAn no puede registrar en Meta, as\xED que su texto se cambia en WhatsApp Manager. Al volver a abrir esta pesta\xF1a ver\xE1s lo que diga Meta.",
     metaOnlyTemplates: "Estas plantillas de WhatsApp Manager todav\xEDa no se pueden traer a esta lista (llevan un carrusel, una oferta por tiempo limitado, un bot\xF3n de copiar c\xF3digo o de WhatsApp Flow, una ubicaci\xF3n en la cabecera, variables con nombre o una variable en la cabecera). Gesti\xF3nalas en WhatsApp Manager: {names}",
     doorRefusal: {
       invalid_name: "Meta no ha aceptado el nombre. Usa solo min\xFAsculas, n\xFAmeros y guiones bajos \u2014sin espacios ni acentos\u2014 y vuelve a intentarlo.",
@@ -4098,6 +4099,7 @@ var en_default = {
     buttonUrl: "Opens a link",
     buttonPhone: "Calls the number",
     templateManagedInMeta: "This template has buttons or an image, video or document header, so its wording is changed in WhatsApp Manager. Open this tab again to see what Meta says.",
+    templateNamedVariablesInMeta: "This template uses named variables ({{name}}), which ERPlora cannot register at Meta yet, so its wording is changed in WhatsApp Manager. Open this tab again to see what Meta says.",
     metaOnlyTemplates: "These WhatsApp Manager templates cannot be brought into this list yet (they use a carousel, a limited-time offer, a copy-code or WhatsApp Flow button, a location header, named variables, or a variable in the header). Manage them in WhatsApp Manager: {names}",
     doorRefusal: {
       invalid_name: "Meta did not accept the name. Use lowercase letters, numbers and underscores only \u2014 no spaces or accents \u2014 and try again.",
@@ -5683,8 +5685,9 @@ var text = (value) => typeof value === "string" ? value : "";
 function placeholders(value) {
   return new Set([...value.matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map((m4) => m4[1])).size;
 }
-function hasNamedPlaceholders(value) {
-  return [...value.matchAll(/\{\{\s*([^{}]*?)\s*\}\}/g)].some((m4) => !/^\d+$/.test(m4[1]));
+function namedVariables(value) {
+  const names = [...value.matchAll(/\{\{\s*([^{}]*?)\s*\}\}/g)].map((m4) => m4[1]);
+  return [...new Set(names.filter((name) => !/^\d+$/.test(name)))];
 }
 function buttonsFromMeta(raw) {
   if (!Array.isArray(raw) || raw.length === 0) return null;
@@ -5725,6 +5728,7 @@ function templateFromMeta(template) {
   let body = "";
   let footer = "";
   let examples = [];
+  let named = [];
   for (const raw of template.components) {
     if (!raw || typeof raw !== "object") return refused;
     const part = raw;
@@ -5736,15 +5740,16 @@ function templateFromMeta(template) {
         header = "";
       } else if (format === "TEXT") {
         header = text(part.text);
-        if (placeholders(header) > 0 || hasNamedPlaceholders(header)) return refused;
+        if (placeholders(header) > 0 || namedVariables(header).length > 0) return refused;
       } else {
         return refused;
       }
     } else if (type === "BODY") {
       body = text(part.text);
-      const example = part.example?.body_text;
-      const first = Array.isArray(example) ? example[0] : void 0;
+      const example = part.example;
+      const first = Array.isArray(example?.body_text) ? example.body_text[0] : void 0;
       examples = Array.isArray(first) ? first : [];
+      named = Array.isArray(example?.body_text_named_params) ? example.body_text_named_params : [];
     } else if (type === "FOOTER") {
       footer = text(part.text);
     } else if (type === "BUTTONS") {
@@ -5755,11 +5760,21 @@ function templateFromMeta(template) {
       return refused;
     }
   }
-  if (!body.trim() || hasNamedPlaceholders(body)) return refused;
-  const variables = Array.from(
-    { length: placeholders(body) },
-    (_2, i7) => text(examples[i7]).trim() || `var${i7 + 1}`
-  );
+  if (!body.trim()) return refused;
+  const names = namedVariables(body);
+  let variables;
+  if (names.length === 0) {
+    variables = Array.from({ length: placeholders(body) }, (_2, i7) => text(examples[i7]).trim() || `var${i7 + 1}`);
+  } else {
+    if (placeholders(body) > 0) return refused;
+    const byName = /* @__PURE__ */ new Map();
+    for (const item of named) {
+      const param = item ?? {};
+      const key = text(param.param_name).trim();
+      if (key && !byName.has(key)) byName.set(key, text(param.example).trim());
+    }
+    variables = names.map((name2) => byName.get(name2) || name2);
+  }
   return {
     ok: true,
     fields: {
@@ -5897,7 +5912,13 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
    *  those parts yet — saving would strip them at Meta. It is edited in WhatsApp Manager and the
    *  tab brings Meta's verdict back on the next open. */
   get managedInMeta() {
-    return !!this.editingId && (this.editingHeaderFormat !== "TEXT" || this.editingButtons.length > 0);
+    return !!this.editingId && (this.editingHeaderFormat !== "TEXT" || this.editingButtons.length > 0 || this.hasNamedVariables);
+  }
+  /** A body with NAMED variables (`{{nombre}}`, whatsapp_inbox#186) locks the panel too: the SaaS
+   *  registers `{{1}}…{{n}}` only, so «Guardar» would be refused (`missing_example`) until it
+   *  sends Meta `parameter_format: NAMED`. */
+  get hasNamedVariables() {
+    return !!this.editingId && namedVariables(this.newBody).length > 0;
   }
   get rowActions() {
     const t5 = (k2) => erplora4().t(CATALOG4, k2);
@@ -6277,7 +6298,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     </div>`;
   }
   /** The media header and the buttons of a template brought from WhatsApp Manager, and why its
-   *  text is not saved from here (whatsapp_inbox#180). Nothing for a text-only template. */
+   *  text is not saved from here (whatsapp_inbox#180, #186). Nothing for a text-only template. */
   renderRichParts() {
     if (!this.managedInMeta) return A;
     const t5 = (k2) => erplora4().t(CATALOG4, k2);
@@ -6293,7 +6314,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
                 </li>`
     )}
             </ul>` : A}
-      <p data-testid="whatsapp-templates-managed-in-meta">${t5("ui.templateManagedInMeta")}</p>
+      ${this.hasNamedVariables ? b2`<p data-testid="whatsapp-templates-named-variables">${t5("ui.templateNamedVariablesInMeta")}</p>` : b2`<p data-testid="whatsapp-templates-managed-in-meta">${t5("ui.templateManagedInMeta")}</p>`}
     </div>`;
   }
   renderDeleteConfirm() {
