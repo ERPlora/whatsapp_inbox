@@ -14,7 +14,7 @@ import {
   metaTemplateView,
 } from '../../lib/meta-template-status';
 import type { MetaTemplateView } from '../../lib/meta-template-status';
-import { templateFromMeta } from '../../lib/meta-template-import';
+import { namedVariables, templateFromMeta } from '../../lib/meta-template-import';
 import type { TemplateButton } from '../../lib/meta-template-import';
 const CATALOG: Record<string, unknown> = { es: esLocale, en: enLocale };
 
@@ -232,9 +232,10 @@ export class ErpWhatsappInboxTemplates extends LitElement {
 
   /** Templates Meta holds that this hub could NOT bring in (whatsapp_inbox#140, #179), as
    *  `name (language)`, the two halves of Meta's identity: parts this module has no field for
-   *  (a carousel, a copy-code or Flow button, a location header, header or named variables), no
-   *  text from the door, or a failed write. The ones that fit — media headers and quick reply, link
-   *  and call buttons included since whatsapp_inbox#180 — are imported and never listed here. */
+   *  (a carousel, a copy-code or Flow button, a location header, header variables), no text from
+   *  the door, or a failed write. The ones that fit — media headers and quick reply, link and call
+   *  buttons included since whatsapp_inbox#180, named body variables since #186 — are imported and
+   *  never listed here. */
   @state() metaOnly: string[] = [];
 
   /** Meta's verdict on the template being edited, and the move it asks for. `null` while the panel
@@ -265,7 +266,17 @@ export class ErpWhatsappInboxTemplates extends LitElement {
    *  those parts yet — saving would strip them at Meta. It is edited in WhatsApp Manager and the
    *  tab brings Meta's verdict back on the next open. */
   private get managedInMeta(): boolean {
-    return !!this.editingId && (this.editingHeaderFormat !== 'TEXT' || this.editingButtons.length > 0);
+    return (
+      !!this.editingId &&
+      (this.editingHeaderFormat !== 'TEXT' || this.editingButtons.length > 0 || this.hasNamedVariables)
+    );
+  }
+
+  /** A body with NAMED variables (`{{nombre}}`, whatsapp_inbox#186) locks the panel too: the SaaS
+   *  registers `{{1}}…{{n}}` only, so «Guardar» would be refused (`missing_example`) until it
+   *  sends Meta `parameter_format: NAMED`. */
+  private get hasNamedVariables(): boolean {
+    return !!this.editingId && namedVariables(this.newBody).length > 0;
   }
 
   private editingRest: Pick<Template, 'header' | 'footer' | 'variables' | 'is_active'> = {
@@ -729,7 +740,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
   }
 
   /** The media header and the buttons of a template brought from WhatsApp Manager, and why its
-   *  text is not saved from here (whatsapp_inbox#180). Nothing for a text-only template. */
+   *  text is not saved from here (whatsapp_inbox#180, #186). Nothing for a text-only template. */
   private renderRichParts() {
     if (!this.managedInMeta) return nothing;
     const t = (k: string): string => erplora().t(CATALOG, k);
@@ -749,7 +760,9 @@ export class ErpWhatsappInboxTemplates extends LitElement {
               )}
             </ul>`
         : nothing}
-      <p data-testid="whatsapp-templates-managed-in-meta">${t('ui.templateManagedInMeta')}</p>
+      ${this.hasNamedVariables
+        ? html`<p data-testid="whatsapp-templates-named-variables">${t('ui.templateNamedVariablesInMeta')}</p>`
+        : html`<p data-testid="whatsapp-templates-managed-in-meta">${t('ui.templateManagedInMeta')}</p>`}
     </div>`;
   }
 

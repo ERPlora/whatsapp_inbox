@@ -9,13 +9,13 @@
 | **Receiving messages automatically** | ❌ No webhook and no declared network access to Meta |
 | **Auto-replies, greetings, out-of-hours messages** | ❌ Configurable, never sent |
 | **Calling an LLM to parse a message** | ❌ Not here — the parsed data must arrive already parsed |
-| **Syncing template status with Meta** | ✅ Each time the Templates tab opens (never on a timer). A template deleted in WhatsApp Manager is marked «Deleted in WhatsApp Manager», not removed; one created there is imported with its text and verdict (#179) — image/video/document headers and quick reply, link and call buttons included (#180), shown read-only in its panel — unless it uses a carousel, a limited-time offer, a copy-code or Flow button, a location header, named variables or a header variable — those are named in a notice |
+| **Syncing template status with Meta** | ✅ Each time the Templates tab opens (never on a timer). A template deleted in WhatsApp Manager is marked «Deleted in WhatsApp Manager», not removed; one created there is imported with its text and verdict (#179) — image/video/document headers and quick reply, link and call buttons included (#180), and named body variables (`{{name}}`, #186), shown read-only in its panel — unless it uses a carousel, a limited-time offer, a copy-code or Flow button, a location header or a header variable — those are named in a notice |
 | **Per-employee routing** | ❌ Table exists; no command, no screen |
 | **Fulfilling a request** (status only) | ✅ Works |
 | **Ingesting a message and a request** | ✅ Works, when something calls it |
 | **Approve / reject / delete a request** | ✅ Works |
 | **Templates and settings CRUD** | ✅ Works |
-| **Knowing whose a conversation is** | ✅ Automatic when the number is on a customer card, typed any way (`+34 600 111 222`, `0034…`, or `600 111 222` without the country code, #162; 7 digits at least); only fills an empty link. A customer filed (or whose phone is corrected) after she wrote gets her conversation when the card is saved (#160); a conversation from before is linked by a background sweep a few minutes after the update, in batches of 200 every 15 minutes (#163) |
+| **Knowing whose a conversation is** | ✅ Automatic when the number is on a customer card, typed any way (`+34 600 111 222`, `0034…`, or `600 111 222` without the country code, #162; 7 digits at least). A card without a prefix is a number of the business's country (the hub's country setting): the same digits from another country's prefix are somebody else and are not linked to her (#167); only fills an empty link. A customer filed (or whose phone is corrected) after she wrote gets her conversation when the card is saved (#160); a conversation from before is linked by a background sweep a few minutes after the update, in batches of 200 every 15 minutes (#163) |
 
 ## Errors and refusals
 
