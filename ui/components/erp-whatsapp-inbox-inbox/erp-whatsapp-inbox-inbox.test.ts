@@ -504,4 +504,91 @@ describe('the thread SHOWS what the customer sent (whatsapp_inbox#192)', () => {
     (el as unknown as { closeDetail: () => void }).closeDetail();
     expect(revocadas, 'the photo stays in memory after the thread is closed').toContain(src);
   });
+
+  // The photo in the bubble is a thumbnail; a tap opens it LARGE, like WhatsApp Web, Messenger,
+  // Front or Zendesk do — a detail on a nail or a hair colour is not readable at bubble size.
+  const visor = (el: HTMLElement & { shadowRoot: ShadowRoot }) =>
+    el.shadowRoot.querySelector('ok-lightbox') as (HTMLElement & {
+      open: boolean;
+      index: number;
+      items: { src: string; alt?: string; type?: string }[];
+      labels: Record<string, string>;
+    }) | null;
+
+  it('tapping the photo opens it large, with the same picture and its caption', async () => {
+    conPuerta();
+    hiloDelHub = [FOTO];
+    const el = await montar();
+    await abrirConversacion(el);
+    await esperar(el);
+    expect(visor(el)?.open ?? false, 'the viewer is open before anyone taps').toBe(false);
+
+    const abrir = burbuja(el).querySelector('[data-testid="whatsapp-inbox-media-open"]') as HTMLElement;
+    expect(abrir, 'the photo is not a door to see it large').toBeTruthy();
+    expect(abrir.querySelector('img'), 'the door is not the photo itself').toBeTruthy();
+    abrir.click();
+    await esperar(el);
+
+    const v = visor(el);
+    expect(v, 'no viewer').toBeTruthy();
+    expect(v!.open, 'tapping the photo did not open it large').toBe(true);
+    const src = burbuja(el).querySelector('img')!.getAttribute('src');
+    expect(v!.items[v!.index]).toEqual({ src, alt: 'mi pelo ahora', type: 'img' });
+  });
+
+  it('the viewer speaks the hub language, not the component\'s English defaults', async () => {
+    conPuerta();
+    hiloDelHub = [FOTO];
+    const el = await montar();
+    await abrirConversacion(el);
+    await esperar(el);
+    (burbuja(el).querySelector('[data-testid="whatsapp-inbox-media-open"]') as HTMLElement).click();
+    await esperar(el);
+    expect(visor(el)!.labels).toEqual({
+      prev: 'ui.viewerPrev',
+      next: 'ui.viewerNext',
+      close: 'ui.viewerClose',
+      download: 'ui.viewerDownload',
+      fullscreen: 'ui.viewerFullscreen',
+      exitFullscreen: 'ui.viewerExitFullscreen',
+    });
+  });
+
+  it('with several photos in the thread, the viewer opens on the one tapped and can page through all', async () => {
+    conPuerta();
+    const OTRA = adjunto('p2', 'image', { id: 'media-9', mime_type: 'image/jpeg' });
+    hiloDelHub = [FOTO, MESSAGES[1], OTRA];
+    const el = await montar();
+    await abrirConversacion(el);
+    await esperar(el);
+    (burbuja(el, 2).querySelector('[data-testid="whatsapp-inbox-media-open"]') as HTMLElement).click();
+    await esperar(el);
+    const v = visor(el)!;
+    expect(v.items.map((i) => i.src)).toEqual([
+      burbuja(el, 0).querySelector('img')!.getAttribute('src'),
+      burbuja(el, 2).querySelector('img')!.getAttribute('src'),
+    ]);
+    expect(v.index, 'it opened on another photo').toBe(1);
+  });
+
+  it('closing the viewer goes back to the thread, and closing the thread closes the viewer', async () => {
+    conPuerta();
+    hiloDelHub = [FOTO];
+    const el = await montar();
+    await abrirConversacion(el);
+    await esperar(el);
+    const abrir = () => (burbuja(el).querySelector('[data-testid="whatsapp-inbox-media-open"]') as HTMLElement).click();
+    abrir();
+    await esperar(el);
+    visor(el)!.dispatchEvent(new CustomEvent('ok-close', { bubbles: true, composed: true }));
+    await esperar(el);
+    expect(visor(el)?.open ?? false, 'the viewer stays open after closing it').toBe(false);
+    expect(burbuja(el).querySelector('img'), 'closing the viewer lost the thread').toBeTruthy();
+
+    abrir();
+    await esperar(el);
+    (el as unknown as { closeDetail: () => void }).closeDetail();
+    await esperar(el);
+    expect(visor(el)?.open ?? false, 'the viewer outlives the thread it belongs to').toBe(false);
+  });
 });

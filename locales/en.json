@@ -179,7 +179,14 @@
     "mediaPlay": "Play",
     "mediaDownload": "Download",
     "mediaOpen": "Open",
-    "threadRepliesElsewhere": "Replies are not sent from this screen: answer from WhatsApp on your phone, or let an automation reply."
+    "threadRepliesElsewhere": "Replies are not sent from this screen: answer from WhatsApp on your phone, or let an automation reply.",
+    "viewerOpen": "See the photo large",
+    "viewerPrev": "Previous photo",
+    "viewerNext": "Next photo",
+    "viewerClose": "Close",
+    "viewerDownload": "Download",
+    "viewerFullscreen": "Full screen",
+    "viewerExitFullscreen": "Exit full screen"
   },
   "errors": {
     "whatsapp_inbox.conversation_not_found": "That conversation does not exist in this business.",

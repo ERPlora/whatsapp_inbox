@@ -180,7 +180,14 @@
     "mediaPlay": "Reproducir",
     "mediaDownload": "Descargar",
     "mediaOpen": "Abrir",
-    "threadRepliesElsewhere": "Desde esta pantalla no se contesta: responde desde el WhatsApp de tu móvil o deja que conteste una automatización."
+    "threadRepliesElsewhere": "Desde esta pantalla no se contesta: responde desde el WhatsApp de tu móvil o deja que conteste una automatización.",
+    "viewerOpen": "Ver la foto en grande",
+    "viewerPrev": "Foto anterior",
+    "viewerNext": "Foto siguiente",
+    "viewerClose": "Cerrar",
+    "viewerDownload": "Descargar",
+    "viewerFullscreen": "Pantalla completa",
+    "viewerExitFullscreen": "Salir de pantalla completa"
   },
   "errors": {
     "whatsapp_inbox.conversation_not_found": "Esa conversación no existe en este negocio.",
