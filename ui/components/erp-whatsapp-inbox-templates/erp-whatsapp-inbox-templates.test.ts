@@ -1305,6 +1305,26 @@ describe('plantillas con botones o imagen en la cabecera (whatsapp_inbox#180)', 
     expect(puerta, 'se volvió a registrar en Meta sin sus botones').toHaveLength(0);
   });
 
+  // Each part locks the panel ON ITS OWN (rv-188): the templates the issue names — «Confirmar» /
+  // «Cambiar cita» — carry buttons and a plain TEXT header, and a guard that only looked at the
+  // header would let «Guardar» strip those buttons at Meta. Same for an image with no buttons.
+  it.each([
+    ['solo botones, cabecera de texto', { header_format: 'TEXT', buttons: JSON.stringify(BOTONES) }],
+    ['solo imagen en la cabecera, sin botones', { header_format: 'IMAGE', buttons: '[]' }],
+  ])('con %s el panel también queda en solo lectura', async (_caso, partes) => {
+    const el = await abrir({ ...RICA, id: 't10', name: 'solo_una_parte', ...partes });
+
+    expect(q(el, 'whatsapp-templates-submit'), '«Guardar» la registraría en Meta sin esa parte').toBeNull();
+    expect(q(el, 'whatsapp-templates-managed-in-meta'), 'no se dice dónde se edita').toBeTruthy();
+    expect((q(el, 'whatsapp-templates-body') as HTMLElement & { disabled?: boolean })?.disabled, 'el cuerpo se puede editar').toBe(true);
+
+    const form = q(el, 'whatsapp-templates-form') as HTMLFormElement;
+    form.dispatchEvent(new Event('submit', { cancelable: true }));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(comandos.filter((c) => c.name === 'whatsapp_inbox.templates.update'), 'se reescribió la plantilla').toHaveLength(0);
+    expect(puerta, 'se volvió a registrar en Meta').toHaveLength(0);
+  });
+
   it('una plantilla de solo texto se sigue editando igual, sin bloque de botones', async () => {
     const el = await abrir(ENVIADA);
 
