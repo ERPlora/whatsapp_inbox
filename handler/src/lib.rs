@@ -386,12 +386,36 @@ const CUSTOMERS_READ: &str = "customers.by_phone";
 /// Shortest number that identifies a person: fewer digits are an extension or a typo.
 const MIN_NUMBER_DIGITS: usize = 7;
 
-/// A phone reduced to the number it names: digits only, leading zeros dropped (the `00`
-/// international prefix, a national trunk `0`). `+34 600-111-222`, `0034600111222` and
-/// `34600111222` are the same number.
-fn phone_number(v: &Value) -> String {
-    let digits: String = as_str(v).chars().filter(|c| c.is_ascii_digit()).collect();
-    digits.trim_start_matches('0').to_string()
+/// A phone as typed, digits only — leading zeros kept, so a number of the business's country can
+/// still tell a trunk `0` from a landline's own `0` (`home_country_number`).
+fn phone_digits(v: &Value) -> String {
+    as_str(v).chars().filter(|c| c.is_ascii_digit()).collect()
+}
+
+/// The number `phone_digits` names, leading zeros dropped (the `00` international prefix, a
+/// national trunk `0`). `+34 600-111-222`, `0034600111222` and `34600111222` are the same number.
+fn number_of(digits: &str) -> &str {
+    digits.trim_start_matches('0')
+}
+
+/// The business's country as the WhatsApp link needs it: its calling code, and whether a national
+/// number's leading `0` stays behind it in the international number.
+#[derive(Clone, Copy)]
+struct Home {
+    code: &'static str,
+    keeps_leading_zero: bool,
+}
+
+/// Countries with no trunk prefix whose national numbers may begin with `0`, kept in the
+/// international number (whatsapp_inbox#201): an Italian landline «06 1234567» is +39 06 1234567,
+/// while a British «07700 900123» is +44 7700 900123. Same data as libphonenumber (the territories
+/// without a `nationalPrefix` whose number pattern admits a leading 0), which Square, Shopify and
+/// Fresha normalise with. Rwanda is NOT here: its 0 is a trunk prefix (078 … is +250 78 …).
+fn keeps_leading_zero(country_code: &str) -> bool {
+    matches!(
+        country_code.trim().to_ascii_uppercase().as_str(),
+        "IT" | "VA" | "SM" | "CI" | "CG" | "BF" | "GA" | "NE" | "TJ"
+    )
 }
 
 /// The international calling code (ITU-T E.164) of a hub's `country_code` (ISO 3166-1 alpha-2, as
@@ -611,11 +635,12 @@ fn calling_code(country_code: &str) -> Option<&'static str> {
 
 /// The calling code of the business's country, from the context the runtime hands every handler.
 /// `None` when the hub's country is missing or unknown: then only the exact number is anybody.
-fn home_calling_code(input: &Value) -> Option<&'static str> {
-    calling_code(&as_str(input.get("context")?.get("country_code")?))
+fn home_calling_code(input: &Value) -> Option<Home> {
+    let country_code = as_str(input.get("context")?.get("country_code")?);
+    Some(Home { code: calling_code(&country_code)?, keeps_leading_zero: keeps_leading_zero(&country_code) })
 }
 
-/// Whether two numbers (as `phone_number` leaves them) are the same person's: equal, or one is the
+/// Whether two phones (as `phone_digits` leaves them) are the same person's: equal numbers, or one is the
 /// other with the BUSINESS's calling code in front — a card typed without it is a number of the
 /// business's country, so it is still her (whatsapp_inbox#162). Another country's prefix is
 /// somebody else, even with the same national digits (whatsapp_inbox#167): 33 600 111 222 is not
@@ -624,17 +649,25 @@ fn home_calling_code(input: &Value) -> Option<&'static str> {
 /// `customers.by_phone` (customers/queries/by_phone.sql) lets through any 1-3 digit prefix: the
 /// read narrows, this decides, and `_link_customer_threads_write.sql` lands exactly the numbers
 /// `home_country_number` names here.
-fn same_number(a: &str, b: &str, home: Option<&str>) -> bool {
+fn same_number(a_digits: &str, b_digits: &str, home: Option<Home>) -> bool {
+    let (a, b) = (number_of(a_digits), number_of(b_digits));
     if a.len() < MIN_NUMBER_DIGITS || b.len() < MIN_NUMBER_DIGITS {
         return false;
     }
-    a == b || home_country_number(a, home).as_deref() == Some(b) || home_country_number(b, home).as_deref() == Some(a)
+    a == b
+        || home_country_number(a_digits, home).as_deref() == Some(b)
+        || home_country_number(b_digits, home).as_deref() == Some(a)
 }
 
-/// `number` as it reads from abroad if it is a number of the business's country: the home calling
-/// code in front. `None` without a known home country.
-fn home_country_number(number: &str, home: Option<&str>) -> Option<String> {
-    home.map(|code| format!("{code}{number}"))
+/// The phone (as `phone_digits` leaves it) as it reads from abroad if it is a number of the
+/// business's country: the home calling code in front of the number. The number drops its leading
+/// zeros (a trunk `0`), except in a country that keeps them in the international number
+/// (whatsapp_inbox#201). A phone typed with the `00` prefix is already international: it matches
+/// by `number_of` alone. `None` without a known home country.
+fn home_country_number(digits: &str, home: Option<Home>) -> Option<String> {
+    let home = home?;
+    let number = if home.keeps_leading_zero { digits } else { number_of(digits) };
+    Some(format!("{}{number}", home.code))
 }
 
 /// The contact the thread is keyed by — the value `wa_contact_id` holds for this message — or
@@ -679,7 +712,7 @@ pub fn link_known_customer_pure(input: Value) -> Result<Output, String> {
     let Some(contact) = thread_contact(&payload) else {
         return Ok(Output::new());
     };
-    let wanted = phone_number(&Value::String(contact.clone()));
+    let wanted = phone_digits(&Value::String(contact.clone()));
     let home = home_calling_code(&input);
     let Some(customer_id) = the_only_card(&input, &wanted, home) else {
         return Ok(Output::new());
@@ -697,11 +730,11 @@ pub fn link_known_customer_pure(input: Value) -> Result<Output, String> {
 /// `wanted`. Every doubt resolves to «nobody»: the read did not arrive, no card is the same number
 /// (a longer number that merely contains it is somebody else, a fragment is nobody), or two
 /// different cards share it — picking one would file the thread under the wrong person.
-fn the_only_card(input: &Value, wanted: &str, home: Option<&str>) -> Option<String> {
+fn the_only_card(input: &Value, wanted: &str, home: Option<Home>) -> Option<String> {
     let rows = read_rows(input, CUSTOMERS_READ)?;
     let mut matches: Vec<String> = rows
         .iter()
-        .filter(|row| same_number(&phone_number(row.get("phone").unwrap_or(&Value::Null)), wanted, home))
+        .filter(|row| same_number(&phone_digits(row.get("phone").unwrap_or(&Value::Null)), wanted, home))
         .map(|row| as_str(row.get("id").unwrap_or(&Value::Null)))
         .filter(|id| !id.is_empty())
         .collect();
@@ -734,7 +767,7 @@ fn the_only_card(input: &Value, wanted: &str, home: Option<&str>) -> Option<Stri
 /// only fills an empty link.
 pub fn link_customer_threads_pure(input: Value) -> Result<Output, String> {
     let payload = input.get("payload").cloned().unwrap_or(Value::Null);
-    let wanted = phone_number(payload.get("phone").unwrap_or(&Value::Null));
+    let wanted = phone_digits(payload.get("phone").unwrap_or(&Value::Null));
     let home = home_calling_code(&input);
     let Some(customer_id) = the_only_card(&input, &wanted, home) else {
         return Ok(Output::new());
@@ -745,11 +778,12 @@ pub fn link_customer_threads_pure(input: Value) -> Result<Output, String> {
     // for a thread, which WhatsApp always keys by the full international number. With no known
     // home country the second is the first again: only the exact number.
     let mut params = Map::new();
-    params.insert("phone".into(), json!(wanted));
+    let number = number_of(&wanted).to_string();
     params.insert(
         "home_country_phone".into(),
-        json!(home_country_number(&wanted, home).unwrap_or_else(|| wanted.clone())),
+        json!(home_country_number(&wanted, home).unwrap_or_else(|| number.clone())),
     );
+    params.insert("phone".into(), json!(number));
     params.insert("customer_id".into(), json!(customer_id));
     Ok(Output::new().with_operation(Operation::sql(
         "whatsapp_inbox._link_customer_threads_write",
@@ -1020,6 +1054,51 @@ mod tests {
     }
 
     #[test]
+    fn an_italian_landline_card_keeps_its_zero_in_the_international_number() {
+        // whatsapp_inbox#201: in Italy the 0 of a landline is part of the number (+39 06 …), not a
+        // trunk prefix. The card «06 1234567» is WhatsApp's 39061234567, not 3961234567.
+        let input = input_in("IT", core_event("39061234567"), json!({ "customers.by_phone": [customer("cu-gio", "06 1234567")] }));
+        assert_eq!(linked(&link_known_customer_pure(input).unwrap()).1, "cu-gio");
+    }
+
+    #[test]
+    fn an_italian_landline_card_without_its_zero_is_somebody_else() {
+        // Dropping the zero names another number (+39 6 1234567): keeping it must not widen the rule.
+        let input = input_in("IT", core_event("3961234567"), json!({ "customers.by_phone": [customer("cu-gio", "06 1234567")] }));
+        untouched(&link_known_customer_pure(input).unwrap());
+    }
+
+    #[test]
+    fn an_italian_card_typed_with_the_00_prefix_or_a_mobile_is_still_her() {
+        // Only a single leading 0 is the landline's own digit: «0039 …» is the international prefix,
+        // and an Italian mobile has no leading 0 at all.
+        let prefixed = input_in("IT", core_event("39061234567"), json!({ "customers.by_phone": [customer("cu-gio", "0039 06 1234567")] }));
+        assert_eq!(linked(&link_known_customer_pure(prefixed).unwrap()).1, "cu-gio");
+        let mobile = input_in("IT", core_event("393331234567"), json!({ "customers.by_phone": [customer("cu-gio", "333 1234567")] }));
+        assert_eq!(linked(&link_known_customer_pure(mobile).unwrap()).1, "cu-gio");
+    }
+
+    #[test]
+    fn every_country_without_a_trunk_prefix_keeps_its_leading_zero_like_libphonenumber() {
+        // whatsapp_inbox#204 (review): Italy is not alone. libphonenumber's metadata has no
+        // national prefix for Burkina Faso (mobiles 01/02/05/06/07 … since 2023), Gabon, Niger and
+        // Tajikistan either: their national numbers begin with 0 and keep it behind the calling
+        // code. A Burkinabe card «01 12 34 56» is WhatsApp's 22601123456, not 2261123456.
+        for (country, contact, card) in [
+            ("BF", "22601123456", "01 12 34 56"),
+            ("GA", "24101123456", "01 12 34 56"),
+            ("NE", "22708123456", "08 12 34 56"),
+            ("TJ", "992011234567", "01 123 4567"),
+        ] {
+            let input = input_in(country, core_event(contact), json!({ "customers.by_phone": [customer("cu-awa", card)] }));
+            assert_eq!(linked(&link_known_customer_pure(input).unwrap()).1, "cu-awa", "{country}: the card keeps its 0");
+        }
+        // Rwanda DOES have the trunk 0 (078 … is +250 78 …): it stays in the dropping group.
+        let rwanda = input_in("RW", core_event("250781234567"), json!({ "customers.by_phone": [customer("cu-ines", "078 123 4567")] }));
+        assert_eq!(linked(&link_known_customer_pure(rwanda).unwrap()).1, "cu-ines");
+    }
+
+    #[test]
     fn four_extra_digits_are_not_a_country_code() {
         // Country codes are 1-3 digits: a number that is the card plus four more is somebody else.
         let input = input_with(core_event("1234600111222"), json!({ "customers.by_phone": [customer("cu-ana", "600 111 222")] }));
@@ -1176,6 +1255,13 @@ mod tests {
             json!({ "customers.by_phone": [customer("cu-ana", "06 00 11 12 22")] }),
         );
         assert_eq!(claimed_at_home(&link_customer_threads_pure(france).unwrap()), "33600111222");
+        // whatsapp_inbox#201: an Italian landline keeps its 0 behind the +39.
+        let italy = input_in(
+            "IT",
+            json!({ "customer_id": "cu-gio", "phone": "06 1234567" }),
+            json!({ "customers.by_phone": [customer("cu-gio", "06 1234567")] }),
+        );
+        assert_eq!(claimed_at_home(&link_customer_threads_pure(italy).unwrap()), "39061234567");
     }
 
     #[test]
