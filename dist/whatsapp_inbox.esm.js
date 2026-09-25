@@ -3878,7 +3878,15 @@ var es_default = {
     doorRefusalNoCode: "No se ha podido registrar la plantilla en Meta. Queda guardada aqu\xED: prueba a guardarla otra vez dentro de un rato.",
     metaRejectedReason: "Motivo de Meta: {reason}",
     metaSyncUnavailable: "No hemos podido comprobar con Meta si hay veredictos nuevos, as\xED que lo que ves es lo \xFAltimo que sabemos. Vuelve a abrir esta pesta\xF1a dentro de un rato.",
-    metaOnlyTemplates: "Estas plantillas de WhatsApp Manager todav\xEDa no se pueden traer a esta lista (llevan cabecera con imagen, v\xEDdeo o documento, botones, variables con nombre o una variable en la cabecera). Gesti\xF3nalas en WhatsApp Manager: {names}",
+    headerMediaImage: "Cabecera con imagen: la imagen se elige al enviar el mensaje.",
+    headerMediaVideo: "Cabecera con v\xEDdeo: el v\xEDdeo se elige al enviar el mensaje.",
+    headerMediaDocument: "Cabecera con documento: el documento se elige al enviar el mensaje.",
+    templateButtons: "Botones",
+    buttonQuickReply: "Respuesta r\xE1pida",
+    buttonUrl: "Abre un enlace",
+    buttonPhone: "Llama al n\xFAmero",
+    templateManagedInMeta: "Esta plantilla lleva botones o una imagen, v\xEDdeo o documento en la cabecera, as\xED que su texto se cambia en WhatsApp Manager. Al volver a abrir esta pesta\xF1a ver\xE1s lo que diga Meta.",
+    metaOnlyTemplates: "Estas plantillas de WhatsApp Manager todav\xEDa no se pueden traer a esta lista (llevan un carrusel, una oferta por tiempo limitado, un bot\xF3n de copiar c\xF3digo o de WhatsApp Flow, una ubicaci\xF3n en la cabecera, variables con nombre o una variable en la cabecera). Gesti\xF3nalas en WhatsApp Manager: {names}",
     doorRefusal: {
       invalid_name: "Meta no ha aceptado el nombre. Usa solo min\xFAsculas, n\xFAmeros y guiones bajos \u2014sin espacios ni acentos\u2014 y vuelve a intentarlo.",
       invalid_category: "Meta no ha aceptado la categor\xEDa. Elige Utilidad, Marketing o Autenticaci\xF3n y vuelve a enviarla.",
@@ -4084,7 +4092,15 @@ var en_default = {
     doorRefusalNoCode: "The template could not be registered with Meta. It is saved here: try saving it again in a moment.",
     metaRejectedReason: "Meta's reason: {reason}",
     metaSyncUnavailable: "We could not check with Meta for new verdicts, so what you see is the last we know. Open this tab again in a while.",
-    metaOnlyTemplates: "These WhatsApp Manager templates cannot be brought into this list yet (they use an image, video or document header, buttons, named variables, or a variable in the header). Manage them in WhatsApp Manager: {names}",
+    headerMediaImage: "Image header: the image is chosen when the message is sent.",
+    headerMediaVideo: "Video header: the video is chosen when the message is sent.",
+    headerMediaDocument: "Document header: the document is chosen when the message is sent.",
+    templateButtons: "Buttons",
+    buttonQuickReply: "Quick reply",
+    buttonUrl: "Opens a link",
+    buttonPhone: "Calls the number",
+    templateManagedInMeta: "This template has buttons or an image, video or document header, so its wording is changed in WhatsApp Manager. Open this tab again to see what Meta says.",
+    metaOnlyTemplates: "These WhatsApp Manager templates cannot be brought into this list yet (they use a carousel, a limited-time offer, a copy-code or WhatsApp Flow button, a location header, named variables, or a variable in the header). Manage them in WhatsApp Manager: {names}",
     doorRefusal: {
       invalid_name: "Meta did not accept the name. Use lowercase letters, numbers and underscores only \u2014 no spaces or accents \u2014 and try again.",
       invalid_category: "Meta did not accept the category. Pick Utility, Marketing or Authentication and send it again.",
@@ -5727,6 +5743,7 @@ function metaTemplateView(raw) {
 }
 
 // ui/lib/meta-template-import.ts
+var MEDIA_HEADERS = /* @__PURE__ */ new Set(["IMAGE", "VIDEO", "DOCUMENT"]);
 var CATEGORIES = /* @__PURE__ */ new Set(["MARKETING", "UTILITY", "AUTHENTICATION"]);
 var text = (value) => typeof value === "string" ? value : "";
 function placeholders(value) {
@@ -5734,6 +5751,31 @@ function placeholders(value) {
 }
 function hasNamedPlaceholders(value) {
   return [...value.matchAll(/\{\{\s*([^{}]*?)\s*\}\}/g)].some((m4) => !/^\d+$/.test(m4[1]));
+}
+function buttonsFromMeta(raw) {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const out = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") return null;
+    const button = item;
+    const type = text(button.type).trim().toUpperCase();
+    const label = text(button.text).trim();
+    if (!label) return null;
+    if (type === "QUICK_REPLY") {
+      out.push({ type, text: label });
+    } else if (type === "URL") {
+      const url = text(button.url).trim();
+      if (!url) return null;
+      out.push({ type, text: label, url });
+    } else if (type === "PHONE_NUMBER") {
+      const phone = text(button.phone_number).trim();
+      if (!phone) return null;
+      out.push({ type, text: label, phone_number: phone });
+    } else {
+      return null;
+    }
+  }
+  return out;
 }
 function templateFromMeta(template) {
   const refused = { ok: false };
@@ -5744,6 +5786,8 @@ function templateFromMeta(template) {
   if (!name || !language || !status || !CATEGORIES.has(category)) return refused;
   if (!Array.isArray(template.components)) return refused;
   let header = "";
+  let headerFormat = "TEXT";
+  let buttons = [];
   let body = "";
   let footer = "";
   let examples = [];
@@ -5753,8 +5797,15 @@ function templateFromMeta(template) {
     const type = text(part.type).trim().toUpperCase();
     if (type === "HEADER") {
       const format = text(part.format).trim().toUpperCase() || "TEXT";
-      header = text(part.text);
-      if (format !== "TEXT" || placeholders(header) > 0 || hasNamedPlaceholders(header)) return refused;
+      if (MEDIA_HEADERS.has(format)) {
+        headerFormat = format;
+        header = "";
+      } else if (format === "TEXT") {
+        header = text(part.text);
+        if (placeholders(header) > 0 || hasNamedPlaceholders(header)) return refused;
+      } else {
+        return refused;
+      }
     } else if (type === "BODY") {
       body = text(part.text);
       const example = part.example?.body_text;
@@ -5762,6 +5813,10 @@ function templateFromMeta(template) {
       examples = Array.isArray(first) ? first : [];
     } else if (type === "FOOTER") {
       footer = text(part.text);
+    } else if (type === "BUTTONS") {
+      const read = buttonsFromMeta(part.buttons);
+      if (!read) return refused;
+      buttons = read;
     } else {
       return refused;
     }
@@ -5773,7 +5828,17 @@ function templateFromMeta(template) {
   );
   return {
     ok: true,
-    fields: { name, language, category, header, body, footer, variables: JSON.stringify(variables) },
+    fields: {
+      name,
+      language,
+      category,
+      header,
+      body,
+      footer,
+      variables: JSON.stringify(variables),
+      header_format: headerFormat,
+      buttons: JSON.stringify(buttons)
+    },
     meta: {
       meta_template_id: text(template.meta_id).trim(),
       meta_status: status,
@@ -5784,6 +5849,25 @@ function templateFromMeta(template) {
 
 // ui/components/erp-whatsapp-inbox-templates/erp-whatsapp-inbox-templates.ts
 var CATALOG4 = { es: es_default, en: en_default };
+function storedButtons(raw) {
+  if (typeof raw !== "string" || !raw.trim()) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((b3) => !!b3 && typeof b3 === "object" && typeof b3.text === "string") : [];
+  } catch {
+    return [];
+  }
+}
+var HEADER_MEDIA_LABEL = {
+  IMAGE: "ui.headerMediaImage",
+  VIDEO: "ui.headerMediaVideo",
+  DOCUMENT: "ui.headerMediaDocument"
+};
+var BUTTON_LABEL = {
+  QUICK_REPLY: "ui.buttonQuickReply",
+  URL: "ui.buttonUrl",
+  PHONE_NUMBER: "ui.buttonPhone"
+};
 function metaKey(name, language) {
   const word = (value) => String(value ?? "").trim().toLowerCase();
   return `${word(name)}\0${word(language)}`;
@@ -5819,8 +5903,8 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     this.editingMeta = null;
     this.editingMetaCode = "";
     this.editingMetaReason = "";
-    /** Carried through an edit so `templates.update` — whose schema requires every field — can send
-     *  back untouched what this panel does not show. */
+    this.editingHeaderFormat = "TEXT";
+    this.editingButtons = [];
     this.editingRest = {
       header: "",
       footer: "",
@@ -5865,7 +5949,21 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     .meta[data-state="paused"],
     .meta[data-state="disabled"],
     .meta[data-state="deleted"] { border-left-color: var(--ion-color-danger, #c5000f); }
+    /* What a template brought from WhatsApp Manager carries beyond its text (whatsapp_inbox#180). */
+    .rich { display:flex; flex-direction:column; gap:.4rem; }
+    .rich p { margin:0; font-size:.9rem; }
+    .rich ul { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:.35rem; }
+    .rich li { border:1px solid var(--ion-border-color,#e7e2d6); border-radius: var(--ok-radius-sm, 10px);
+      padding:.4rem .6rem; font-size:.9rem; overflow-wrap:anywhere; }
+    .rich li small { display:block; color: var(--ion-color-medium, #6b675d); }
   `;
+  }
+  /** A template with a media header or buttons is read-only here (whatsapp_inbox#180): «Guardar»
+   *  registers the template again at Meta from what this panel holds, and this panel cannot write
+   *  those parts yet — saving would strip them at Meta. It is edited in WhatsApp Manager and the
+   *  tab brings Meta's verdict back on the next open. */
+  get managedInMeta() {
+    return !!this.editingId && (this.editingHeaderFormat !== "TEXT" || this.editingButtons.length > 0);
   }
   get rowActions() {
     const t5 = (k2) => erplora4().t(CATALOG4, k2);
@@ -6108,7 +6206,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
   }
   async createTemplate(ev) {
     ev.preventDefault();
-    if (!this.newName.trim()) return;
+    if (!this.newName.trim() || this.managedInMeta) return;
     if (this.editingId) {
       await this.updateTemplate();
       return;
@@ -6141,6 +6239,8 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
       variables: row.variables ?? "[]",
       is_active: Number(row.is_active ?? 1)
     };
+    this.editingHeaderFormat = String(row.header_format ?? "").trim().toUpperCase() || "TEXT";
+    this.editingButtons = storedButtons(row.buttons);
     this.editingMeta = metaTemplateView(row.meta_status);
     this.editingMetaCode = String(row.meta_status ?? "");
     this.editingMetaReason = String(row.meta_rejected_reason ?? "");
@@ -6242,6 +6342,26 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
       ${this.editingMetaReason ? b2`<p>${erplora4().t(CATALOG4, "ui.metaRejectedReason", { reason: this.editingMetaReason })}</p>` : A}
     </div>`;
   }
+  /** The media header and the buttons of a template brought from WhatsApp Manager, and why its
+   *  text is not saved from here (whatsapp_inbox#180). Nothing for a text-only template. */
+  renderRichParts() {
+    if (!this.managedInMeta) return A;
+    const t5 = (k2) => erplora4().t(CATALOG4, k2);
+    const media = HEADER_MEDIA_LABEL[this.editingHeaderFormat];
+    return b2`<div class="rich">
+      ${media ? b2`<p data-testid="whatsapp-templates-header-media" data-format=${this.editingHeaderFormat}>${t5(media)}</p>` : A}
+      ${this.editingButtons.length ? b2`<strong>${t5("ui.templateButtons")}</strong>
+            <ul>
+              ${this.editingButtons.map(
+      (b3) => b2`<li data-testid="whatsapp-templates-button" data-type=${b3.type}>
+                  ${b3.text}
+                  <small>${t5(BUTTON_LABEL[b3.type] ?? "ui.buttonQuickReply")}${"url" in b3 ? b2` · ${b3.url}` : A}${"phone_number" in b3 ? b2` · ${b3.phone_number}` : A}</small>
+                </li>`
+    )}
+            </ul>` : A}
+      <p data-testid="whatsapp-templates-managed-in-meta">${t5("ui.templateManagedInMeta")}</p>
+    </div>`;
+  }
   renderDeleteConfirm() {
     if (!this.pendingDelete) return A;
     const t5 = (k2) => erplora4().t(CATALOG4, k2);
@@ -6254,6 +6374,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
   }
   render() {
     const t5 = (k2) => erplora4().t(CATALOG4, k2);
+    const locked = this.managedInMeta;
     return b2`<div class="page">
         ${this.formError ? b2`<p class="err" data-testid="whatsapp-templates-form-error">${this.formError}</p>` : A}
         ${this.ctrl?.error ? b2`<p class="err" data-testid="whatsapp-templates-load-error">${this.ctrl.error}</p>` : A}
@@ -6265,15 +6386,16 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
                panel abierto, el «+» de la barra desplegaría un panel vacío. -->
           <form data-testid="whatsapp-templates-form" slot="create" class="form" @submit=${(e5) => this.createTemplate(e5)}>
             ${this.renderMetaVerdict()}
-            <ion-input data-testid="whatsapp-templates-name" mode="md" fill="outline" label-placement="floating" label=${t5("ui.colName")} .value=${this.newName} @ionInput=${(e5) => this.newName = e5.target.value}></ion-input>
-            <ion-input data-testid="whatsapp-templates-language" mode="md" fill="outline" label-placement="floating" label=${t5("ui.colLanguage")} placeholder=${t5("ui.placeholderLanguage")} .value=${this.newLanguage} @ionInput=${(e5) => this.newLanguage = e5.target.value}></ion-input>
-            <ion-select data-testid="whatsapp-templates-category" mode="md" fill="outline" label-placement="floating" label=${t5("ui.colCategory")} .value=${this.newCategory} @ionChange=${(e5) => this.newCategory = e5.target.value}>
+            ${this.renderRichParts()}
+            <ion-input data-testid="whatsapp-templates-name" .disabled=${locked} mode="md" fill="outline" label-placement="floating" label=${t5("ui.colName")} .value=${this.newName} @ionInput=${(e5) => this.newName = e5.target.value}></ion-input>
+            <ion-input data-testid="whatsapp-templates-language" .disabled=${locked} mode="md" fill="outline" label-placement="floating" label=${t5("ui.colLanguage")} placeholder=${t5("ui.placeholderLanguage")} .value=${this.newLanguage} @ionInput=${(e5) => this.newLanguage = e5.target.value}></ion-input>
+            <ion-select data-testid="whatsapp-templates-category" .disabled=${locked} mode="md" fill="outline" label-placement="floating" label=${t5("ui.colCategory")} .value=${this.newCategory} @ionChange=${(e5) => this.newCategory = e5.target.value}>
               <ion-select-option value="UTILITY">${t5("ui.categoryUtility")}</ion-select-option>
               <ion-select-option value="MARKETING">${t5("ui.categoryMarketing")}</ion-select-option>
               <ion-select-option value="AUTHENTICATION">${t5("ui.categoryAuthentication")}</ion-select-option>
             </ion-select>
-            <ion-textarea data-testid="whatsapp-templates-body" mode="md" fill="outline" label-placement="floating" label=${t5("ui.colBody")} placeholder=${t5("ui.placeholderBody")} .value=${this.newBody} @ionInput=${(e5) => this.newBody = e5.target.value}></ion-textarea>
-            <ion-button data-testid="whatsapp-templates-submit" type="submit" ?disabled=${this.saving || !this.newName}>${this.saving ? t5("ui.saving") : this.editingId ? t5("ui.save") : t5("ui.add")}</ion-button>
+            <ion-textarea data-testid="whatsapp-templates-body" .disabled=${locked} mode="md" fill="outline" label-placement="floating" label=${t5("ui.colBody")} placeholder=${t5("ui.placeholderBody")} .value=${this.newBody} @ionInput=${(e5) => this.newBody = e5.target.value}></ion-textarea>
+            ${locked ? A : b2`<ion-button data-testid="whatsapp-templates-submit" type="submit" ?disabled=${this.saving || !this.newName}>${this.saving ? t5("ui.saving") : this.editingId ? t5("ui.save") : t5("ui.add")}</ion-button>`}
             ${this.editingId ? b2`<ion-button data-testid="whatsapp-templates-cancel" fill="clear" size="small" ?disabled=${this.saving}
                   @click=${() => this.cancelEdit()}>${t5("ui.cancel")}</ion-button>` : A}
           </form>
@@ -6323,5 +6445,11 @@ __decorateClass([
 __decorateClass([
   r5()
 ], _ErpWhatsappInboxTemplates.prototype, "editingMetaReason", 2);
+__decorateClass([
+  r5()
+], _ErpWhatsappInboxTemplates.prototype, "editingHeaderFormat", 2);
+__decorateClass([
+  r5()
+], _ErpWhatsappInboxTemplates.prototype, "editingButtons", 2);
 var ErpWhatsappInboxTemplates = _ErpWhatsappInboxTemplates;
 define("erp-whatsapp-inbox-templates", ErpWhatsappInboxTemplates);

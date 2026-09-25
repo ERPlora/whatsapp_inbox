@@ -15,6 +15,7 @@ import {
 } from '../../lib/meta-template-status';
 import type { MetaTemplateView } from '../../lib/meta-template-status';
 import { templateFromMeta } from '../../lib/meta-template-import';
+import type { TemplateButton } from '../../lib/meta-template-import';
 const CATALOG: Record<string, unknown> = { es: esLocale, en: enLocale };
 
 /** One template as the door describes it: Meta's own verdict, in the SaaS's field names. The door
@@ -70,8 +71,40 @@ interface Template {
   /** Meta's id for this template, `''` while Meta has never seen it. It is what makes
    *  `meta_status` project as a verdict instead of as `not_sent`. */
   meta_template_id: string;
+  /** `TEXT`, or the kind of file the header carries (`IMAGE`, `VIDEO`, `DOCUMENT`) — whatsapp_inbox#180.
+   *  Absent on a row read before the column existed, which is a text header. */
+  header_format?: string;
+  /** JSON array of `TemplateButton`s, `'[]'` (or absent) when it has none — whatsapp_inbox#180. */
+  buttons?: string;
   is_active: number;
 }
+
+/** The buttons a row stores, or none when the column is absent or does not hold a list. */
+function storedButtons(raw: unknown): TemplateButton[] {
+  if (typeof raw !== 'string' || !raw.trim()) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((b): b is TemplateButton => !!b && typeof b === 'object' && typeof b.text === 'string')
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+/** The label of each header kind that carries a file. */
+const HEADER_MEDIA_LABEL: Record<string, string> = {
+  IMAGE: 'ui.headerMediaImage',
+  VIDEO: 'ui.headerMediaVideo',
+  DOCUMENT: 'ui.headerMediaDocument',
+};
+
+/** The label of each button kind. */
+const BUTTON_LABEL: Record<string, string> = {
+  QUICK_REPLY: 'ui.buttonQuickReply',
+  URL: 'ui.buttonUrl',
+  PHONE_NUMBER: 'ui.buttonPhone',
+};
 
 /**
  * How Meta names a template: by NAME **and** LANGUAGE (whatsapp_inbox#134).
@@ -161,6 +194,13 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     .meta[data-state="paused"],
     .meta[data-state="disabled"],
     .meta[data-state="deleted"] { border-left-color: var(--ion-color-danger, #c5000f); }
+    /* What a template brought from WhatsApp Manager carries beyond its text (whatsapp_inbox#180). */
+    .rich { display:flex; flex-direction:column; gap:.4rem; }
+    .rich p { margin:0; font-size:.9rem; }
+    .rich ul { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:.35rem; }
+    .rich li { border:1px solid var(--ion-border-color,#e7e2d6); border-radius: var(--ok-radius-sm, 10px);
+      padding:.4rem .6rem; font-size:.9rem; overflow-wrap:anywhere; }
+    .rich li small { display:block; color: var(--ion-color-medium, #6b675d); }
   `;
 
   @state() newName = '';
@@ -192,8 +232,9 @@ export class ErpWhatsappInboxTemplates extends LitElement {
 
   /** Templates Meta holds that this hub could NOT bring in (whatsapp_inbox#140, #179), as
    *  `name (language)`, the two halves of Meta's identity: parts this module has no field for
-   *  (media header, buttons, header or named variables), no text from the door, or a failed write. The ones
-   *  that fit are imported with their text and never listed here. */
+   *  (a carousel, a copy-code or Flow button, a location header, header or named variables), no
+   *  text from the door, or a failed write. The ones that fit — media headers and quick reply, link
+   *  and call buttons included since whatsapp_inbox#180 — are imported and never listed here. */
   @state() metaOnly: string[] = [];
 
   /** Meta's verdict on the template being edited, and the move it asks for. `null` while the panel
@@ -212,6 +253,21 @@ export class ErpWhatsappInboxTemplates extends LitElement {
 
   /** Carried through an edit so `templates.update` — whose schema requires every field — can send
    *  back untouched what this panel does not show. */
+  /** The header kind of the template being edited. Only read through `managedInMeta`, which is
+   *  false while the panel is an ADD, and `startEdit` sets it on every open. */
+  @state() editingHeaderFormat = 'TEXT';
+
+  /** The buttons of the template being edited, in Meta's order. Same lifecycle as the header kind. */
+  @state() editingButtons: TemplateButton[] = [];
+
+  /** A template with a media header or buttons is read-only here (whatsapp_inbox#180): «Guardar»
+   *  registers the template again at Meta from what this panel holds, and this panel cannot write
+   *  those parts yet — saving would strip them at Meta. It is edited in WhatsApp Manager and the
+   *  tab brings Meta's verdict back on the next open. */
+  private get managedInMeta(): boolean {
+    return !!this.editingId && (this.editingHeaderFormat !== 'TEXT' || this.editingButtons.length > 0);
+  }
+
   private editingRest: Pick<Template, 'header' | 'footer' | 'variables' | 'is_active'> = {
     header: '',
     footer: '',
@@ -412,7 +468,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     }
     // The other half of #140: what Meta holds and this hub does not. Same answer, no extra call.
     // Since whatsapp_inbox#179 the door carries each template's text, so it is BROUGHT here instead
-    // of only named. What does not fit this module's fields (a media header, buttons…) stays named
+    // of only named. What does not fit this module's fields (a carousel, a Flow button…) stays named
     // in the notice: imported without that part, the next «Guardar» would strip it at Meta.
     const here = new Set(rows.map((row) => metaKey(row.name, row.language)));
     const notBrought: string[] = [];
@@ -523,7 +579,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
 
   private async createTemplate(ev: Event) {
     ev.preventDefault();
-    if (!this.newName.trim()) return;
+    if (!this.newName.trim() || this.managedInMeta) return;
     if (this.editingId) {
       await this.updateTemplate();
       return;
@@ -557,6 +613,8 @@ export class ErpWhatsappInboxTemplates extends LitElement {
       variables: row.variables ?? '[]',
       is_active: Number(row.is_active ?? 1),
     };
+    this.editingHeaderFormat = String(row.header_format ?? '').trim().toUpperCase() || 'TEXT';
+    this.editingButtons = storedButtons(row.buttons);
     this.editingMeta = metaTemplateView(row.meta_status);
     this.editingMetaCode = String(row.meta_status ?? '');
     this.editingMetaReason = String(row.meta_rejected_reason ?? '');
@@ -670,6 +728,31 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     </div>`;
   }
 
+  /** The media header and the buttons of a template brought from WhatsApp Manager, and why its
+   *  text is not saved from here (whatsapp_inbox#180). Nothing for a text-only template. */
+  private renderRichParts() {
+    if (!this.managedInMeta) return nothing;
+    const t = (k: string): string => erplora().t(CATALOG, k);
+    const media = HEADER_MEDIA_LABEL[this.editingHeaderFormat];
+    return html`<div class="rich">
+      ${media
+        ? html`<p data-testid="whatsapp-templates-header-media" data-format=${this.editingHeaderFormat}>${t(media)}</p>`
+        : nothing}
+      ${this.editingButtons.length
+        ? html`<strong>${t('ui.templateButtons')}</strong>
+            <ul>
+              ${this.editingButtons.map(
+                (b) => html`<li data-testid="whatsapp-templates-button" data-type=${b.type}>
+                  ${b.text}
+                  <small>${t(BUTTON_LABEL[b.type] ?? 'ui.buttonQuickReply')}${'url' in b ? html` · ${b.url}` : nothing}${'phone_number' in b ? html` · ${b.phone_number}` : nothing}</small>
+                </li>`,
+              )}
+            </ul>`
+        : nothing}
+      <p data-testid="whatsapp-templates-managed-in-meta">${t('ui.templateManagedInMeta')}</p>
+    </div>`;
+  }
+
   private renderDeleteConfirm() {
     if (!this.pendingDelete) return nothing;
     const t = (k: string): string => erplora().t(CATALOG, k);
@@ -683,6 +766,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
 
   render() {
     const t = (k: string): string => erplora().t(CATALOG, k);
+    const locked = this.managedInMeta;
     return html`<div class="page">
         ${this.formError
           ? html`<p class="err" data-testid="whatsapp-templates-form-error">${this.formError}</p>`
@@ -702,15 +786,18 @@ export class ErpWhatsappInboxTemplates extends LitElement {
                panel abierto, el «+» de la barra desplegaría un panel vacío. -->
           <form data-testid="whatsapp-templates-form" slot="create" class="form" @submit=${(e: Event) => this.createTemplate(e)}>
             ${this.renderMetaVerdict()}
-            <ion-input data-testid="whatsapp-templates-name" mode="md" fill="outline" label-placement="floating" label=${t('ui.colName')} .value=${this.newName} @ionInput=${(e: any) => (this.newName = e.target.value)}></ion-input>
-            <ion-input data-testid="whatsapp-templates-language" mode="md" fill="outline" label-placement="floating" label=${t('ui.colLanguage')} placeholder=${t('ui.placeholderLanguage')} .value=${this.newLanguage} @ionInput=${(e: any) => (this.newLanguage = e.target.value)}></ion-input>
-            <ion-select data-testid="whatsapp-templates-category" mode="md" fill="outline" label-placement="floating" label=${t('ui.colCategory')} .value=${this.newCategory} @ionChange=${(e: any) => (this.newCategory = e.target.value)}>
+            ${this.renderRichParts()}
+            <ion-input data-testid="whatsapp-templates-name" .disabled=${locked} mode="md" fill="outline" label-placement="floating" label=${t('ui.colName')} .value=${this.newName} @ionInput=${(e: any) => (this.newName = e.target.value)}></ion-input>
+            <ion-input data-testid="whatsapp-templates-language" .disabled=${locked} mode="md" fill="outline" label-placement="floating" label=${t('ui.colLanguage')} placeholder=${t('ui.placeholderLanguage')} .value=${this.newLanguage} @ionInput=${(e: any) => (this.newLanguage = e.target.value)}></ion-input>
+            <ion-select data-testid="whatsapp-templates-category" .disabled=${locked} mode="md" fill="outline" label-placement="floating" label=${t('ui.colCategory')} .value=${this.newCategory} @ionChange=${(e: any) => (this.newCategory = e.target.value)}>
               <ion-select-option value="UTILITY">${t('ui.categoryUtility')}</ion-select-option>
               <ion-select-option value="MARKETING">${t('ui.categoryMarketing')}</ion-select-option>
               <ion-select-option value="AUTHENTICATION">${t('ui.categoryAuthentication')}</ion-select-option>
             </ion-select>
-            <ion-textarea data-testid="whatsapp-templates-body" mode="md" fill="outline" label-placement="floating" label=${t('ui.colBody')} placeholder=${t('ui.placeholderBody')} .value=${this.newBody} @ionInput=${(e: any) => (this.newBody = e.target.value)}></ion-textarea>
-            <ion-button data-testid="whatsapp-templates-submit" type="submit" ?disabled=${this.saving || !this.newName}>${this.saving ? t('ui.saving') : this.editingId ? t('ui.save') : t('ui.add')}</ion-button>
+            <ion-textarea data-testid="whatsapp-templates-body" .disabled=${locked} mode="md" fill="outline" label-placement="floating" label=${t('ui.colBody')} placeholder=${t('ui.placeholderBody')} .value=${this.newBody} @ionInput=${(e: any) => (this.newBody = e.target.value)}></ion-textarea>
+            ${locked
+              ? nothing
+              : html`<ion-button data-testid="whatsapp-templates-submit" type="submit" ?disabled=${this.saving || !this.newName}>${this.saving ? t('ui.saving') : this.editingId ? t('ui.save') : t('ui.add')}</ion-button>`}
             ${this.editingId
               ? html`<ion-button data-testid="whatsapp-templates-cancel" fill="clear" size="small" ?disabled=${this.saving}
                   @click=${() => this.cancelEdit()}>${t('ui.cancel')}</ion-button>`

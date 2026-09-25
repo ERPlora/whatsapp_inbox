@@ -3,10 +3,11 @@
  *
  * The SaaS door lists every template of the business with Meta's own `components` array
  * (ERPlora/saas#2253). This module stores a template as seven flat fields, the same seven Meta
- * reviews when the tab registers one. `templateFromMeta` translates the first into the second —
- * or refuses: a template with a part those fields cannot hold (a media header, buttons, a header
- * variable, named variables) is NOT imported without it. The panel resends every field on «Guardar», so a row
- * missing the buttons would register the template again at Meta without them.
+ * reviews when the tab registers one, plus the KIND of its header and its buttons (whatsapp_inbox#180).
+ * `templateFromMeta` translates the first into the second — or refuses: a template with a part those
+ * fields cannot hold (a location header, a carousel, a copy-code or Flow button, a header variable,
+ * named variables) is NOT imported without it. The panel resends every field on «Guardar», so a row
+ * missing a part would register the template again at Meta without it.
  */
 
 /** The seven fields `whatsapp_inbox.templates.import_from_meta` stores as the template's text. */
@@ -20,7 +21,22 @@ export interface ImportedTemplateFields {
   /** JSON array, one EXAMPLE value per `{{n}}` of the body: what the SaaS sends to Meta as
    *  `example.body_text` when the template is registered again. */
   variables: string;
+  /** `TEXT` (the `header` column holds it, possibly empty), or the kind of file the header carries:
+   *  `IMAGE`, `VIDEO`, `DOCUMENT`. The file itself is chosen when the message is SENT. */
+  header_format: string;
+  /** JSON array of the template's buttons in Meta's order, as `TemplateButton`s. */
+  buttons: string;
 }
+
+/** A button of a template, with what the screen needs to say what it does. */
+export type TemplateButton =
+  | { type: 'QUICK_REPLY'; text: string }
+  | { type: 'URL'; text: string; url: string }
+  | { type: 'PHONE_NUMBER'; text: string; phone_number: string };
+
+/** The header kinds that carry a file. `LOCATION` is left out: nothing on the screen could say
+ *  where it points, and a template sent without one fails at Meta. */
+const MEDIA_HEADERS = new Set(['IMAGE', 'VIDEO', 'DOCUMENT']);
 
 /** What Meta says about it, in the names `import_from_meta` stores it under. */
 export interface ImportedTemplateVerdict {
@@ -49,6 +65,35 @@ function hasNamedPlaceholders(value: string): boolean {
   return [...value.matchAll(/\{\{\s*([^{}]*?)\s*\}\}/g)].some((m) => !/^\d+$/.test(m[1]));
 }
 
+/** Meta's `buttons` list as this module stores it, or `null` when one of them is a kind the
+ *  screen cannot show (copy code, one-time password, WhatsApp Flow, catalogue…) or lacks what it
+ *  needs to work (its text, a link's URL, a call button's number). */
+function buttonsFromMeta(raw: unknown): TemplateButton[] | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const out: TemplateButton[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') return null;
+    const button = item as Record<string, unknown>;
+    const type = text(button.type).trim().toUpperCase();
+    const label = text(button.text).trim();
+    if (!label) return null;
+    if (type === 'QUICK_REPLY') {
+      out.push({ type, text: label });
+    } else if (type === 'URL') {
+      const url = text(button.url).trim();
+      if (!url) return null;
+      out.push({ type, text: label, url });
+    } else if (type === 'PHONE_NUMBER') {
+      const phone = text(button.phone_number).trim();
+      if (!phone) return null;
+      out.push({ type, text: label, phone_number: phone });
+    } else {
+      return null;
+    }
+  }
+  return out;
+}
+
 export function templateFromMeta(template: Record<string, unknown>): TemplateImport {
   const refused: TemplateImport = { ok: false };
   const name = text(template.name).trim();
@@ -59,6 +104,8 @@ export function templateFromMeta(template: Record<string, unknown>): TemplateImp
   if (!Array.isArray(template.components)) return refused;
 
   let header = '';
+  let headerFormat = 'TEXT';
+  let buttons: TemplateButton[] = [];
   let body = '';
   let footer = '';
   let examples: unknown[] = [];
@@ -68,8 +115,15 @@ export function templateFromMeta(template: Record<string, unknown>): TemplateImp
     const type = text(part.type).trim().toUpperCase();
     if (type === 'HEADER') {
       const format = text(part.format).trim().toUpperCase() || 'TEXT';
-      header = text(part.text);
-      if (format !== 'TEXT' || placeholders(header) > 0 || hasNamedPlaceholders(header)) return refused;
+      if (MEDIA_HEADERS.has(format)) {
+        headerFormat = format;
+        header = '';
+      } else if (format === 'TEXT') {
+        header = text(part.text);
+        if (placeholders(header) > 0 || hasNamedPlaceholders(header)) return refused;
+      } else {
+        return refused;
+      }
     } else if (type === 'BODY') {
       body = text(part.text);
       const example = (part.example as { body_text?: unknown } | undefined)?.body_text;
@@ -77,6 +131,10 @@ export function templateFromMeta(template: Record<string, unknown>): TemplateImp
       examples = Array.isArray(first) ? first : [];
     } else if (type === 'FOOTER') {
       footer = text(part.text);
+    } else if (type === 'BUTTONS') {
+      const read = buttonsFromMeta(part.buttons);
+      if (!read) return refused;
+      buttons = read;
     } else {
       return refused;
     }
@@ -92,7 +150,17 @@ export function templateFromMeta(template: Record<string, unknown>): TemplateImp
 
   return {
     ok: true,
-    fields: { name, language, category, header, body, footer, variables: JSON.stringify(variables) },
+    fields: {
+      name,
+      language,
+      category,
+      header,
+      body,
+      footer,
+      variables: JSON.stringify(variables),
+      header_format: headerFormat,
+      buttons: JSON.stringify(buttons),
+    },
     meta: {
       meta_template_id: text(template.meta_id).trim(),
       meta_status: status,

@@ -16,6 +16,9 @@ imports the ones this hub does not hold through `whatsapp_inbox.templates.import
 3. **A template the owner deleted HERE is not brought back.** Deleting in the tab does not delete
    at Meta, so Meta keeps listing it: resurrecting it on the next open would undo the owner.
 4. **Another language is another template**, and **another hub's row blocks nothing** (tenancy).
+5. **The header's KIND and the buttons travel with it** (whatsapp_inbox#180): a template with an
+   image header and «Confirmar» / «Cambiar cita» lists them back, and one created in the tab lists
+   as a text header with no buttons — what every row was before the columns existed.
 
 Usage: tests/meta_template_import.pg.test.py   (exit 0 = green)
   Uses the `erplora-test-pg-5433` container by default (override: ERPLORA_TEST_PG_CONTAINER).
@@ -66,7 +69,12 @@ def import_binds(
         "meta_template_id": meta_id,
         "meta_status": status,
         "meta_rejected_reason": "",
+        "header_format": "TEXT",
+        "buttons": "[]",
     }
+
+
+RICH_BUTTONS = '[{"type":"QUICK_REPLY","text":"Confirmar"},{"type":"QUICK_REPLY","text":"Cambiar cita"}]'
 
 
 def listed(db, base, hub=P.HUB):
@@ -89,6 +97,27 @@ def check_import(db, base):
     want = 'i-1|hola_meta|es|approved|555|Novedades|Hola {{1}}, tenemos ofertas.|Salón Elena|["Ana"]'
     if got != [want]:
         return [f"an imported template should list as {want!r}, got {got!r}"]
+    return []
+
+
+def check_rich_parts_round_trip(db, base):
+    binds = import_binds("i-rich", name="cita_con_botones")
+    binds.update(header="", header_format="IMAGE", buttons=RICH_BUTTONS)
+    problems = P.run_command(db, IMPORT_COMMAND, binds)
+    problems += P.run_command(db, P.CREATE_COMMAND, P.create_binds("c-plain", "hecha_aqui"))
+    if problems:
+        return problems
+    sql = base.replace("$1", P.sql_literal(P.HUB))
+    got, error = P.rows(
+        db,
+        f"SELECT id, header_format, buttons FROM ({sql}) AS sub "
+        "WHERE id IN ('i-rich', 'c-plain') ORDER BY id;",
+    )
+    if error:
+        return [f"the list did not run: {error}"]
+    want = ["c-plain|TEXT|[]", f"i-rich|IMAGE|{RICH_BUTTONS}"]
+    if got != want:
+        return [f"the header kind and the buttons must list back as {want!r}, got {got!r}"]
     return []
 
 
@@ -185,6 +214,7 @@ def main():
             check_twice_is_once,
             check_other_language_and_hub,
             check_deleted_here_stays_deleted,
+            check_rich_parts_round_trip,
         ):
             if not problems:
                 problems += check(db, base)
@@ -195,7 +225,7 @@ def main():
         print(
             "OK: a template from WhatsApp Manager is imported with its text and Meta's verdict, "
             "once per name and language (caseless), never over a row the owner deleted here, and "
-            "never blocked by another hub"
+            "never blocked by another hub, with its header kind and its buttons"
         )
         return 0
     finally:

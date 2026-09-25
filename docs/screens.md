@@ -130,9 +130,13 @@ never blanks a header somebody set. **Delete** asks for confirmation in the page
 > (created in WhatsApp Manager) are imported with their header, body, footer, example values and
 > Meta's verdict (#179), once per name + language, and never over one the owner deleted here (the
 > command refuses with `template_already_here` and the tab takes it as the normal answer: no notice,
-> no phantom `template.created`). Those with parts this module has no field for (image/video/document
-> header, buttons, a header variable, named `{{name}}` variables) are not imported without them: they
-> are named in a notice above the table, `name (language)`.
+> no phantom `template.created`). Since #180 an image/video/document header (its KIND —
+> `header_format`; the file is chosen when a message is sent) and quick reply, link and call buttons
+> (`buttons`, Meta's order) come in too: the panel lists them and keeps the template read-only, with
+> no «Guardar», because saving would register it at Meta without them. Those with parts this module
+> has no field for (a carousel, a limited-time offer, a copy-code or Flow button, a location header,
+> a header variable, named `{{name}}` variables) are not imported without them: they are named in a
+> notice above the table, `name (language)`.
 
 ## Settings — the channel
 

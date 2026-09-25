@@ -18,6 +18,9 @@
 -- hacer» de #65, y para un rechazo el «qué hacer» sin el «por qué» manda al dueño a adivinar. Va
 -- vacía en todo lo que no es un rechazo, que es lo que Meta contesta, así que la pantalla pregunta
 -- «¿hay motivo?» y no «¿el estado es rechazado?».
+--
+-- `header_format` and `buttons` travel too (whatsapp_inbox#180): the panel shows what a template
+-- brought in from WhatsApp Manager carries, and keeps its text read-only when it carries either.
 SELECT id, name, language, category, header, body, footer,
        meta_template_id,
        CASE
@@ -25,6 +28,6 @@ SELECT id, name, language, category, header, body, footer,
          ELSE LOWER(meta_status)
        END AS meta_status,
        COALESCE(meta_rejected_reason, '') AS meta_rejected_reason,
-       variables, is_active, created_at, updated_at
+       variables, header_format, buttons, is_active, created_at, updated_at
 FROM whatsapp_inbox_template
 WHERE hub_id = :hub_id AND is_deleted = 0
