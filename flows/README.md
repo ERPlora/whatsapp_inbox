@@ -399,6 +399,17 @@ porque el commit más nuevo que `-S` devuelve suele ser el que SUBIÓ la versió
 campo que estas plantillas mandan ya estuviera declarado ahí. Si no se puede leer, lo dice en voz
 alta; nunca calla.
 
+**Y todo vecino que la receta USA tiene suelo, también el que solo llega como tool del asistente**
+(whatsapp_inbox#173, #197). Las reglas de arriba solo leen lo que `requires.json` declara, así que
+un vecino que falta ahí no las pone en rojo: las deja mudas, y el hub ofrece la receta junto a
+cualquier copia de ese vecino. `unfloored_read_problems` exige suelo para cada módulo ajeno que un
+paso `query` o `command` nombra **y** para cada uno de los `tools.queries`/`tools.commands` de un
+paso `ai`. Por eso `appointment-from-whatsapp` fija `services` y `staff`: `book_appointment` le da
+al asistente `services.services.list`, `staff.members.list` y `staff.schedules.list_for_member`, y
+sin suelo un hub sin Servicios o Personal (o con uno de ellos en pausa) recibía la receta y el
+asistente fallaba en la primera pregunta. Los números son los del primer árbol de cada repo (1.1.7
+y 2.0.4), que ya declaran esas lecturas con su bloque `ai`.
+
 **La duración estimada se ve.** Va en `duration_minutes` del payload propuesto (que es lo que se
 ejecuta al aprobar, sin re-derivar) y además **en palabras en `internal_notes`**, para que se lea en
 cualquier pantalla que pinte la cita y se pueda corregir antes de que llegue el día.
