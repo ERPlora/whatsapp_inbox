@@ -10,6 +10,7 @@ import esLocale from '../../../locales/es.json';
 import enLocale from '../../../locales/en.json';
 import { domainErrorText as declaredErrorText } from '../../lib/domain-error-text';
 import { businessTimezone, formatMessageTime } from '../../lib/message-time';
+import { messageMedia, type MessageMedia } from '../../lib/message-media';
 const CATALOG: Record<string, unknown> = { es: esLocale, en: enLocale };
 
 // erp-whatsapp-inbox-inbox — the list of conversations AND the thread you open from it.
@@ -32,7 +33,16 @@ const CATALOG: Record<string, unknown> = { es: esLocale, en: enLocale };
 // SaaS proxy, which is where the credentials live. The screen says so instead of showing a
 // composer that would do nothing.
 
+/** The door the platform serves a customer's attachment by (whatsapp_inbox#192): Meta's asset id
+ *  in, the file out. Module-scoped like `whatsappTemplates`, because Meta's token lives in the SaaS
+ *  and only the runtime may reach it on this module's behalf. A hub that does not offer it yet
+ *  leaves it undefined, and the thread says where to see the attachment instead. */
+interface WhatsappMediaDoor {
+  get(mediaId: string): Promise<Blob>;
+}
+
 interface ErploraClientLike extends ListClient {
+  forModule?(id: string): { whatsappMedia?: WhatsappMediaDoor } | undefined;
   query<T = unknown>(name: string, params?: Record<string, unknown>): Promise<T>;
   queryPage<R = unknown>(name: string, params: ListParams): Promise<ListPage<R>>;
   command<T = unknown>(name: string, payload?: Record<string, unknown>): Promise<T>;
@@ -60,9 +70,18 @@ interface Message {
   message_type: string;
   body: string;
   media_url: string;
+  /** Meta's own message object: where an attachment's asset id lives (whatsapp_inbox#192). */
+  extra_metadata?: unknown;
   status: string;
   created_at: string;
 }
+
+/** One attachment's download, keyed by Meta's asset id. */
+type MediaState = { status: 'loading' } | { status: 'ready'; url: string } | { status: 'error' };
+
+/** Shown as soon as the thread opens, like any inbox; the rest wait for a tap, because every
+ *  download is a round trip to Meta and a thread can hold a dozen voice notes. */
+const SHOWN_INLINE: ReadonlySet<string> = new Set(['image', 'sticker']);
 
 /** The whole thread of one conversation in one read. 50 is the query's own page size. */
 const THREAD_PAGE = 200;
@@ -82,6 +101,14 @@ function whenText(value: string | null | undefined, withTime = false): string {
     yesterday: client.t(CATALOG, 'ui.yesterday'),
     withTime,
   });
+}
+
+function mediaDoor(): WhatsappMediaDoor | null {
+  const client = erplora();
+  if (typeof client.forModule !== 'function') return null;
+  // The literal travels IN the SDK call: the contract extractor (ADR-0127) follows nothing else.
+  const door = client.forModule('whatsapp_inbox')?.whatsappMedia;
+  return door && typeof door.get === 'function' ? door : null;
 }
 
 /** UI visibility only; the runtime re-checks the permission on every call. */
@@ -134,6 +161,12 @@ export class ErpWhatsappInboxInbox extends LitElement {
     .msg .body { white-space:pre-wrap; margin:0; }
     .msg .when { display:block; font-size:.75rem; color:var(--ion-color-medium,#6f6a5e); margin-top:.15rem; }
     .msg .kind { font-size:.75rem; font-weight:600; color:var(--ion-color-medium,#6f6a5e); }
+    .msg .media { display:flex; flex-direction:column; gap:.3rem; margin:.2rem 0; }
+    .msg .media img { display:block; max-width:100%; max-height:20rem; border-radius:8px; object-fit:contain; }
+    .msg .media audio, .msg .media video { max-width:100%; }
+    .msg .media video { max-height:20rem; border-radius:8px; }
+    .msg .media a { color:var(--ion-color-primary,#1971c2); font-weight:600; word-break:break-all; }
+    .msg .media .note, .msg .media .err { margin:0; }
     .empty { color:var(--ion-color-medium,#6f6a5e); }
     .assign { display:flex; gap:.5rem; align-items:end; flex-wrap:wrap; margin-top:.75rem; }
     .note { font-size:.85rem; color:var(--ion-color-medium,#6f6a5e); margin:.5rem 0 0; }
@@ -151,6 +184,9 @@ export class ErpWhatsappInboxInbox extends LitElement {
   @state() detailError = '';
 
   @state() detailBusy = false;
+
+  /** Downloads of the open thread's attachments, by asset id. Released when the thread closes. */
+  @state() media: Record<string, MediaState> = {};
 
   /** Employee id typed into the assign box. `''` means "unassign" — the SQL's own contract. */
   @state() assignTo = '';
@@ -231,6 +267,7 @@ export class ErpWhatsappInboxInbox extends LitElement {
     window.removeEventListener('erplora:locale-changed', this.onLocaleChange);
     super.disconnectedCallback();
     this.unsub?.();
+    this.releaseMedia();
   }
 
   /** A new message must land in the thread the operator is READING, not only in the list. */
@@ -270,16 +307,51 @@ export class ErpWhatsappInboxInbox extends LitElement {
         params: { conversation_id: conversationId },
       });
       this.messages = page?.rows ?? [];
+      for (const m of this.messages) {
+        const media = messageMedia(m);
+        if (media && SHOWN_INLINE.has(media.kind)) void this.loadMedia(media.mediaId);
+      }
     } catch (e) {
       this.detailError = e instanceof Error ? e.message : erplora().t(CATALOG, 'ui.errLoadThread');
     }
   }
 
   private closeDetail() {
+    this.releaseMedia();
     this.detail = null;
     this.messages = [];
     this.detailError = '';
     this.assignTo = '';
+  }
+
+  // ── Attachments (whatsapp_inbox#192) ───────────────────────────────────────
+
+  /** Downloads one attachment once; `retry` starts again after a failure. A reload of the thread
+   *  (a new message arriving) keeps what was already downloaded. */
+  private async loadMedia(mediaId: string, retry = false) {
+    const door = mediaDoor();
+    const current = this.media[mediaId];
+    if (!door || (current && !(retry && current.status === 'error'))) return;
+    this.media = { ...this.media, [mediaId]: { status: 'loading' } };
+    let next: MediaState;
+    try {
+      next = { status: 'ready', url: URL.createObjectURL(await door.get(mediaId)) };
+    } catch {
+      next = { status: 'error' };
+    }
+    if (this.media[mediaId]?.status !== 'loading') {
+      // The thread closed while it downloaded: nothing will show it, so do not keep it.
+      if (next.status === 'ready') URL.revokeObjectURL(next.url);
+      return;
+    }
+    this.media = { ...this.media, [mediaId]: next };
+  }
+
+  private releaseMedia() {
+    for (const state of Object.values(this.media)) {
+      if (state.status === 'ready') URL.revokeObjectURL(state.url);
+    }
+    this.media = {};
   }
 
   /** Assigns the open conversation, or unassigns it: `employee_id: ''` is the SQL's own contract. */
@@ -307,6 +379,43 @@ export class ErpWhatsappInboxInbox extends LitElement {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
+  private renderMedia(media: MessageMedia, body: string) {
+    const t = (k: string): string => erplora().t(CATALOG, k);
+    const label = t(`ui.mediaKind.${media.kind}`);
+    const state = this.media[media.mediaId];
+    let content: unknown;
+    if (!mediaDoor()) {
+      content = html`<p class="note" data-testid="whatsapp-inbox-media-unavailable">${t('ui.mediaUnavailable')}</p>`;
+    } else if (!state) {
+      content = SHOWN_INLINE.has(media.kind)
+        ? html`<p class="note">${t('ui.mediaLoading')}</p>`
+        : html`<ion-button data-testid="whatsapp-inbox-media-load" size="small" fill="outline"
+            @click=${() => this.loadMedia(media.mediaId)}>
+            ${t(media.kind === 'document' ? 'ui.mediaDownload' : 'ui.mediaPlay')}
+          </ion-button>`;
+    } else if (state.status === 'loading') {
+      content = html`<p class="note">${t('ui.mediaLoading')}</p>`;
+    } else if (state.status === 'error') {
+      content = html`<p class="err">${t('ui.mediaError')}</p>
+        <ion-button data-testid="whatsapp-inbox-media-retry" size="small" fill="clear"
+          @click=${() => this.loadMedia(media.mediaId, true)}>${t('ui.mediaRetry')}</ion-button>`;
+    } else if (media.kind === 'image' || media.kind === 'sticker') {
+      content = html`<img src=${state.url} alt=${media.caption || label} />`;
+    } else if (media.kind === 'audio') {
+      content = html`<audio controls src=${state.url}></audio>`;
+    } else if (media.kind === 'video') {
+      content = html`<video controls playsinline src=${state.url}></video>`;
+    } else {
+      content = html`<a href=${state.url} download=${media.filename || label} target="_blank" rel="noopener">
+        ${t('ui.mediaOpen')} ${media.filename || label}</a>`;
+    }
+    return html`<div class="media">
+      <span class="kind">${label}${media.filename ? html` · ${media.filename}` : nothing}</span>
+      ${content}
+      ${media.caption && media.caption !== body ? html`<p class="body">${media.caption}</p>` : nothing}
+    </div>`;
+  }
+
   private renderMessage(m: Message) {
     const t = (k: string): string => erplora().t(CATALOG, k);
     // Who said it (whatsapp_inbox#66). Since hub#1612 the thread also carries the ECHO of what the
@@ -318,11 +427,14 @@ export class ErpWhatsappInboxInbox extends LitElement {
     const side = m.direction === 'outbound' || m.direction === 'inbound' ? m.direction : 'unknown';
     // A photo, a location or a button reply is NOT an empty text message: say what arrived when
     // there is no body to show (Meta's own `type` vocabulary is this column).
-    const bodyless = !m.body && m.message_type && m.message_type !== 'text';
+    // An attachment is shown, not named (whatsapp_inbox#192).
+    const media = messageMedia(m);
+    const bodyless = !media && !m.body && m.message_type && m.message_type !== 'text';
     return html`<div class=${`msg ${side}`}>
       ${side === 'unknown'
         ? html`<span class="kind">${t('ui.unknownDirection')} · ${m.direction}</span>`
         : nothing}
+      ${media ? this.renderMedia(media, m.body) : nothing}
       ${bodyless ? html`<span class="kind">${m.message_type}</span>` : nothing}
       ${m.body ? html`<p class="body">${m.body}</p>` : nothing}
       ${m.media_url ? html`<span class="kind">${t('ui.attachment')}</span>` : nothing}

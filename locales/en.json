@@ -196,7 +196,21 @@
       "cloud_unreadable": "erplora.com answered something this till could not read. The template is saved here — try again in a moment.",
       "hub_not_enrolled": "This till is not yet paired with erplora.com, so it cannot send templates to Meta. Contact support.",
       "capability_denied": "WhatsApp Inbox is not allowed to send WhatsApp messages on this hub. Grant it in Settings → Permissions and save the template again."
-    }
+    },
+    "mediaKind": {
+      "image": "Photo",
+      "sticker": "Sticker",
+      "audio": "Voice note",
+      "video": "Video",
+      "document": "Document"
+    },
+    "mediaLoading": "Loading attachment…",
+    "mediaError": "Could not load the attachment.",
+    "mediaRetry": "Try again",
+    "mediaUnavailable": "This attachment cannot be shown here yet: you can see it on your phone's WhatsApp.",
+    "mediaPlay": "Play",
+    "mediaDownload": "Download",
+    "mediaOpen": "Open"
   },
   "errors": {
     "whatsapp_inbox.conversation_not_found": "That conversation does not exist in this business.",

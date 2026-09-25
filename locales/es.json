@@ -197,7 +197,21 @@
       "cloud_unreadable": "erplora.com ha contestado algo que esta caja no ha sabido leer. La plantilla queda guardada aquí: inténtalo dentro de un rato.",
       "hub_not_enrolled": "Esta caja todavía no está emparejada con erplora.com, así que no puede enviar plantillas a Meta. Avisa a soporte.",
       "capability_denied": "WhatsApp no tiene permiso para enviar mensajes desde este hub. Concédeselo en Ajustes → Permisos y vuelve a guardar la plantilla."
-    }
+    },
+    "mediaKind": {
+      "image": "Foto",
+      "sticker": "Sticker",
+      "audio": "Nota de voz",
+      "video": "Vídeo",
+      "document": "Documento"
+    },
+    "mediaLoading": "Cargando el adjunto…",
+    "mediaError": "No se ha podido cargar el adjunto.",
+    "mediaRetry": "Reintentar",
+    "mediaUnavailable": "Este adjunto aún no se puede ver aquí: lo tienes en el WhatsApp de tu móvil.",
+    "mediaPlay": "Reproducir",
+    "mediaDownload": "Descargar",
+    "mediaOpen": "Abrir"
   },
   "errors": {
     "whatsapp_inbox.conversation_not_found": "Esa conversación no existe en este negocio.",
