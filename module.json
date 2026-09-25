@@ -19,7 +19,7 @@
   "depends_on": [
     {
       "id": "customers",
-      "min_version": "2.3.45"
+      "min_version": "2.3.47"
     }
   ],
   "compatibility": {

@@ -436,6 +436,15 @@ por nueva y le creaba una segunda ficha. `customers.by_phone` (customers ≥ 2.3
 `*.requires.json`) aplica la misma regla que la bandeja desde #162. Lo vigila la marca 6 de
 `own_customer_only_problems` en `tests/flow_templates.test.py`.
 
+**Y lee el número como uno del PAÍS del negocio** (whatsapp_inbox#202): la receta reserva sobre la
+**primera** ficha que contesta la consulta, y hasta customers#81 `customers.by_phone` dejaba pasar
+cualquier prefijo de país, así que un francés `33 600 111 222` que escribía a una peluquería de
+España salía como la clienta local `600 111 222` y la cita iba a su ficha. Desde Clientes 2.3.47 la
+consulta lee `hub_settings.country_code` y solo acepta ese prefijo; por eso el suelo de `customers`
+en los dos `*.requires.json` y en el `depends_on` de `module.json` es 2.3.47. Una versión de
+Clientes cuyo SQL no nombra el país se trata como «no sabe el país», nunca como «seguramente vale»:
+lo vigila `home_country_match_problems`, que lee ese SQL en el árbol publicado como suelo.
+
 1. **`acknowledge`** — contesta al instante por WhatsApp, igual que en citas.
 2. **`book_table`** — decide qué le están pidiendo y, si es una mesa, **mira y reserva en el mismo
    turno**: los ajustes del restaurante (`reservations.settings.get`), los días cerrados
