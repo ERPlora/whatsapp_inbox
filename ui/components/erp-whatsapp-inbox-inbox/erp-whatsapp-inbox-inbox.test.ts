@@ -392,7 +392,18 @@ describe('the thread SHOWS what the customer sent (whatsapp_inbox#192)', () => {
     respuesta = async (mediaId) => new Blob([mediaId], { type: 'application/octet-stream' });
     URL.createObjectURL = (b: Blob) => `blob:test/${(b as Blob).size}-${Math.random()}`;
     URL.revokeObjectURL = (u: string) => { revocadas.push(u); };
+    formatos = [];
+    reproduce = () => 'maybe';
+    HTMLMediaElement.prototype.canPlayType = (mime: string) => {
+      formatos.push(mime);
+      return reproduce(mime) as CanPlayTypeResult;
+    };
   });
+
+  // What the device answers `canPlayType` (whatsapp_inbox#223): Safari on iPhone, iPad and older
+  // Macs answers "" for WhatsApp's own voice-note format, `audio/ogg; codecs=opus`.
+  let formatos: string[] = [];
+  let reproduce: (mime: string) => string;
 
   const esperar = async (el: HTMLElement) => {
     for (let i = 0; i < 4; i++) {
@@ -467,6 +478,86 @@ describe('the thread SHOWS what the customer sent (whatsapp_inbox#192)', () => {
     expect(audio, 'the voice note has no player').toBeTruthy();
     expect(audio!.hasAttribute('controls')).toBe(true);
     expect(audio!.getAttribute('src')).toMatch(/^blob:/);
+  });
+
+  // whatsapp_inbox#223 — WhatsApp sends voice notes as OGG/Opus, which some Safari (iPhone, iPad,
+  // Mac) cannot play: a bare player there stays mute and the owner hears nothing. The thread asks
+  // the device first and, when it cannot play the file, says so and hands the file over instead.
+  const NOTA_OPUS = adjunto('a2', 'audio', { id: 'media-5', mime_type: 'audio/ogg; codecs=opus', voice: true });
+
+  it('the device is asked about the exact format Meta declared for the voice note', async () => {
+    conPuerta();
+    hiloDelHub = [NOTA_OPUS];
+    const el = await montar();
+    await abrirConversacion(el);
+    await esperar(el);
+    expect(formatos, 'nobody asked the device whether it can play the voice note').toContain('audio/ogg; codecs=opus');
+  });
+
+  it('a voice note this device cannot play says so and offers the file, never a mute player', async () => {
+    conPuerta();
+    reproduce = (mime) => (mime.startsWith('audio/ogg') ? '' : 'maybe');
+    hiloDelHub = [NOTA_OPUS];
+    const el = await montar();
+    await abrirConversacion(el);
+    await esperar(el);
+    const boton = burbuja(el).querySelector('[data-testid="whatsapp-inbox-media-load"]') as HTMLElement;
+    expect(boton.textContent, 'the button promises to play what this device cannot play').toContain('ui.mediaDownload');
+    boton.click();
+    await esperar(el);
+    expect(burbuja(el).querySelector('audio'), 'a player that will stay mute is on screen').toBeNull();
+    expect(
+      burbuja(el).querySelector('[data-testid="whatsapp-inbox-media-cannot-play"]')?.textContent,
+    ).toContain('ui.mediaCannotPlay');
+    const enlace = burbuja(el).querySelector('a[download]');
+    expect(enlace, 'the voice note cannot be taken to another app').toBeTruthy();
+    expect(enlace!.getAttribute('href')).toMatch(/^blob:/);
+    expect(enlace!.getAttribute('download'), 'the file has no extension to open it with').toBe('ui.mediaKind.audio.ogg');
+  });
+
+  it('a voice note whose player fails once loaded falls back to the file, not silence', async () => {
+    conPuerta();
+    hiloDelHub = [NOTA_OPUS];
+    const el = await montar();
+    await abrirConversacion(el);
+    await esperar(el);
+    (burbuja(el).querySelector('[data-testid="whatsapp-inbox-media-load"]') as HTMLElement).click();
+    await esperar(el);
+    const audio = burbuja(el).querySelector('audio');
+    expect(audio, 'a playable voice note has no player').toBeTruthy();
+    audio!.dispatchEvent(new Event('error'));
+    await esperar(el);
+    expect(burbuja(el).querySelector('audio'), 'the broken player is still there').toBeNull();
+    expect(burbuja(el).textContent).toContain('ui.mediaCannotPlay');
+    expect(burbuja(el).querySelector('a[download]')?.getAttribute('href')).toMatch(/^blob:/);
+  });
+
+  it('a video this device cannot play is handed over as a file too', async () => {
+    conPuerta();
+    reproduce = () => '';
+    hiloDelHub = [adjunto('v1', 'video', { id: 'media-6', mime_type: 'video/3gpp' })];
+    const el = await montar();
+    await abrirConversacion(el);
+    await esperar(el);
+    (burbuja(el).querySelector('[data-testid="whatsapp-inbox-media-load"]') as HTMLElement).click();
+    await esperar(el);
+    expect(burbuja(el).querySelector('video')).toBeNull();
+    expect(burbuja(el).textContent).toContain('ui.mediaCannotPlay');
+    expect(burbuja(el).querySelector('a[download]')?.getAttribute('download')).toBe('ui.mediaKind.video.3gp');
+  });
+
+  it('a video whose player fails once loaded falls back to the file too', async () => {
+    conPuerta();
+    hiloDelHub = [adjunto('v2', 'video', { id: 'media-8', mime_type: 'video/mp4' })];
+    const el = await montar();
+    await abrirConversacion(el);
+    await esperar(el);
+    (burbuja(el).querySelector('[data-testid="whatsapp-inbox-media-load"]') as HTMLElement).click();
+    await esperar(el);
+    burbuja(el).querySelector('video')!.dispatchEvent(new Event('error'));
+    await esperar(el);
+    expect(burbuja(el).querySelector('video'), 'the broken player is still there').toBeNull();
+    expect(burbuja(el).querySelector('a[download]')?.getAttribute('download')).toBe('ui.mediaKind.video.mp4');
   });
 
   it('a document opens under its own file name', async () => {

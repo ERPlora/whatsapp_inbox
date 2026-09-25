@@ -107,3 +107,8 @@ not the file, and the hub fetches it through the platform. Until the hub offers 
 («Photo», «Voice note», the document's name and the caption) and you see the file on the phone.
 WhatsApp only keeps an attachment for a limited time; an old one can fail with «Could not load the
 attachment» for good.
+
+**"This device cannot play it."** WhatsApp records voice notes as OGG/Opus, a format Safari on
+iPhone, iPad and older Macs does not play. The thread says so and offers the file for download
+instead of showing a player that stays silent; open it with another app, or listen on Chrome or the
+phone's WhatsApp. The same happens with a video in a format the device does not play.

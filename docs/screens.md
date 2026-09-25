@@ -35,6 +35,10 @@ every photo of the thread (arrows or the keys ← →) and closes with ✕ or Es
 **Download** button with its file name: they are fetched only when tapped, because every attachment
 travels from WhatsApp through the platform. While it loads the bubble says so; if it fails it says
 so and offers **Try again**. The file is kept only while the thread is open.
+WhatsApp sends voice notes as OGG/Opus, which Safari on iPhone, iPad and older Macs cannot play
+(#223): on a device that cannot play it the button says **Download** instead of **Play**, and the
+bubble says the device cannot play it and hands over the file (with its `.ogg`, `.mp3`… extension)
+to open with another app. A player that fails on the downloaded file falls back the same way.
 
 Until whatsapp_inbox#29 those two reads had no caller and a module called *inbox* could not open a
 message. Whoever confirms a booking asked for over WhatsApp has to be able to read what the customer

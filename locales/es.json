@@ -180,6 +180,7 @@
     "mediaPlay": "Reproducir",
     "mediaDownload": "Descargar",
     "mediaOpen": "Abrir",
+    "mediaCannotPlay": "Este dispositivo no puede reproducirlo: descárgalo y ábrelo con otra aplicación.",
     "threadRepliesElsewhere": "Desde esta pantalla no se contesta: responde desde el WhatsApp de tu móvil o deja que conteste una automatización.",
     "viewerOpen": "Ver la foto en grande",
     "viewerPrev": "Foto anterior",
