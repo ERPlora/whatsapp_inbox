@@ -1261,7 +1261,7 @@ function r5(r6) {
   return n4({ ...r6, state: true, attribute: false });
 }
 
-// node_modules/@erplora/outfitkit/dist/define.js
+// @erplora/outfitkit/dist/define.js
 function define(tag, ctor) {
   if (typeof customElements !== "undefined" && !customElements.get(tag)) {
     customElements.define(tag, ctor);
@@ -1403,7 +1403,7 @@ var o6 = e4(class extends i4 {
   }
 });
 
-// node_modules/@erplora/outfitkit/dist/shared/icons.js
+// @erplora/outfitkit/dist/shared/icons.js
 var rawAdd = '<svg viewBox="0 0 512 512" width="1.2em" height="1.2em" ><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="32" d="M256 112v288m144-144H112"/></svg>';
 var rawAlertCircle = '<svg viewBox="0 0 512 512" width="1.2em" height="1.2em" ><path fill="currentColor" d="M256 48C141.31 48 48 141.31 48 256s93.31 208 208 208s208-93.31 208-208S370.69 48 256 48m0 319.91a20 20 0 1 1 20-20a20 20 0 0 1-20 20m21.72-201.15l-5.74 122a16 16 0 0 1-32 0l-5.74-121.94v-.05a21.74 21.74 0 1 1 43.44 0Z"/></svg>';
 var rawAlertCircleOutline = '<svg viewBox="0 0 512 512" width="1.2em" height="1.2em" ><path fill="none" stroke="currentColor" stroke-miterlimit="10" stroke-width="32" d="M448 256c0-106-86-192-192-192S64 150 64 256s86 192 192 192s192-86 192-192Z"/><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="32" d="M250.26 166.05L256 288l5.73-121.95a5.74 5.74 0 0 0-5.79-6h0a5.74 5.74 0 0 0-5.68 6"/><path fill="currentColor" d="M256 367.91a20 20 0 1 1 20-20a20 20 0 0 1-20 20"/></svg>';
@@ -1554,7 +1554,7 @@ function okIcon(value) {
   return BY_NAME[value] ?? value;
 }
 
-// node_modules/@erplora/outfitkit/dist/ok-data-table.js
+// @erplora/outfitkit/dist/ok-data-table.js
 var CSV_BOM = "\uFEFF";
 var WINDOWS_1252_C1 = [
   8364,
@@ -3470,7 +3470,7 @@ __decorateClass2([
 var OkDataTable = _OkDataTable;
 define("ok-data-table", OkDataTable);
 
-// node_modules/@erplora/outfitkit/dist/ok-status-pill.js
+// @erplora/outfitkit/dist/ok-status-pill.js
 var __defProp3 = Object.defineProperty;
 var __decorateClass3 = (decorators, target, key, kind) => {
   var result = void 0;
@@ -3741,6 +3741,7 @@ var es_default = {
     colPhone: "Tel\xE9fono",
     colStatus: "Estado",
     colUnread: "Sin leer",
+    yesterday: "Ayer",
     colLastMessage: "\xDAltimo mensaje",
     colReference: "Referencia",
     colType: "Tipo",
@@ -3946,6 +3947,7 @@ var en_default = {
     colPhone: "Phone",
     colStatus: "Status",
     colUnread: "Unread",
+    yesterday: "Yesterday",
     colLastMessage: "Last message",
     colReference: "Reference",
     colType: "Type",
@@ -4147,6 +4149,53 @@ function domainErrorText(catalog, locale, e5) {
   return text2.replaceAll("{message}", message);
 }
 
+// ui/lib/message-time.ts
+function businessTimezone() {
+  const tz = globalThis.erplora?.timezone;
+  return typeof tz === "string" && tz.trim() ? tz.trim() : "UTC";
+}
+function usableZone(timezone) {
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: timezone });
+    return timezone;
+  } catch {
+    return "UTC";
+  }
+}
+function businessDay(instant, timezone) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(instant);
+}
+function previousDay(day) {
+  const [y3, m4, d3] = day.split("-").map(Number);
+  return new Date(Date.UTC(y3, m4 - 1, d3 - 1)).toISOString().slice(0, 10);
+}
+function formatMessageTime(value, opts) {
+  const raw = value == null ? "" : String(value);
+  if (!raw) return "";
+  const instant = new Date(raw);
+  if (Number.isNaN(instant.getTime())) return raw;
+  const timeZone = usableZone(opts.timezone);
+  const locale = opts.locale || "es";
+  let time;
+  let date;
+  try {
+    time = instant.toLocaleTimeString(locale, { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+    date = instant.toLocaleDateString(locale, { timeZone, day: "2-digit", month: "2-digit", year: "numeric" });
+  } catch {
+    return raw;
+  }
+  const day = businessDay(instant, timeZone);
+  const today = businessDay(opts.now ?? /* @__PURE__ */ new Date(), timeZone);
+  if (day === today) return time;
+  const label = day === previousDay(today) ? opts.yesterday : date;
+  return opts.withTime ? `${label}, ${time}` : label;
+}
+
 // ui/components/erp-whatsapp-inbox-inbox/erp-whatsapp-inbox-inbox.ts
 var CATALOG = { es: es_default, en: en_default };
 var THREAD_PAGE = 200;
@@ -4154,6 +4203,15 @@ function erplora() {
   const c5 = globalThis.erplora;
   if (!c5) throw new Error("erplora SDK no inicializado por el shell");
   return c5;
+}
+function whenText(value, withTime = false) {
+  const client = erplora();
+  return formatMessageTime(value, {
+    locale: client.locale,
+    timezone: businessTimezone(),
+    yesterday: client.t(CATALOG, "ui.yesterday"),
+    withTime
+  });
 }
 function can(permission) {
   const client = erplora();
@@ -4241,7 +4299,15 @@ var ErpWhatsappInboxInbox = class extends i3 {
         filterType: "range",
         format: (r6) => Number(r6.unread_count) > 0 ? String(r6.unread_count) : "\u2014"
       },
-      { key: "last_message_at", header: t5("ui.colLastMessage"), sortable: true, filterable: true, filterType: "daterange" }
+      {
+        key: "last_message_at",
+        header: t5("ui.colLastMessage"),
+        sortable: true,
+        filterable: true,
+        filterType: "daterange",
+        // Sorting and the date-range filter go to the server on the raw instant; this is display only.
+        format: (r6) => whenText(r6.last_message_at)
+      }
     ];
   }
   // TODO-LIT: componentWillLoad → connectedCallback. Recuerda: connectedCallback se dispara
@@ -4340,7 +4406,7 @@ var ErpWhatsappInboxInbox = class extends i3 {
       ${bodyless ? b2`<span class="kind">${m4.message_type}</span>` : A}
       ${m4.body ? b2`<p class="body">${m4.body}</p>` : A}
       ${m4.media_url ? b2`<span class="kind">${t5("ui.attachment")}</span>` : A}
-      <span class="when">${m4.created_at}</span>
+      <span class="when">${whenText(m4.created_at, true)}</span>
     </div>`;
   }
   renderDetail() {
@@ -4404,7 +4470,7 @@ __decorateClass([
 ], ErpWhatsappInboxInbox.prototype, "assignTo", 2);
 define("erp-whatsapp-inbox-inbox", ErpWhatsappInboxInbox);
 
-// node_modules/@erplora/outfitkit/dist/ok-inline-feedback.js
+// @erplora/outfitkit/dist/ok-inline-feedback.js
 var __defProp4 = Object.defineProperty;
 var __decorateClass4 = (decorators, target, key, kind) => {
   var result = void 0;
