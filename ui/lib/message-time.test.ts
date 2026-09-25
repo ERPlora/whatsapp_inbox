@@ -28,6 +28,12 @@ describe('formatMessageTime — list form (compact)', () => {
     expect(formatMessageTime('2026-09-01T23:30:00+00:00', MADRID)).toBe('01:30');
   });
 
+  it('«now» is read on the business clock too: at 01:30 in Madrid (still the 1st in UTC) a message from 01:00 is today', () => {
+    const justAfterMidnight = { ...MADRID, now: new Date('2026-09-01T23:30:00Z') };
+    expect(formatMessageTime('2026-09-01T23:00:00+00:00', justAfterMidnight)).toBe('01:00');
+    expect(formatMessageTime('2026-09-01T08:00:00+00:00', justAfterMidnight)).toBe('Ayer');
+  });
+
   it('English hubs get the English date order', () => {
     expect(formatMessageTime('2026-03-10T08:00:00+00:00', { ...MADRID, locale: 'en' })).toBe('03/10/2026');
   });
