@@ -52,7 +52,6 @@ loose reference resolved through public queries, never by reading another module
 | `whatsapp_inbox.request.approved` / `.rejected` / `.fulfilled` / `.deleted` | the request moves |
 | `whatsapp_inbox.conversation.assigned` | a conversation is assigned |
 | `whatsapp_inbox.template.created` / `.updated` / `.deleted` | templates change |
-| `whatsapp_inbox.settings.updated` | the configuration is saved |
 
 **Events it listens to** — one, since [#27](https://github.com/ERPlora/whatsapp_inbox/pull/27):
 `hub.whatsapp.message_received`, the core event the hub raises when it polls an inbound WhatsApp

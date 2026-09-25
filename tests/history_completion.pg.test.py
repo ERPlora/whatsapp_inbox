@@ -35,6 +35,8 @@ import subprocess
 import sys
 import uuid
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from module_migrations import declared_migrations  # noqa: E402
 MODULE_DIR = pathlib.Path(__file__).resolve().parent.parent
 
 
@@ -220,8 +222,8 @@ def main():
         ["docker", "exec", CONTAINER, "createdb", "-U", "postgres", db], check=True
     )
     try:
-        for rel in MANIFEST["migrations"]["postgres"]:
-            r = dedup.psql(db, (MODULE_DIR / rel).read_text())
+        for rel, migration in declared_migrations():
+            r = dedup.psql(db, migration)
             if r.returncode != 0:
                 print(f"FAIL: migration {rel} does not apply\n{r.stderr}")
                 return 1

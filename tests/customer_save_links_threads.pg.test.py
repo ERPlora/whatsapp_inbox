@@ -5,13 +5,15 @@ Why this file exists. Saving a customer card links the unlinked conversation of 
 (`_link_customer_threads`, #160). The thread is keyed by WhatsApp's number in international digits
 (`34600111222`), but the card holds whatever the owner typed — very often `600 111 222`, with no
 country code. An exact-key write never found that thread. `_link_customer_threads_write` finds it by
-the same NUMBER rule `customers.by_phone` and the handler use: equal, or the thread's number is the
-card's plus a 1-3 digit country code.
+the two numbers the handler's rule accepts: the card's number, or that number with the BUSINESS's
+calling code in front (`home_country_phone`). Never «any 1-3 digit prefix» (whatsapp_inbox#167): a
+French 33 600 111 222 is not the Spanish shop's «600 111 222».
 
 What is checked here, against real Postgres and each one a way the link goes wrong silently:
 1. the write is a closed internal door with a strict schema and NO `expect_rows` (a thread that is
    already linked writes 0 rows on purpose; a gate there would dead-letter the customer event);
-2. a national card claims the thread keyed by the international number, and an exact one too;
+2. a national card claims the thread keyed by the international number in the business's country,
+   and an exact one too — but not the same national digits with ANOTHER country's prefix;
 3. it only FILLS: a thread somebody already linked keeps its customer, `''` counts as unlinked;
 4. a longer number that merely contains it, a deleted thread and the other hub's thread are never
    touched.
@@ -28,6 +30,8 @@ import pathlib
 import sys
 import uuid
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from module_migrations import declared_migrations  # noqa: E402
 MODULE_DIR = pathlib.Path(__file__).resolve().parent.parent
 MANIFEST = json.loads((MODULE_DIR / "module.json").read_text())
 
@@ -77,14 +81,18 @@ def check_the_door(jsonschema):
         return problems + [f"`{WRITE}` declares no `schema`"]
     if jsonschema:
         validator = jsonschema.Draft202012Validator(json.loads((MODULE_DIR / rel).read_text()))
-        if list(validator.iter_errors({"phone": "600111222", "customer_id": ANA})):
+        good = {"phone": "600111222", "home_country_phone": "34600111222", "customer_id": ANA}
+        if list(validator.iter_errors(good)):
             problems.append(f"`{rel}` refuses a legitimate claim")
         for bad in (
-            {"phone": "600111222", "customer_id": ""},
-            {"phone": "", "customer_id": ANA},
-            {"phone": "600 111 222", "customer_id": ANA},
-            {"customer_id": ANA},
-            {"phone": "600111222", "customer_id": ANA, "hub_id": OTHER_HUB},
+            {**good, "customer_id": ""},
+            {**good, "phone": ""},
+            {**good, "phone": "600 111 222"},
+            {**good, "home_country_phone": ""},
+            {**good, "home_country_phone": "+34600111222"},
+            {"phone": "600111222", "customer_id": ANA},  # without it the write would have to guess
+            {"home_country_phone": "34600111222", "customer_id": ANA},
+            {**good, "hub_id": OTHER_HUB},
         ):
             if not list(validator.iter_errors(bad)):
                 problems.append(f"`{rel}` accepts {bad!r}")
@@ -96,6 +104,8 @@ def seed(db):
         ("t-ana", HUB, "34600111222", "NULL", 0),  # the bug: keyed international, card national
         ("t-longer", HUB, "346001112229", "NULL", 0),  # contains her number: somebody else
         ("t-four-more", HUB, "1234600111222", "NULL", 0),  # hers plus 4 digits: not a country code
+        ("t-french", HUB, "33600111222", "NULL", 0),  # her digits, ANOTHER country: somebody else
+        ("t-plus-one", HUB, "1600111222", "NULL", 0),  # her digits with a 1-digit foreign prefix
         ("t-linked", HUB, "34600999888", sql_literal(SOMEBODY_ELSE), 0),  # a person linked it
         ("t-blank", HUB, "34600777666", "''", 0),  # blank = unlinked
         ("t-dead", HUB, "34600555444", "NULL", 1),  # deleted thread
@@ -129,7 +139,9 @@ def check_behaviour(db):
     if customer_of(db, "t-ana") != "<null>":
         return ["the fixture does not measure the bug: t-ana is already linked"]
 
-    err, n = run_write(db, {"phone": "600111222", "customer_id": ANA}, "national")
+    err, n = run_write(
+        db, {"phone": "600111222", "home_country_phone": "34600111222", "customer_id": ANA}, "national"
+    )
     if err:
         return problems + [err]
     if customer_of(db, "t-ana") != ANA:
@@ -138,6 +150,11 @@ def check_behaviour(db):
         )
     if n != 1:
         problems.append(f"claiming one thread wrote {n} rows, expected exactly 1")
+    for foreign in ("t-french", "t-plus-one"):
+        if customer_of(db, foreign) != "<null>":
+            problems.append(
+                f"{foreign}: the same national digits with ANOTHER country's prefix were claimed"
+            )
     if customer_of(db, "t-four-more") != "<null>":
         problems.append("a number that is hers plus FOUR digits was claimed: country codes are 1-3")
     if customer_of(db, "t-longer") != "<null>":
@@ -145,25 +162,33 @@ def check_behaviour(db):
     if customer_of(db, "t-other") != "<null>":
         problems.append("the OTHER hub's thread was claimed: tenancy leak")
 
-    err, _ = run_write(db, {"phone": "447700900123", "customer_id": ANA}, "exact")
+    err, _ = run_write(
+        db, {"phone": "447700900123", "home_country_phone": "34447700900123", "customer_id": ANA}, "exact"
+    )
     if err:
         return problems + [err]
     if customer_of(db, "t-exact") != ANA:
         problems.append("a card with the full international number did not claim its thread")
 
-    err, n = run_write(db, {"phone": "34600999888", "customer_id": ANA}, "overwrite")
+    err, n = run_write(
+        db, {"phone": "600999888", "home_country_phone": "34600999888", "customer_id": ANA}, "overwrite"
+    )
     if err:
         return problems + [err]
     if customer_of(db, "t-linked") != SOMEBODY_ELSE or n != 0:
         problems.append("a thread somebody already linked was OVERWRITTEN")
 
-    err, _ = run_write(db, {"phone": "600777666", "customer_id": ANA}, "blank")
+    err, _ = run_write(
+        db, {"phone": "600777666", "home_country_phone": "34600777666", "customer_id": ANA}, "blank"
+    )
     if err:
         return problems + [err]
     if customer_of(db, "t-blank") != ANA:
         problems.append("a blank customer_id was not treated as unlinked")
 
-    err, n = run_write(db, {"phone": "600555444", "customer_id": ANA}, "dead")
+    err, n = run_write(
+        db, {"phone": "600555444", "home_country_phone": "34600555444", "customer_id": ANA}, "dead"
+    )
     if err:
         return problems + [err]
     if customer_of(db, "t-dead") != "<null>" or n != 0:
@@ -180,8 +205,8 @@ def main():
         db = "wa_claim_" + uuid.uuid4().hex[:8]
         psql("postgres", f'CREATE DATABASE "{db}";')
         try:
-            for rel in MANIFEST["migrations"]["postgres"]:
-                if psql(db, (MODULE_DIR / rel).read_text()).returncode != 0:
+            for rel, migration in declared_migrations():
+                if psql(db, migration).returncode != 0:
                     problems.append(f"migration `{rel}` failed")
                     break
             else:

@@ -26,8 +26,14 @@ The **Open** action of a row loads the conversation (`whatsapp_inbox.conversatio
 messages (`whatsapp_inbox.messages.list`, oldest first) into a panel above the list. Requires
 `whatsapp_inbox.view_conversation`, the same as the list — an employee can read a thread.
 
-Messages that carry no text (a photo, a location, a button reply) show the **kind** Meta reported
-instead of an empty bubble.
+Messages that carry no text (a location, a button reply) show the **kind** Meta reported instead of
+an empty bubble.
+
+**Attachments** (#192). A photo or a sticker the customer sent shows inside the thread as soon as it
+opens, with its caption. A voice note or a video gets a **Play** button, and a document a
+**Download** button with its file name: they are fetched only when tapped, because every attachment
+travels from WhatsApp through the platform. While it loads the bubble says so; if it fails it says
+so and offers **Try again**. The file is kept only while the thread is open.
 
 Until whatsapp_inbox#29 those two reads had no caller and a module called *inbox* could not open a
 message. That matters since appointments#38: approving a request creates a real appointment, so
@@ -140,9 +146,12 @@ never blanks a header somebody set. **Delete** asks for confirmation in the page
 
 ## Settings — the channel
 
-`<erp-whatsapp-inbox-settings>` — three blocks in this order: **the channel**, **what you use this
-WhatsApp for**, and **the requests**. Read with `whatsapp_inbox.settings.get` and saved with
-`whatsapp_inbox.settings.upsert`. Requires `whatsapp_inbox.manage_settings` — **admin only**.
+`<erp-whatsapp-inbox-settings>` — three steps (whatsapp_inbox#123): **connect the number**, **say
+what you use this WhatsApp for**, and **one switch** per use. Requires
+`whatsapp_inbox.manage_settings` — **admin only**. The screen writes no setting of this module: the
+one decision it offers («bookings confirm themselves / I review them first») belongs to the module
+that owns the diary (`appointments.settings.set_auto_confirm_online`,
+`reservations.settings.set_auto_confirm`).
 
 **The channel** shows the meter (the billable messages this hub has spent this month against the
 plan's allowance — both read-only, both counted by the platform and written by their only writer,
@@ -176,28 +185,15 @@ event and the one command that identify the use, never `manage_flows`:
 is «Use», which would build the second automation the badge exists to prevent. The status answer
 carries no id on purpose, so the list is the closest the card can bring the owner to their flow.
 
-### The requests
+### What this screen does not store
 
-The one decision this screen offers: **approval mode** — whether a request the assistant parsed
-lands confirmed or waits for a person to review it (read by `commands/_insert_request.sql`).
+The old bot's settings — greeting, auto-reply, out-of-hours text, «require confirmation», the prompt,
+which modules feed it, auto-close hours, staff notification, the on/off switch, the account mode and
+the request schema — were retired in whatsapp_inbox#127: nothing read them, and a switch that
+promises behaviour no code reads is a dead switch. What an automatic reply says is written in the
+FLOW that answers (Automations), which the owner edits without republishing the module. The values
+a hub had saved are set aside in the database (`_deprecated_*` columns), not destroyed.
 
-Everything the old bot used to configure — greeting, auto-reply, out-of-hours text, the prompt,
-which modules feed it — is said by the FLOW that answers now (`WASM-TODO.md`, revision of
-2026-08-11, pm#112 / ADR-0283). Those columns still exist and `settings.upsert` still requires them,
-so the screen carries them back untouched; it does not OFFER them, because a switch that promises
-behaviour no code reads is a dead switch.
-
-#### The columns, and what each one means
-
-| Setting | What it controls |
-|---|---|
-| **Account mode** | `shared` or `per_employee` |
-| **Approval mode** | `auto` (requests start confirmed) or `manual` (they wait for review) |
-| Auto-reply enabled, greeting, out-of-hours message | Automatic replies — **nothing sends them** |
-| Require confirmation | Whether a request needs confirming |
-| **Request schema** | The dynamic schema an ingested request is validated against |
-| System prompt | The prompt for the assistant that parses messages |
-| **Input modules** | Which modules' public queries provide catalogue context |
-| **Output modules** | Which modules a request type would be dispatched to |
-| Auto-close hours | When an idle conversation closes |
-| Free-tier monthly limit | 0 means no limit |
+The only numbers the channel still keeps are the billing meter — the monthly allowance and what was
+spent — written by billing alone (`whatsapp_inbox._quota.set`) and read with
+`whatsapp_inbox.usage.get`.

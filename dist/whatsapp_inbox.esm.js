@@ -1591,20 +1591,20 @@ var WINDOWS_1252_C1 = [
   376
 ];
 function decodeWindows1252(bytes) {
-  let text2 = "";
+  let text3 = "";
   for (const byte of bytes) {
-    text2 += String.fromCharCode(byte >= 128 && byte <= 159 ? WINDOWS_1252_C1[byte - 128] : byte);
+    text3 += String.fromCharCode(byte >= 128 && byte <= 159 ? WINDOWS_1252_C1[byte - 128] : byte);
   }
-  return text2;
+  return text3;
 }
 function decodeCsvBuffer(buf) {
-  let text2;
+  let text3;
   try {
-    text2 = new TextDecoder("utf-8", { fatal: true }).decode(buf);
+    text3 = new TextDecoder("utf-8", { fatal: true }).decode(buf);
   } catch {
-    text2 = decodeWindows1252(new Uint8Array(buf));
+    text3 = decodeWindows1252(new Uint8Array(buf));
   }
-  return text2.charCodeAt(0) === 65279 ? text2.slice(1) : text2;
+  return text3.charCodeAt(0) === 65279 ? text3.slice(1) : text3;
 }
 var __defProp2 = Object.defineProperty;
 var __decorateClass2 = (decorators, target, key, kind) => {
@@ -2323,16 +2323,16 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     this.emit("csvExport", { rows: this.rows.length });
     this.emit("export", { rows: this.rows.length });
   }
-  parseCsv(text2) {
+  parseCsv(text3) {
     const out = [];
     let row = [];
     let field = "";
     let q = false;
-    for (let i7 = 0; i7 < text2.length; i7++) {
-      const c5 = text2[i7];
+    for (let i7 = 0; i7 < text3.length; i7++) {
+      const c5 = text3[i7];
       if (q) {
         if (c5 === '"') {
-          if (text2[i7 + 1] === '"') {
+          if (text3[i7 + 1] === '"') {
             field += '"';
             i7++;
           } else q = false;
@@ -2342,7 +2342,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
         row.push(field);
         field = "";
       } else if (c5 === "\n" || c5 === "\r") {
-        if (c5 === "\r" && text2[i7 + 1] === "\n") i7++;
+        if (c5 === "\r" && text3[i7 + 1] === "\n") i7++;
         row.push(field);
         field = "";
         if (row.length > 1 || row[0] !== "") out.push(row);
@@ -2361,8 +2361,8 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     const input = ev.target;
     const file = input.files?.[0];
     if (!file) return;
-    const text2 = decodeCsvBuffer(await file.arrayBuffer());
-    const { headers, rows } = this.parseCsv(text2);
+    const text3 = decodeCsvBuffer(await file.arrayBuffer());
+    const { headers, rows } = this.parseCsv(text3);
     this.emit("csvImport", { headers, rows });
     this.emit("import", { headers, rows });
     input.value = "";
@@ -3886,7 +3886,8 @@ var es_default = {
     buttonUrl: "Abre un enlace",
     buttonPhone: "Llama al n\xFAmero",
     templateManagedInMeta: "Esta plantilla lleva botones o una imagen, v\xEDdeo o documento en la cabecera, as\xED que su texto se cambia en WhatsApp Manager. Al volver a abrir esta pesta\xF1a ver\xE1s lo que diga Meta.",
-    metaOnlyTemplates: "Estas plantillas de WhatsApp Manager todav\xEDa no se pueden traer a esta lista (llevan un carrusel, una oferta por tiempo limitado, un bot\xF3n de copiar c\xF3digo o de WhatsApp Flow, una ubicaci\xF3n en la cabecera, variables con nombre o una variable en la cabecera). Gesti\xF3nalas en WhatsApp Manager: {names}",
+    templateNamedVariablesInMeta: "Esta plantilla usa variables con nombre ({{nombre}}), que ERPlora a\xFAn no puede registrar en Meta, as\xED que su texto se cambia en WhatsApp Manager. Al volver a abrir esta pesta\xF1a ver\xE1s lo que diga Meta.",
+    metaOnlyTemplates: "Estas plantillas de WhatsApp Manager todav\xEDa no se pueden traer a esta lista (llevan un carrusel, una oferta por tiempo limitado, un bot\xF3n de copiar c\xF3digo o de WhatsApp Flow, una ubicaci\xF3n en la cabecera o una variable en la cabecera). Gesti\xF3nalas en WhatsApp Manager: {names}",
     doorRefusal: {
       invalid_name: "Meta no ha aceptado el nombre. Usa solo min\xFAsculas, n\xFAmeros y guiones bajos \u2014sin espacios ni acentos\u2014 y vuelve a intentarlo.",
       invalid_category: "Meta no ha aceptado la categor\xEDa. Elige Utilidad, Marketing o Autenticaci\xF3n y vuelve a enviarla.",
@@ -3907,7 +3908,22 @@ var es_default = {
       cloud_unreadable: "erplora.com ha contestado algo que esta caja no ha sabido leer. La plantilla queda guardada aqu\xED: int\xE9ntalo dentro de un rato.",
       hub_not_enrolled: "Esta caja todav\xEDa no est\xE1 emparejada con erplora.com, as\xED que no puede enviar plantillas a Meta. Avisa a soporte.",
       capability_denied: "WhatsApp no tiene permiso para enviar mensajes desde este hub. Conc\xE9deselo en Ajustes \u2192 Permisos y vuelve a guardar la plantilla."
-    }
+    },
+    mediaKind: {
+      image: "Foto",
+      sticker: "Sticker",
+      audio: "Nota de voz",
+      video: "V\xEDdeo",
+      document: "Documento"
+    },
+    mediaLoading: "Cargando el adjunto\u2026",
+    mediaError: "No se ha podido cargar el adjunto.",
+    mediaRetry: "Reintentar",
+    mediaUnavailable: "Este adjunto a\xFAn no se puede ver aqu\xED: lo tienes en el WhatsApp de tu m\xF3vil.",
+    mediaPlay: "Reproducir",
+    mediaDownload: "Descargar",
+    mediaOpen: "Abrir",
+    threadRepliesElsewhere: "Desde esta pantalla no se contesta: responde desde el WhatsApp de tu m\xF3vil o deja que conteste una automatizaci\xF3n."
   },
   errors: {
     "whatsapp_inbox.conversation_not_found": "Esa conversaci\xF3n no existe en este negocio.",
@@ -4100,7 +4116,8 @@ var en_default = {
     buttonUrl: "Opens a link",
     buttonPhone: "Calls the number",
     templateManagedInMeta: "This template has buttons or an image, video or document header, so its wording is changed in WhatsApp Manager. Open this tab again to see what Meta says.",
-    metaOnlyTemplates: "These WhatsApp Manager templates cannot be brought into this list yet (they use a carousel, a limited-time offer, a copy-code or WhatsApp Flow button, a location header, named variables, or a variable in the header). Manage them in WhatsApp Manager: {names}",
+    templateNamedVariablesInMeta: "This template uses named variables ({{name}}), which ERPlora cannot register at Meta yet, so its wording is changed in WhatsApp Manager. Open this tab again to see what Meta says.",
+    metaOnlyTemplates: "These WhatsApp Manager templates cannot be brought into this list yet (they use a carousel, a limited-time offer, a copy-code or WhatsApp Flow button, a location header, or a variable in the header). Manage them in WhatsApp Manager: {names}",
     doorRefusal: {
       invalid_name: "Meta did not accept the name. Use lowercase letters, numbers and underscores only \u2014 no spaces or accents \u2014 and try again.",
       invalid_category: "Meta did not accept the category. Pick Utility, Marketing or Authentication and send it again.",
@@ -4121,7 +4138,22 @@ var en_default = {
       cloud_unreadable: "erplora.com answered something this till could not read. The template is saved here \u2014 try again in a moment.",
       hub_not_enrolled: "This till is not yet paired with erplora.com, so it cannot send templates to Meta. Contact support.",
       capability_denied: "WhatsApp Inbox is not allowed to send WhatsApp messages on this hub. Grant it in Settings \u2192 Permissions and save the template again."
-    }
+    },
+    mediaKind: {
+      image: "Photo",
+      sticker: "Sticker",
+      audio: "Voice note",
+      video: "Video",
+      document: "Document"
+    },
+    mediaLoading: "Loading attachment\u2026",
+    mediaError: "Could not load the attachment.",
+    mediaRetry: "Try again",
+    mediaUnavailable: "This attachment cannot be shown here yet: you can see it on your phone's WhatsApp.",
+    mediaPlay: "Play",
+    mediaDownload: "Download",
+    mediaOpen: "Open",
+    threadRepliesElsewhere: "Replies are not sent from this screen: answer from WhatsApp on your phone, or let an automation reply."
   },
   errors: {
     "whatsapp_inbox.conversation_not_found": "That conversation does not exist in this business.",
@@ -4140,8 +4172,8 @@ var en_default = {
 var SOURCE_LANG = "en";
 function textFor(catalog, lang, code) {
   const dict = catalog[lang];
-  const text2 = dict?.errors?.[code];
-  return typeof text2 === "string" && text2.trim() ? text2 : "";
+  const text3 = dict?.errors?.[code];
+  return typeof text3 === "string" && text3.trim() ? text3 : "";
 }
 function alreadySpoken(catalog, code, message) {
   if (!message) return false;
@@ -4158,11 +4190,11 @@ function alreadySpoken(catalog, code, message) {
 function domainErrorText(catalog, locale, e5) {
   const code = e5?.code;
   if (typeof code !== "string" || !code) return "";
-  const text2 = textFor(catalog, locale, code) || textFor(catalog, SOURCE_LANG, code);
-  if (!text2.includes("{message}")) return text2;
+  const text3 = textFor(catalog, locale, code) || textFor(catalog, SOURCE_LANG, code);
+  if (!text3.includes("{message}")) return text3;
   const message = e5 instanceof Error ? e5.message : "";
   if (alreadySpoken(catalog, code, message)) return message;
-  return text2.replaceAll("{message}", message);
+  return text3.replaceAll("{message}", message);
 }
 
 // ui/lib/message-time.ts
@@ -4212,8 +4244,40 @@ function formatMessageTime(value, opts) {
   return opts.withTime ? `${label}, ${time}` : label;
 }
 
+// ui/lib/message-media.ts
+var KINDS = ["image", "sticker", "audio", "video", "document"];
+function isKind(value) {
+  return typeof value === "string" && KINDS.includes(value);
+}
+function asObject(value) {
+  if (typeof value === "string") {
+    if (!value) return null;
+    try {
+      return asObject(JSON.parse(value));
+    } catch {
+      return null;
+    }
+  }
+  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+var text = (value) => typeof value === "string" ? value : "";
+function messageMedia(m4) {
+  if (!isKind(m4.message_type)) return null;
+  const asset = asObject(asObject(m4.extra_metadata)?.[m4.message_type]);
+  const mediaId = text(asset?.id);
+  if (!asset || !mediaId) return null;
+  return {
+    kind: m4.message_type,
+    mediaId,
+    mimeType: text(asset.mime_type),
+    caption: text(asset.caption),
+    filename: text(asset.filename)
+  };
+}
+
 // ui/components/erp-whatsapp-inbox-inbox/erp-whatsapp-inbox-inbox.ts
 var CATALOG = { es: es_default, en: en_default };
+var SHOWN_INLINE = /* @__PURE__ */ new Set(["image", "sticker"]);
 var THREAD_PAGE = 200;
 var STATUS_KEYS = { active: "ui.statusActive", closed: "ui.statusClosed" };
 function erplora() {
@@ -4229,6 +4293,12 @@ function whenText(value, withTime = false) {
     yesterday: client.t(CATALOG, "ui.yesterday"),
     withTime
   });
+}
+function mediaDoor() {
+  const client = erplora();
+  if (typeof client.forModule !== "function") return null;
+  const door2 = client.forModule("whatsapp_inbox")?.whatsappMedia;
+  return door2 && typeof door2.get === "function" ? door2 : null;
 }
 function can(permission) {
   const client = erplora();
@@ -4247,6 +4317,7 @@ var ErpWhatsappInboxInbox = class extends i3 {
     this.messages = [];
     this.detailError = "";
     this.detailBusy = false;
+    this.media = {};
     this.assignTo = "";
     this.onLocaleChange = () => this.requestUpdate();
   }
@@ -4279,6 +4350,12 @@ var ErpWhatsappInboxInbox = class extends i3 {
     .msg .body { white-space:pre-wrap; margin:0; }
     .msg .when { display:block; font-size:.75rem; color:var(--ion-color-medium,#6f6a5e); margin-top:.15rem; }
     .msg .kind { font-size:.75rem; font-weight:600; color:var(--ion-color-medium,#6f6a5e); }
+    .msg .media { display:flex; flex-direction:column; gap:.3rem; margin:.2rem 0; }
+    .msg .media img { display:block; max-width:100%; max-height:20rem; border-radius:8px; object-fit:contain; }
+    .msg .media audio, .msg .media video { max-width:100%; }
+    .msg .media video { max-height:20rem; border-radius:8px; }
+    .msg .media a { color:var(--ion-color-primary,#1971c2); font-weight:600; word-break:break-all; }
+    .msg .media .note, .msg .media .err { margin:0; }
     .empty { color:var(--ion-color-medium,#6f6a5e); }
     .assign { display:flex; gap:.5rem; align-items:end; flex-wrap:wrap; margin-top:.75rem; }
     .note { font-size:.85rem; color:var(--ion-color-medium,#6f6a5e); margin:.5rem 0 0; }
@@ -4358,6 +4435,7 @@ var ErpWhatsappInboxInbox = class extends i3 {
     window.removeEventListener("erplora:locale-changed", this.onLocaleChange);
     super.disconnectedCallback();
     this.unsub?.();
+    this.releaseMedia();
   }
   /** A new message must land in the thread the operator is READING, not only in the list. */
   onDomainEvent() {
@@ -4385,15 +4463,46 @@ var ErpWhatsappInboxInbox = class extends i3 {
         params: { conversation_id: conversationId }
       });
       this.messages = page?.rows ?? [];
+      for (const m4 of this.messages) {
+        const media = messageMedia(m4);
+        if (media && SHOWN_INLINE.has(media.kind)) void this.loadMedia(media.mediaId);
+      }
     } catch (e5) {
       this.detailError = e5 instanceof Error ? e5.message : erplora().t(CATALOG, "ui.errLoadThread");
     }
   }
   closeDetail() {
+    this.releaseMedia();
     this.detail = null;
     this.messages = [];
     this.detailError = "";
     this.assignTo = "";
+  }
+  // ── Attachments (whatsapp_inbox#192) ───────────────────────────────────────
+  /** Downloads one attachment once; `retry` starts again after a failure. A reload of the thread
+   *  (a new message arriving) keeps what was already downloaded. */
+  async loadMedia(mediaId, retry = false) {
+    const door2 = mediaDoor();
+    const current = this.media[mediaId];
+    if (!door2 || current && !(retry && current.status === "error")) return;
+    this.media = { ...this.media, [mediaId]: { status: "loading" } };
+    let next;
+    try {
+      next = { status: "ready", url: URL.createObjectURL(await door2.get(mediaId)) };
+    } catch {
+      next = { status: "error" };
+    }
+    if (this.media[mediaId]?.status !== "loading") {
+      if (next.status === "ready") URL.revokeObjectURL(next.url);
+      return;
+    }
+    this.media = { ...this.media, [mediaId]: next };
+  }
+  releaseMedia() {
+    for (const state of Object.values(this.media)) {
+      if (state.status === "ready") URL.revokeObjectURL(state.url);
+    }
+    this.media = {};
   }
   /** Assigns the open conversation, or unassigns it: `employee_id: ''` is the SQL's own contract. */
   async assign() {
@@ -4417,12 +4526,48 @@ var ErpWhatsappInboxInbox = class extends i3 {
     if (ev.detail.actionId === "open") void this.loadDetail(String(ev.detail.row.id));
   }
   // ── Render ────────────────────────────────────────────────────────────────
+  renderMedia(media, body) {
+    const t5 = (k2) => erplora().t(CATALOG, k2);
+    const label = t5(`ui.mediaKind.${media.kind}`);
+    const state = this.media[media.mediaId];
+    let content;
+    if (!mediaDoor()) {
+      content = b2`<p class="note" data-testid="whatsapp-inbox-media-unavailable">${t5("ui.mediaUnavailable")}</p>`;
+    } else if (!state) {
+      content = SHOWN_INLINE.has(media.kind) ? b2`<p class="note">${t5("ui.mediaLoading")}</p>` : b2`<ion-button data-testid="whatsapp-inbox-media-load" size="small" fill="outline"
+            @click=${() => this.loadMedia(media.mediaId)}>
+            ${t5(media.kind === "document" ? "ui.mediaDownload" : "ui.mediaPlay")}
+          </ion-button>`;
+    } else if (state.status === "loading") {
+      content = b2`<p class="note">${t5("ui.mediaLoading")}</p>`;
+    } else if (state.status === "error") {
+      content = b2`<p class="err">${t5("ui.mediaError")}</p>
+        <ion-button data-testid="whatsapp-inbox-media-retry" size="small" fill="clear"
+          @click=${() => this.loadMedia(media.mediaId, true)}>${t5("ui.mediaRetry")}</ion-button>`;
+    } else if (media.kind === "image" || media.kind === "sticker") {
+      content = b2`<img src=${state.url} alt=${media.caption || label} />`;
+    } else if (media.kind === "audio") {
+      content = b2`<audio controls src=${state.url}></audio>`;
+    } else if (media.kind === "video") {
+      content = b2`<video controls playsinline src=${state.url}></video>`;
+    } else {
+      content = b2`<a href=${state.url} download=${media.filename || label} target="_blank" rel="noopener">
+        ${t5("ui.mediaOpen")} ${media.filename || label}</a>`;
+    }
+    return b2`<div class="media">
+      <span class="kind">${label}${media.filename ? b2` · ${media.filename}` : A}</span>
+      ${content}
+      ${media.caption && media.caption !== body ? b2`<p class="body">${media.caption}</p>` : A}
+    </div>`;
+  }
   renderMessage(m4) {
     const t5 = (k2) => erplora().t(CATALOG, k2);
     const side = m4.direction === "outbound" || m4.direction === "inbound" ? m4.direction : "unknown";
-    const bodyless = !m4.body && m4.message_type && m4.message_type !== "text";
+    const media = messageMedia(m4);
+    const bodyless = !media && !m4.body && m4.message_type && m4.message_type !== "text";
     return b2`<div class=${`msg ${side}`}>
       ${side === "unknown" ? b2`<span class="kind">${t5("ui.unknownDirection")} · ${m4.direction}</span>` : A}
+      ${media ? this.renderMedia(media, m4.body) : A}
       ${bodyless ? b2`<span class="kind">${m4.message_type}</span>` : A}
       ${m4.body ? b2`<p class="body">${m4.body}</p>` : A}
       ${m4.media_url ? b2`<span class="kind">${t5("ui.attachment")}</span>` : A}
@@ -4455,7 +4600,7 @@ var ErpWhatsappInboxInbox = class extends i3 {
               ${this.assignTo.trim() ? t5("ui.assign") : t5("ui.unassign")}
             </ion-button>
           </div>` : A}
-      <p class="note">${t5("ui.noReplyHere")}</p>
+      <p class="note">${t5("ui.threadRepliesElsewhere")}</p>
     </section>`;
   }
   render() {
@@ -4485,6 +4630,9 @@ __decorateClass([
 __decorateClass([
   r5()
 ], ErpWhatsappInboxInbox.prototype, "detailBusy", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxInbox.prototype, "media", 2);
 __decorateClass([
   r5()
 ], ErpWhatsappInboxInbox.prototype, "assignTo", 2);
@@ -5700,14 +5848,14 @@ function doorErrorCode(e5) {
 function textFor2(catalog, lang, key) {
   const ui = catalog[lang]?.ui;
   const bucket = ui?.doorRefusal;
-  const text2 = key ? bucket?.[key] : void 0;
-  return typeof text2 === "string" && text2.trim() ? text2 : "";
+  const text3 = key ? bucket?.[key] : void 0;
+  return typeof text3 === "string" && text3.trim() ? text3 : "";
 }
 function unknownText(catalog, lang, key, code) {
   const ui = catalog[lang]?.ui;
-  const text2 = ui?.[key];
-  if (typeof text2 !== "string" || !text2.trim()) return "";
-  return text2.replaceAll("{code}", code);
+  const text3 = ui?.[key];
+  if (typeof text3 !== "string" || !text3.trim()) return "";
+  return text3.replaceAll("{code}", code);
 }
 function doorRefusalText(catalog, locale, e5) {
   const code = doorErrorCode(e5);
@@ -5749,12 +5897,13 @@ function metaTemplateView(raw) {
 // ui/lib/meta-template-import.ts
 var MEDIA_HEADERS = /* @__PURE__ */ new Set(["IMAGE", "VIDEO", "DOCUMENT"]);
 var CATEGORIES = /* @__PURE__ */ new Set(["MARKETING", "UTILITY", "AUTHENTICATION"]);
-var text = (value) => typeof value === "string" ? value : "";
+var text2 = (value) => typeof value === "string" ? value : "";
 function placeholders(value) {
   return new Set([...value.matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map((m4) => m4[1])).size;
 }
-function hasNamedPlaceholders(value) {
-  return [...value.matchAll(/\{\{\s*([^{}]*?)\s*\}\}/g)].some((m4) => !/^\d+$/.test(m4[1]));
+function namedVariables(value) {
+  const names = [...value.matchAll(/\{\{\s*([^{}]*?)\s*\}\}/g)].map((m4) => m4[1]);
+  return [...new Set(names.filter((name) => !/^\d+$/.test(name)))];
 }
 function buttonsFromMeta(raw) {
   if (!Array.isArray(raw) || raw.length === 0) return null;
@@ -5762,17 +5911,17 @@ function buttonsFromMeta(raw) {
   for (const item of raw) {
     if (!item || typeof item !== "object") return null;
     const button = item;
-    const type = text(button.type).trim().toUpperCase();
-    const label = text(button.text).trim();
+    const type = text2(button.type).trim().toUpperCase();
+    const label = text2(button.text).trim();
     if (!label) return null;
     if (type === "QUICK_REPLY") {
       out.push({ type, text: label });
     } else if (type === "URL") {
-      const url = text(button.url).trim();
+      const url = text2(button.url).trim();
       if (!url) return null;
       out.push({ type, text: label, url });
     } else if (type === "PHONE_NUMBER") {
-      const phone = text(button.phone_number).trim();
+      const phone = text2(button.phone_number).trim();
       if (!phone) return null;
       out.push({ type, text: label, phone_number: phone });
     } else {
@@ -5783,10 +5932,10 @@ function buttonsFromMeta(raw) {
 }
 function templateFromMeta(template) {
   const refused = { ok: false };
-  const name = text(template.name).trim();
-  const language = text(template.language).trim();
-  const category = text(template.category).trim().toUpperCase();
-  const status = text(template.status).trim();
+  const name = text2(template.name).trim();
+  const language = text2(template.language).trim();
+  const category = text2(template.category).trim().toUpperCase();
+  const status = text2(template.status).trim();
   if (!name || !language || !status || !CATEGORIES.has(category)) return refused;
   if (!Array.isArray(template.components)) return refused;
   let header = "";
@@ -5795,28 +5944,30 @@ function templateFromMeta(template) {
   let body = "";
   let footer = "";
   let examples = [];
+  let named = [];
   for (const raw of template.components) {
     if (!raw || typeof raw !== "object") return refused;
     const part = raw;
-    const type = text(part.type).trim().toUpperCase();
+    const type = text2(part.type).trim().toUpperCase();
     if (type === "HEADER") {
-      const format = text(part.format).trim().toUpperCase() || "TEXT";
+      const format = text2(part.format).trim().toUpperCase() || "TEXT";
       if (MEDIA_HEADERS.has(format)) {
         headerFormat = format;
         header = "";
       } else if (format === "TEXT") {
-        header = text(part.text);
-        if (placeholders(header) > 0 || hasNamedPlaceholders(header)) return refused;
+        header = text2(part.text);
+        if (placeholders(header) > 0 || namedVariables(header).length > 0) return refused;
       } else {
         return refused;
       }
     } else if (type === "BODY") {
-      body = text(part.text);
-      const example = part.example?.body_text;
-      const first = Array.isArray(example) ? example[0] : void 0;
+      body = text2(part.text);
+      const example = part.example;
+      const first = Array.isArray(example?.body_text) ? example.body_text[0] : void 0;
       examples = Array.isArray(first) ? first : [];
+      named = Array.isArray(example?.body_text_named_params) ? example.body_text_named_params : [];
     } else if (type === "FOOTER") {
-      footer = text(part.text);
+      footer = text2(part.text);
     } else if (type === "BUTTONS") {
       const read = buttonsFromMeta(part.buttons);
       if (!read) return refused;
@@ -5825,11 +5976,21 @@ function templateFromMeta(template) {
       return refused;
     }
   }
-  if (!body.trim() || hasNamedPlaceholders(body)) return refused;
-  const variables = Array.from(
-    { length: placeholders(body) },
-    (_2, i7) => text(examples[i7]).trim() || `var${i7 + 1}`
-  );
+  if (!body.trim()) return refused;
+  const names = namedVariables(body);
+  let variables;
+  if (names.length === 0) {
+    variables = Array.from({ length: placeholders(body) }, (_2, i7) => text2(examples[i7]).trim() || `var${i7 + 1}`);
+  } else {
+    if (placeholders(body) > 0) return refused;
+    const byName = /* @__PURE__ */ new Map();
+    for (const item of named) {
+      const param = item ?? {};
+      const key = text2(param.param_name).trim();
+      if (key && !byName.has(key)) byName.set(key, text2(param.example).trim());
+    }
+    variables = names.map((name2) => byName.get(name2) || name2);
+  }
   return {
     ok: true,
     fields: {
@@ -5844,9 +6005,9 @@ function templateFromMeta(template) {
       buttons: JSON.stringify(buttons)
     },
     meta: {
-      meta_template_id: text(template.meta_id).trim(),
+      meta_template_id: text2(template.meta_id).trim(),
       meta_status: status,
-      meta_rejected_reason: text(template.rejected_reason)
+      meta_rejected_reason: text2(template.rejected_reason)
     }
   };
 }
@@ -5967,7 +6128,13 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
    *  those parts yet — saving would strip them at Meta. It is edited in WhatsApp Manager and the
    *  tab brings Meta's verdict back on the next open. */
   get managedInMeta() {
-    return !!this.editingId && (this.editingHeaderFormat !== "TEXT" || this.editingButtons.length > 0);
+    return !!this.editingId && (this.editingHeaderFormat !== "TEXT" || this.editingButtons.length > 0 || this.hasNamedVariables);
+  }
+  /** A body with NAMED variables (`{{nombre}}`, whatsapp_inbox#186) locks the panel too: the SaaS
+   *  registers `{{1}}…{{n}}` only, so «Guardar» would be refused (`missing_example`) until it
+   *  sends Meta `parameter_format: NAMED`. */
+  get hasNamedVariables() {
+    return !!this.editingId && namedVariables(this.newBody).length > 0;
   }
   get rowActions() {
     const t5 = (k2) => erplora4().t(CATALOG4, k2);
@@ -6075,11 +6242,11 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     const listed = Array.isArray(answer?.templates) ? answer.templates : [];
     for (const template of listed) atMeta.set(metaKey(template?.name, template?.language), template);
     const absenceIsDeletion = answer?.stale !== true && listed.length > 0;
-    const text2 = (value) => typeof value === "string" ? value : "";
+    const text3 = (value) => typeof value === "string" ? value : "";
     let written = 0;
     for (const row of rows) {
       const answered = atMeta.get(metaKey(row.name, row.language));
-      const knownId = text2(row.meta_template_id).trim();
+      const knownId = text3(row.meta_template_id).trim();
       let verdict;
       if (answered) {
         verdict = answered;
@@ -6088,12 +6255,12 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
       } else {
         continue;
       }
-      const status = text2(verdict.status).trim();
+      const status = text3(verdict.status).trim();
       if (!status) continue;
-      const metaId = text2(verdict.meta_id).trim() || text2(row.meta_template_id);
-      const reason = text2(verdict.rejected_reason);
+      const metaId = text3(verdict.meta_id).trim() || text3(row.meta_template_id);
+      const reason = text3(verdict.rejected_reason);
       const projected = metaId ? status.toLowerCase() : "not_sent";
-      if (projected === text2(row.meta_status) && reason === text2(row.meta_rejected_reason) && metaId === text2(row.meta_template_id)) {
+      if (projected === text3(row.meta_status) && reason === text3(row.meta_rejected_reason) && metaId === text3(row.meta_template_id)) {
         continue;
       }
       try {
@@ -6120,9 +6287,9 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     const here = new Set(rows.map((row) => metaKey(row.name, row.language)));
     const notBrought = [];
     for (const template of listed) {
-      if (!text2(template?.name).trim() || here.has(metaKey(template.name, template.language))) continue;
+      if (!text3(template?.name).trim() || here.has(metaKey(template.name, template.language))) continue;
       here.add(metaKey(template.name, template.language));
-      const label = `${text2(template.name).trim()} (${text2(template.language).trim()})`;
+      const label = `${text3(template.name).trim()} (${text3(template.language).trim()})`;
       const imported = templateFromMeta(template);
       if (!imported.ok) {
         notBrought.push(label);
@@ -6183,8 +6350,8 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
       this.formError = doorRefusalText(CATALOG4, erplora4().locale, e5);
       return;
     }
-    const text2 = (value) => typeof value === "string" ? value : "";
-    const status = text2(verdict?.status).trim();
+    const text3 = (value) => typeof value === "string" ? value : "";
+    const status = text3(verdict?.status).trim();
     if (!status || !templateId) {
       this.formError = doorRefusalText(CATALOG4, erplora4().locale, null);
       return;
@@ -6192,9 +6359,9 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     try {
       await erplora4().command("whatsapp_inbox.templates.record_meta_answer", {
         template_id: templateId,
-        meta_template_id: text2(verdict.meta_id),
+        meta_template_id: text3(verdict.meta_id),
         meta_status: status,
-        meta_rejected_reason: text2(verdict.rejected_reason),
+        meta_rejected_reason: text3(verdict.rejected_reason),
         ...reviewed
       });
     } catch (e5) {
@@ -6347,7 +6514,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     </div>`;
   }
   /** The media header and the buttons of a template brought from WhatsApp Manager, and why its
-   *  text is not saved from here (whatsapp_inbox#180). Nothing for a text-only template. */
+   *  text is not saved from here (whatsapp_inbox#180, #186). Nothing for a text-only template. */
   renderRichParts() {
     if (!this.managedInMeta) return A;
     const t5 = (k2) => erplora4().t(CATALOG4, k2);
@@ -6363,7 +6530,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
                 </li>`
     )}
             </ul>` : A}
-      <p data-testid="whatsapp-templates-managed-in-meta">${t5("ui.templateManagedInMeta")}</p>
+      ${this.hasNamedVariables ? b2`<p data-testid="whatsapp-templates-named-variables">${t5("ui.templateNamedVariablesInMeta")}</p>` : b2`<p data-testid="whatsapp-templates-managed-in-meta">${t5("ui.templateManagedInMeta")}</p>`}
     </div>`;
   }
   renderDeleteConfirm() {

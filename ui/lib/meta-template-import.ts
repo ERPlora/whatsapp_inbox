@@ -5,8 +5,8 @@
  * (ERPlora/saas#2253). This module stores a template as seven flat fields, the same seven Meta
  * reviews when the tab registers one, plus the KIND of its header and its buttons (whatsapp_inbox#180).
  * `templateFromMeta` translates the first into the second — or refuses: a template with a part those
- * fields cannot hold (a location header, a carousel, a copy-code or Flow button, a header variable,
- * named variables) is NOT imported without it. The panel resends every field on «Guardar», so a row
+ * fields cannot hold (a location header, a carousel, a copy-code or Flow button, a header variable)
+ * is NOT imported without it. The panel resends every field on «Guardar», so a row
  * missing a part would register the template again at Meta without it.
  */
 
@@ -19,7 +19,9 @@ export interface ImportedTemplateFields {
   body: string;
   footer: string;
   /** JSON array, one EXAMPLE value per `{{n}}` of the body: what the SaaS sends to Meta as
-   *  `example.body_text` when the template is registered again. */
+   *  `example.body_text` when the template is registered again. For a body with NAMED variables
+   *  (`{{nombre}}`, whatsapp_inbox#186) one per distinct name, in the order the body first uses it:
+   *  the names are read from the body, see `namedVariables`. */
   variables: string;
   /** `TEXT` (the `header` column holds it, possibly empty), or the kind of file the header carries:
    *  `IMAGE`, `VIDEO`, `DOCUMENT`. The file itself is chosen when the message is SENT. */
@@ -59,10 +61,12 @@ function placeholders(value: string): number {
   return new Set([...value.matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map((m) => m[1])).size;
 }
 
-/** A `{{…}}` that is not a number: WhatsApp Manager's NAMED variables (`{{nombre}}`). This module
- *  and the SaaS count `{{1}}…{{n}}` only, so such a template cannot be stored with its examples. */
-function hasNamedPlaceholders(value: string): boolean {
-  return [...value.matchAll(/\{\{\s*([^{}]*?)\s*\}\}/g)].some((m) => !/^\d+$/.test(m[1]));
+/** The `{{…}}` that are not numbers — WhatsApp Manager's NAMED variables (`{{nombre}}`) — each name
+ *  once, in the order the text first uses it (whatsapp_inbox#186). That order is what pairs a name
+ *  with its example in `variables`. */
+export function namedVariables(value: string): string[] {
+  const names = [...value.matchAll(/\{\{\s*([^{}]*?)\s*\}\}/g)].map((m) => m[1]);
+  return [...new Set(names.filter((name) => !/^\d+$/.test(name)))];
 }
 
 /** Meta's `buttons` list as this module stores it, or `null` when one of them is a kind the
@@ -109,6 +113,7 @@ export function templateFromMeta(template: Record<string, unknown>): TemplateImp
   let body = '';
   let footer = '';
   let examples: unknown[] = [];
+  let named: unknown[] = [];
   for (const raw of template.components) {
     if (!raw || typeof raw !== 'object') return refused;
     const part = raw as Record<string, unknown>;
@@ -120,15 +125,16 @@ export function templateFromMeta(template: Record<string, unknown>): TemplateImp
         header = '';
       } else if (format === 'TEXT') {
         header = text(part.text);
-        if (placeholders(header) > 0 || hasNamedPlaceholders(header)) return refused;
+        if (placeholders(header) > 0 || namedVariables(header).length > 0) return refused;
       } else {
         return refused;
       }
     } else if (type === 'BODY') {
       body = text(part.text);
-      const example = (part.example as { body_text?: unknown } | undefined)?.body_text;
-      const first = Array.isArray(example) ? example[0] : undefined;
+      const example = part.example as { body_text?: unknown; body_text_named_params?: unknown } | undefined;
+      const first = Array.isArray(example?.body_text) ? example.body_text[0] : undefined;
       examples = Array.isArray(first) ? first : [];
+      named = Array.isArray(example?.body_text_named_params) ? example.body_text_named_params : [];
     } else if (type === 'FOOTER') {
       footer = text(part.text);
     } else if (type === 'BUTTONS') {
@@ -139,14 +145,25 @@ export function templateFromMeta(template: Record<string, unknown>): TemplateImp
       return refused;
     }
   }
-  if (!body.trim() || hasNamedPlaceholders(body)) return refused;
+  if (!body.trim()) return refused;
 
-  // One value per placeholder, or the SaaS refuses the next save (`missing_example`). Meta's own
-  // examples first; a hole Meta left without one gets a named stand-in the owner can overwrite.
-  const variables = Array.from(
-    { length: placeholders(body) },
-    (_, i) => text(examples[i]).trim() || `var${i + 1}`,
-  );
+  // One value per variable, or the SaaS refuses the next save (`missing_example`). Meta's own
+  // examples first; a hole Meta left without one gets a stand-in the owner can overwrite.
+  const names = namedVariables(body);
+  let variables: string[];
+  if (names.length === 0) {
+    variables = Array.from({ length: placeholders(body) }, (_, i) => text(examples[i]).trim() || `var${i + 1}`);
+  } else {
+    // Meta takes ONE kind of variable per template (its `parameter_format`), never both.
+    if (placeholders(body) > 0) return refused;
+    const byName = new Map<string, string>();
+    for (const item of named) {
+      const param = (item ?? {}) as { param_name?: unknown; example?: unknown };
+      const key = text(param.param_name).trim();
+      if (key && !byName.has(key)) byName.set(key, text(param.example).trim());
+    }
+    variables = names.map((name) => byName.get(name) || name);
+  }
 
   return {
     ok: true,

@@ -47,6 +47,8 @@ import pathlib
 import sys
 import uuid
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from module_migrations import declared_migrations  # noqa: E402
 MODULE_DIR = pathlib.Path(__file__).resolve().parent.parent
 MANIFEST = json.loads((MODULE_DIR / "module.json").read_text())
 
@@ -113,8 +115,8 @@ SCRATCH = f"wa_state_gate_{uuid.uuid4().hex[:10]}"
 def run_migrations(db: str) -> bool:
     """The module's own migrations, in manifest order — the schema the runtime installs."""
     statements = []
-    for rel in MANIFEST["migrations"]["postgres"]:
-        statements.append((MODULE_DIR / rel).read_text())
+    for rel, migration in declared_migrations():
+        statements.append(migration)
     return psql(db, "\n".join(statements) + "\n").returncode == 0
 
 

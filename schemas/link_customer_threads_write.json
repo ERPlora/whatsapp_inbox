@@ -3,12 +3,17 @@
   "title": "whatsapp_inbox._link_customer_threads_write",
   "type": "object",
   "additionalProperties": false,
-  "required": ["phone", "customer_id"],
+  "required": ["phone", "home_country_phone", "customer_id"],
   "properties": {
     "phone": {
       "type": "string",
       "pattern": "^[1-9][0-9]{6,}$",
       "description": "The saved card's number in digits, leading zeros dropped, 7 digits at least — with or without the country code"
+    },
+    "home_country_phone": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{6,}$",
+      "description": "The same number with the business's calling code in front (hub country_code), or `phone` again when the hub's country is unknown. A thread keyed by any other prefix is somebody else (whatsapp_inbox#167)"
     },
     "customer_id": {
       "type": "string",

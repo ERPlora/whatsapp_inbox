@@ -355,3 +355,153 @@ describe('the «Status» column is translated, not the raw value (whatsapp_inbox
     }
   });
 });
+
+// whatsapp_inbox#192 — a customer's photo, voice note or document reached the thread as the bare
+// word «image» and the owner had to pick up the phone to see it. Meta sends an asset id, never a
+// URL; the bytes come through the module-scoped door the platform serves them by
+// (`erplora.forModule('whatsapp_inbox').whatsappMedia.get(id)` → Blob). The shape is WhatsApp
+// Web's and every inbox's: the photo shows inline, a voice note gets a player, a document opens.
+describe('the thread SHOWS what the customer sent (whatsapp_inbox#192)', () => {
+  const adjunto = (id: string, kind: string, asset: Record<string, unknown>, body = '') => ({
+    ...MESSAGES[0], id, wa_message_id: `wamid.${id}`, message_type: kind, body,
+    extra_metadata: JSON.stringify({ id: `wamid.${id}`, type: kind, [kind]: asset }),
+  });
+  const FOTO = adjunto('p1', 'image', { id: 'media-1', mime_type: 'image/jpeg', caption: 'mi pelo ahora' });
+  const NOTA = adjunto('a1', 'audio', { id: 'media-2', mime_type: 'audio/ogg', voice: true });
+  const DOC = adjunto('d1', 'document', { id: 'media-3', mime_type: 'application/pdf', filename: 'presupuesto.pdf' });
+
+  let descargas: { module: string; mediaId: string }[] = [];
+  let respuesta: (mediaId: string) => Promise<Blob>;
+  const revocadas: string[] = [];
+
+  const conPuerta = () => {
+    const sdk = (globalThis as { erplora: Record<string, unknown> }).erplora;
+    sdk.forModule = (module: string) => ({
+      whatsappMedia: {
+        get: (mediaId: string) => {
+          descargas.push({ module, mediaId });
+          return respuesta(mediaId);
+        },
+      },
+    });
+  };
+
+  beforeEach(() => {
+    descargas = [];
+    revocadas.length = 0;
+    respuesta = async (mediaId) => new Blob([mediaId], { type: 'application/octet-stream' });
+    URL.createObjectURL = (b: Blob) => `blob:test/${(b as Blob).size}-${Math.random()}`;
+    URL.revokeObjectURL = (u: string) => { revocadas.push(u); };
+  });
+
+  const esperar = async (el: HTMLElement) => {
+    for (let i = 0; i < 4; i++) {
+      await new Promise((r) => setTimeout(r, 0));
+      await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    }
+  };
+  const burbuja = (el: HTMLElement & { shadowRoot: ShadowRoot }, i = 0) =>
+    el.shadowRoot.querySelectorAll('.msg')[i] as HTMLElement;
+
+  it('a photo is downloaded by its asset id through the module door and shown inline, with its caption', async () => {
+    conPuerta();
+    hiloDelHub = [FOTO];
+    const el = await montar();
+    await abrirConversacion(el);
+    await esperar(el);
+
+    expect(descargas, 'the photo was never asked for').toEqual([{ module: 'whatsapp_inbox', mediaId: 'media-1' }]);
+    const img = burbuja(el).querySelector('img');
+    expect(img, 'the photo is not on screen').toBeTruthy();
+    expect(img!.getAttribute('src')).toMatch(/^blob:/);
+    expect(burbuja(el).textContent).toContain('mi pelo ahora');
+    expect(
+      [...burbuja(el).querySelectorAll('.kind')].map((k) => k.textContent?.trim()),
+      'the bubble still prints Meta\'s raw `type` instead of a translated label',
+    ).not.toContain('image');
+  });
+
+  it('while the photo downloads the bubble says so, not an empty box', async () => {
+    conPuerta();
+    respuesta = () => new Promise<Blob>(() => {});
+    hiloDelHub = [FOTO];
+    const el = await montar();
+    await abrirConversacion(el);
+    await esperar(el);
+    expect(burbuja(el).textContent).toContain('ui.mediaLoading');
+    expect(burbuja(el).querySelector('img')).toBeNull();
+  });
+
+  it('a download that fails says so and can be retried', async () => {
+    conPuerta();
+    let intentos = 0;
+    respuesta = async (mediaId) => {
+      intentos += 1;
+      if (intentos === 1) throw new Error('502');
+      return new Blob([mediaId]);
+    };
+    hiloDelHub = [FOTO];
+    const el = await montar();
+    await abrirConversacion(el);
+    await esperar(el);
+    expect(burbuja(el).textContent).toContain('ui.mediaError');
+    const reintentar = burbuja(el).querySelector('[data-testid="whatsapp-inbox-media-retry"]') as HTMLElement;
+    expect(reintentar, 'there is no way to try again').toBeTruthy();
+    reintentar.click();
+    await esperar(el);
+    expect(burbuja(el).querySelector('img'), 'retrying did not show the photo').toBeTruthy();
+    expect(burbuja(el).textContent).not.toContain('ui.mediaError');
+  });
+
+  it('a voice note is only downloaded when the owner asks to play it, then gets a player', async () => {
+    conPuerta();
+    hiloDelHub = [NOTA];
+    const el = await montar();
+    await abrirConversacion(el);
+    await esperar(el);
+    expect(descargas, 'every voice note of the thread is downloaded just by opening it').toEqual([]);
+    (burbuja(el).querySelector('[data-testid="whatsapp-inbox-media-load"]') as HTMLElement).click();
+    await esperar(el);
+    expect(descargas).toEqual([{ module: 'whatsapp_inbox', mediaId: 'media-2' }]);
+    const audio = burbuja(el).querySelector('audio');
+    expect(audio, 'the voice note has no player').toBeTruthy();
+    expect(audio!.hasAttribute('controls')).toBe(true);
+    expect(audio!.getAttribute('src')).toMatch(/^blob:/);
+  });
+
+  it('a document opens under its own file name', async () => {
+    conPuerta();
+    hiloDelHub = [DOC];
+    const el = await montar();
+    await abrirConversacion(el);
+    await esperar(el);
+    expect(burbuja(el).textContent).toContain('presupuesto.pdf');
+    (burbuja(el).querySelector('[data-testid="whatsapp-inbox-media-load"]') as HTMLElement).click();
+    await esperar(el);
+    const enlace = burbuja(el).querySelector('a[download]');
+    expect(enlace, 'the document cannot be opened').toBeTruthy();
+    expect(enlace!.getAttribute('download')).toBe('presupuesto.pdf');
+    expect(enlace!.getAttribute('href')).toMatch(/^blob:/);
+  });
+
+  it('a hub that cannot serve attachments yet says where to see it, and nothing breaks', async () => {
+    hiloDelHub = [FOTO, MESSAGES[1]];
+    const el = await montar();
+    await abrirConversacion(el);
+    await esperar(el);
+    expect(burbuja(el).textContent).toContain('ui.mediaUnavailable');
+    expect(burbuja(el).textContent).toContain('mi pelo ahora');
+    expect(burbuja(el, 1).textContent, 'the rest of the thread is gone').toContain('para un tinte');
+  });
+
+  it('closing the thread releases the downloaded files', async () => {
+    conPuerta();
+    hiloDelHub = [FOTO];
+    const el = await montar();
+    await abrirConversacion(el);
+    await esperar(el);
+    const src = burbuja(el).querySelector('img')!.getAttribute('src');
+    (el as unknown as { closeDetail: () => void }).closeDetail();
+    expect(revocadas, 'the photo stays in memory after the thread is closed').toContain(src);
+  });
+});

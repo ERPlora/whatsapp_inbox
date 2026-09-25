@@ -176,7 +176,8 @@
     "buttonUrl": "Abre un enlace",
     "buttonPhone": "Llama al número",
     "templateManagedInMeta": "Esta plantilla lleva botones o una imagen, vídeo o documento en la cabecera, así que su texto se cambia en WhatsApp Manager. Al volver a abrir esta pestaña verás lo que diga Meta.",
-    "metaOnlyTemplates": "Estas plantillas de WhatsApp Manager todavía no se pueden traer a esta lista (llevan un carrusel, una oferta por tiempo limitado, un botón de copiar código o de WhatsApp Flow, una ubicación en la cabecera, variables con nombre o una variable en la cabecera). Gestiónalas en WhatsApp Manager: {names}",
+    "templateNamedVariablesInMeta": "Esta plantilla usa variables con nombre ({{nombre}}), que ERPlora aún no puede registrar en Meta, así que su texto se cambia en WhatsApp Manager. Al volver a abrir esta pestaña verás lo que diga Meta.",
+    "metaOnlyTemplates": "Estas plantillas de WhatsApp Manager todavía no se pueden traer a esta lista (llevan un carrusel, una oferta por tiempo limitado, un botón de copiar código o de WhatsApp Flow, una ubicación en la cabecera o una variable en la cabecera). Gestiónalas en WhatsApp Manager: {names}",
     "doorRefusal": {
       "invalid_name": "Meta no ha aceptado el nombre. Usa solo minúsculas, números y guiones bajos —sin espacios ni acentos— y vuelve a intentarlo.",
       "invalid_category": "Meta no ha aceptado la categoría. Elige Utilidad, Marketing o Autenticación y vuelve a enviarla.",
@@ -197,7 +198,22 @@
       "cloud_unreadable": "erplora.com ha contestado algo que esta caja no ha sabido leer. La plantilla queda guardada aquí: inténtalo dentro de un rato.",
       "hub_not_enrolled": "Esta caja todavía no está emparejada con erplora.com, así que no puede enviar plantillas a Meta. Avisa a soporte.",
       "capability_denied": "WhatsApp no tiene permiso para enviar mensajes desde este hub. Concédeselo en Ajustes → Permisos y vuelve a guardar la plantilla."
-    }
+    },
+    "mediaKind": {
+      "image": "Foto",
+      "sticker": "Sticker",
+      "audio": "Nota de voz",
+      "video": "Vídeo",
+      "document": "Documento"
+    },
+    "mediaLoading": "Cargando el adjunto…",
+    "mediaError": "No se ha podido cargar el adjunto.",
+    "mediaRetry": "Reintentar",
+    "mediaUnavailable": "Este adjunto aún no se puede ver aquí: lo tienes en el WhatsApp de tu móvil.",
+    "mediaPlay": "Reproducir",
+    "mediaDownload": "Descargar",
+    "mediaOpen": "Abrir",
+    "threadRepliesElsewhere": "Desde esta pantalla no se contesta: responde desde el WhatsApp de tu móvil o deja que conteste una automatización."
   },
   "errors": {
     "whatsapp_inbox.conversation_not_found": "Esa conversación no existe en este negocio.",

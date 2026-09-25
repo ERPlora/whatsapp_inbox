@@ -1355,3 +1355,82 @@ describe('plantillas con botones o imagen en la cabecera (whatsapp_inbox#180)', 
     expect(qa(el, 'whatsapp-templates-button')).toHaveLength(0);
   });
 });
+
+describe('plantillas con variables con NOMBRE, {{nombre}} (whatsapp_inbox#186)', () => {
+  const EN_META = {
+    name: 'aviso_cita', language: 'es', category: 'UTILITY', status: 'APPROVED', meta_id: '93',
+    parameter_format: 'NAMED',
+    components: [
+      {
+        type: 'BODY',
+        text: 'Hola {{nombre}}, te esperamos el {{fecha}}.',
+        example: {
+          body_text_named_params: [
+            { param_name: 'nombre', example: 'Ana' },
+            { param_name: 'fecha', example: 'lunes' },
+          ],
+        },
+      },
+    ],
+  };
+  const TRAIDA = {
+    id: 't11', name: 'aviso_cita', language: 'es', category: 'UTILITY', header: '',
+    body: 'Hola {{nombre}}, te esperamos el {{fecha}}.', footer: '', variables: '["Ana","lunes"]',
+    meta_template_id: '93', meta_status: 'approved', meta_rejected_reason: '', is_active: 1,
+    header_format: 'TEXT', buttons: '[]',
+  };
+  const q = (el: HTMLElement & { shadowRoot: ShadowRoot }, id: string) =>
+    el.shadowRoot.querySelector(`[data-testid="${id}"]`);
+
+  it('se trae a la lista con sus ejemplos y deja de nombrarse en el aviso', async () => {
+    filas = [];
+    respondeListado = async () => ({ templates: [EN_META], stale: false });
+
+    const el = await montar();
+
+    const importados = comandos.filter((c) => c.name === 'whatsapp_inbox.templates.import_from_meta');
+    expect(importados, 'la plantilla con variables con nombre no se trajo').toHaveLength(1);
+    expect(importados[0].payload).toMatchObject({
+      name: 'aviso_cita', body: 'Hola {{nombre}}, te esperamos el {{fecha}}.', variables: '["Ana","lunes"]',
+    });
+    expect(q(el, 'whatsapp-templates-meta-only'), 'se sigue avisando de una plantilla que ya se trajo').toBeNull();
+  });
+
+  // The SaaS registers {{1}}…{{n}} only (it would answer `missing_example`): until it sends Meta
+  // `parameter_format: NAMED`, «Guardar» cannot re-register this text, so it is edited in
+  // WhatsApp Manager — the same lock as a template with buttons (whatsapp_inbox#180).
+  it('al abrirla queda en solo lectura, dice por qué, y un envío del formulario no la toca', async () => {
+    filas = [TRAIDA];
+    const el = await montar();
+    const t = tabla(el)!;
+    t.open = () => {};
+    t.close = () => {};
+    (el as unknown as { startEdit: (r: Record<string, unknown>) => void }).startEdit(TRAIDA);
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+
+    expect(q(el, 'whatsapp-templates-submit'), '«Guardar» la mandaría a un SaaS que la rechaza').toBeNull();
+    expect(q(el, 'whatsapp-templates-named-variables')?.textContent, 'no se dice por qué no se edita aquí').toContain(
+      'ui.templateNamedVariablesInMeta',
+    );
+    expect((q(el, 'whatsapp-templates-body') as HTMLElement & { disabled?: boolean })?.disabled).toBe(true);
+
+    const form = q(el, 'whatsapp-templates-form') as HTMLFormElement;
+    form.dispatchEvent(new Event('submit', { cancelable: true }));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(comandos.filter((c) => c.name === 'whatsapp_inbox.templates.update'), 'se reescribió la plantilla').toHaveLength(0);
+    expect(puerta, 'se volvió a registrar en Meta').toHaveLength(0);
+  });
+
+  it('una plantilla numerada ({{1}}) se sigue editando', async () => {
+    const numerada = { ...TRAIDA, body: 'Hola {{1}}', variables: '["Ana"]' };
+    filas = [numerada];
+    const el = await montar();
+    const t = tabla(el)!;
+    t.open = () => {};
+    (el as unknown as { startEdit: (r: Record<string, unknown>) => void }).startEdit(numerada);
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+
+    expect(q(el, 'whatsapp-templates-submit')).toBeTruthy();
+    expect(q(el, 'whatsapp-templates-named-variables')).toBeNull();
+  });
+});

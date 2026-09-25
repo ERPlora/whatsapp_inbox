@@ -61,23 +61,6 @@ PENDING = {
         "same intake point, one step later: the caller hands over the payload the LLM already "
         "parsed (WASM-TODO.md §3)"
     ),
-    # The three below lost their screen when Settings became the three-step screen (whatsapp_inbox
-    # #123, ADR-0470). They are not orphans by accident: the ADR names where each one goes, and
-    # `check_pending_is_still_pending` takes the line out again the day it gets a caller.
-    "whatsapp_inbox.settings.get": (
-        "the three-step screen writes NOT ONE column of `whatsapp_inbox` (ADR-0470 §3: the single "
-        "decision is `appointments.settings.set_auto_confirm_online`, in the module that owns the "
-        "diary), so the read that fed the old form has no screen left. What survives of the "
-        "singleton row is `free_tier_monthly_limit` — written by `_quota.set`, never by a person — "
-        "and `account_mode`; whatsapp_inbox#127 reduces both operations to exactly that and drops "
-        "the dead columns"
-    ),
-    "whatsapp_inbox.settings.upsert": (
-        "the other half of the same retreat: the «Guardar» button went out with the paragraphs it "
-        "saved (ADR-0470). Reduced to `free_tier_monthly_limit` + `account_mode` by "
-        "whatsapp_inbox#127 — and the quota half of that is already `_quota.set`'s job, which is "
-        "why `settings_quota_owner.pg.test.py` exists"
-    ),
 }
 
 
