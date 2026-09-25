@@ -85,9 +85,9 @@ GONE_LISTENS = (
     "appointments.booking_request.fulfilled",
     "appointments.booking_request.failed",
 )
-# Declared `deprecated` in this release, deleted in a later one (ADR-0398 §3). The version that
-# announces the retirement is the one this manifest ships as.
-DEPRECATED_ERRORS = (
+# Declared `deprecated` in 2.1.83 and deleted in the next release (ADR-0398 §3: two releases).
+# From here on they are neither declared nor texted.
+RETIRED_ERRORS = (
     "whatsapp_inbox.conversation_unreadable",
     "whatsapp_inbox.request_not_deletable",
     "whatsapp_inbox.request_not_found",
@@ -189,12 +189,11 @@ def check_no_surface_left() -> None:
     for event in GONE_LISTENS:
         ok(f"`{event}` is no longer listened to", event not in listen)
     declared_errors = MANIFEST.get("errors", {})
-    for code in DEPRECATED_ERRORS:
-        decl = declared_errors.get(code)
+    for code in RETIRED_ERRORS:
         ok(
-            f"error `{code}` is still declared, marked `deprecated` (ADR-0398: two releases)",
-            isinstance(decl, dict) and isinstance(decl.get("deprecated"), str) and bool(decl["deprecated"]),
-            f"declared as {decl!r}",
+            f"error `{code}` is no longer declared (its deprecation release already shipped)",
+            code not in declared_errors,
+            f"declared as {declared_errors.get(code)!r}",
         )
     for rel in GONE_FILES:
         ok(f"`{rel}` is gone from the package", not (MODULE_DIR / rel).exists())
@@ -220,10 +219,10 @@ def check_no_surface_left() -> None:
             for key in ("requestDetail", "confirmFulfil")
             if key in strings.get("ui", {})
         )
-        for code in DEPRECATED_ERRORS:
+        for code in RETIRED_ERRORS:
             ok(
-                f"`{locale}` still texts the deprecated `{code}` (a declared code needs its text)",
-                bool(str(strings.get("errors", {}).get(code, "")).strip()),
+                f"`{locale}` no longer texts the deleted `{code}`",
+                code not in strings.get("errors", {}),
             )
         ok(
             f"`{locale}` carries no string of the pipeline",
@@ -234,7 +233,8 @@ def check_no_surface_left() -> None:
     ok(
         "control — the inbox's own door is still declared",
         "whatsapp_inbox.messages.ingest" in commands
-        and "whatsapp_inbox.message.received" in emitted,
+        and "whatsapp_inbox.message.received" in emitted
+        and "whatsapp_inbox.conversation_not_found" in declared_errors,
     )
 
 
