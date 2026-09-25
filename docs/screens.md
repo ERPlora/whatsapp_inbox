@@ -16,6 +16,10 @@ each of those messages keeps the time it was **actually sent** (Meta's own times
 conversation stays down the list where it belongs and its thread reads in the order things were
 said. A history message that arrives without a usable time is dated when it reached the hub.
 
+Times are shown on the **business clock** (the hub's time zone, not the device's) and in the hub's
+language: the «Last message» column reads the time if it is from today, «Yesterday», or the date if
+older; each message in the thread reads the same way, with its time next to «Yesterday» or the date.
+
 ### Open a conversation and read the thread
 
 The **Open** action of a row loads the conversation (`whatsapp_inbox.conversations.get`) and its
