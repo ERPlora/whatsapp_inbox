@@ -22,7 +22,7 @@ flowchart LR
     M -- "webhook (mensajes)" --> S["☁️ erplora.com (SaaS)<br/>· guarda el token del número<br/>· aparca los mensajes<br/>· envía por Meta y cobra la cuota"]
     S -- "el hub PREGUNTA cada 5 s<br/>(el SaaS nunca empuja)" --> H
     subgraph H["🏪 Hub del negocio"]
-        R["Runtime"] --> W["Módulo WhatsApp Inbox<br/>Bandeja · Solicitudes · Plantillas · Ajustes"]
+        R["Runtime"] --> W["Módulo WhatsApp Inbox<br/>Bandeja · Plantillas · Ajustes"]
         R --> F["Automatizaciones (flows)<br/>disparadores · pasos · permisos"]
         F --> A["Citas / Reservas"]
         F -. "paso notify" .-> R
@@ -214,13 +214,11 @@ permisos**: el dueño concede los permisos, la revisa y la activa.
 | Evento | Cuándo salta |
 |---|---|
 | `whatsapp_inbox.message.received` | Entra un mensaje de un cliente |
-| `whatsapp_inbox.request.created` | La IA ha extraído una petición (cita, reserva, pedido, presupuesto) |
-| `whatsapp_inbox.request.approved` · `.rejected` · `.fulfilled` · `.deleted` | La petición cambia de estado |
 | `whatsapp_inbox.conversation.assigned` | Se asigna la conversación a una persona |
 | `whatsapp_inbox.template.created` · `.updated` · `.deleted` | Cambian las plantillas |
 
 Y los que el módulo **escucha**: `hub.whatsapp.message_received` (del núcleo del hub) y
-`appointments.booking_request.fulfilled` / `.failed` (Citas dice si materializó la reserva).
+`customer.created` / `.updated` (Clientes: para ligar el hilo a la ficha de su número).
 
 ## 6. Responder
 
@@ -240,35 +238,21 @@ flowchart LR
 - Lo que el dueño contesta **desde el móvil** todavía no aparece en la Bandeja (`ERPlora/saas#1883`);
   el historial anterior a la conexión, tampoco (`ERPlora/saas#1884`).
 
-## 7. Las peticiones (Solicitudes)
+## 7. Revisar una reserva antes de confirmarla
 
-Cuando la IA entiende que el cliente pide algo concreto, lo guarda como **petición** con su
-referencia (`WA-20260906-0007`) y los datos extraídos (servicio, fecha, personas…).
+No hay pestaña de «Solicitudes» (se retiró en whatsapp_inbox#193, y lo que la alimentaba en
+whatsapp_inbox#206): la automatización reserva directamente en **Citas** o **Reservas**. Si el salón
+quiere revisar lo que propone la IA antes de darlo por bueno, la cita entra **pendiente de
+confirmar** y se confirma desde Citas, con su contador de pendientes — como en Square, Fresha o
+Booksy.
 
-```mermaid
-stateDiagram-v2
-    [*] --> pending_review: la IA crea la petición<br/>(modo «revisión», por defecto)
-    [*] --> confirmed: modo «automático»
-    pending_review --> confirmed: el dueño aprueba
-    pending_review --> rejected: el dueño rechaza
-    confirmed --> fulfilled: Citas crea la reserva<br/>(booking_request.fulfilled)
-    confirmed --> pending_review: Citas no pudo<br/>(booking_request.failed)
-    fulfilled --> [*]
-    rejected --> [*]
-```
-
-- **Revisión o automático** se elige en Ajustes (`approval_mode`). Por defecto, revisión: lo que
-  propone una IA lo confirma una persona, como en Square, Fresha o Booksy.
-- **Una petición atendida no se borra**: es el rastro de lo que se prometió al cliente.
-
-## 8. Las cuatro pantallas
+## 8. Las pantallas
 
 | Pantalla | Para qué |
 |---|---|
 | **Bandeja** | Conversaciones, no leídos, abrir el hilo, asignar a una persona |
-| **Solicitudes** | Peticiones extraídas por la IA: aprobar, rechazar, ver qué se creó |
 | **Plantillas** | Las plantillas aprobadas por Meta que puede usar un paso `notify` |
-| **Ajustes** | Bloque **Canal** (conectar el número, consumo del mes frente a cuota) y modo de aprobación |
+| **Ajustes** | Bloque **Canal** (conectar el número, consumo del mes frente a cuota) y para qué se usa el número |
 
 No hay campo de token ni de secreto en ninguna pantalla, a propósito: las credenciales viven en
 el SaaS y el hub no las ve nunca.
@@ -291,8 +275,8 @@ el SaaS y el hub no las ve nunca.
 2. En Automatizaciones, la automatización de WhatsApp está **activa** y con sus permisos concedidos.
 3. Desde otro móvil, escribe al número: en menos de diez segundos el mensaje está en la **Bandeja**.
 4. El cliente recibe el acuse del paso `notify`.
-5. Si pidió cita, aparece en **Solicitudes** (o directamente en Citas si el modo es automático).
-6. Al aprobar, el cliente recibe la confirmación y la cita está en la agenda.
+5. Si pidió cita, la cita está en **Citas** (pendiente de confirmar si el salón revisa las reservas).
+6. Al confirmarla, el cliente recibe la confirmación y la cita está en la agenda.
 
 Si el paso 3 falla, mira primero el SaaS (¿el webhook recibe? ¿el hub pregunta?); si falla el 4,
 mira los permisos del flujo y la cuota; los demás se ven en el historial del run de la automatización.

@@ -1,6 +1,6 @@
 {
   "name": "Bandeja de WhatsApp",
-  "description": "Conversaciones de WhatsApp, solicitudes entrantes, plantillas de mensaje y ajustes del canal.",
+  "description": "Conversaciones de WhatsApp, plantillas de mensaje y ajustes del canal.",
   "navigation": {
     "inbox": {
       "label": "Bandeja de entrada"
@@ -82,7 +82,6 @@
     "errLoadThread": "No se pudo cargar la conversación",
     "errAssign": "No se pudo asignar la conversación",
     "delete": "Borrar",
-    "confirmFulfil": "¿Marcar la solicitud como atendida? No se crea nada en otro módulo: es una nota de que alguien la resolvió.",
     "edit": "Editar",
     "save": "Guardar",
     "cancel": "Cancelar",
@@ -92,7 +91,6 @@
     "errDeleteTemplate": "No se pudo borrar la plantilla",
     "settingsTitle": "Ajustes del canal",
     "helpConnectNeedsNewerHub": "Este hub es demasiado antiguo para conectar el número desde aquí. Actualiza el hub y vuelve a esta pantalla.",
-    "requestDetail": "Petición",
     "useAppointmentsName": "Reservar citas",
     "useAppointmentsSummary": "Una clienta pide cita por WhatsApp, el asistente le ofrece las horas que de verdad tienes libres y le reserva la que elija; luego le dice que ya está, y le avisa cuando tú confirmas su cita.",
     "usesGoToApps": "Ver aplicaciones",
@@ -186,12 +184,6 @@
   },
   "errors": {
     "whatsapp_inbox.conversation_not_found": "Esa conversación no existe en este negocio.",
-    "whatsapp_inbox.conversation_unreadable": "No se ha podido leer la conversación, así que no se ha creado nada. Prueba otra vez.",
-    "whatsapp_inbox.request_not_deletable": "Esa solicitud no se puede borrar: no existe en este negocio, o está cumplida y debe conservarse por auditoría.",
-    "whatsapp_inbox.request_not_found": "Esa solicitud no existe en este negocio.",
-    "whatsapp_inbox.request_not_fulfillable": "Solo una solicitud confirmada se puede marcar como atendida.",
-    "whatsapp_inbox.request_not_pending": "Esa solicitud no está pendiente de revisión: no existe en este negocio, o ya se aprobó, rechazó o atendió.",
-    "whatsapp_inbox.request_unreadable": "No se ha podido leer la solicitud, así que no se ha cambiado nada. Prueba otra vez.",
     "whatsapp_inbox.template_already_here": "Este negocio ya tiene una plantilla con ese nombre e idioma (viva o borrada aquí), así que no se ha traído nada.",
     "whatsapp_inbox.template_not_found": "Esa plantilla no existe en este negocio."
   }
