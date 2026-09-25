@@ -3741,6 +3741,7 @@ var es_default = {
     colPhone: "Tel\xE9fono",
     colStatus: "Estado",
     colUnread: "Sin leer",
+    yesterday: "Ayer",
     colLastMessage: "\xDAltimo mensaje",
     colReference: "Referencia",
     colType: "Tipo",
@@ -3955,6 +3956,7 @@ var en_default = {
     colPhone: "Phone",
     colStatus: "Status",
     colUnread: "Unread",
+    yesterday: "Yesterday",
     colLastMessage: "Last message",
     colReference: "Reference",
     colType: "Type",
@@ -4165,6 +4167,53 @@ function domainErrorText(catalog, locale, e5) {
   return text2.replaceAll("{message}", message);
 }
 
+// ui/lib/message-time.ts
+function businessTimezone() {
+  const tz = globalThis.erplora?.timezone;
+  return typeof tz === "string" && tz.trim() ? tz.trim() : "UTC";
+}
+function usableZone(timezone) {
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: timezone });
+    return timezone;
+  } catch {
+    return "UTC";
+  }
+}
+function businessDay(instant, timezone) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(instant);
+}
+function previousDay(day) {
+  const [y3, m4, d3] = day.split("-").map(Number);
+  return new Date(Date.UTC(y3, m4 - 1, d3 - 1)).toISOString().slice(0, 10);
+}
+function formatMessageTime(value, opts) {
+  const raw = value == null ? "" : String(value);
+  if (!raw) return "";
+  const instant = new Date(raw);
+  if (Number.isNaN(instant.getTime())) return raw;
+  const timeZone = usableZone(opts.timezone);
+  const locale = opts.locale || "es";
+  let time;
+  let date;
+  try {
+    time = instant.toLocaleTimeString(locale, { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+    date = instant.toLocaleDateString(locale, { timeZone, day: "2-digit", month: "2-digit", year: "numeric" });
+  } catch {
+    return raw;
+  }
+  const day = businessDay(instant, timeZone);
+  const today = businessDay(opts.now ?? /* @__PURE__ */ new Date(), timeZone);
+  if (day === today) return time;
+  const label = day === previousDay(today) ? opts.yesterday : date;
+  return opts.withTime ? `${label}, ${time}` : label;
+}
+
 // ui/components/erp-whatsapp-inbox-inbox/erp-whatsapp-inbox-inbox.ts
 var CATALOG = { es: es_default, en: en_default };
 var THREAD_PAGE = 200;
@@ -4172,6 +4221,15 @@ function erplora() {
   const c5 = globalThis.erplora;
   if (!c5) throw new Error("erplora SDK no inicializado por el shell");
   return c5;
+}
+function whenText(value, withTime = false) {
+  const client = erplora();
+  return formatMessageTime(value, {
+    locale: client.locale,
+    timezone: businessTimezone(),
+    yesterday: client.t(CATALOG, "ui.yesterday"),
+    withTime
+  });
 }
 function can(permission) {
   const client = erplora();
@@ -4259,7 +4317,15 @@ var ErpWhatsappInboxInbox = class extends i3 {
         filterType: "range",
         format: (r6) => Number(r6.unread_count) > 0 ? String(r6.unread_count) : "\u2014"
       },
-      { key: "last_message_at", header: t5("ui.colLastMessage"), sortable: true, filterable: true, filterType: "daterange" }
+      {
+        key: "last_message_at",
+        header: t5("ui.colLastMessage"),
+        sortable: true,
+        filterable: true,
+        filterType: "daterange",
+        // Sorting and the date-range filter go to the server on the raw instant; this is display only.
+        format: (r6) => whenText(r6.last_message_at)
+      }
     ];
   }
   // TODO-LIT: componentWillLoad → connectedCallback. Recuerda: connectedCallback se dispara
@@ -4358,7 +4424,7 @@ var ErpWhatsappInboxInbox = class extends i3 {
       ${bodyless ? b2`<span class="kind">${m4.message_type}</span>` : A}
       ${m4.body ? b2`<p class="body">${m4.body}</p>` : A}
       ${m4.media_url ? b2`<span class="kind">${t5("ui.attachment")}</span>` : A}
-      <span class="when">${m4.created_at}</span>
+      <span class="when">${whenText(m4.created_at, true)}</span>
     </div>`;
   }
   renderDetail() {

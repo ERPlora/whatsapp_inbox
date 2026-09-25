@@ -290,3 +290,29 @@ describe('the inbox lists the latest activity first (whatsapp_inbox#92)', () => 
     expect([list.default_sort, list.default_dir]).toEqual(['last_message_at', 'desc']);
   });
 });
+
+// whatsapp_inbox#183 — the thread and the «Last message» column printed the raw ISO instant in UTC.
+// The fixtures are from 2026-08-20, so neither is «today»: both read as a date on the Madrid clock.
+describe('message times are readable and on the hub clock (whatsapp_inbox#183)', () => {
+  const inMadrid = () => {
+    (globalThis as { erplora: Record<string, unknown> }).erplora.timezone = 'Europe/Madrid';
+  };
+
+  it('the thread shows the local date and time, not the ISO instant', async () => {
+    inMadrid();
+    const el = await montar();
+    await abrirConversacion(el);
+    const cuando = [...el.shadowRoot.querySelectorAll('.msg .when')].map((w) => w.textContent?.trim());
+    expect(cuando).toEqual(['20/08/2026, 11:00', '20/08/2026, 11:05']);
+  });
+
+  it('the «Last message» column is formatted on the hub clock', async () => {
+    inMadrid();
+    const el = await montar();
+    const cols = (tabla(el) as unknown as { columns: { key: string; format?: (r: unknown) => string }[] }).columns;
+    const col = cols.find((c) => c.key === 'last_message_at');
+    expect(col?.format, 'the column prints the raw value').toBeTypeOf('function');
+    expect(col!.format!(CONVERSATION)).toBe('20/08/2026');
+    expect(col!.format!({ ...CONVERSATION, last_message_at: null })).toBe('');
+  });
+});
