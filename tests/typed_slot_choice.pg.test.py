@@ -52,6 +52,8 @@ import pathlib
 import sys
 import uuid
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from module_migrations import declared_migrations  # noqa: E402
 MODULE_DIR = pathlib.Path(__file__).resolve().parent.parent
 MANIFEST = json.loads((MODULE_DIR / "module.json").read_text())
 
@@ -498,10 +500,8 @@ def main():
         db = "wa_offer_" + uuid.uuid4().hex[:8]
         psql("postgres", f'CREATE DATABASE "{db}";')
         try:
-            for entry in MANIFEST["migrations"]["postgres"]:
-                # A contract migration is declared as `{file, kind, since}` (hub#542).
-                rel = entry if isinstance(entry, str) else entry["file"]
-                r = psql(db, (MODULE_DIR / rel).read_text())
+            for rel, migration in declared_migrations():
+                r = psql(db, migration)
                 if r.returncode != 0:
                     problems.append(f"migration `{rel}` failed: {r.stderr.strip()}")
                     break

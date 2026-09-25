@@ -218,7 +218,6 @@ permisos**: el dueño concede los permisos, la revisa y la activa.
 | `whatsapp_inbox.request.approved` · `.rejected` · `.fulfilled` · `.deleted` | La petición cambia de estado |
 | `whatsapp_inbox.conversation.assigned` | Se asigna la conversación a una persona |
 | `whatsapp_inbox.template.created` · `.updated` · `.deleted` | Cambian las plantillas |
-| `whatsapp_inbox.settings.updated` | Cambian los ajustes del canal |
 
 Y los que el módulo **escucha**: `hub.whatsapp.message_received` (del núcleo del hub) y
 `appointments.booking_request.fulfilled` / `.failed` (Citas dice si materializó la reserva).

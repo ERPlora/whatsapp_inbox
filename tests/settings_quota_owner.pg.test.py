@@ -28,19 +28,16 @@ it, only the runtime itself.
 
 ## What is asserted here, against a real Postgres built from this module's own migrations
 
-1. **The public door cannot move the meter.** A `settings.upsert` carrying
-   `free_tier_monthly_limit = 0` over a row that says `30` leaves `30` — asserted through the
-   command the runtime would actually run, not through a helper that seeds the table.
-2. **And it cannot move it by omission either.** The same upsert with the field absent (which is
-   what the screen sends now) still leaves `30`: preserving is the behaviour, not a side effect of
-   the caller happening to echo the value back.
-3. **Everything else still saves.** Closing one column must not freeze the other fourteen.
-4. **The owner's door works, and it is the only one.** `_quota.set` writes the number, and creates
+1. **No public door writes the meter.** Until whatsapp_inbox#37 `settings.upsert` wrote it from its
+   payload; since whatsapp_inbox#127 that command is gone altogether (Settings has written no column
+   of this module since #123). The guarantee is kept for EVERY command a person, an API key or the
+   assistant can reach: none of them writes the singleton row (reading it, as the ingest guards
+   do, is fine) — so the next public command cannot quietly become the second writer.
+2. **The owner's door works, and it is the only one.** `_quota.set` writes the number, and creates
    the singleton row if the merchant never opened the settings screen — ingestion does not wait for
    anybody to visit a screen, so neither can the meter.
-5. **The owner's door is unreachable from outside.** `_quota.set` is `internal: true` in the
-   manifest (the `_` prefix alone would do it; both are asserted so a rename cannot open it), and
-   the SQL of `settings.upsert` never names the cap or the spend again.
+3. **The owner's door is unreachable from outside.** `_quota.set` is `internal: true` in the
+   manifest (the `_` prefix alone would do it; both are asserted so a rename cannot open it).
 
 Usage: tests/settings_quota_owner.pg.test.py   (exit 0 = green)
   Uses the `erplora-test-pg-5433` container by default (override: ERPLORA_TEST_PG_CONTAINER).
@@ -52,15 +49,17 @@ import importlib.util
 import json
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import uuid
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from module_migrations import declared_migrations  # noqa: E402
 MODULE_DIR = pathlib.Path(__file__).resolve().parent.parent
 MANIFEST = json.loads((MODULE_DIR / "module.json").read_text())
 CONTAINER = os.environ.get("ERPLORA_TEST_PG_CONTAINER", "erplora-test-pg-5433")
 
-PUBLIC_DOOR = "whatsapp_inbox.settings.upsert"
 OWNER_DOOR = "whatsapp_inbox._quota.set"
 METER_COLUMN = "free_tier_monthly_limit"
 # The spend the platform reports arrives through the SAME door and is the invoice for the
@@ -121,31 +120,6 @@ def run_command(db, command, binds):
     return []
 
 
-def settings_binds(now, new_id, **overrides):
-    """The payload of `whatsapp_inbox.settings.upsert` (`schemas/settings_upsert.json`) + system."""
-    binds = {
-        "hub_id": HUB,
-        "current_user_id": "u1",
-        "now": now,
-        "new_id": new_id,
-        "is_enabled": 1,
-        "account_mode": "shared",
-        "auto_reply_enabled": 1,
-        "approval_mode": "manual",
-        "require_confirmation": 1,
-        "request_schema": "{}",
-        "gpt_system_prompt": "",
-        "input_modules": "[]",
-        "output_modules": "[]",
-        "auto_close_hours": 24,
-        "notify_staff_new_request": 1,
-        "greeting_message": "",
-        "out_of_hours_message": "",
-    }
-    binds.update(overrides)
-    return binds
-
-
 def quota_binds(now, new_id, monthly_limit, monthly_usage=None):
     """The payload the Cloud-facing caller hands to the owner's door.
 
@@ -173,7 +147,7 @@ def meter(db):
 
 
 def check_owner_door_seeds_the_row(db):
-    """(4) billing can set the meter before anybody ever opens the settings screen."""
+    """(2) billing can set the meter before anybody ever opens the settings screen."""
     problems = run_command(
         db, OWNER_DOOR, quota_binds("2026-08-21T09:00:00+00:00", "s-1", GRANTED)
     )
@@ -189,64 +163,8 @@ def check_owner_door_seeds_the_row(db):
     return []
 
 
-def check_public_door_cannot_zero_the_meter(db):
-    """(1) the hole itself: `manage_settings` + a `0` used to switch the invoice off."""
-    problems = run_command(
-        db,
-        PUBLIC_DOOR,
-        settings_binds("2026-08-21T10:00:00+00:00", "s-2", **{METER_COLUMN: 0}),
-    )
-    # A payload the command no longer binds is not an error: the runtime passes the whole payload
-    # and the SQL takes what it names. What matters is only what landed in the column.
-    if problems and "binds" not in problems[0]:
-        return problems
-    got = meter(db)
-    if got != GRANTED:
-        return [
-            f"`{PUBLIC_DOOR}` with {METER_COLUMN}=0 left the meter at {got!r}: anybody holding "
-            f"`manage_settings` can still switch this channel's billing off."
-        ]
-    return []
-
-
-def check_public_door_cannot_blank_it_by_omission(db):
-    """(2) and (3): the field is gone from the payload, the rest of the screen still saves."""
-    problems = run_command(
-        db,
-        PUBLIC_DOOR,
-        settings_binds(
-            "2026-08-21T11:00:00+00:00",
-            "s-3",
-            greeting_message="Hola!",
-            auto_close_hours=48,
-        ),
-    )
-    if problems:
-        return problems
-    got = meter(db)
-    if got != GRANTED:
-        return [
-            f"`{PUBLIC_DOOR}` without the field at all left the meter at {got!r}, not {GRANTED}: "
-            f"the value survives only while the caller echoes it back, which is not a guarantee."
-        ]
-    greeting = scalar(
-        db,
-        f"SELECT greeting_message FROM whatsapp_inbox_settings WHERE hub_id = {sql_literal(HUB)};",
-    )
-    hours = scalar(
-        db,
-        f"SELECT auto_close_hours FROM whatsapp_inbox_settings WHERE hub_id = {sql_literal(HUB)};",
-    )
-    if greeting != "Hola!" or hours != "48":
-        return [
-            f"the settings screen stopped saving: greeting={greeting!r}, auto_close_hours={hours!r}"
-            " — closing one column must not freeze the other fourteen."
-        ]
-    return []
-
-
 def check_owner_door_still_moves_it(db):
-    """(4) an upgrade lands on a row that already exists."""
+    """(2) an upgrade lands on a row that already exists."""
     problems = run_command(
         db, OWNER_DOOR, quota_binds("2026-08-21T12:00:00+00:00", "s-4", RAISED)
     )
@@ -259,7 +177,7 @@ def check_owner_door_still_moves_it(db):
 
 
 def check_the_door_is_internal():
-    """(5) manifest contract — no screen, no API key and no assistant can reach the owner's door."""
+    """(3) manifest contract — no screen, no API key and no assistant can reach the owner's door."""
     problems = []
     spec = MANIFEST["commands"][OWNER_DOOR]
     name = OWNER_DOOR.split(".", 1)[1]
@@ -277,32 +195,55 @@ def check_the_door_is_internal():
             f"`{OWNER_DOOR}` is offered to the assistant as a tool: a chat message must never be "
             f"able to move the meter."
         )
-    public = MANIFEST["commands"][PUBLIC_DOOR]
-    files = public["sql"] if isinstance(public["sql"], list) else [public["sql"]]
-    for rel in files:
-        body = (MODULE_DIR / rel).read_text()
-        code = "\n".join(
-            line for line in body.splitlines() if not line.lstrip().startswith("--")
-        )
-        for column in (METER_COLUMN, *SPEND_COLUMNS):
-            if column in code:
+    problems += check_no_public_door_names_the_meter()
+    return problems
+
+
+def is_public(name, spec):
+    """A command a person, an API key or the assistant can reach (not internal, not `_`-named)."""
+    return not spec.get("internal") and not name.split(".", 1)[1].startswith("_")
+
+
+def check_no_public_door_names_the_meter(manifest=None):
+    """(1) no public command WRITES the singleton row — reading the meter is what the ingest guards
+    do, and is fine. Writing it at all is the invoice: the cap, the spend, or a row that resets them."""
+    problems = []
+    commands = (manifest or MANIFEST)["commands"]
+    writes = re.compile(r"\b(INSERT\s+INTO|UPDATE)\s+whatsapp_inbox_settings\b", re.IGNORECASE)
+    for name, spec in sorted(commands.items()):
+        if not is_public(name, spec):
+            continue
+        sql = spec.get("sql") or []  # a handler-only command has no SQL of its own
+        for rel in sql if isinstance(sql, list) else [sql]:
+            body = (MODULE_DIR / rel).read_text()
+            code = "\n".join(
+                line for line in body.splitlines() if not line.lstrip().startswith("--")
+            )
+            if writes.search(code):
                 problems.append(
-                    f"`{PUBLIC_DOOR}` [{rel}] still names `{column}` in its SQL: the public door "
-                    f"is writing the invoice again."
+                    f"`{name}` [{rel}] writes `whatsapp_inbox_settings`: a public door is writing "
+                    f"the invoice again ({METER_COLUMN}, {', '.join(SPEND_COLUMNS)})."
                 )
     return problems
 
 
-def main():
-    # The premise: both doors are declared. A rename must fail loudly, not silently pass.
-    for door in (PUBLIC_DOOR, OWNER_DOOR):
-        if door not in MANIFEST["commands"]:
-            print(
-                f"FAIL: `{door}` is not declared in module.json — the meter has no single owner"
-            )
-            return 1
+def check_the_sweep_sees_a_writer():
+    """Control: the sweep above DOES catch the owner's door if it were public."""
+    spec = dict(MANIFEST["commands"][OWNER_DOOR])
+    spec.pop("internal", None)
+    fake = {"commands": {"whatsapp_inbox.quota.set": spec}}
+    if not check_no_public_door_names_the_meter(fake):
+        return ["control: the public-door sweep did not flag `quota_set.sql` made public"]
+    return []
 
-    problems = check_the_door_is_internal()
+
+def main():
+    # The premise: the owner's door is declared. A rename must fail loudly, not silently pass.
+    if OWNER_DOOR not in MANIFEST["commands"]:
+        print(f"FAIL: `{OWNER_DOOR}` is not declared in module.json — the meter has no owner")
+        return 1
+
+    problems = check_the_door_is_internal() + check_the_sweep_sees_a_writer()
     if problems:
         for problem in problems:
             print(f"FAIL {OWNER_DOOR}\n    {problem}")
@@ -317,29 +258,24 @@ def main():
         ["docker", "exec", CONTAINER, "createdb", "-U", "postgres", db], check=True
     )
     try:
-        for rel in MANIFEST["migrations"]["postgres"]:
-            r = psql(db, (MODULE_DIR / rel).read_text())
+        for rel, migration in declared_migrations():
+            r = psql(db, migration)
             if r.returncode != 0:
                 print(f"FAIL: migration {rel} does not apply\n{r.stderr}")
                 return 1
 
         problems = check_owner_door_seeds_the_row(db)
         if not problems:
-            problems += check_public_door_cannot_zero_the_meter(db)
-        if not problems:
-            problems += check_public_door_cannot_blank_it_by_omission(db)
-        if not problems:
             problems += check_owner_door_still_moves_it(db)
 
         for problem in problems:
-            print(f"FAIL {PUBLIC_DOOR} / {OWNER_DOOR}\n    {problem}")
+            print(f"FAIL {OWNER_DOOR}\n    {problem}")
         if problems:
             return 1
 
         print(
             "OK: the free-tier meter has one writer — `_quota.set`, internal, which seeds the "
-            "singleton row and moves the number; `settings.upsert` cannot zero it, cannot blank it "
-            "by omission, and still saves everything else"
+            "singleton row and moves the number; no public command writes the singleton row"
         )
         return 0
     finally:

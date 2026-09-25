@@ -66,12 +66,12 @@ gatea nada contesta «sí» a una auditoría que debería decir que no.
 | ---- | ------ | ------- |
 | query | `conversations.list` / `.get` · `messages.list` | `view_conversation` |
 | query | `requests.list` / `.get` | `view_request` |
-| query | `templates.list` · `settings.get` | `manage_settings` (solo admin) |
+| query | `templates.list` · `usage.get` | `manage_settings` (solo admin) |
 | command | `requests.approve` / `.reject` / `.fulfill` (WASM) | `change_request` |
 | command | `requests.delete` (rechaza si ya está `fulfilled`) | `delete_request` |
-| command | `conversations.assign` · `templates.create/update/delete` · `settings.upsert` | `manage_settings` |
+| command | `conversations.assign` · `templates.create/update/delete` | `manage_settings` |
 | command | `messages.ingest` · `requests.ingest` (WASM) | `manage_connections` |
-| emite | `message.received`, `request.created/approved/rejected/fulfilled/deleted`, `conversation.assigned`, `template.*`, `settings.updated` | — |
+| emite | `message.received`, `request.created/approved/rejected/fulfilled/deleted`, `conversation.assigned`, `template.*` | — |
 | escucha | `hub.whatsapp.message_received` (core) · `appointments.booking_request.fulfilled` / `.failed` | — |
 
 Navegación: `erp-whatsapp-inbox-inbox`, `-requests`, `-templates`.
