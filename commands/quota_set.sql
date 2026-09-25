@@ -47,12 +47,11 @@
 -- **It seeds the singleton row.** Inbound ingestion does not wait for anybody to open the settings
 -- screen, so the meter cannot either: a hub whose merchant never visited that page still has to
 -- carry the allowance billing granted it. Every other column is left to its DDL default
--- (`migrations/postgres/001_init.sql`), which is exactly what `settings.get` already projects for
--- a hub with no row — creating it here changes no behaviour the merchant can see.
+-- (`migrations/postgres/001_init.sql`) — creating the row here changes no behaviour the merchant
+-- can see.
 --
--- On conflict only the meter and the audit stamp move: this command has no opinion about the
--- fifteen fields the settings screen owns, and overwriting them with defaults would make a plan
--- change wipe the merchant's greeting.
+-- On conflict only the meter and the audit stamp move: this command has no opinion about any
+-- other column of the row (today `approval_mode`, still read by the requests pipeline).
 --
 -- `0` keeps meaning «no cap» for the LIMIT (the guards only enforce above zero) — it is what a hub
 -- on an unmetered plan gets, and what an unprovisioned hub has always had.

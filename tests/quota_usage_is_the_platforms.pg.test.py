@@ -66,6 +66,8 @@ import subprocess
 import sys
 import uuid
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from module_migrations import declared_migrations  # noqa: E402
 MODULE_DIR = pathlib.Path(__file__).resolve().parent.parent
 MANIFEST = json.loads((MODULE_DIR / "module.json").read_text())
 CONTAINER = os.environ.get("ERPLORA_TEST_PG_CONTAINER", "erplora-test-pg-5433")
@@ -535,9 +537,8 @@ def main():
         ["docker", "exec", CONTAINER, "createdb", "-U", "postgres", db], check=True
     )
     try:
-        for entry in MANIFEST["migrations"]["postgres"]:
-            rel = entry if isinstance(entry, str) else entry["file"]
-            r = psql(db, (MODULE_DIR / rel).read_text())
+        for rel, migration in declared_migrations():
+            r = psql(db, migration)
             if r.returncode != 0:
                 print(f"FAIL: migration {rel} does not apply\n{r.stderr}")
                 return 1

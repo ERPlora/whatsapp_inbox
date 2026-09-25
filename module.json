@@ -1,7 +1,7 @@
 {
   "id": "whatsapp_inbox",
   "name": "WhatsApp Inbox",
-  "version": "2.1.75",
+  "version": "2.1.76",
   "description": "WhatsApp conversations, inbound requests, message templates and channel settings.",
   "agent": {
     "description": "Manages WhatsApp conversations, inbound requests, message templates, and channel settings: list and read conversations/messages, assign conversations, approve or reject requests, and configure the WhatsApp channel.",
@@ -89,7 +89,12 @@
       "migrations/postgres/008_quota_usage.sql",
       "migrations/postgres/009_last_offer.sql",
       "migrations/postgres/010_link_sweep.sql",
-      "migrations/postgres/011_template_rich_parts.sql"
+      "migrations/postgres/011_template_rich_parts.sql",
+      {
+        "file": "migrations/postgres/012_retire_dead_settings.sql",
+        "kind": "contract",
+        "since": "2.1.75"
+      }
     ]
   },
   "queries": {
@@ -344,13 +349,6 @@
       },
       "ai": {
         "description": "Lists the available WhatsApp message templates"
-      }
-    },
-    "whatsapp_inbox.settings.get": {
-      "permission": "whatsapp_inbox.manage_settings",
-      "sql": "queries/settings_get.sql",
-      "ai": {
-        "description": "Retrieves the current WhatsApp channel configuration"
       }
     },
     "whatsapp_inbox.usage.get": {
@@ -731,20 +729,6 @@
       ],
       "schema": "schemas/link_known_customer_write.json"
     },
-    "whatsapp_inbox.settings.upsert": {
-      "permission": "whatsapp_inbox.manage_settings",
-      "transaction": true,
-      "sql": [
-        "commands/settings_upsert.sql"
-      ],
-      "schema": "schemas/settings_upsert.json",
-      "emit": [
-        "whatsapp_inbox.settings.updated"
-      ],
-      "ai": {
-        "description": "Creates or updates the WhatsApp channel configuration"
-      }
-    },
     "whatsapp_inbox._quota.set": {
       "permission": "whatsapp_inbox.manage_connections",
       "internal": true,
@@ -825,7 +809,6 @@
       "whatsapp_inbox.template.created",
       "whatsapp_inbox.template.updated",
       "whatsapp_inbox.template.deleted",
-      "whatsapp_inbox.settings.updated",
       "whatsapp_inbox.conversation.link_pending"
     ]
   },

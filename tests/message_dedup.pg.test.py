@@ -53,6 +53,8 @@ import subprocess
 import sys
 import uuid
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from module_migrations import declared_migrations  # noqa: E402
 MODULE_DIR = pathlib.Path(__file__).resolve().parent.parent
 MANIFEST = json.loads((MODULE_DIR / "module.json").read_text())
 CONTAINER = os.environ.get("ERPLORA_TEST_PG_CONTAINER", "erplora-test-pg-5433")
@@ -327,10 +329,10 @@ def check_migration_survives_existing_duplicates():
     )
     try:
         # Everything the hub had BEFORE this fix, and then the damage.
-        for rel in MANIFEST["migrations"]["postgres"]:
+        for rel, migration in declared_migrations():
             if rel.endswith("005_message_dedup.sql"):
                 break
-            r = psql(db, (MODULE_DIR / rel).read_text())
+            r = psql(db, migration)
             if r.returncode != 0:
                 return [f"migration {rel} does not apply: {r.stderr}"]
         r = psql(
@@ -427,8 +429,8 @@ def main():
         ["docker", "exec", CONTAINER, "createdb", "-U", "postgres", db], check=True
     )
     try:
-        for rel in MANIFEST["migrations"]["postgres"]:
-            r = psql(db, (MODULE_DIR / rel).read_text())
+        for rel, migration in declared_migrations():
+            r = psql(db, migration)
             if r.returncode != 0:
                 print(f"FAIL: migration {rel} does not apply\n{r.stderr}")
                 return 1
