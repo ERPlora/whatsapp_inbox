@@ -57,6 +57,52 @@ describe('a template Meta holds, as this module stores it', () => {
     expect(out.ok && JSON.parse(out.fields.variables)).toEqual(['Ana', 'lunes']);
   });
 
+  // whatsapp_inbox#186 — WhatsApp Manager lets the owner NAME a variable (`{{nombre}}`) instead of
+  // numbering it, and Meta then keeps its examples in `body_text_named_params`. The names live in
+  // the body itself, so `variables` stays one example per variable, in the order the body first
+  // uses each name — the same list a numbered template stores, keyed by the text next to it.
+  it('a body with NAMED variables is brought in, with Meta`s example for each name', () => {
+    const out = templateFromMeta({
+      ...BASE,
+      parameter_format: 'NAMED',
+      components: [
+        {
+          type: 'BODY',
+          text: 'Hola {{nombre}}, te esperamos el {{fecha}}.',
+          example: {
+            body_text_named_params: [
+              { param_name: 'fecha', example: 'lunes' },
+              { param_name: 'nombre', example: 'Ana' },
+            ],
+          },
+        },
+      ],
+    });
+    expect(out.ok, 'a template with named variables is still refused').toBe(true);
+    expect(out.ok && out.fields.body).toBe('Hola {{nombre}}, te esperamos el {{fecha}}.');
+    expect(out.ok && JSON.parse(out.fields.variables), 'examples out of the body`s order').toEqual(['Ana', 'lunes']);
+  });
+
+  it('a name used twice is ONE variable; a name Meta gave no example gets the name as stand-in', () => {
+    const out = templateFromMeta({
+      ...BASE,
+      components: [
+        {
+          type: 'BODY',
+          text: '{{nombre}}, tu cita es el {{fecha}}. ¡Hasta pronto, {{ nombre }}!',
+          example: { body_text_named_params: [{ param_name: 'nombre', example: 'Ana' }] },
+        },
+      ],
+    });
+    expect(out.ok && JSON.parse(out.fields.variables)).toEqual(['Ana', 'fecha']);
+  });
+
+  it('numbered and named variables in the same body: Meta allows one kind per template', () => {
+    expect(
+      templateFromMeta({ ...BASE, components: [{ type: 'BODY', text: 'Hola {{nombre}}, el {{1}}' }] }),
+    ).toEqual({ ok: false });
+  });
+
   it('placeholders without examples still get one value each, or the SaaS refuses the next save', () => {
     const out = templateFromMeta({
       ...BASE,
@@ -178,16 +224,7 @@ describe('what does NOT fit is refused, never imported with a piece missing', ()
     ).toBe(false);
   });
 
-  it('named variables ({{nombre}}) in the body or the header: this module and the SaaS count {{1}}…{{n}} only', () => {
-    // WhatsApp Manager lets the owner name a variable instead of numbering it. Imported as is,
-    // the row would carry `variables: []` next to a body full of holes, and the next «Guardar»
-    // would send it to Meta with no example for them.
-    expect(
-      templateFromMeta({
-        ...BASE,
-        components: [{ type: 'BODY', text: 'Hola {{nombre}}, te esperamos el {{fecha}}.' }],
-      }),
-    ).toEqual({ ok: false });
+  it('a named variable in the header: the module carries body variables only', () => {
     expect(
       templateFromMeta({
         ...BASE,
