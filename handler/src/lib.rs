@@ -408,10 +408,14 @@ struct Home {
 
 /// Countries with no trunk prefix whose national numbers may begin with `0`, kept in the
 /// international number (whatsapp_inbox#201): an Italian landline «06 1234567» is +39 06 1234567,
-/// while a British «07700 900123» is +44 7700 900123. Same data as libphonenumber, which Square,
-/// Shopify and Fresha normalise with.
+/// while a British «07700 900123» is +44 7700 900123. Same data as libphonenumber (the territories
+/// without a `nationalPrefix` whose number pattern admits a leading 0), which Square, Shopify and
+/// Fresha normalise with. Rwanda is NOT here: its 0 is a trunk prefix (078 … is +250 78 …).
 fn keeps_leading_zero(country_code: &str) -> bool {
-    matches!(country_code.trim().to_ascii_uppercase().as_str(), "IT" | "VA" | "SM" | "CI" | "CG")
+    matches!(
+        country_code.trim().to_ascii_uppercase().as_str(),
+        "IT" | "VA" | "SM" | "CI" | "CG" | "BF" | "GA" | "NE" | "TJ"
+    )
 }
 
 /// The international calling code (ITU-T E.164) of a hub's `country_code` (ISO 3166-1 alpha-2, as
@@ -1072,6 +1076,26 @@ mod tests {
         assert_eq!(linked(&link_known_customer_pure(prefixed).unwrap()).1, "cu-gio");
         let mobile = input_in("IT", core_event("393331234567"), json!({ "customers.by_phone": [customer("cu-gio", "333 1234567")] }));
         assert_eq!(linked(&link_known_customer_pure(mobile).unwrap()).1, "cu-gio");
+    }
+
+    #[test]
+    fn every_country_without_a_trunk_prefix_keeps_its_leading_zero_like_libphonenumber() {
+        // whatsapp_inbox#204 (review): Italy is not alone. libphonenumber's metadata has no
+        // national prefix for Burkina Faso (mobiles 01/02/05/06/07 … since 2023), Gabon, Niger and
+        // Tajikistan either: their national numbers begin with 0 and keep it behind the calling
+        // code. A Burkinabe card «01 12 34 56» is WhatsApp's 22601123456, not 2261123456.
+        for (country, contact, card) in [
+            ("BF", "22601123456", "01 12 34 56"),
+            ("GA", "24101123456", "01 12 34 56"),
+            ("NE", "22708123456", "08 12 34 56"),
+            ("TJ", "992011234567", "01 123 4567"),
+        ] {
+            let input = input_in(country, core_event(contact), json!({ "customers.by_phone": [customer("cu-awa", card)] }));
+            assert_eq!(linked(&link_known_customer_pure(input).unwrap()).1, "cu-awa", "{country}: the card keeps its 0");
+        }
+        // Rwanda DOES have the trunk 0 (078 … is +250 78 …): it stays in the dropping group.
+        let rwanda = input_in("RW", core_event("250781234567"), json!({ "customers.by_phone": [customer("cu-ines", "078 123 4567")] }));
+        assert_eq!(linked(&link_known_customer_pure(rwanda).unwrap()).1, "cu-ines");
     }
 
     #[test]
