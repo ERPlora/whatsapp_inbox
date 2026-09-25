@@ -47,6 +47,7 @@ Usage: tests/flow_templates.test.py   (exit 0 = green)
 """
 
 import json
+import os
 import pathlib
 import re
 import subprocess
@@ -57,9 +58,16 @@ MODULE_DIR = pathlib.Path(__file__).resolve().parent.parent
 FLOWS_DIR = MODULE_DIR / "flows"
 MANIFEST = json.loads((MODULE_DIR / "module.json").read_text())
 
-# The hub checkout, when this runs from the monorepo. Absent on a CI runner that only clones this
-# repo — the schema check then SKIPS loudly instead of passing quietly.
-HUB_SCHEMA = MODULE_DIR.parents[2] / "hub" / "schemas" / "flow.schema.json"
+# The hub checkout the schema comes from. The gate DECLARES one in `ERPLORA_HUB_DIR` (the full hub
+# its `module-sdk` step brings down, module-toolkit#146) and a declared hub always wins; otherwise it
+# is the monorepo sibling. A CI runner only clones this repo, so before whatsapp_inbox#214 the
+# sibling was never there and the layer SKIPPED on every pull request, green. Now a declared hub
+# without the schema, or a CI run with no hub at all, is RED; only a bare local clone skips loudly.
+HUB_DECLARED = os.environ.get("ERPLORA_HUB_DIR", "").strip()
+HUB_SCHEMA = (
+    pathlib.Path(HUB_DECLARED) if HUB_DECLARED else MODULE_DIR.parents[2] / "hub"
+) / "schemas" / "flow.schema.json"
+SCHEMA_REQUIRED = bool(HUB_DECLARED) or bool(os.environ.get("CI", "").strip())
 WORKSPACE_MODULES = MODULE_DIR.parent
 
 
@@ -1179,8 +1187,8 @@ def unordered_tool_problems(name, doc):
 
 # `crates/runtime/src/flows/def.rs::MAX_ITERS_CAP` — the hub REFUSES a document whose `ai` step asks
 # for more, so a template past it is one no hub can save. `flow.schema.json` says the same, but that
-# layer only runs with the hub checkout next door (a CI runner has none): this one needs nothing, so
-# the cap holds on a bare checkout too.
+# layer needs a hub checkout (the monorepo sibling or the gate's `ERPLORA_HUB_DIR`): this one needs
+# nothing, so the cap holds on a bare local checkout too.
 MAX_ITERS_CAP = 10
 
 
@@ -8466,10 +8474,15 @@ def main():
     # virtualenv `jsonschema` is not importable (PEP 668 refuses to install it system-wide). It
     # used to raise `ModuleNotFoundError` in the second case, which aborted the run before layers
     # 2-6 — the ones that need no dependency at all — had said anything.
+    #
+    # Both stop being skips where a hub is PROMISED (`ERPLORA_HUB_DIR` declared, or a CI run): there
+    # the skip is exactly the silence whatsapp_inbox#214 removed, so it is a FAIL with its code.
     validator = None
+    unavailable = None
     if not HUB_SCHEMA.is_file():
-        skipped.append(
-            f"flow.schema.json not found at {HUB_SCHEMA} — the documents were NOT validated"
+        unavailable = (
+            "hub_schema_missing",
+            f"flow.schema.json not found at {HUB_SCHEMA} — the documents were NOT validated",
         )
     else:
         try:
@@ -8477,12 +8490,23 @@ def main():
 
             validator = jsonschema
         except ImportError:
-            skipped.append(
+            unavailable = (
+                "jsonschema_missing",
                 f"`jsonschema` is not installed — the documents were NOT validated against "
-                f"{HUB_SCHEMA.name}; every other layer below still ran"
+                f"{HUB_SCHEMA}; every other layer below still ran",
             )
+    if unavailable is not None:
+        code, why = unavailable
+        if SCHEMA_REQUIRED:
+            problems.append(
+                f"[{code}] {why}; a hub was promised here "
+                f"(ERPLORA_HUB_DIR={HUB_DECLARED or 'unset'}, CI={os.environ.get('CI', 'unset')})"
+            )
+        else:
+            skipped.append(why)
 
     if validator is not None:
+        print(f"SCHEMA  {HUB_SCHEMA}")
         schema = json.loads(HUB_SCHEMA.read_text())
         for path in docs:
             try:
