@@ -1460,6 +1460,18 @@ describe('plantillas con variables con NOMBRE, {{nombre}} (whatsapp_inbox#186)',
     expect(error, 'se enseña el código pelado').not.toBe('invalid_named_placeholders');
   });
 
+  it('el «+» tras abrir una no hereda sus ejemplos: la nueva lleva los suyos', async () => {
+    const el = await abrir(TRAIDA);
+    await (el as unknown as { openCreate: () => Promise<void> }).openCreate();
+    (el as unknown as { newName: string }).newName = 'aviso_nuevo';
+
+    await guardarCon(el, 'Hola {{nombre}}');
+
+    expect(comandos.filter((c) => c.name === 'whatsapp_inbox.templates.create')).toHaveLength(1);
+    expect(puerta, 'no se mandó a Meta').toHaveLength(1);
+    expect(puerta[0].variables, 'la plantilla nueva lleva el ejemplo de la que se abrió antes').toBe('["nombre"]');
+  });
+
   it('una plantilla con botones sigue en solo lectura aunque use variables con nombre', async () => {
     const conBotones = { ...TRAIDA, buttons: '[{"type":"QUICK_REPLY","text":"Vale"}]' };
     const el = await abrir(conBotones);
