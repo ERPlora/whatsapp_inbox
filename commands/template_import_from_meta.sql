@@ -19,13 +19,16 @@
 -- the no-op rolls back together with its `template.created`, and the tab treats that code as the
 -- quiet answer it is (no notice, no reload). Without the gate every open would announce a template
 -- that was never created (the online_booking#25 failure).
+--
+-- The header's KIND and the buttons land with the text (whatsapp_inbox#180): a template with an
+-- image header or «Confirmar» / «Cambiar cita» is brought in whole, never with a part missing.
 INSERT INTO whatsapp_inbox_template
   (id, hub_id, name, language, category, header, body, footer,
-   meta_template_id, meta_status, meta_rejected_reason, variables, is_active,
-   is_deleted, created_by, updated_by, created_at, updated_at)
+   meta_template_id, meta_status, meta_rejected_reason, variables, header_format, buttons,
+   is_active, is_deleted, created_by, updated_by, created_at, updated_at)
 SELECT :new_id, :hub_id, :name, :language, :category, :header, :body, :footer,
-       :meta_template_id, :meta_status, :meta_rejected_reason, :variables, 1,
-       0, :current_user_id, :current_user_id, :now, :now
+       :meta_template_id, :meta_status, :meta_rejected_reason, :variables, :header_format, :buttons,
+       1, 0, :current_user_id, :current_user_id, :now, :now
 WHERE NOT EXISTS (
   SELECT 1 FROM whatsapp_inbox_template t
   WHERE t.hub_id = :hub_id

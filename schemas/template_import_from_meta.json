@@ -14,7 +14,9 @@
     "variables",
     "meta_template_id",
     "meta_status",
-    "meta_rejected_reason"
+    "meta_rejected_reason",
+    "header_format",
+    "buttons"
   ],
   "properties": {
     "name": { "type": "string", "minLength": 1, "maxLength": 255 },
@@ -31,6 +33,15 @@
       "maxLength": 40,
       "description": "Meta's verdict as Meta words it (APPROVED, PENDING, REJECTED…). Not an enum, for the same reason as in template_record_meta_answer.json."
     },
-    "meta_rejected_reason": { "type": "string", "maxLength": 512 }
+    "meta_rejected_reason": { "type": "string", "maxLength": 512 },
+    "header_format": {
+      "type": "string",
+      "enum": ["TEXT", "IMAGE", "VIDEO", "DOCUMENT"],
+      "description": "TEXT, or the kind of file the header carries (whatsapp_inbox#180). The file itself is chosen when a message is sent."
+    },
+    "buttons": {
+      "type": "string",
+      "description": "JSON array of the template's buttons in Meta's order: {type: QUICK_REPLY|URL|PHONE_NUMBER, text, url?, phone_number?}"
+    }
   }
 }

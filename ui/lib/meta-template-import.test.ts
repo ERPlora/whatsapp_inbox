@@ -38,6 +38,8 @@ describe('a template Meta holds, as this module stores it', () => {
         body: 'Hola, te esperamos mañana.',
         footer: 'Peluquería Elena',
         variables: '[]',
+        header_format: 'TEXT',
+        buttons: '[]',
       },
       meta: { meta_template_id: '123', meta_status: 'APPROVED', meta_rejected_reason: '' },
     });
@@ -98,16 +100,82 @@ describe('a template Meta holds, as this module stores it', () => {
   });
 });
 
+describe('templates with buttons or a media header (whatsapp_inbox#180)', () => {
+  it('an image, video or document header is kept as its KIND, with no text', () => {
+    // Meta's `example.header_handle` is a sample upload that expires: the file a message carries is
+    // chosen when it is SENT, so the row keeps what the template IS — a header of that kind.
+    for (const format of ['IMAGE', 'VIDEO', 'DOCUMENT']) {
+      const out = templateFromMeta({
+        ...BASE,
+        components: [
+          { type: 'HEADER', format: format.toLowerCase(), example: { header_handle: ['https://scontent.example/x'] } },
+          { type: 'BODY', text: 'Cuerpo' },
+        ],
+      });
+      expect(out.ok, format).toBe(true);
+      expect(out.ok && out.fields.header_format, format).toBe(format);
+      expect(out.ok && out.fields.header, format).toBe('');
+    }
+  });
+
+  it('quick replies, link and call buttons are kept in Meta`s order with what each one does', () => {
+    const out = templateFromMeta({
+      ...BASE,
+      components: [
+        { type: 'BODY', text: 'Tu cita es mañana' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Confirmar' },
+            { type: 'quick_reply', text: 'Cambiar cita' },
+            { type: 'URL', text: 'Ver cita', url: 'https://salon.example/c/{{1}}', example: ['https://salon.example/c/42'] },
+            { type: 'PHONE_NUMBER', text: 'Llamar', phone_number: '+34600111222' },
+          ],
+        },
+      ],
+    });
+    expect(out.ok).toBe(true);
+    expect(out.ok && JSON.parse(out.fields.buttons)).toEqual([
+      { type: 'QUICK_REPLY', text: 'Confirmar' },
+      { type: 'QUICK_REPLY', text: 'Cambiar cita' },
+      { type: 'URL', text: 'Ver cita', url: 'https://salon.example/c/{{1}}' },
+      { type: 'PHONE_NUMBER', text: 'Llamar', phone_number: '+34600111222' },
+    ]);
+    expect(out.ok && out.fields.header_format).toBe('TEXT');
+  });
+
+  it('a media header and buttons together', () => {
+    const out = templateFromMeta({
+      ...BASE,
+      category: 'MARKETING',
+      components: [
+        { type: 'HEADER', format: 'IMAGE' },
+        { type: 'BODY', text: 'Hola {{1}}, -20 % esta semana', example: { body_text: [['Ana']] } },
+        { type: 'FOOTER', text: 'Salón Elena' },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Reservar' }] },
+      ],
+    });
+    expect(out.ok && out.fields).toEqual({
+      name: 'recordatorio_cita',
+      language: 'es',
+      category: 'MARKETING',
+      header: '',
+      body: 'Hola {{1}}, -20 % esta semana',
+      footer: 'Salón Elena',
+      variables: '["Ana"]',
+      header_format: 'IMAGE',
+      buttons: '[{"type":"QUICK_REPLY","text":"Reservar"}]',
+    });
+  });
+});
+
 describe('what does NOT fit is refused, never imported with a piece missing', () => {
   const refused = (template: Record<string, unknown>) => templateFromMeta(template).ok;
 
-  it('an image, video or document header', () => {
-    for (const format of ['IMAGE', 'VIDEO', 'DOCUMENT', 'LOCATION']) {
-      expect(
-        refused({ ...BASE, components: [{ type: 'HEADER', format }, { type: 'BODY', text: 'Cuerpo' }] }),
-        format,
-      ).toBe(false);
-    }
+  it('a location header: nothing on the screen can say where it points', () => {
+    expect(
+      refused({ ...BASE, components: [{ type: 'HEADER', format: 'LOCATION' }, { type: 'BODY', text: 'Cuerpo' }] }),
+    ).toBe(false);
   });
 
   it('named variables ({{nombre}}) in the body or the header: this module and the SaaS count {{1}}…{{n}} only', () => {
@@ -137,10 +205,46 @@ describe('what does NOT fit is refused, never imported with a piece missing', ()
     ).toBe(false);
   });
 
-  it('buttons, or any part this module has no field for', () => {
-    for (const type of ['BUTTONS', 'CAROUSEL', 'LIMITED_TIME_OFFER']) {
+  it('a carousel, a limited-time offer, or any part this module has no field for', () => {
+    for (const type of ['CAROUSEL', 'LIMITED_TIME_OFFER', 'SOMETHING_NEW']) {
       expect(refused({ ...BASE, components: [{ type: 'BODY', text: 'x' }, { type }] }), type).toBe(false);
     }
+  });
+
+  it('a button kind this module cannot show (copy code, one-time password, WhatsApp Flow, catalogue…)', () => {
+    for (const type of ['COPY_CODE', 'OTP', 'FLOW', 'CATALOG', 'MPM', 'VOICE_CALL']) {
+      expect(
+        refused({
+          ...BASE,
+          components: [
+            { type: 'BODY', text: 'x' },
+            { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sí' }, { type, text: 'Otro' }] },
+          ],
+        }),
+        type,
+      ).toBe(false);
+    }
+  });
+
+  it('a BUTTONS part whose buttons are missing, empty, or not a list', () => {
+    for (const buttons of [undefined, [], 'QUICK_REPLY', [null], [{ type: 'QUICK_REPLY', text: '  ' }]]) {
+      expect(
+        refused({ ...BASE, components: [{ type: 'BODY', text: 'x' }, { type: 'BUTTONS', buttons }] }),
+        JSON.stringify(buttons),
+      ).toBe(false);
+    }
+  });
+
+  it('a link button without its link, or a call button without its number', () => {
+    expect(
+      refused({ ...BASE, components: [{ type: 'BODY', text: 'x' }, { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Web' }] }] }),
+    ).toBe(false);
+    expect(
+      refused({
+        ...BASE,
+        components: [{ type: 'BODY', text: 'x' }, { type: 'BUTTONS', buttons: [{ type: 'PHONE_NUMBER', text: 'Llamar' }] }],
+      }),
+    ).toBe(false);
   });
 
   it('no body, no components, or components that are not a list', () => {
