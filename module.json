@@ -1,7 +1,7 @@
 {
   "id": "whatsapp_inbox",
   "name": "WhatsApp Inbox",
-  "version": "2.1.83",
+  "version": "2.1.84",
   "description": "WhatsApp conversations, message templates and channel settings.",
   "agent": {
     "description": "Manages WhatsApp conversations, message templates, and channel settings: list and read conversations/messages, assign conversations, and configure the WhatsApp channel.",
