@@ -143,4 +143,11 @@ If it uses a carousel, a limited-time offer, a copy-code or Flow button, a locat
 variables (`{{name}}` instead of `{{1}}`) or a variable in the header, it is named in a notice above
 the table instead; manage it in WhatsApp Manager. If you deleted it here before, it is not brought back.
 
+**"A photo or voice note says it cannot be shown here yet."** WhatsApp sends an attachment's id,
+not the file, and the hub fetches it through the platform. Until the hub offers that door
+(ERPlora/hub#2114, with the platform's half in ERPlora/saas#2285) the thread names what arrived
+(«Photo», «Voice note», the document's name and the caption) and you see the file on the phone.
+WhatsApp only keeps an attachment for a limited time; an old one can fail with «Could not load the
+attachment» for good.
+
 **"New requests skip review."** The approval mode is `auto`. Set it to `manual`.

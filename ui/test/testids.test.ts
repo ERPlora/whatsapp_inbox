@@ -67,6 +67,11 @@ const COVERED: Record<
       'whatsapp-inbox-detail-close',
       'whatsapp-inbox-detail-error',
       'whatsapp-inbox-load-error',
+      // An attachment in the thread (whatsapp_inbox#192): play/download it, retry a failed
+      // download, and the notice of a hub that cannot serve attachments yet.
+      'whatsapp-inbox-media-load',
+      'whatsapp-inbox-media-retry',
+      'whatsapp-inbox-media-unavailable',
     ],
     tables: ['whatsapp-inbox-table'],
   },

@@ -26,8 +26,14 @@ The **Open** action of a row loads the conversation (`whatsapp_inbox.conversatio
 messages (`whatsapp_inbox.messages.list`, oldest first) into a panel above the list. Requires
 `whatsapp_inbox.view_conversation`, the same as the list — an employee can read a thread.
 
-Messages that carry no text (a photo, a location, a button reply) show the **kind** Meta reported
-instead of an empty bubble.
+Messages that carry no text (a location, a button reply) show the **kind** Meta reported instead of
+an empty bubble.
+
+**Attachments** (#192). A photo or a sticker the customer sent shows inside the thread as soon as it
+opens, with its caption. A voice note or a video gets a **Play** button, and a document a
+**Download** button with its file name: they are fetched only when tapped, because every attachment
+travels from WhatsApp through the platform. While it loads the bubble says so; if it fails it says
+so and offers **Try again**. The file is kept only while the thread is open.
 
 Until whatsapp_inbox#29 those two reads had no caller and a module called *inbox* could not open a
 message. That matters since appointments#38: approving a request creates a real appointment, so
