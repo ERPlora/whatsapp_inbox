@@ -4495,12 +4495,6 @@ var es_default = {
   },
   errors: {
     "whatsapp_inbox.conversation_not_found": "Esa conversaci\xF3n no existe en este negocio.",
-    "whatsapp_inbox.conversation_unreadable": "No se ha podido leer la conversaci\xF3n, as\xED que no se ha creado nada. Prueba otra vez.",
-    "whatsapp_inbox.request_not_deletable": "Esa solicitud no se puede borrar: no existe en este negocio, o est\xE1 cumplida y debe conservarse por auditor\xEDa.",
-    "whatsapp_inbox.request_not_found": "Esa solicitud no existe en este negocio.",
-    "whatsapp_inbox.request_not_fulfillable": "Solo una solicitud confirmada se puede marcar como atendida.",
-    "whatsapp_inbox.request_not_pending": "Esa solicitud no est\xE1 pendiente de revisi\xF3n: no existe en este negocio, o ya se aprob\xF3, rechaz\xF3 o atendi\xF3.",
-    "whatsapp_inbox.request_unreadable": "No se ha podido leer la solicitud, as\xED que no se ha cambiado nada. Prueba otra vez.",
     "whatsapp_inbox.template_already_here": "Este negocio ya tiene una plantilla con ese nombre e idioma (viva o borrada aqu\xED), as\xED que no se ha tra\xEDdo nada.",
     "whatsapp_inbox.template_not_found": "Esa plantilla no existe en este negocio."
   }
@@ -4700,12 +4694,6 @@ var en_default = {
   },
   errors: {
     "whatsapp_inbox.conversation_not_found": "That conversation does not exist in this business.",
-    "whatsapp_inbox.conversation_unreadable": "That conversation could not be read, so nothing was created. Try again.",
-    "whatsapp_inbox.request_not_deletable": "That request cannot be deleted: it does not exist in this business, or it was fulfilled and has to stay for audit.",
-    "whatsapp_inbox.request_not_found": "That request does not exist in this business.",
-    "whatsapp_inbox.request_not_fulfillable": "Only a confirmed request can be marked as handled.",
-    "whatsapp_inbox.request_not_pending": "That request is not waiting for review: it does not exist in this business, or it was already approved, rejected or handled.",
-    "whatsapp_inbox.request_unreadable": "That request could not be read, so nothing was changed. Try again.",
     "whatsapp_inbox.template_already_here": "This business already holds a template with that name and language (live or deleted here), so nothing was brought in.",
     "whatsapp_inbox.template_not_found": "That template does not exist in this business."
   }
