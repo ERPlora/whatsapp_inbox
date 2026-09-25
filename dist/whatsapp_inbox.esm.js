@@ -3754,8 +3754,8 @@ var es_default = {
     colMetaStatus: "Estado en Meta",
     colActive: "Activa",
     colBody: "Cuerpo",
-    statusActive: "Activas",
-    statusClosed: "Cerradas",
+    statusActive: "Activa",
+    statusClosed: "Cerrada",
     typeOrder: "Pedido",
     typeReservation: "Reserva",
     typeAppointment: "Cita",
@@ -4279,6 +4279,7 @@ function messageMedia(m4) {
 var CATALOG = { es: es_default, en: en_default };
 var SHOWN_INLINE = /* @__PURE__ */ new Set(["image", "sticker"]);
 var THREAD_PAGE = 200;
+var STATUS_KEYS = { active: "ui.statusActive", closed: "ui.statusClosed" };
 function erplora() {
   const c5 = globalThis.erplora;
   if (!c5) throw new Error("erplora SDK no inicializado por el shell");
@@ -4378,10 +4379,13 @@ var ErpWhatsappInboxInbox = class extends i3 {
         sortable: true,
         filterable: true,
         filterType: "select",
-        options: [
-          { value: "active", label: t5("ui.statusActive") },
-          { value: "closed", label: t5("ui.statusClosed") }
-        ]
+        options: Object.entries(STATUS_KEYS).map(([value, key]) => ({ value, label: t5(key) })),
+        // The cell names the status like the filter does (whatsapp_inbox#189); an unlearned value is
+        // shown as it arrived rather than disguised as another status.
+        format: (r6) => {
+          const key = STATUS_KEYS[String(r6.status ?? "")];
+          return key ? t5(key) : String(r6.status ?? "");
+        }
       },
       {
         key: "unread_count",
@@ -4867,7 +4871,7 @@ var TYPE_KEYS = {
   transport: "ui.typeTransport",
   custom: "ui.typeCustom"
 };
-var STATUS_KEYS = {
+var STATUS_KEYS2 = {
   pending_review: "ui.requestStatusPending",
   confirmed: "ui.requestStatusConfirmed",
   fulfilled: "ui.requestStatusFulfilled",
@@ -4879,7 +4883,7 @@ function typeLabel(value) {
   return key ? erplora2().t(CATALOG2, key) : value;
 }
 function statusLabel(value) {
-  const key = STATUS_KEYS[value];
+  const key = STATUS_KEYS2[value];
   return key ? erplora2().t(CATALOG2, key) : value;
 }
 function domainErrorText3(e5, fallbackKey) {

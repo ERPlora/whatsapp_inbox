@@ -317,6 +317,45 @@ describe('message times are readable and on the hub clock (whatsapp_inbox#183)',
   });
 });
 
+// whatsapp_inbox#189 — the «Status» column had translated filter options but no `format`, so the
+// cell fell back to the raw value: «active» / «closed» in a Spanish screen, «Estado: active» on the
+// phone cards. The cell names the status the way the filter and the thread header already do.
+describe('the «Status» column is translated, not the raw value (whatsapp_inbox#189)', () => {
+  const statusFormat = async () => {
+    const el = await montar();
+    const cols = (tabla(el) as unknown as { columns: { key: string; format?: (r: unknown) => string }[] }).columns;
+    const col = cols.find((c) => c.key === 'status');
+    expect(col?.format, 'the status column prints the raw value').toBeTypeOf('function');
+    return col!.format!;
+  };
+
+  it('an active conversation reads as the translated «active» label', async () => {
+    const format = await statusFormat();
+    expect(format({ ...CONVERSATION, status: 'active' })).toBe('ui.statusActive');
+  });
+
+  it('a closed conversation reads as the translated «closed» label', async () => {
+    const format = await statusFormat();
+    expect(format({ ...CONVERSATION, status: 'closed' })).toBe('ui.statusClosed');
+  });
+
+  it('a status the module has not learned is shown as it arrived, never as another status', async () => {
+    const format = await statusFormat();
+    expect(format({ ...CONVERSATION, status: 'archived' })).toBe('archived');
+  });
+
+  it('the cell and the filter use the same label for each value', async () => {
+    const el = await montar();
+    const cols = (tabla(el) as unknown as {
+      columns: { key: string; format?: (r: unknown) => string; options?: { value: string; label: string }[] }[];
+    }).columns;
+    const col = cols.find((c) => c.key === 'status')!;
+    for (const opt of col.options ?? []) {
+      expect(col.format?.({ ...CONVERSATION, status: opt.value })).toBe(opt.label);
+    }
+  });
+});
+
 // whatsapp_inbox#192 — a customer's photo, voice note or document reached the thread as the bare
 // word «image» and the owner had to pick up the phone to see it. Meta sends an asset id, never a
 // URL; the bytes come through the module-scoped door the platform serves them by
