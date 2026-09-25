@@ -2041,6 +2041,161 @@ def birth_status_problems(name, doc):
     return problems
 
 
+# ── «read the switch in the shape it really comes back» — whatsapp_inbox#152 ───────────────────
+#
+# `booking_policy` hands the model the setting that decides the birth status, and the prompt has
+# to say what its VALUES mean. That sentence is only true for the shape the read answers in, and
+# the shape is the neighbour's, not ours: `reservations` answered its `auto_confirm` as the raw
+# INTEGER column (`0`/`1`) until reservations#54 projected it as `auto_confirm <> 0`, which the
+# runtime serialises as JSON `true`/`false`. A prompt still explaining `1`/`0` over a read that
+# answers `true`/`false` gives the model a key that opens nothing — and the branch it then guesses
+# is the sentence the customer believes. `BIRTH_STATUS_RULES` pins the two endings; this pins the
+# sentence that picks between them, and the floor that makes it true.
+#
+# `booking command -> {language -> the sentence that says what each value of the switch means}`.
+BIRTH_STATUS_READING = {
+    BOOKING_COMMAND: {
+        "en": (
+            "`true` means the appointment you just made is already accepted, `false` means it is "
+            "waiting for somebody at the salon to accept it."
+        ),
+        "es": (
+            "`true` significa que la cita que acabas de hacer ya está aceptada, `false` que está "
+            "esperando a que alguien del salón la acepte."
+        ),
+    },
+    TABLE_BOOKING_COMMAND: {
+        "en": (
+            "`true` means the table you just booked is already accepted, `false` means it is "
+            "waiting for somebody at the restaurant to accept it."
+        ),
+        "es": (
+            "`true` significa que la mesa que acabas de reservar ya está aceptada, `false` que "
+            "está esperando a que alguien del restaurante la acepte."
+        ),
+    },
+}
+
+# `booking command -> {language -> how to read an EMPTY answer}`. Not the same value in the two
+# modules (see `flows/README.md`, «La receta dice la VERDAD»): a salon with no settings row
+# confirms, a restaurant with none reviews. Said in the same `true`/`false` as the reading above.
+BIRTH_STATUS_EMPTY = {
+    BOOKING_COMMAND: {"en": "so read it as `true`.", "es": "así que léelo como `true`."},
+    TABLE_BOOKING_COMMAND: {"en": "so read it as `false`.", "es": "así que léelo como `false`."},
+}
+
+# The integer wording the prompts used before reservations#54. Present next to the boolean one it
+# is a prompt that contradicts itself, and the model is free to pick the stale half.
+RAW_FLAG_WORDING = re.compile(
+    r"`[01]` (?:means|significa)|, `[01]` (?:que|means)|read it as `[01]`|léelo como `[01]`"
+    r"|comes back raw|viene crudo"
+)
+
+# `booking command -> (module, first release whose read answers the switch as a boolean, field)`.
+# Below that floor the sentences above are false, so a family that books with the command has to
+# declare at least this version in its `requires.json` — the hub reads that floor to decide whether
+# the recipe is OFFERED (hub#1611). 3.0.30 is `chore(release): v3.0.30`, the first release after
+# fc41c37 (reservations#58); `boolean_since_problems` re-reads it out of the neighbour's history.
+BIRTH_STATUS_BOOLEAN_SINCE = {
+    TABLE_BOOKING_COMMAND: ("reservations", "3.0.30", "auto_confirm"),
+}
+
+
+def birth_status_reading_problems(name, doc, floors):
+    """The step that books explains the switch in the shape its read really answers — whatsapp_inbox#152.
+
+    Three things, per language: the pinned `true`/`false` reading of the switch, the pinned reading
+    of an empty answer, and none of the old `0`/`1` wording left beside them. Plus the floor: a
+    family whose read only answers a boolean from some release on declares at least that release,
+    or the hub offers the recipe to a Reservas that still answers `0`/`1`.
+    """
+    parts = name.split(".")
+    lang = parts[1] if len(parts) >= 3 else ""
+    problems = []
+    for step in doc.get("steps", []):
+        if step.get("kind") != "ai":
+            continue
+        commands = (step.get("tools") or {}).get("commands") or []
+        prompt = prompt_of(step)
+        for booking in sorted(BIRTH_STATUS_READING):
+            if booking not in commands:
+                continue
+            for table, what in (
+                (BIRTH_STATUS_READING, "what `true` and `false` of the switch mean"),
+                (BIRTH_STATUS_EMPTY, "how to read the switch when it comes back empty"),
+            ):
+                sentence = table[booking].get(lang)
+                if sentence is None or sentence not in prompt:
+                    problems.append(
+                        f"{name} step `{step.get('id')}` can book with `{booking}` and its prompt "
+                        f"no longer says {what} («{sentence}»). The read answers `true`/`false`; "
+                        f"a prompt that explains anything else leaves the model guessing which "
+                        f"ending the customer gets"
+                    )
+            stale = RAW_FLAG_WORDING.search(prompt)
+            if stale:
+                problems.append(
+                    f"{name} step `{step.get('id')}` still explains the switch as the raw `0`/`1` "
+                    f"(«{stale.group(0)}»): the read answers `true`/`false` since reservations#54, "
+                    f"and a prompt that says both lets the model read the stale half"
+                )
+            since = BIRTH_STATUS_BOOLEAN_SINCE.get(booking)
+            if since is None:
+                continue
+            module_id, version, _field = since
+            declared = floors.get(module_id)
+            have = version_tuple(declared)
+            if have is None or have < version_tuple(version):
+                problems.append(
+                    f"{name} step `{step.get('id')}` explains `{module_id}`'s switch as "
+                    f"`true`/`false`, which it only answers from {version} on, and the family "
+                    f"declares `{module_id}` at {declared}: raise it in "
+                    f"`{name.split('.')[0]}.requires.json`, or the hub offers the recipe to a "
+                    f"release whose answer the prompt does not describe"
+                )
+    return problems
+
+
+BOOLEAN_PROJECTION = "{field}\\s*<>\\s*0\\s+AS\\s+{field}\\b"
+
+
+def boolean_since_problems(definitions):
+    """`BIRTH_STATUS_BOOLEAN_SINCE` names the FIRST release that answers the switch as a boolean.
+
+    Read out of the neighbour's history, both ways: the settings query projects `<field> <> 0 AS
+    <field>` at the pinned release, and does not one patch release below it. Returns `(problems,
+    skipped)` — a history this machine cannot read is a skip, never a red.
+    """
+    problems, skipped = [], []
+    for booking, (module_id, version, field) in sorted(BIRTH_STATUS_BOOLEAN_SINCE.items()):
+        source = BIRTH_STATUS_SOURCE[booking]
+        target = (definitions or {}).get(source)
+        if target is None:
+            skipped.append(f"`{source}` is not declared by any checkout here — {version} NOT verified")
+            continue
+        module_dir, qdef = target
+        rel = qdef.get("sql")
+        major, minor, patch = version_tuple(version)
+        below = f"{major}.{minor}.{patch - 1}"
+        pattern = re.compile(BOOLEAN_PROJECTION.format(field=re.escape(field)), re.IGNORECASE)
+        for at, expected in ((version, True), (below, False)):
+            sha, why = release_commit(module_dir, at)
+            if sha is None:
+                skipped.append(f"`{source}` at {at} could not be read ({why}) — {version} NOT verified")
+                break
+            blob, why = git_in(module_dir, "show", f"{sha}:{rel}")
+            if blob is None:
+                skipped.append(f"`{source}` at {at} could not be read ({why}) — {version} NOT verified")
+                break
+            if bool(pattern.search(SQL_COMMENT.sub(" ", blob))) != expected:
+                problems.append(
+                    f"`BIRTH_STATUS_BOOLEAN_SINCE` pins {module_id} {version} as the first release "
+                    f"whose `{source}` answers `{field}` as a boolean, and at {at} it "
+                    f"{'does not' if expected else 'already does'}: move the pin to the release "
+                    f"that really made the change"
+                )
+    return problems, skipped
+
 # ── «a rule with no recipe is a promise nothing keeps» ────────────────────────────────────────
 #
 # whatsapp_inbox#60. `BOOKING_RULES` is the table of everything this channel knows how to book
@@ -4525,6 +4680,113 @@ BIRTH_STATUS_CASES = [
             step_id="book_table",
         ),
         2,
+    ),
+]
+
+# `(label, file name, document, floors, problems expected)` — the unit tests of
+# `birth_status_reading_problems`, the rule whatsapp_inbox#152 is about.
+_TABLE_READ_EN = BIRTH_STATUS_READING[TABLE_BOOKING_COMMAND]["en"]
+_TABLE_READ_ES = BIRTH_STATUS_READING[TABLE_BOOKING_COMMAND]["es"]
+_TABLE_EMPTY_EN = BIRTH_STATUS_EMPTY[TABLE_BOOKING_COMMAND]["en"]
+_TABLE_EMPTY_ES = BIRTH_STATUS_EMPTY[TABLE_BOOKING_COMMAND]["es"]
+_APPT_READ_EN = BIRTH_STATUS_READING[BOOKING_COMMAND]["en"]
+_APPT_EMPTY_EN = BIRTH_STATUS_EMPTY[BOOKING_COMMAND]["en"]
+_BOOLEAN_FLOOR = {"reservations": BIRTH_STATUS_BOOLEAN_SINCE[TABLE_BOOKING_COMMAND][1]}
+# What both table prompts said before whatsapp_inbox#152, word for word.
+_RAW_TABLE_EN = (
+    "it comes back raw: `1` means the table you just booked is already accepted, `0` means it is "
+    "waiting for somebody at the restaurant to accept it. If it comes back EMPTY this restaurant "
+    "has never saved its reservation settings, and Reservas treats that as OFF, so read it as `0`."
+)
+_RAW_TABLE_ES = (
+    "viene crudo: `1` significa que la mesa que acabas de reservar ya está aceptada, `0` que está "
+    "esperando a que alguien del restaurante la acepte. Si viene VACÍO, este restaurante no ha "
+    "guardado nunca sus ajustes de reservas, y Reservas lo trata como APAGADO, así que léelo como `0`."
+)
+
+
+def _books_table(prompt):
+    return _books(
+        prompt, query=_TABLE_SETTINGS, command=TABLE_BOOKING_COMMAND, step_id="book_table"
+    )
+
+
+BIRTH_READING_CASES = [
+    (
+        "the shape whatsapp_inbox#152 ships: the table prompt reads the switch as `true`/`false`, "
+        "an empty answer as `false`, and the family floors Reservas where it answers a boolean",
+        TABLE_UNATTENDED,
+        _books_table(f"Book it. {_TABLE_READ_EN} If empty, {_TABLE_EMPTY_EN}"),
+        _BOOLEAN_FLOOR,
+        0,
+    ),
+    (
+        "🔴 the red this issue IS: the prompt still explains `1`/`0` over a read that answers "
+        "`true`/`false` — the reading sentence is missing, the empty reading is missing, and the "
+        "stale integer wording is there",
+        TABLE_UNATTENDED,
+        _books_table(f"Book it. {_RAW_TABLE_EN}"),
+        _BOOLEAN_FLOOR,
+        3,
+    ),
+    (
+        "…and the Spanish twin, which said the same thing in Spanish",
+        TABLE_UNATTENDED_ES,
+        _books_table(f"Resérvala. {_RAW_TABLE_ES}"),
+        _BOOLEAN_FLOOR,
+        3,
+    ),
+    (
+        "the Spanish table document with the Spanish boolean reading",
+        TABLE_UNATTENDED_ES,
+        _books_table(f"Resérvala. {_TABLE_READ_ES} Si viene vacío, {_TABLE_EMPTY_ES}"),
+        _BOOLEAN_FLOOR,
+        0,
+    ),
+    (
+        "both wordings at once: the boolean sentences were added and the raw ones left behind, a "
+        "prompt that contradicts itself",
+        TABLE_UNATTENDED,
+        _books_table(f"Book it. {_TABLE_READ_EN} {_TABLE_EMPTY_EN} {_RAW_TABLE_EN}"),
+        _BOOLEAN_FLOOR,
+        1,
+    ),
+    (
+        "🔴 the right words over the wrong floor: a hub on Reservas 3.0.28 still answers `0`/`1`, "
+        "and the hub offers the recipe there because `requires.json` says it may",
+        TABLE_UNATTENDED,
+        _books_table(f"Book it. {_TABLE_READ_EN} {_TABLE_EMPTY_EN}"),
+        {"reservations": "3.0.28"},
+        1,
+    ),
+    (
+        "…and a family that declares no Reservas floor at all is offered everywhere",
+        TABLE_UNATTENDED,
+        _books_table(f"Book it. {_TABLE_READ_EN} {_TABLE_EMPTY_EN}"),
+        {},
+        1,
+    ),
+    (
+        "the empty answer read as the SALON reads it: a restaurant with no settings reviews, so "
+        "«read it as `true`» tells the customer of every such restaurant her table is booked",
+        TABLE_UNATTENDED,
+        _books_table(f"Book it. {_TABLE_READ_EN} {_APPT_EMPTY_EN}"),
+        _BOOLEAN_FLOOR,
+        1,
+    ),
+    (
+        "the salon recipe already speaks `true`/`false`, and Citas owes no Reservas floor",
+        UNATTENDED,
+        _books(f"Book it. {_APPT_READ_EN} If empty, {_APPT_EMPTY_EN}"),
+        {},
+        0,
+    ),
+    (
+        "a step that cannot book owes no reading",
+        TABLE_UNATTENDED,
+        _books("Find or create them.", command="customers.create", step_id="know_the_customer"),
+        {},
+        0,
     ),
 ]
 
@@ -7665,6 +7927,13 @@ def self_check():
                 f"the battery's own «tell her what really happened» rule is wrong — {label}: "
                 f"expected {expected} problem(s), got {len(got)}: {got}"
             )
+    for label, name, doc, floors, expected in BIRTH_READING_CASES:
+        got = birth_status_reading_problems(name, doc, floors)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «read the switch as it comes back» rule is wrong — {label}: "
+                f"expected {expected} problem(s), got {len(got)}: {got}"
+            )
     for label, families, expected in LEDGER_CASES:
         got = unattended_ledger_problems("(self-check)", {}, families)
         if len(got) != expected:
@@ -7996,6 +8265,11 @@ def main():
         read_perms = module_read_permissions(resolved)
         enums = payload_enums(commands_def)
         identity_props = payload_properties(commands_def)
+        # The release `BIRTH_STATUS_BOOLEAN_SINCE` pins is the one that really made the switch
+        # a boolean, read out of the neighbour's history (whatsapp_inbox#152).
+        since_problems, since_skips = boolean_since_problems(definitions)
+        problems += since_problems
+        skipped += since_skips
 
     # Which family books what, read once: `shipped_recipe_problems` judges the SET of
     # documents, and the set is not visible from any one of them.
@@ -8076,6 +8350,16 @@ def main():
         # 3a-bis-iii-bis) …and every booking that wording exists for is one this module really
         # SHIPS, in both families (whatsapp_inbox#60). Needs no manifest: it reads `flows/`.
         problems += applied(ledger, birth_status_problems, path.name, doc)
+
+        # …and the sentence that picks between those endings describes the switch in the shape
+        # its read really answers, over a floor where it answers it (whatsapp_inbox#152).
+        fpath = floors_of(path)
+        family_floors = (
+            (json.loads(fpath.read_text()) or {}).get("modules") or {} if fpath.is_file() else {}
+        )
+        problems += applied(
+            ledger, birth_status_reading_problems, path.name, doc, family_floors
+        )
 
         problems += applied(ledger, shipped_recipe_problems, path.name, doc, booked)
 

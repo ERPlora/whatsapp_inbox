@@ -130,8 +130,10 @@ otra:
 cuenta: un salón sin fila de ajustes tiene `auto_confirm_online` **encendido**
 (`auto_confirm_online_of` devuelve `true` cuando el campo falta), mientras que un restaurante sin
 ajustes guardados nace `pending` (`COALESCE(s.auto_confirm, 0) = 1` en el `INSERT` de Reservas).
-Cambian también en la forma: Citas devuelve el flag ya como **booleano** y Reservas lo devuelve
-**crudo, 0/1**.
+En la forma ya coinciden: los dos devuelven el flag como **booleano** (`true`/`false`). Reservas lo
+devolvía crudo, `0`/`1`, hasta reservations#54 (su 3.0.30), y por eso la receta de mesas pide
+Reservas ≥ 3.0.30 en su `requires.json` (whatsapp_inbox#152): la frase que explica el valor está
+pineada en `BIRTH_STATUS_READING` y el suelo en `BIRTH_STATUS_BOOLEAN_SINCE`.
 
 🔴 **Y el grant FIJA `booked_online` = `true`.** Es la otra mitad de `born_confirmed` y la escribe
 un modelo que está leyendo el mensaje de un desconocido, así que no se deja en el prompt: el
@@ -433,7 +435,8 @@ por nueva y le creaba una segunda ficha. `customers.by_phone` (customers ≥ 2.3
 3. **`confirm_to_customer`** — se lo manda por el mismo WhatsApp por el que escribió.
 
 Y delante de `book_table` va su **`booking_policy`**, igual que en citas: aquí lee
-`reservations.settings.get`, y el flag se llama `auto_confirm` y vuelve **crudo** (`0`/`1`). Su
+`reservations.settings.get`, y el flag se llama `auto_confirm` y vuelve **booleano** (`true`/`false`,
+desde Reservas 3.0.30). Su
 vacío tampoco significa lo mismo — un restaurante que no ha guardado sus ajustes reserva `pending`,
 al revés que un salón. Ver «La receta dice la VERDAD» arriba.
 
