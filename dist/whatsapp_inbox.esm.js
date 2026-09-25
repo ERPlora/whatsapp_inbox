@@ -3589,16 +3589,609 @@ __decorateClass3([
 ], OkStatusPill.prototype, "size");
 define("ok-status-pill", OkStatusPill);
 
+// @erplora/outfitkit/dist/shared/fullscreen.js
+function notCapable() {
+  return Promise.reject(new Error("Not capable"));
+}
+function isCapable(target) {
+  if (typeof document === "undefined") return false;
+  if (document.fullscreenEnabled === false) return false;
+  const el = target ?? document.documentElement;
+  return typeof el?.requestFullscreen === "function";
+}
+function activeEl() {
+  if (typeof document === "undefined") return null;
+  return document.fullscreenElement ?? null;
+}
+function isActive(el) {
+  if (typeof document === "undefined") return false;
+  if (!el) return activeEl() !== null;
+  const root = el.getRootNode();
+  if (root !== document && root.fullscreenElement === el) return true;
+  return document.fullscreenElement === el;
+}
+function request(target) {
+  if (typeof document === "undefined") return notCapable();
+  const el = target ?? document.documentElement;
+  if (!isCapable(el)) return notCapable();
+  return el.requestFullscreen();
+}
+function exit() {
+  if (typeof document === "undefined") return Promise.resolve();
+  if (activeEl() === null) return Promise.resolve();
+  const exitFn = document.exitFullscreen;
+  if (typeof exitFn !== "function") return notCapable();
+  return exitFn.call(document);
+}
+function toggle(target) {
+  return isActive(target) ? exit() : request(target);
+}
+function onChange(fn) {
+  if (typeof document === "undefined") return () => {
+  };
+  const handler = () => fn(activeEl());
+  document.addEventListener("fullscreenchange", handler);
+  let stopped = false;
+  return () => {
+    if (stopped) return;
+    stopped = true;
+    document.removeEventListener("fullscreenchange", handler);
+  };
+}
+
+// @erplora/outfitkit/dist/shared/tap-target.js
+var tapTarget = i`
+  /* The host positions itself. Leaving this to each component was not a contract but a trap: an
+     absolutely positioned overlay resolves against the nearest POSITIONED ancestor, so a host that
+     forgot position:relative sent its hit area somewhere else entirely -- ok-color-picker shipped
+     with its 10 preset swatches stacked in the middle of the panel, over the saturation square,
+     where a click set the colour to #000000.
+     A component that genuinely needs another value declares it in its own rule, which comes later in
+     static styles and wins. */
+  .ok-tap,
+  [data-ok-tap] {
+    position: relative;
+  }
+
+  .ok-tap::before,
+  [data-ok-tap]::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: max(100%, var(--ok-tap-min, 44px));
+    height: max(100%, var(--ok-tap-min, 44px));
+  }
+`;
+
+// @erplora/outfitkit/dist/ok-lightbox.js
+var __defProp4 = Object.defineProperty;
+var __decorateClass4 = (decorators, target, key, kind) => {
+  var result = void 0;
+  for (var i7 = decorators.length - 1, decorator; i7 >= 0; i7--)
+    if (decorator = decorators[i7])
+      result = decorator(target, key, result) || result;
+  if (result) __defProp4(target, key, result);
+  return result;
+};
+var DEFAULT_LABELS2 = {
+  prev: "Previous",
+  next: "Next",
+  close: "Close",
+  download: "Download",
+  fullscreen: "Fullscreen",
+  exitFullscreen: "Exit fullscreen"
+};
+var OkLightbox = class extends i3 {
+  constructor() {
+    super(...arguments);
+    this.items = [];
+    this.index = 0;
+    this.open = false;
+    this.labels = {};
+    this.shown = false;
+    this.fullscreenOn = false;
+    this.portalRoot = null;
+    this.onKeydown = (e5) => {
+      if (!this.open) return;
+      if (e5.key === "Escape") {
+        e5.preventDefault();
+        this.requestClose();
+      } else if (e5.key === "ArrowLeft") {
+        e5.preventDefault();
+        this.go(-1);
+      } else if (e5.key === "ArrowRight") {
+        e5.preventDefault();
+        this.go(1);
+      }
+    };
+  }
+  static {
+    this.styles = [tapTarget, i`
+    :host {
+      display: block;
+      width: 100%;
+      /* Vars overridable (estilo Ionic), default = cadena --ok-* → --ion-* → hex/literal. */
+      --overlay-bg: var(--ok-media-bg, rgba(0, 0, 0, 0.92));
+      --fg-soft: var(--ok-media-fg, rgba(255, 255, 255, 0.7));
+      --glass: var(--ok-overlay-glass, rgba(255, 255, 255, 0.1));
+      --glass-hover: var(--ok-overlay-glass-2, rgba(255, 255, 255, 0.18));
+      --brand: var(--ok-primary, var(--ion-color-primary, #e8552a));
+      --media-bg: var(--ok-media-frame, rgba(255, 255, 255, 0.06));
+      --radius-lg: var(--ok-radius-lg, 10px);
+      --radius-sm: var(--ok-radius-sm, 6px);
+      --font: var(--ok-font, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif);
+      --font-mono: var(--ok-font-mono, ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace);
+    }
+
+    /* Overlay a pantalla completa: columna [cabecera | medio | filmstrip]. */
+    .lightbox {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+      box-sizing: border-box;
+      background: var(--overlay-bg);
+      color: var(--fg-soft);
+      font-family: var(--font);
+      opacity: 0;
+      transition: opacity var(--ok-transition, 200ms ease);
+    }
+    .lightbox.shown {
+      opacity: 1;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .lightbox {
+        transition: none;
+      }
+    }
+
+    /* Cabecera mono: contador + nombre a la izquierda; acciones a la derecha. */
+    .head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--fg-soft);
+    }
+    .head .meta {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .head .count {
+      font-variant-numeric: tabular-nums;
+    }
+    .head .sep {
+      opacity: 0.5;
+      margin: 0 6px;
+    }
+    .head .actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      flex: none;
+    }
+    .icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: var(--ok-tap-min, 44px);
+      height: var(--ok-tap-min, 44px);
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--fg-soft);
+      cursor: pointer;
+      text-decoration: none;
+      transition: background var(--ok-transition, 150ms ease), color var(--ok-transition, 150ms ease);
+    }
+    @media (hover: hover) {
+      .icon-btn:hover {
+        background: var(--glass);
+        color: #fff;
+      }
+    }
+    .icon-btn ion-icon {
+      font-size: 1.25rem;
+    }
+
+    /* Zona central: medio centrado con flechas de navegación absolutas. */
+    .main {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px 0;
+      position: relative;
+      min-height: 0;
+    }
+    .media {
+      max-width: 60%;
+      max-height: 100%;
+      width: auto;
+      object-fit: contain;
+      background: var(--media-bg);
+      border-radius: var(--radius-lg);
+      display: block;
+    }
+    /* Reserva de proporción 16:10 cuando no hay medio o como marco de fondo. */
+    .media-empty {
+      width: 60%;
+      aspect-ratio: 16 / 10;
+      max-height: 100%;
+      background: var(--media-bg);
+      border-radius: var(--radius-lg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--fg-soft);
+    }
+    video.media {
+      max-height: 100%;
+    }
+
+    /* Navegación circular glass de 44px. */
+    .nav {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 0;
+      background: var(--glass);
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      backdrop-filter: blur(4px);
+      transition: background var(--ok-transition, 150ms ease), opacity var(--ok-transition, 150ms ease);
+    }
+    @media (hover: hover) {
+      .nav:hover {
+        background: var(--glass-hover);
+      }
+    }
+    .nav[disabled] {
+      opacity: 0.25;
+      cursor: default;
+      pointer-events: none;
+    }
+    .nav ion-icon {
+      font-size: 1.5rem;
+    }
+    .nav.prev {
+      left: 20px;
+    }
+    .nav.next {
+      right: 20px;
+    }
+
+    /* Filmstrip inferior: miniaturas 50×36, la activa a opacidad total con outline de marca. */
+    .strip {
+      display: flex;
+      gap: 6px;
+      justify-content: center;
+      flex-wrap: wrap;
+      padding-top: 12px;
+      max-height: 96px;
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+    .thumb {
+      /* ok-tap-exempt: filmstrip thumbnail, 50x36 is the drawn size of the strip; growing it
+         would reflow the whole strip's composition. The hit area is widened by tapTarget
+         instead (its ::before below), the drawing stays put. */
+      position: relative;
+      flex: none;
+      width: 50px;
+      height: 36px;
+      padding: 0;
+      border: 0;
+      border-radius: var(--radius-sm);
+      background: var(--media-bg);
+      background-size: cover;
+      background-position: center;
+      cursor: pointer;
+      opacity: 0.5;
+      /* No overflow:hidden here: it would clip tapTarget's ::before hit-area extension along
+         with the drawing. The rounded corners are clipped on the children instead (below). */
+      transition: opacity var(--ok-transition, 150ms ease);
+    }
+    @media (hover: hover) {
+      .thumb:hover {
+        opacity: 0.8;
+      }
+    }
+    .thumb.active {
+      opacity: 1;
+      outline: 2px solid var(--brand);
+      outline-offset: 2px;
+    }
+    .thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      border-radius: inherit;
+    }
+    .thumb .vid {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      color: var(--fg-soft);
+      border-radius: inherit;
+      overflow: hidden;
+    }
+    .thumb .vid ion-icon {
+      font-size: 1rem;
+    }
+  `];
+  }
+  // Textos efectivos: defaults en inglés + overrides del consumidor.
+  get t() {
+    return { ...DEFAULT_LABELS2, ...this.labels };
+  }
+  connectedCallback() {
+    super.connectedCallback();
+    this.stopFullscreenWatch = onChange(() => {
+      this.fullscreenOn = isActive(this.boxEl() ?? void 0);
+    });
+  }
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this.stopFullscreenWatch?.();
+    this.stopFullscreenWatch = void 0;
+    this.unbind();
+    const host = this.portalRoot?.host;
+    this.portalRoot = null;
+    if (host && host.parentNode) host.parentNode.removeChild(host);
+  }
+  bind() {
+    document.addEventListener("keydown", this.onKeydown);
+  }
+  unbind() {
+    document.removeEventListener("keydown", this.onKeydown);
+  }
+  // Crea (una vez) el portal: un div en `document.body` con shadow propio que ADOPTA la misma hoja
+  // de estilos del componente.
+  ensurePortal() {
+    if (this.portalRoot) return this.portalRoot;
+    const host = document.createElement("div");
+    host.setAttribute("data-ok-lightbox-portal", "");
+    document.body.appendChild(host);
+    const root = host.attachShadow({ mode: "open" });
+    const styles = this.constructor.elementStyles ?? [];
+    root.adoptedStyleSheets = styles.map((s5) => s5 instanceof CSSStyleSheet ? s5 : s5.styleSheet).filter((s5) => !!s5);
+    this.portalRoot = root;
+    return root;
+  }
+  updated(changed) {
+    if (changed.has("open")) {
+      if (this.open) {
+        this.bind();
+        requestAnimationFrame(() => requestAnimationFrame(() => this.shown = true));
+      } else {
+        this.unbind();
+        this.shown = false;
+      }
+    }
+    if (!this.open && !this.portalRoot) return;
+    D(this.open ? this.overlayTemplate() : A, this.ensurePortal());
+  }
+  // Índice saneado dentro de los límites.
+  get safeIndex() {
+    const n6 = this.items.length;
+    if (n6 === 0) return 0;
+    return Math.max(0, Math.min(this.index, n6 - 1));
+  }
+  prefersReducedMotion() {
+    return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+  }
+  // Navega delta posiciones (clamp, sin wrap). Emite `ok-index` si cambia.
+  go(delta) {
+    const next = this.safeIndex + delta;
+    if (next < 0 || next >= this.items.length || next === this.safeIndex) return;
+    this.setIndex(next);
+  }
+  setIndex(i7) {
+    if (i7 === this.safeIndex) return;
+    this.index = i7;
+    this.dispatchEvent(
+      new CustomEvent("ok-index", { detail: { index: i7 }, bubbles: true, composed: true })
+    );
+  }
+  // Pide cerrar: anima el fade-out y al terminar emite `ok-close` (el consumidor pone `open=false`).
+  requestClose() {
+    this.unbind();
+    this.shown = false;
+    const box = this.portalRoot?.querySelector(".lightbox");
+    const finish = () => {
+      this.dispatchEvent(new CustomEvent("ok-close", { bubbles: true, composed: true }));
+    };
+    if (box && !this.prefersReducedMotion()) {
+      box.addEventListener("transitionend", finish, { once: true });
+    } else {
+      finish();
+    }
+  }
+  // Nombre de fichero mostrado en la cabecera (alt o último segmento de la URL).
+  fileName(item) {
+    if (!item) return "";
+    if (item.alt) return item.alt;
+    try {
+      const path = item.src.split(/[?#]/)[0];
+      return path.substring(path.lastIndexOf("/") + 1) || item.src;
+    } catch {
+      return item.src;
+    }
+  }
+  render() {
+    return A;
+  }
+  // Overlay (cabecera + medio + filmstrip). Se renderiza en el portal de `document.body`.
+  overlayTemplate() {
+    const items = this.items;
+    const i7 = this.safeIndex;
+    const current = items[i7];
+    const isVideo = current?.type === "video";
+    const name = this.fileName(current);
+    const total = items.length;
+    return b2`
+      <div
+        class="lightbox ${this.shown ? "shown" : ""}"
+        role="dialog"
+        aria-modal="true"
+        aria-label=${name}
+      >
+        <div class="head">
+          <div class="meta">
+            <span class="count">${total ? i7 + 1 : 0} / ${total}</span>
+            ${name ? b2`<span class="sep">·</span><span>${name}</span>` : null}
+          </div>
+          <div class="actions">
+            ${current ? b2`<a
+                  class="icon-btn"
+                  href=${current.src}
+                  download
+                  target="_blank"
+                  rel="noopener"
+                  aria-label=${this.t.download}
+                >
+                  <ion-icon .icon=${iconDownloadOutline}></ion-icon>
+                </a>` : null}
+            ${isCapable() ? b2`<button
+                  type="button"
+                  class="icon-btn"
+                  aria-label=${this.fullscreenOn ? this.t.exitFullscreen : this.t.fullscreen}
+                  @click=${() => void this.toggleFullscreen()}
+                >
+                  <ion-icon
+                    .icon=${this.fullscreenOn ? iconContractOutline : iconExpandOutline}
+                  ></ion-icon>
+                </button>` : null}
+            <button
+              type="button"
+              class="icon-btn"
+              aria-label=${this.t.close}
+              @click=${() => this.requestClose()}
+            >
+              <ion-icon .icon=${iconCloseOutline}></ion-icon>
+            </button>
+          </div>
+        </div>
+
+        <div class="main">
+          <button
+            type="button"
+            class="nav prev"
+            aria-label=${this.t.prev}
+            ?disabled=${i7 <= 0}
+            @click=${() => this.go(-1)}
+          >
+            <ion-icon .icon=${iconChevronBackOutline}></ion-icon>
+          </button>
+
+          ${current ? isVideo ? b2`<video
+                  class="media"
+                  src=${current.src}
+                  controls
+                  playsinline
+                  aria-label=${name}
+                ></video>` : b2`<img class="media" src=${current.src} alt=${name} />` : b2`<div class="media-empty"></div>`}
+
+          <button
+            type="button"
+            class="nav next"
+            aria-label=${this.t.next}
+            ?disabled=${i7 >= total - 1}
+            @click=${() => this.go(1)}
+          >
+            <ion-icon .icon=${iconChevronForwardOutline}></ion-icon>
+          </button>
+        </div>
+
+        ${total > 1 ? b2`<div class="strip" role="tablist">
+              ${items.map((it, idx) => this.renderThumb(it, idx, idx === i7))}
+            </div>` : null}
+      </div>
+    `;
+  }
+  renderThumb(item, idx, active) {
+    const isVideo = item.type === "video";
+    return b2`<button
+      type="button"
+      class="thumb ok-tap ${active ? "active" : ""}"
+      role="tab"
+      aria-selected=${active ? "true" : "false"}
+      aria-label=${this.fileName(item)}
+      @click=${() => this.setIndex(idx)}
+    >
+      ${isVideo ? b2`<span class="vid"><ion-icon .icon=${iconPlayOutline}></ion-icon></span>` : b2`<img src=${item.thumb ?? item.src} alt="" loading="lazy" />`}
+    </button>`;
+  }
+  /** El `.lightbox` vive en el portal, que tiene shadow root PROPIO: no está en este `shadowRoot`. */
+  boxEl() {
+    return this.portalRoot?.querySelector(".lightbox") ?? null;
+  }
+  // Pantalla completa nativa sobre el overlay portado.
+  //
+  // Pregunta por ESTE overlay, no por «¿hay algo a pantalla completa?»: con el shell del Hub en modo
+  // inmersivo la pregunta global era siempre que sí, y el botón cerraba el modo del shell en vez de
+  // agrandar la galería. `isActive` mira además el shadow root del portal, porque
+  // `document.fullscreenElement` reporta el HOST del portal y nunca el `.lightbox`.
+  async toggleFullscreen() {
+    const box = this.boxEl();
+    if (!box) return;
+    try {
+      await toggle(box);
+    } catch {
+    }
+  }
+};
+__decorateClass4([
+  n4({ attribute: false })
+], OkLightbox.prototype, "items");
+__decorateClass4([
+  n4({ type: Number })
+], OkLightbox.prototype, "index");
+__decorateClass4([
+  n4({ type: Boolean })
+], OkLightbox.prototype, "open");
+__decorateClass4([
+  n4({ attribute: false })
+], OkLightbox.prototype, "labels");
+__decorateClass4([
+  r5()
+], OkLightbox.prototype, "shown");
+__decorateClass4([
+  r5()
+], OkLightbox.prototype, "fullscreenOn");
+define("ok-lightbox", OkLightbox);
+
 // @erplora/module-sdk/src/index.ts
 function isEmpty(v3) {
   return v3 === null || v3 === void 0 || v3 === "";
 }
 var ListController = class {
-  constructor(client, queryName, onChange = () => {
+  constructor(client, queryName, onChange2 = () => {
   }, opts = {}) {
     this.client = client;
     this.queryName = queryName;
-    this.onChange = onChange;
+    this.onChange = onChange2;
     this.rows = [];
     this.total = 0;
     this.loading = false;
@@ -3702,9 +4295,9 @@ var ListController = class {
     void this.load();
   }
 };
-function createListController(client, queryName, onChange = () => {
+function createListController(client, queryName, onChange2 = () => {
 }, opts = {}) {
-  return new ListController(client, queryName, onChange, opts);
+  return new ListController(client, queryName, onChange2, opts);
 }
 
 // locales/es.json
@@ -3890,7 +4483,14 @@ var es_default = {
     mediaPlay: "Reproducir",
     mediaDownload: "Descargar",
     mediaOpen: "Abrir",
-    threadRepliesElsewhere: "Desde esta pantalla no se contesta: responde desde el WhatsApp de tu m\xF3vil o deja que conteste una automatizaci\xF3n."
+    threadRepliesElsewhere: "Desde esta pantalla no se contesta: responde desde el WhatsApp de tu m\xF3vil o deja que conteste una automatizaci\xF3n.",
+    viewerOpen: "Ver la foto en grande",
+    viewerPrev: "Foto anterior",
+    viewerNext: "Foto siguiente",
+    viewerClose: "Cerrar",
+    viewerDownload: "Descargar",
+    viewerFullscreen: "Pantalla completa",
+    viewerExitFullscreen: "Salir de pantalla completa"
   },
   errors: {
     "whatsapp_inbox.conversation_not_found": "Esa conversaci\xF3n no existe en este negocio.",
@@ -4087,7 +4687,14 @@ var en_default = {
     mediaPlay: "Play",
     mediaDownload: "Download",
     mediaOpen: "Open",
-    threadRepliesElsewhere: "Replies are not sent from this screen: answer from WhatsApp on your phone, or let an automation reply."
+    threadRepliesElsewhere: "Replies are not sent from this screen: answer from WhatsApp on your phone, or let an automation reply.",
+    viewerOpen: "See the photo large",
+    viewerPrev: "Previous photo",
+    viewerNext: "Next photo",
+    viewerClose: "Close",
+    viewerDownload: "Download",
+    viewerFullscreen: "Full screen",
+    viewerExitFullscreen: "Exit full screen"
   },
   errors: {
     "whatsapp_inbox.conversation_not_found": "That conversation does not exist in this business.",
@@ -4212,6 +4819,14 @@ function messageMedia(m4) {
 // ui/components/erp-whatsapp-inbox-inbox/erp-whatsapp-inbox-inbox.ts
 var CATALOG = { es: es_default, en: en_default };
 var SHOWN_INLINE = /* @__PURE__ */ new Set(["image", "sticker"]);
+var VIEWER_LABELS = {
+  prev: "ui.viewerPrev",
+  next: "ui.viewerNext",
+  close: "ui.viewerClose",
+  download: "ui.viewerDownload",
+  fullscreen: "ui.viewerFullscreen",
+  exitFullscreen: "ui.viewerExitFullscreen"
+};
 var THREAD_PAGE = 200;
 var STATUS_KEYS = { active: "ui.statusActive", closed: "ui.statusClosed" };
 function erplora() {
@@ -4252,6 +4867,7 @@ var ErpWhatsappInboxInbox = class extends i3 {
     this.detailError = "";
     this.detailBusy = false;
     this.media = {};
+    this.viewing = null;
     this.assignTo = "";
     this.onLocaleChange = () => this.requestUpdate();
   }
@@ -4285,7 +4901,8 @@ var ErpWhatsappInboxInbox = class extends i3 {
     .msg .when { display:block; font-size:.75rem; color:var(--ion-color-medium,#6f6a5e); margin-top:.15rem; }
     .msg .kind { font-size:.75rem; font-weight:600; color:var(--ion-color-medium,#6f6a5e); }
     .msg .media { display:flex; flex-direction:column; gap:.3rem; margin:.2rem 0; }
-    .msg .media img { display:block; max-width:100%; max-height:20rem; border-radius:8px; object-fit:contain; }
+    .msg .media img { display:block; max-width:100%; max-height:16rem; border-radius:8px; object-fit:contain; }
+    .msg .media .open-photo { display:block; padding:0; border:0; background:none; cursor:zoom-in; max-width:100%; }
     .msg .media audio, .msg .media video { max-width:100%; }
     .msg .media video { max-height:20rem; border-radius:8px; }
     .msg .media a { color:var(--ion-color-primary,#1971c2); font-weight:600; word-break:break-all; }
@@ -4406,6 +5023,7 @@ var ErpWhatsappInboxInbox = class extends i3 {
     }
   }
   closeDetail() {
+    this.viewing = null;
     this.releaseMedia();
     this.detail = null;
     this.messages = [];
@@ -4479,7 +5097,11 @@ var ErpWhatsappInboxInbox = class extends i3 {
         <ion-button data-testid="whatsapp-inbox-media-retry" size="small" fill="clear"
           @click=${() => this.loadMedia(media.mediaId, true)}>${t5("ui.mediaRetry")}</ion-button>`;
     } else if (media.kind === "image" || media.kind === "sticker") {
-      content = b2`<img src=${state.url} alt=${media.caption || label} />`;
+      const img = b2`<img src=${state.url} alt=${media.caption || label} />`;
+      content = media.kind === "image" ? b2`<button type="button" class="open-photo" data-testid="whatsapp-inbox-media-open"
+            aria-label=${t5("ui.viewerOpen")} @click=${() => {
+        this.viewing = media.mediaId;
+      }}>${img}</button>` : img;
     } else if (media.kind === "audio") {
       content = b2`<audio controls src=${state.url}></audio>`;
     } else if (media.kind === "video") {
@@ -4493,6 +5115,27 @@ var ErpWhatsappInboxInbox = class extends i3 {
       ${content}
       ${media.caption && media.caption !== body ? b2`<p class="body">${media.caption}</p>` : A}
     </div>`;
+  }
+  /** Every downloaded photo of the thread, oldest first, so the viewer pages through them all. */
+  renderViewer() {
+    if (!this.viewing) return A;
+    const photos = [];
+    for (const m4 of this.messages) {
+      const media = messageMedia(m4);
+      const state = media && media.kind === "image" ? this.media[media.mediaId] : void 0;
+      if (!media || state?.status !== "ready") continue;
+      const alt = media.caption || erplora().t(CATALOG, "ui.mediaKind.image");
+      photos.push({ mediaId: media.mediaId, item: { src: state.url, alt, type: "img" } });
+    }
+    const index = photos.findIndex((p4) => p4.mediaId === this.viewing);
+    if (index < 0) return A;
+    const labels = Object.fromEntries(
+      Object.entries(VIEWER_LABELS).map(([k2, key]) => [k2, erplora().t(CATALOG, key)])
+    );
+    return b2`<ok-lightbox open .items=${photos.map((p4) => p4.item)} .index=${index}
+      .labels=${labels} @ok-close=${() => {
+      this.viewing = null;
+    }}></ok-lightbox>`;
   }
   renderMessage(m4) {
     const t5 = (k2) => erplora().t(CATALOG, k2);
@@ -4526,6 +5169,7 @@ var ErpWhatsappInboxInbox = class extends i3 {
       <div class="thread">
         ${this.messages.length ? this.messages.map((m4) => this.renderMessage(m4)) : b2`<p class="empty">${t5("ui.emptyThread")}</p>`}
       </div>
+      ${this.renderViewer()}
       ${can("whatsapp_inbox.manage_settings") ? b2`<div class="assign">
             <ion-input data-testid="whatsapp-inbox-assign-to" mode="md" fill="outline" label-placement="floating" label=${t5("ui.assignedTo")}
               placeholder=${t5("ui.assignPlaceholder")} .value=${this.assignTo}
@@ -4569,20 +5213,23 @@ __decorateClass([
 ], ErpWhatsappInboxInbox.prototype, "media", 2);
 __decorateClass([
   r5()
+], ErpWhatsappInboxInbox.prototype, "viewing", 2);
+__decorateClass([
+  r5()
 ], ErpWhatsappInboxInbox.prototype, "assignTo", 2);
 define("erp-whatsapp-inbox-inbox", ErpWhatsappInboxInbox);
 
 // @erplora/outfitkit/dist/ok-inline-feedback.js
-var __defProp4 = Object.defineProperty;
-var __decorateClass4 = (decorators, target, key, kind) => {
+var __defProp5 = Object.defineProperty;
+var __decorateClass5 = (decorators, target, key, kind) => {
   var result = void 0;
   for (var i7 = decorators.length - 1, decorator; i7 >= 0; i7--)
     if (decorator = decorators[i7])
       result = decorator(target, key, result) || result;
-  if (result) __defProp4(target, key, result);
+  if (result) __defProp5(target, key, result);
   return result;
 };
-var DEFAULT_LABELS2 = {
+var DEFAULT_LABELS3 = {
   dismiss: "Dismiss"
 };
 var OkInlineFeedback = class extends i3 {
@@ -4718,7 +5365,7 @@ var OkInlineFeedback = class extends i3 {
   }
   // Textos efectivos: defaults en inglés + overrides del consumidor.
   get t() {
-    return { ...DEFAULT_LABELS2, ...this.labels };
+    return { ...DEFAULT_LABELS3, ...this.labels };
   }
   // Icono por defecto según el tono (overridable por la prop `icon`).
   defaultIcon() {
@@ -4766,25 +5413,25 @@ var OkInlineFeedback = class extends i3 {
     `;
   }
 };
-__decorateClass4([
+__decorateClass5([
   n4({ type: String, reflect: true })
 ], OkInlineFeedback.prototype, "tone");
-__decorateClass4([
+__decorateClass5([
   n4({ type: String })
 ], OkInlineFeedback.prototype, "heading");
-__decorateClass4([
+__decorateClass5([
   n4({ type: String })
 ], OkInlineFeedback.prototype, "icon");
-__decorateClass4([
+__decorateClass5([
   n4({ type: Boolean, reflect: true })
 ], OkInlineFeedback.prototype, "dismissible");
-__decorateClass4([
+__decorateClass5([
   n4({ type: Boolean, reflect: true })
 ], OkInlineFeedback.prototype, "hidden");
-__decorateClass4([
+__decorateClass5([
   n4({ attribute: false })
 ], OkInlineFeedback.prototype, "labels");
-__decorateClass4([
+__decorateClass5([
   r5()
 ], OkInlineFeedback.prototype, "hasActions");
 define("ok-inline-feedback", OkInlineFeedback);
