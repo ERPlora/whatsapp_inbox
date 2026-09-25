@@ -1084,9 +1084,9 @@ describe('lo creado en WhatsApp Manager se trae a la lista con su texto (whatsap
       { type: 'FOOTER', text: 'Salón Elena' },
     ],
   };
-  const CON_BOTONES = {
-    name: 'con_botones', language: 'es', category: 'MARKETING', status: 'APPROVED', meta_id: '91',
-    components: [{ type: 'BODY', text: 'Elige' }, { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sí' }] }],
+  const CARRUSEL = {
+    name: 'carrusel', language: 'es', category: 'MARKETING', status: 'APPROVED', meta_id: '91',
+    components: [{ type: 'BODY', text: 'Elige' }, { type: 'CAROUSEL', cards: [] }],
   };
   const importados = () => comandos.filter((c) => c.name === 'whatsapp_inbox.templates.import_from_meta');
   const soloEnMeta = (el: HTMLElement & { shadowRoot: ShadowRoot }) =>
@@ -1103,6 +1103,7 @@ describe('lo creado en WhatsApp Manager se trae a la lista con su texto (whatsap
       name: 'promo_otono', language: 'es', category: 'MARKETING', header: 'Otoño',
       body: 'Hola {{1}}, 20 % en tintes.', footer: 'Salón Elena', variables: '["Ana"]',
       meta_template_id: '90', meta_status: 'APPROVED', meta_rejected_reason: '',
+      header_format: 'TEXT', buttons: '[]',
     });
     expect(
       comandos.filter((c) => c.name === 'whatsapp_inbox.templates.create'),
@@ -1110,15 +1111,15 @@ describe('lo creado en WhatsApp Manager se trae a la lista con su texto (whatsap
     ).toHaveLength(0);
   });
 
-  it('una traída ya no sale en el aviso; la que no cabe (botones) sí, con su idioma', async () => {
+  it('una traída ya no sale en el aviso; la que no cabe (un carrusel) sí, con su idioma', async () => {
     filas = [ENVIADA];
-    respondeListado = async () => ({ templates: [DE_META, PROMO, CON_BOTONES], stale: false });
+    respondeListado = async () => ({ templates: [DE_META, PROMO, CARRUSEL], stale: false });
 
     const el = await montar();
 
-    expect(importados().map((c) => c.payload.name), 'se importó una plantilla con botones sin ellos').toEqual(['promo_otono']);
+    expect(importados().map((c) => c.payload.name), 'se importó un carrusel sin sus tarjetas').toEqual(['promo_otono']);
     const texto = soloEnMeta(el)?.textContent ?? '';
-    expect(texto).toContain('con_botones (es)');
+    expect(texto).toContain('carrusel (es)');
     expect(texto, 'se sigue avisando de una plantilla que ya se trajo').not.toContain('promo_otono');
   });
 
@@ -1204,5 +1205,153 @@ describe('lo creado en WhatsApp Manager se trae a la lista con su texto (whatsap
 
     expect((el as unknown as { metaSyncNotice: string }).metaSyncNotice, 'el fallo al traerla se calló').toBeTruthy();
     expect(soloEnMeta(el)?.textContent ?? '', 'la que no se pudo traer desapareció sin rastro').toContain('promo_otono (es)');
+  });
+});
+
+// whatsapp_inbox#180 — a template with buttons or an image in its header is brought in WHOLE, and
+// the panel shows what it carries. Its text stays read-only here: «Guardar» registers the template
+// again at Meta from the fields this panel holds, and this panel cannot write buttons or a media
+// header yet, so saving would strip them at Meta.
+describe('plantillas con botones o imagen en la cabecera (whatsapp_inbox#180)', () => {
+  const ENVIADA = {
+    id: 't1', name: 'recordatorio_cita', language: 'es', category: 'UTILITY', header: '',
+    body: 'Te esperamos el {{1}}', footer: '', variables: '["lunes"]', meta_template_id: '77',
+    meta_status: 'approved', meta_rejected_reason: '', is_active: 1, header_format: 'TEXT', buttons: '[]',
+  };
+  const DE_META = { name: 'recordatorio_cita', language: 'es', status: 'APPROVED', meta_id: '77' };
+  const BOTONES = [
+    { type: 'QUICK_REPLY', text: 'Confirmar' },
+    { type: 'URL', text: 'Ver cita', url: 'https://salon.example/c/{{1}}' },
+    { type: 'PHONE_NUMBER', text: 'Llamar', phone_number: '+34600111222' },
+  ];
+  const RICA_EN_META = {
+    name: 'cita_con_foto', language: 'es', category: 'UTILITY', status: 'APPROVED', meta_id: '92',
+    components: [
+      { type: 'HEADER', format: 'IMAGE', example: { header_handle: ['https://scontent.example/x'] } },
+      { type: 'BODY', text: 'Tu cita es el {{1}}', example: { body_text: [['lunes']] } },
+      { type: 'BUTTONS', buttons: BOTONES },
+    ],
+  };
+  const RICA = {
+    ...ENVIADA, id: 't9', name: 'cita_con_foto', meta_template_id: '92',
+    header_format: 'IMAGE', buttons: JSON.stringify(BOTONES),
+  };
+  const importados = () => comandos.filter((c) => c.name === 'whatsapp_inbox.templates.import_from_meta');
+  const q = (el: HTMLElement & { shadowRoot: ShadowRoot }, id: string) =>
+    el.shadowRoot.querySelector(`[data-testid="${id}"]`);
+  const qa = (el: HTMLElement & { shadowRoot: ShadowRoot }, id: string) =>
+    [...el.shadowRoot.querySelectorAll(`[data-testid="${id}"]`)];
+
+  async function abrir(row: Record<string, unknown>) {
+    filas = [ENVIADA, RICA];
+    const el = await montar();
+    const t = tabla(el)!;
+    t.open = () => {};
+    t.close = () => {};
+    (el as unknown as { startEdit: (r: Record<string, unknown>) => void }).startEdit(row);
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    return el;
+  }
+
+  it('se trae entera: la cabecera con su TIPO y los botones en el orden de Meta', async () => {
+    filas = [ENVIADA];
+    respondeListado = async () => ({ templates: [DE_META, RICA_EN_META], stale: false });
+
+    const el = await montar();
+
+    expect(importados(), 'la plantilla con imagen y botones no se trajo').toHaveLength(1);
+    expect(importados()[0].payload).toMatchObject({
+      name: 'cita_con_foto', header: '', header_format: 'IMAGE', buttons: JSON.stringify(BOTONES),
+    });
+    expect(q(el, 'whatsapp-templates-meta-only'), 'se sigue avisando de una plantilla que ya se trajo').toBeNull();
+  });
+
+  it('al abrirla, el panel dice qué cabecera lleva y pinta cada botón con lo que hace', async () => {
+    const el = await abrir(RICA);
+
+    const cabecera = q(el, 'whatsapp-templates-header-media');
+    expect(cabecera, 'el panel no dice que la plantilla lleva una imagen en la cabecera').toBeTruthy();
+    expect(cabecera?.getAttribute('data-format')).toBe('IMAGE');
+    expect(cabecera?.textContent).toContain('ui.headerMediaImage');
+
+    const botones = qa(el, 'whatsapp-templates-button');
+    expect(botones.map((b) => b.getAttribute('data-type')), 'faltan botones o salen desordenados').toEqual([
+      'QUICK_REPLY', 'URL', 'PHONE_NUMBER',
+    ]);
+    expect(botones[0].textContent).toContain('Confirmar');
+    expect(botones[1].textContent, 'un botón de enlace no dice a dónde lleva').toContain('https://salon.example/c/{{1}}');
+    expect(botones[2].textContent, 'un botón de llamada no dice a qué número').toContain('+34600111222');
+  });
+
+  it('su texto no se puede guardar desde aquí: sin «Guardar», campos bloqueados y el porqué', async () => {
+    const el = await abrir(RICA);
+
+    expect(q(el, 'whatsapp-templates-submit'), '«Guardar» la registraría en Meta SIN los botones').toBeNull();
+    expect(q(el, 'whatsapp-templates-managed-in-meta'), 'no se dice dónde se edita').toBeTruthy();
+    for (const id of ['whatsapp-templates-name', 'whatsapp-templates-language', 'whatsapp-templates-category', 'whatsapp-templates-body']) {
+      expect((q(el, id) as HTMLElement & { disabled?: boolean })?.disabled, `${id} se puede editar`).toBe(true);
+    }
+    expect(q(el, 'whatsapp-templates-cancel'), 'no hay forma de cerrar el panel').toBeTruthy();
+  });
+
+  it('aunque el formulario se envíe (Intro), no se actualiza ni se vuelve a registrar en Meta', async () => {
+    const el = await abrir(RICA);
+
+    const form = q(el, 'whatsapp-templates-form') as HTMLFormElement;
+    form.dispatchEvent(new Event('submit', { cancelable: true }));
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(comandos.filter((c) => c.name === 'whatsapp_inbox.templates.update'), 'se reescribió la plantilla').toHaveLength(0);
+    expect(puerta, 'se volvió a registrar en Meta sin sus botones').toHaveLength(0);
+  });
+
+  // Each part locks the panel ON ITS OWN (rv-188): the templates the issue names — «Confirmar» /
+  // «Cambiar cita» — carry buttons and a plain TEXT header, and a guard that only looked at the
+  // header would let «Guardar» strip those buttons at Meta. Same for an image with no buttons.
+  it.each([
+    ['solo botones, cabecera de texto', { header_format: 'TEXT', buttons: JSON.stringify(BOTONES) }],
+    ['solo imagen en la cabecera, sin botones', { header_format: 'IMAGE', buttons: '[]' }],
+  ])('con %s el panel también queda en solo lectura', async (_caso, partes) => {
+    const el = await abrir({ ...RICA, id: 't10', name: 'solo_una_parte', ...partes });
+
+    expect(q(el, 'whatsapp-templates-submit'), '«Guardar» la registraría en Meta sin esa parte').toBeNull();
+    expect(q(el, 'whatsapp-templates-managed-in-meta'), 'no se dice dónde se edita').toBeTruthy();
+    expect((q(el, 'whatsapp-templates-body') as HTMLElement & { disabled?: boolean })?.disabled, 'el cuerpo se puede editar').toBe(true);
+
+    const form = q(el, 'whatsapp-templates-form') as HTMLFormElement;
+    form.dispatchEvent(new Event('submit', { cancelable: true }));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(comandos.filter((c) => c.name === 'whatsapp_inbox.templates.update'), 'se reescribió la plantilla').toHaveLength(0);
+    expect(puerta, 'se volvió a registrar en Meta').toHaveLength(0);
+  });
+
+  it('una plantilla de solo texto se sigue editando igual, sin bloque de botones', async () => {
+    const el = await abrir(ENVIADA);
+
+    expect(q(el, 'whatsapp-templates-submit')).toBeTruthy();
+    expect(q(el, 'whatsapp-templates-managed-in-meta')).toBeNull();
+    expect(q(el, 'whatsapp-templates-header-media')).toBeNull();
+    expect(qa(el, 'whatsapp-templates-button')).toHaveLength(0);
+    expect((q(el, 'whatsapp-templates-body') as HTMLElement & { disabled?: boolean })?.disabled).toBeFalsy();
+  });
+
+  it('el «+» después de abrir una con botones es un alta LIMPIA y editable', async () => {
+    const el = await abrir(RICA);
+
+    tabla(el)!.dispatchEvent(new CustomEvent('primaryAction', { detail: {}, bubbles: true, composed: true }));
+    await new Promise((r) => setTimeout(r, 0));
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+
+    expect(q(el, 'whatsapp-templates-submit'), 'el alta quedó sin botón de añadir').toBeTruthy();
+    expect(qa(el, 'whatsapp-templates-button'), 'el alta enseña los botones de la plantilla anterior').toHaveLength(0);
+    expect(q(el, 'whatsapp-templates-header-media')).toBeNull();
+  });
+
+  it('una fila de antes de la migración (sin las columnas) se trata como de solo texto', async () => {
+    const { header_format: _h, buttons: _b, ...vieja } = ENVIADA;
+    const el = await abrir(vieja);
+
+    expect(q(el, 'whatsapp-templates-submit')).toBeTruthy();
+    expect(qa(el, 'whatsapp-templates-button')).toHaveLength(0);
   });
 });
