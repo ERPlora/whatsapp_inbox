@@ -114,8 +114,8 @@
           "last_message_at",
           "unread_count"
         ],
-        "default_sort": "id",
-        "default_dir": "asc",
+        "default_sort": "last_message_at",
+        "default_dir": "desc",
         "filters": {
           "customer_id": {
             "op": "eq"

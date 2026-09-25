@@ -29,13 +29,21 @@
 --     hundreds of unread conversations and no way to clear them.
 --
 -- An unknown `direction` DOES count: unread means «nobody here has read this», and the one case
--- where that is certainly false is the business having written it. `last_message_at` moves for
--- every message, backlog included — ordering the historical thread by when it was really said needs
--- a timestamp the event does not carry today (whatsapp_inbox#92).
+-- where that is certainly false is the business having written it.
+--
+-- **`last_message_at` is the time of the newest message the thread HAS** (whatsapp_inbox#92), read
+-- from the row the previous statement wrote — so it is when the message was said, which for the
+-- backlog is Meta's timestamp and not the moment of the backfill. `GREATEST` because the backlog
+-- arrives after live traffic: a March message landing now must neither drag an old thread to the
+-- top of the inbox nor pull back a thread the customer wrote in this morning. Both sides are the
+-- same UTC text shape, so text order is time order.
 --
 -- The lookup goes through the primary key. Runtime injects :new_id, :hub_id, :current_user_id, :now.
 UPDATE whatsapp_inbox_conversation
-SET last_message_at = :now,
+SET last_message_at = GREATEST(
+      COALESCE(last_message_at, ''),
+      (SELECT m.created_at FROM whatsapp_inbox_message m WHERE m.hub_id = :hub_id AND m.id = :new_id)
+    ),
     unread_count    = unread_count + CASE
       WHEN COALESCE(NULLIF((:direction)::text, ''), 'inbound') = 'outbound' THEN 0
       WHEN COALESCE(NULLIF((:source)::text, ''), 'live') <> 'live' THEN 0

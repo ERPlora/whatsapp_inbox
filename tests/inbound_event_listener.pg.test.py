@@ -307,6 +307,7 @@ def served_payload(
     source="live",
     sender=None,
     contact=CONTACT_WA_ID,
+    timestamp="1786000000",
 ):
     """One message as a hub WITH hub#1612 serves it: `direction`, `contact` and `source` included.
 
@@ -314,7 +315,11 @@ def served_payload(
     customer sent, the customer in an echo of what the owner answered. Threading by `from` is what
     opens a conversation between the shop and itself.
     """
-    who = sender if sender is not None else (STORE_WA_ID if direction == "outbound" else CONTACT_WA_ID)
+    who = (
+        sender
+        if sender is not None
+        else (STORE_WA_ID if direction == "outbound" else CONTACT_WA_ID)
+    )
     return {
         "wa_message_id": wa_message_id,
         "from": who,
@@ -326,7 +331,7 @@ def served_payload(
         "message": {
             "id": wa_message_id,
             "from": who,
-            "timestamp": "1786000000",
+            "timestamp": timestamp,
             "type": "text",
             "text": {"body": text},
         },
@@ -399,7 +404,9 @@ def check_echo_lands_in_the_customers_thread(db, command):
         db,
         command,
         served_payload(
-            "wamid.S1", "Te va bien el jueves?", "2026-08-11T09:05:00+00:00",
+            "wamid.S1",
+            "Te va bien el jueves?",
+            "2026-08-11T09:05:00+00:00",
             direction="outbound",
         ),
         hub_id=hub,
@@ -454,7 +461,10 @@ def check_an_unknown_direction_is_never_repainted(db, command):
         db,
         command,
         served_payload(
-            "wamid.U1", "??", "2026-08-11T10:00:00+00:00", direction="broadcast",
+            "wamid.U1",
+            "??",
+            "2026-08-11T10:00:00+00:00",
+            direction="broadcast",
             sender=STORE_WA_ID,
         ),
         hub_id=hub,
@@ -491,7 +501,8 @@ def check_the_cap_only_stops_live_customer_traffic(db, command):
         return [f"could not seed the quota: {r.stderr}"]
 
     problems = run_listener(
-        db, command,
+        db,
+        command,
         served_payload("wamid.M1", "primera", "2026-09-02T09:00:00+00:00"),
         hub_id=hub,
     )
@@ -512,7 +523,10 @@ def check_the_cap_only_stops_live_customer_traffic(db, command):
             "wamid.M3", "vieja", "2026-09-02T09:02:00+00:00", source="history"
         ),
         "a direction nobody recognises": served_payload(
-            "wamid.M4", "raro", "2026-09-02T09:03:00+00:00", direction="broadcast",
+            "wamid.M4",
+            "raro",
+            "2026-09-02T09:03:00+00:00",
+            direction="broadcast",
             sender=STORE_WA_ID,
         ),
     }
@@ -525,7 +539,8 @@ def check_the_cap_only_stops_live_customer_traffic(db, command):
     # spent — and it does so with FOUR rows in the table, so a guard that went back to counting
     # them would refuse M2-M4 above instead.
     problems += run_listener(
-        db, command,
+        db,
+        command,
         served_payload("wamid.M5", "segunda", "2026-09-02T09:04:00+00:00"),
         hub_id=hub,
     )
@@ -545,7 +560,6 @@ def check_the_cap_only_stops_live_customer_traffic(db, command):
             "must still stop it (`wamid.M5` is the positive control)"
         )
     return problems
-
 
 
 def usage_reported(db, hub_id):
@@ -602,9 +616,13 @@ def check_the_history_does_not_eat_the_month(db, command):
     problems = []
     for n in range(1, limit + 2):
         failed = run_listener(
-            db, command,
+            db,
+            command,
             served_payload(
-                f"wamid.H{n}", f"vieja {n}", f"2026-09-02T08:0{n}:00+00:00", source="history"
+                f"wamid.H{n}",
+                f"vieja {n}",
+                f"2026-09-02T08:0{n}:00+00:00",
+                source="history",
             ),
             hub_id=hub,
         )
@@ -622,7 +640,8 @@ def check_the_history_does_not_eat_the_month(db, command):
     # The whole allowance still has to be there for the customers who write NOW.
     for n in range(1, limit + 1):
         failed = run_listener(
-            db, command,
+            db,
+            command,
             served_payload(f"wamid.N{n}", f"nueva {n}", f"2026-09-02T09:0{n}:00+00:00"),
             hub_id=hub,
         )
@@ -637,7 +656,8 @@ def check_the_history_does_not_eat_the_month(db, command):
 
     # The positive control: the cap is still armed and cuts off the one over the limit.
     failed = run_listener(
-        db, command,
+        db,
+        command,
         served_payload("wamid.N9", "una de mas", "2026-09-02T09:09:00+00:00"),
         hub_id=hub,
     )
@@ -797,6 +817,123 @@ def check_the_meter_is_per_hub(db, command):
     return problems
 
 
+# Meta's `message.timestamp` (epoch seconds, as text) of two messages of the coexistence backlog.
+MARCH_EPOCH = "1773133200"  # 2026-03-10T09:00:00Z
+APRIL_EPOCH = "1775154600"  # 2026-04-02T18:30:00Z
+OTHER_CONTACT_WA_ID = "34600999888"
+
+
+def check_the_history_keeps_when_it_was_said(db, command):
+    """whatsapp_inbox#92 — a message of the backlog is dated when it was SAID, not when it arrived.
+
+    Connecting the number backfills 180 days of conversations. Stamped with the runtime clock of
+    the backfill, a «hola, ¿tenéis hueco?» of March read as written today, it sat BELOW the reply
+    the customer got this morning, and every old conversation jumped to the top of the inbox as if
+    it had just written. The real time travels in Meta's own object (`message.timestamp`).
+
+    The scenario is the one a merchant lives: the customer writes live, and a few seconds later the
+    backfill delivers what the same customer said in March, plus an April thread with someone else.
+    """
+    hub = "h-history"
+    live_now = "2026-09-02T10:00:00.123456+00:00"  # `now_rfc3339()` carries a fraction
+    problems = []
+    for payload, now in (
+        (served_payload("wamid.T92L1", "hola de hoy", live_now), live_now),
+        (
+            served_payload(
+                "wamid.T92H1", "hola de marzo", "2026-09-02T10:00:04+00:00",
+                source="history", timestamp=MARCH_EPOCH,
+            ),
+            "2026-09-02T10:00:05+00:00",
+        ),
+        (
+            served_payload(
+                "wamid.T92H2", "hola de abril", "2026-09-02T10:00:05+00:00",
+                source="history", timestamp=APRIL_EPOCH, contact=OTHER_CONTACT_WA_ID,
+                sender=OTHER_CONTACT_WA_ID,
+            ),
+            "2026-09-02T10:00:06+00:00",
+        ),
+    ):
+        problems += run_listener(db, command, payload, hub_id=hub, now=now)
+    if problems:
+        return problems
+
+    stamped = scalar(
+        db,
+        "SELECT string_agg(wa_message_id || '@' || created_at, ' / ' ORDER BY wa_message_id)"
+        f" FROM whatsapp_inbox_message WHERE hub_id = {sql_literal(hub)};",
+    )
+    expected = (
+        "wamid.T92H1@2026-03-10T09:00:00+00:00 / wamid.T92H2@2026-04-02T18:30:00+00:00"
+        f" / wamid.T92L1@{live_now}"
+    )
+    if stamped != expected:
+        problems.append(
+            f"messages are dated [{stamped}], expected [{expected}]: a backlog message must carry "
+            "the time Meta says it was sent, and a live one the runtime clock"
+        )
+
+    thread = scalar(
+        db,
+        "SELECT string_agg(m.body, ' / ' ORDER BY m.created_at, m.id)"
+        " FROM whatsapp_inbox_message m JOIN whatsapp_inbox_conversation c ON c.id = m.conversation_id"
+        f" WHERE m.hub_id = {sql_literal(hub)} AND c.wa_contact_id = {sql_literal(CONTACT_WA_ID)};",
+    )
+    if thread != "hola de marzo / hola de hoy":
+        problems.append(
+            f"the thread reads [{thread}]: it has to read in the order things were said"
+        )
+
+    inbox = scalar(
+        db,
+        "SELECT string_agg(wa_contact_id || '@' || COALESCE(last_message_at, '-'), ' / '"
+        " ORDER BY last_message_at DESC)"
+        f" FROM whatsapp_inbox_conversation WHERE hub_id = {sql_literal(hub)};",
+    )
+    expected_inbox = (
+        f"{CONTACT_WA_ID}@{live_now} / {OTHER_CONTACT_WA_ID}@2026-04-02T18:30:00+00:00"
+    )
+    if inbox != expected_inbox:
+        problems.append(
+            f"the inbox reads [{inbox}], expected [{expected_inbox}]: a backlog message may not "
+            "drag a thread to the top, nor move a newer thread's last activity back or forward"
+        )
+    return problems
+
+
+def check_a_history_message_without_a_usable_time_falls_back(db, command):
+    """No usable `message.timestamp` → the runtime clock, never a failed ingestion.
+
+    `message` may be null (the SaaS had nothing to store) or carry a timestamp that is not epoch
+    seconds. Refusing or crashing would dead-letter a message the customer did send; the arrival
+    time is the honest fallback.
+    """
+    hub = "h-history-notime"
+    now = "2026-09-02T11:00:00+00:00"
+    problems = []
+    garbage = served_payload(
+        "wamid.T92G1", "sin hora", now, source="history", timestamp="ayer'; DROP TABLE x;--"
+    )
+    nulled = served_payload("wamid.T92G2", "sin objeto", now, source="history")
+    nulled["message"] = None
+    for payload in (garbage, nulled):
+        problems += run_listener(db, command, payload, hub_id=hub, now=now)
+    if problems:
+        return problems
+    stamped = scalar(
+        db,
+        "SELECT string_agg(wa_message_id || '@' || created_at, ' / ' ORDER BY wa_message_id)"
+        f" FROM whatsapp_inbox_message WHERE hub_id = {sql_literal(hub)};",
+    )
+    expected = f"wamid.T92G1@{now} / wamid.T92G2@{now}"
+    if stamped != expected:
+        problems.append(
+            f"backlog messages without a usable time are dated [{stamped}], expected [{expected}]"
+        )
+    return problems
+
+
 def check_a_hub_before_1612_still_ingests(db, command):
     """A hub that sends no `direction`/`contact`/`source` keeps working exactly as before.
 
@@ -880,6 +1017,8 @@ def main():
         problems += check_the_history_does_not_eat_the_month(db, command)
         problems += check_the_meter_is_per_hub(db, command)
         problems += check_a_hub_before_1612_still_ingests(db, command)
+        problems += check_the_history_keeps_when_it_was_said(db, command)
+        problems += check_a_history_message_without_a_usable_time_falls_back(db, command)
         for p in problems:
             print(f"FAIL  {p}")
         if problems:

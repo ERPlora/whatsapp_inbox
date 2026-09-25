@@ -70,6 +70,17 @@
 -- message the hub already has — absorbing is what «at-least-once delivery» is owed. The `WHERE`
 -- repeats the index predicate because the index is PARTIAL over `is_deleted = 0`.
 --
+-- **`created_at` is when the message was SAID** (whatsapp_inbox#92). For live traffic that is the
+-- runtime clock: the poll drains every few seconds, and `:now` is the clock every other timestamp of
+-- this hub is ordered by. For the coexistence backlog (`source = 'history'`) it is NOT: the backfill
+-- lands 180 days of messages within seconds, and stamping them with `:now` dated a March «hola» as
+-- today and read it below this morning's answer. Meta's own `message.timestamp` (epoch seconds, as
+-- text) is the time it was sent, rendered in the SAME text shape `:now` has (`…+00:00`, UTC) so the
+-- column keeps sorting as text. `received_at` would be wrong: it is the SaaS poll cursor. A backlog
+-- message with no usable timestamp (no object, not digits) falls back to `:now` instead of being
+-- refused — dead-lettering a message the customer did send is worse than dating it on arrival.
+-- `updated_at` stays `:now`: it is when THIS row was written.
+--
 -- Runtime injects :new_id, :hub_id, :current_user_id, :now.
 INSERT INTO whatsapp_inbox_message
   (id, hub_id, conversation_id, direction, source, wa_message_id, extra_metadata,
@@ -91,7 +102,16 @@ SELECT
   COALESCE(NULLIF((:message)::text::jsonb ->> 'type', ''), 'unknown'),
   '',
   'received',
-  0, :current_user_id, :current_user_id, :now, :now
+  0, :current_user_id, :current_user_id,
+  CASE
+    WHEN COALESCE(NULLIF((:source)::text, ''), 'live') = 'history'
+     AND ((:message)::text::jsonb ->> 'timestamp') ~ '^[0-9]{1,11}$'
+    THEN to_char(
+      to_timestamp(((:message)::text::jsonb ->> 'timestamp')::bigint) AT TIME ZONE 'UTC',
+      'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+    ELSE :now
+  END,
+  :now
 WHERE (
   COALESCE(NULLIF((:direction)::text, ''), 'inbound') <> 'inbound'
   OR COALESCE(NULLIF((:source)::text, ''), 'live') <> 'live'

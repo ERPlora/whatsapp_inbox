@@ -276,3 +276,17 @@ describe('el hilo distingue QUIÉN habló (whatsapp_inbox#66)', () => {
     expect(rara.textContent ?? '', 'el valor que llegó no se enseña, así que nadie puede reportarlo').toContain('broadcast');
   });
 });
+
+describe('the inbox lists the latest activity first (whatsapp_inbox#92)', () => {
+  it('asks `conversations.list` sorted by `last_message_at` descending, like any inbox', async () => {
+    await montar();
+    const lista = consultas.find((c) => c.name === 'whatsapp_inbox.conversations.list');
+    expect(lista?.params).toMatchObject({ sort: 'last_message_at', dir: 'desc' });
+  });
+
+  it('the manifest default agrees, so any other caller of the list gets the same order', async () => {
+    const manifest = (await import('../../../module.json')).default;
+    const list = manifest.queries['whatsapp_inbox.conversations.list'].list;
+    expect([list.default_sort, list.default_dir]).toEqual(['last_message_at', 'desc']);
+  });
+});

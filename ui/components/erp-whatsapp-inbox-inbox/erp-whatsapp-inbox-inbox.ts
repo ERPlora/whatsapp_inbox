@@ -192,8 +192,10 @@ export class ErpWhatsappInboxInbox extends LitElement {
     window.addEventListener('erplora:locale-changed', this.onLocaleChange);
     this.ctrl = createListController<Conversation>(erplora(), 'whatsapp_inbox.conversations.list', () => this.requestUpdate(), {
       pageSize: 50,
-      sort: 'id',
-      dir: 'asc',
+      // Latest activity first, like every inbox (whatsapp_inbox#92): sorting by `id` put a random
+      // uuid in charge of who the operator sees first.
+      sort: 'last_message_at',
+      dir: 'desc',
     });
     await this.ctrl.load();
     try {
