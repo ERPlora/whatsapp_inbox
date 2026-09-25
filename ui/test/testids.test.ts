@@ -10,7 +10,7 @@
 // This is the guard of the PATTERN, not a patch over one screen. The hub's twin lives in
 // `apps/web/src/form-testids.test.ts`; the convention both obey is written once, in
 // `architecture/hub/apps/testids.md`: `<surface>-<field|action|state>`, kebab-case, and the rows
-// of a list carry their identity at the end (`whatsapp-requests-pending-approve-${id}`), never the index.
+// of a list carry their identity at the end (`whatsapp-settings-activate-${family}`), never the index.
 //
 // Two things are NOT copied from the hub's guard, because this repo is not Vue:
 //
@@ -74,28 +74,6 @@ const COVERED: Record<
       'whatsapp-inbox-media-unavailable',
     ],
     tables: ['whatsapp-inbox-table'],
-  },
-  // The review queue (`/m/whatsapp_inbox/requests`): what the assistant understood from a chat and
-  // what the shop does about it — approve it, book it against the diary, reject it, read it in
-  // full, delete it. Several requests are painted AT ONCE, so every hook of the queue carries the
-  // request id: a spec approves THAT request, never «the first button».
-  'components/erp-whatsapp-inbox-requests/erp-whatsapp-inbox-requests.ts': {
-    prefix: 'whatsapp-requests-',
-    contract: [
-      'whatsapp-requests-delete-cancel',
-      'whatsapp-requests-delete-confirm',
-      'whatsapp-requests-detail-booking-failed',
-      'whatsapp-requests-detail-close',
-      'whatsapp-requests-form-error',
-      'whatsapp-requests-load-error',
-    ],
-    computed: [
-      'whatsapp-requests-pending-approve-',
-      'whatsapp-requests-pending-book-',
-      'whatsapp-requests-pending-failed-',
-      'whatsapp-requests-pending-reject-',
-    ],
-    tables: ['whatsapp-requests-table'],
   },
   // Settings (`/m/whatsapp_inbox/settings`): the three steps of ADR-0470 — connect the number, say
   // what it is for, and decide whether what arrives is booked on its own or waits for a person.

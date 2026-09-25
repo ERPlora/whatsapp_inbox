@@ -74,7 +74,7 @@ gatea nada contesta «sí» a una auditoría que debería decir que no.
 | emite | `message.received`, `request.created/approved/rejected/fulfilled/deleted`, `conversation.assigned`, `template.*` | — |
 | escucha | `hub.whatsapp.message_received` (core) · `appointments.booking_request.fulfilled` / `.failed` | — |
 
-Navegación: `erp-whatsapp-inbox-inbox`, `-requests`, `-templates`.
+Navegación: `erp-whatsapp-inbox-inbox` y `erp-whatsapp-inbox-settings` (que embebe `-templates`). La pestaña de solicitudes se retiró en #193; sus commands y queries salen en #206.
 
 ## Layout
 
