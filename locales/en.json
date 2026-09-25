@@ -210,7 +210,8 @@
     "mediaUnavailable": "This attachment cannot be shown here yet: you can see it on your phone's WhatsApp.",
     "mediaPlay": "Play",
     "mediaDownload": "Download",
-    "mediaOpen": "Open"
+    "mediaOpen": "Open",
+    "threadRepliesElsewhere": "Replies are not sent from this screen: answer from WhatsApp on your phone, or let an automation reply."
   },
   "errors": {
     "whatsapp_inbox.conversation_not_found": "That conversation does not exist in this business.",

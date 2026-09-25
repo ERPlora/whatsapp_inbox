@@ -474,7 +474,7 @@ export class ErpWhatsappInboxInbox extends LitElement {
             </ion-button>
           </div>`
         : nothing}
-      <p class="note">${t('ui.noReplyHere')}</p>
+      <p class="note">${t('ui.threadRepliesElsewhere')}</p>
     </section>`;
   }
 

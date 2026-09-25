@@ -211,7 +211,8 @@
     "mediaUnavailable": "Este adjunto aún no se puede ver aquí: lo tienes en el WhatsApp de tu móvil.",
     "mediaPlay": "Reproducir",
     "mediaDownload": "Descargar",
-    "mediaOpen": "Abrir"
+    "mediaOpen": "Abrir",
+    "threadRepliesElsewhere": "Desde esta pantalla no se contesta: responde desde el WhatsApp de tu móvil o deja que conteste una automatización."
   },
   "errors": {
     "whatsapp_inbox.conversation_not_found": "Esa conversación no existe en este negocio.",
