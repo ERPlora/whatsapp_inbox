@@ -27,3 +27,8 @@ concurrency:
 jobs:
   validate:
     uses: ERPlora/module-toolkit/.github/workflows/module-gate.yml@main
+    # The recipes' version floors (flows/*.requires.json) are checked against the neighbours'
+    # history, and the gate clones them with MODULES_DEPLOY_KEYS (module-toolkit#343). `inherit`
+    # and not the one secret by name: it works whether or not the gate declares it yet, so this
+    # stub can land before or after the toolkit side without a red window.
+    secrets: inherit
