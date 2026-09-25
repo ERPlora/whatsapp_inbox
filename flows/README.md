@@ -186,15 +186,9 @@ esperaba la escritura, y en la mitad de los casos hacía que la receta dijese lo
 la agenda tenía. Así que hoy la receta es una, corre en `auto`, y **lee** la decisión donde vive
 (whatsapp_inbox#124).
 
-⚠️ **El ajuste `approval_mode` de este módulo no gobierna nada de esto** — y hoy no gobierna nada en
-absoluto. Decide el estado inicial de una `request` (`commands/_insert_request.sql`: `auto` →
-`confirmed`, `manual` → `pending_review`), y ese pipeline está desconectado: lo único que emite
-`whatsapp_inbox.request.approved` —el evento que `appointments` escucha para reservar— es
-`requests.approve`, cuyo SQL exige `status = 'pending_review'` y devuelve
-`whatsapp_inbox.request_not_pending` en cualquier otro caso. O sea que una request nacida
-`confirmed` **no se puede aprobar y nadie la reserva**; y `whatsapp_inbox.request.created` no lo
-escucha ningún módulo. Además hoy **nadie llama a `requests.ingest`**, así que ese camino no se ha
-ejecutado nunca.
+El antiguo ajuste `approval_mode` de este módulo, que decidía el estado inicial de una «request»
+de la bandeja, se retiró con todo ese pipeline en whatsapp_inbox#206 (migración 013): nadie lo
+alimentaba y nada de lo que hacen estas recetas pasaba por él.
 
 ### `UNATTENDED_FAMILIES` es la DECLARACIÓN
 

@@ -325,7 +325,7 @@
         "message": "That conversation does not exist in this business."
       },
       "ai": {
-        "description": "Remembers which customer a WhatsApp conversation belongs to, so the inbox can be filtered by her and every request read from the thread is born carrying her. Identified by the WhatsApp contact the messages come from"
+        "description": "Remembers which customer a WhatsApp conversation belongs to, so the inbox can be filtered by her. Identified by the WhatsApp contact the messages come from"
       }
     },
     "whatsapp_inbox.conversations.remember_offer": {

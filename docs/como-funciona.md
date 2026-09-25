@@ -291,4 +291,3 @@ mira los permisos del flujo y la cuota; los demás se ven en el historial del ru
 | **Coexistencia** | Usar el mismo número en la app del móvil y en ERPlora a la vez |
 | **Paso `notify`** | El único sitio por el que sale un WhatsApp del hub |
 | **Grant / permiso** | Lo que el dueño concede a una automatización: canal, destinatario, lecturas, escrituras |
-| **Petición** | Lo que la IA extrae de una conversación: cita, reserva, pedido, presupuesto |

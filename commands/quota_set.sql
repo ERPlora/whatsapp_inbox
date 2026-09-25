@@ -51,7 +51,7 @@
 -- can see.
 --
 -- On conflict only the meter and the audit stamp move: this command has no opinion about any
--- other column of the row (today `approval_mode`, still read by the requests pipeline).
+-- other column of the row.
 --
 -- `0` keeps meaning «no cap» for the LIMIT (the guards only enforce above zero) — it is what a hub
 -- on an unmetered plan gets, and what an unprovisioned hub has always had.

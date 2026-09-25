@@ -1,6 +1,6 @@
 # WhatsApp Inbox — Screens
 
-The module contributes three tabs to the hub navigation: **Inbox**, **Requests** and **Templates**.
+The module contributes two tabs to the hub navigation: **Inbox** and **Templates**.
 
 ## Inbox — conversations
 
@@ -36,8 +36,8 @@ travels from WhatsApp through the platform. While it loads the bubble says so; i
 so and offers **Try again**. The file is kept only while the thread is open.
 
 Until whatsapp_inbox#29 those two reads had no caller and a module called *inbox* could not open a
-message. That matters since appointments#38: approving a request creates a real appointment, so
-whoever approves has to be able to read what the customer actually wrote.
+message. Whoever confirms a booking asked for over WhatsApp has to be able to read what the customer
+actually wrote.
 
 ### Assign a conversation
 
@@ -71,8 +71,8 @@ There is still no webhook receiver and no network access to Meta declared here.
 There is no «Requests» tab any more (whatsapp_inbox#193). Nothing fed it: the WhatsApp recipes book
 straight into Appointments or Reservations, so the owner saw a list that was always empty. A booking
 that waits for the owner's OK is a **pending appointment**, and it is confirmed in Appointments, next
-to the rest of the diary. The requests commands, queries and table still ship without a screen until
-they are retired too (whatsapp_inbox#206).
+to the rest of the diary. The requests commands, queries, table and events behind it were retired
+too (whatsapp_inbox#206).
 
 ## Templates
 
