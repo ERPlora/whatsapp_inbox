@@ -67,6 +67,9 @@ interface Message {
 /** The whole thread of one conversation in one read. 50 is the query's own page size. */
 const THREAD_PAGE = 200;
 
+/** Conversation status → its catalogue label. Shared by the column's filter and its cells. */
+const STATUS_KEYS: Record<string, string> = { active: 'ui.statusActive', closed: 'ui.statusClosed' };
+
 function erplora(): ErploraClientLike {
   const c = (globalThis as { erplora?: ErploraClientLike }).erplora;
   if (!c) throw new Error('erplora SDK no inicializado por el shell');
@@ -176,10 +179,13 @@ export class ErpWhatsappInboxInbox extends LitElement {
       sortable: true,
       filterable: true,
       filterType: 'select',
-      options: [
-        { value: 'active', label: t('ui.statusActive') },
-        { value: 'closed', label: t('ui.statusClosed') },
-      ],
+      options: Object.entries(STATUS_KEYS).map(([value, key]) => ({ value, label: t(key) })),
+      // The cell names the status like the filter does (whatsapp_inbox#189); an unlearned value is
+      // shown as it arrived rather than disguised as another status.
+      format: (r) => {
+        const key = STATUS_KEYS[String(r.status ?? '')];
+        return key ? t(key) : String(r.status ?? '');
+      },
     },
     {
       key: 'unread_count',
