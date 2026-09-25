@@ -34,7 +34,7 @@
     },
     "received_at": {
       "type": "string",
-      "description": "When the SaaS stored the message (ISO-8601). Kept for the record; the row's own clock is the runtime's `:now`, which is the one every other timestamp in this hub is ordered by."
+      "description": "When the SaaS stored the message (ISO-8601) — the poll cursor, NOT when the message was sent. Kept for the record and never used as the message's time: a live message is dated with the runtime's `:now`, and a `history` one with Meta's `message.timestamp` (whatsapp_inbox#92)."
     },
     "message": {
       "type": ["object", "null"],

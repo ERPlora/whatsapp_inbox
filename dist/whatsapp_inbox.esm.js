@@ -1261,7 +1261,7 @@ function r5(r6) {
   return n4({ ...r6, state: true, attribute: false });
 }
 
-// @erplora/outfitkit/dist/define.js
+// node_modules/@erplora/outfitkit/dist/define.js
 function define(tag, ctor) {
   if (typeof customElements !== "undefined" && !customElements.get(tag)) {
     customElements.define(tag, ctor);
@@ -1403,7 +1403,7 @@ var o6 = e4(class extends i4 {
   }
 });
 
-// @erplora/outfitkit/dist/shared/icons.js
+// node_modules/@erplora/outfitkit/dist/shared/icons.js
 var rawAdd = '<svg viewBox="0 0 512 512" width="1.2em" height="1.2em" ><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="32" d="M256 112v288m144-144H112"/></svg>';
 var rawAlertCircle = '<svg viewBox="0 0 512 512" width="1.2em" height="1.2em" ><path fill="currentColor" d="M256 48C141.31 48 48 141.31 48 256s93.31 208 208 208s208-93.31 208-208S370.69 48 256 48m0 319.91a20 20 0 1 1 20-20a20 20 0 0 1-20 20m21.72-201.15l-5.74 122a16 16 0 0 1-32 0l-5.74-121.94v-.05a21.74 21.74 0 1 1 43.44 0Z"/></svg>';
 var rawAlertCircleOutline = '<svg viewBox="0 0 512 512" width="1.2em" height="1.2em" ><path fill="none" stroke="currentColor" stroke-miterlimit="10" stroke-width="32" d="M448 256c0-106-86-192-192-192S64 150 64 256s86 192 192 192s192-86 192-192Z"/><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="32" d="M250.26 166.05L256 288l5.73-121.95a5.74 5.74 0 0 0-5.79-6h0a5.74 5.74 0 0 0-5.68 6"/><path fill="currentColor" d="M256 367.91a20 20 0 1 1 20-20a20 20 0 0 1-20 20"/></svg>';
@@ -1554,7 +1554,7 @@ function okIcon(value) {
   return BY_NAME[value] ?? value;
 }
 
-// @erplora/outfitkit/dist/ok-data-table.js
+// node_modules/@erplora/outfitkit/dist/ok-data-table.js
 var CSV_BOM = "\uFEFF";
 var WINDOWS_1252_C1 = [
   8364,
@@ -3470,7 +3470,7 @@ __decorateClass2([
 var OkDataTable = _OkDataTable;
 define("ok-data-table", OkDataTable);
 
-// @erplora/outfitkit/dist/ok-status-pill.js
+// node_modules/@erplora/outfitkit/dist/ok-status-pill.js
 var __defProp3 = Object.defineProperty;
 var __decorateClass3 = (decorators, target, key, kind) => {
   var result = void 0;
@@ -4252,8 +4252,10 @@ var ErpWhatsappInboxInbox = class extends i3 {
     window.addEventListener("erplora:locale-changed", this.onLocaleChange);
     this.ctrl = createListController(erplora(), "whatsapp_inbox.conversations.list", () => this.requestUpdate(), {
       pageSize: 50,
-      sort: "id",
-      dir: "asc"
+      // Latest activity first, like every inbox (whatsapp_inbox#92): sorting by `id` put a random
+      // uuid in charge of who the operator sees first.
+      sort: "last_message_at",
+      dir: "desc"
     });
     await this.ctrl.load();
     try {
@@ -4402,7 +4404,7 @@ __decorateClass([
 ], ErpWhatsappInboxInbox.prototype, "assignTo", 2);
 define("erp-whatsapp-inbox-inbox", ErpWhatsappInboxInbox);
 
-// @erplora/outfitkit/dist/ok-inline-feedback.js
+// node_modules/@erplora/outfitkit/dist/ok-inline-feedback.js
 var __defProp4 = Object.defineProperty;
 var __decorateClass4 = (decorators, target, key, kind) => {
   var result = void 0;

@@ -95,15 +95,23 @@ def scan_args(sql, open_idx):
     raise AssertionError("unbalanced parentheses")
 
 
+def pad_to_min_width(value, width, fill):
+    """`width` is a MINIMUM, never a ceiling (hub#1378, `pad_to_min_width` in the runtime).
+
+    A bare `lpad` cuts the overflow, so this harness would pass SQL the runtime renders differently.
+    """
+    return f"lpad(({value})::text, greatest({width}, length(({value})::text)), {fill})"
+
+
 def render_bridge(name, raw_args):
     """The native Postgres expression a bridge call lowers to, or None on wrong arity."""
     a = [shim_functions(x.strip()) for x in raw_args]
     if name == "erp_now":
         return "now()" if (not raw_args or (len(a) == 1 and not a[0])) else None
     if name == "erp_pad" and len(a) == 2:
-        return f"lpad(({a[0]})::text, {a[1]}, '0')"
+        return pad_to_min_width(a[0], a[1], "'0'")
     if name == "erp_lpad" and len(a) == 3:
-        return f"lpad(({a[0]})::text, {a[1]}, {a[2]})"
+        return pad_to_min_width(a[0], a[1], a[2])
     if name == "erp_dt" and len(a) == 1:
         return f"(({a[0]})::timestamptz)"
     if name == "erp_date" and len(a) == 1:
@@ -142,6 +150,21 @@ def shim_functions(sql):
             in_string = True
             out.append(c)
             i += 1
+            continue
+        # Comments are emitted VERBATIM and never touch the string state, exactly like the
+        # runtime (hub#1026): an apostrophe in prose (`-- the slot's capacity`) would otherwise
+        # open a phantom literal and leave every later bridge call unrewritten.
+        if sql[i : i + 2] == "--":
+            j = sql.find("\n", i)
+            j = len(sql) if j < 0 else j
+            out.append(sql[i:j])
+            i = j
+            continue
+        if sql[i : i + 2] == "/*":
+            j = sql.find("*/", i + 2)
+            j = len(sql) if j < 0 else j + 2
+            out.append(sql[i:j])
+            i = j
             continue
         previous_is_ident = i > 0 and (sql[i - 1].isalnum() or sql[i - 1] == "_")
         rewritten = False
