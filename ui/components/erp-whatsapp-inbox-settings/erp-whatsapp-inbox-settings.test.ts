@@ -28,7 +28,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import esLocale from '../../../locales/es.json';
 import enLocale from '../../../locales/en.json';
-import { APPS_PATH, AUTOMATIONS_PATH, MODULE_ID, WHATSAPP_USES } from '../../lib/whatsapp-uses';
+import { readdirSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { APPS_PATH, AUTOMATIONS_PATH, MODULE_ID, NEIGHBOUR_NAME_KEYS, WHATSAPP_USES } from '../../lib/whatsapp-uses';
 
 /** The use this hub can offer today. `#126` adds the restaurant one, and every test here reads the
  *  family off the lib rather than spelling it, so a rename cannot leave this file green. */
@@ -79,6 +83,24 @@ interface Hub {
   reservationsSettings?: Record<string, unknown>[];
   /** The diary refuses the narrow command: too old to publish it, or a denied permission. */
   policyError?: { code: string; message: string };
+  /**
+   * What `flows.templateDiscards()` answers (hub#2123): the families of this module the hub left
+   * out, with the stable code and — on the floor codes — the neighbour that failed, as data.
+   */
+  discarded?: Discard[];
+  /** A hub from before hub#2123: the SDK method is not there, and the card keeps its old sentence. */
+  noDiscards?: boolean;
+  /** The discard listing itself refuses: the screen must still paint, with its old sentence. */
+  discardsError?: { code: string; message: string };
+}
+
+/** The shape of hub#2123's `FlowTemplateDiscard`, the one a module reads. */
+interface Discard {
+  module: string;
+  family: string;
+  code: string;
+  detail: string;
+  requires?: { module: string; floor: string; installed: string | null };
 }
 
 function mountWith(hub: Hub = {}) {
@@ -127,10 +149,10 @@ function mountWith(hub: Hub = {}) {
     },
     locale: 'es',
     // Resolved against the SHIPPED catalog: asserting on a key that returns the key would pass no
-    // matter what the sentence said.
-    t: (catalog: Record<string, { ui: Record<string, string> }>, key: string) => {
+    // matter what the sentence said. `{name}` placeholders are filled the way the SDK's `t()` does.
+    t: (catalog: Record<string, { ui: Record<string, string> }>, key: string, params?: Record<string, unknown>) => {
       const [, k] = key.split('.');
-      return catalog.es?.ui?.[k] ?? key;
+      return fill(catalog.es?.ui?.[k] ?? key, params);
     },
   };
   client.queryOptional = async (name: string, params?: Record<string, unknown>) => {
@@ -149,6 +171,13 @@ function mountWith(hub: Hub = {}) {
   if (!hub.noForModule) {
     client.forModule = (id: string) => {
       const flows: Record<string, unknown> = { templates };
+      if (!hub.noDiscards) {
+        flows.templateDiscards = async () => {
+          kernel.push({ call: 'templateDiscards', scopedTo: id });
+          if (hub.discardsError) throw Object.assign(new Error(hub.discardsError.message), { code: hub.discardsError.code });
+          return hub.discarded ?? [];
+        };
+      }
       if (!hub.oldHub) {
         flows.activateTemplate = async (family: string) => {
           kernel.push({ call: 'activate', family, scopedTo: id });
@@ -187,6 +216,13 @@ async function settle(el: HTMLElement) {
   await ready.updateComplete;
   await new Promise((r) => setTimeout(r, 0));
   await ready.updateComplete;
+}
+
+/** `{name}` → value, exactly the substitution the SDK's `t()` makes (packages/module-sdk). */
+function fill(sentence: string, params?: Record<string, unknown>): string {
+  let out = sentence;
+  for (const [k, v] of Object.entries(params ?? {})) out = out.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v));
+  return out;
 }
 
 const pick = (el: HTMLElement & { shadowRoot: ShadowRoot }, testid: string) =>
@@ -572,6 +608,133 @@ describe('a failure is read on the card, never swallowed', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
+// Why a card is not offered — the neighbour that fails, by name (whatsapp_inbox#210)
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// Since whatsapp_inbox#197 «Reservar citas» needs Services and Staff too, not only Appointments. A
+// salon with Citas up to date and Personal paused lost the card and was told «Actualiza Citas o
+// Reservas»: she went to Apps, saw Citas up to date and had nothing to do. The hub knows which
+// neighbour failed and, since hub#2123, hands it to the module as DATA (`requires.module` + the
+// `code`); the card names it in her language. `detail` is the hub's prose and is never read
+// (ADR-0055). A hub without that method keeps the old sentence rather than a blank.
+describe('a card that is not offered says which app is missing, paused or too old', () => {
+  const discard = (code: string, module: string, installed: string | null, floor = '2.0.4'): Discard => ({
+    module: MODULE_ID,
+    family: APPOINTMENTS.family,
+    code,
+    detail: 'prosa del hub que no se lee',
+    requires: { module, floor, installed },
+  });
+  const nameOf = (module: string) => sentence(NEIGHBOUR_NAME_KEYS[module]!);
+  const useName = sentence(APPOINTMENTS.nameKey);
+
+  it('Staff paused: it names Staff and says it is paused, never «update Appointments»', async () => {
+    mountWith({
+      unlisted: [APPOINTMENTS.family, RESERVATIONS.family],
+      absent: ['reservations'],
+      discarded: [discard('template_floor_module_paused', 'staff', '2.3.1')],
+    });
+    const el = await mount();
+    const reason = pick(el, `whatsapp-settings-uses-blocked-${APPOINTMENTS.family}`);
+    expect(reason, 'the card vanished without saying why').not.toBeNull();
+    expect(reason!.textContent).toContain(fill(sentence('ui.usesNeedPausedModule'), { use: useName, module: nameOf('staff') }));
+    expect(
+      text(el),
+      'told a salon with Citas up to date to update Citas while the app that fails is Personal',
+    ).not.toContain(esLocale.ui.usesNeedNewerBookingModule);
+    expect(pick(el, 'whatsapp-settings-uses-go-to-apps'), 'named the app but gave no way to reach it').not.toBeNull();
+  });
+
+  it('Services missing: it says to install Services', async () => {
+    mountWith({
+      unlisted: [APPOINTMENTS.family, RESERVATIONS.family],
+      absent: ['reservations'],
+      discarded: [discard('template_floor_module_missing', 'services', null, '1.1.7')],
+    });
+    const el = await mount();
+    expect(pick(el, `whatsapp-settings-uses-blocked-${APPOINTMENTS.family}`)!.textContent).toContain(
+      fill(sentence('ui.usesNeedMissingModule'), { use: useName, module: nameOf('services') }),
+    );
+  });
+
+  it('Appointments too old: it names the version it needs and the one this hub has', async () => {
+    mountWith({
+      unlisted: [APPOINTMENTS.family, RESERVATIONS.family],
+      absent: ['reservations'],
+      discarded: [discard('template_floor_module_too_old', 'appointments', '1.1.70', '1.1.77')],
+    });
+    const el = await mount();
+    expect(pick(el, `whatsapp-settings-uses-blocked-${APPOINTMENTS.family}`)!.textContent).toContain(
+      fill(sentence('ui.usesNeedUpdatedModule'), {
+        use: useName,
+        module: nameOf('appointments'),
+        floor: '1.1.77',
+        installed: '1.1.70',
+      }),
+    );
+  });
+
+  it('the other card still offered: the blocked one still says why, under it', async () => {
+    mountWith({
+      unlisted: [APPOINTMENTS.family],
+      discarded: [discard('template_floor_module_paused', 'staff', '2.3.1')],
+    });
+    const el = await mount();
+    expect(pick(el, `whatsapp-settings-activate-${RESERVATIONS.family}`), 'hid the card the hub does offer').not.toBeNull();
+    expect(
+      pick(el, `whatsapp-settings-uses-blocked-${APPOINTMENTS.family}`)?.textContent,
+      'a salon-and-restaurant lost «Reservar citas» in silence because the other card was there',
+    ).toContain(nameOf('staff'));
+  });
+
+  it('a discard of ANOTHER family (a companion) does not speak for this card', async () => {
+    mountWith({
+      unlisted: [APPOINTMENTS.family, RESERVATIONS.family],
+      absent: ['reservations'],
+      discarded: [{ ...discard('template_floor_module_paused', 'staff', '2.3.1'), family: 'appointment-confirmed-to-whatsapp' }],
+    });
+    const el = await mount();
+    expect(pick(el, `whatsapp-settings-uses-blocked-${APPOINTMENTS.family}`)).toBeNull();
+    expect(text(el)).toContain(esLocale.ui.usesNeedNewerBookingModule);
+  });
+
+  it.each([
+    ['a hub from before hub#2123 (no templateDiscards)', { noDiscards: true }],
+    ['the discard listing refused', { discardsError: { code: 'server_unavailable', message: 'down' } }],
+    ['a code with no neighbour (template_floor_unreadable)', {
+      discarded: [{ module: MODULE_ID, family: 'appointment-from-whatsapp', code: 'template_floor_unreadable', detail: 'x' }],
+    }],
+    ['a neighbour this screen has no name for', {
+      discarded: [{
+        module: MODULE_ID, family: 'appointment-from-whatsapp', code: 'template_floor_module_paused', detail: 'x',
+        requires: { module: 'somebody_else', floor: '1.0.0', installed: '1.0.0' },
+      }],
+    }],
+  ] as [string, Partial<Hub>][])('%s: it keeps the sentence it had, never a blank or a raw id', async (_, extra) => {
+    mountWith({ unlisted: [APPOINTMENTS.family, RESERVATIONS.family], absent: ['reservations'], ...extra });
+    const el = await mount();
+    expect(text(el)).toContain(esLocale.ui.usesNeedNewerBookingModule);
+    expect(text(el)).not.toContain('somebody_else');
+  });
+
+  it('every neighbour a recipe of this module declares a floor on has a name in both languages', () => {
+    const flowsDir = join(dirname(fileURLToPath(import.meta.url)), '../../../flows');
+    const neighbours = new Set(
+      readdirSync(flowsDir)
+        .filter((f) => f.endsWith('.requires.json'))
+        .flatMap((f) => Object.keys(JSON.parse(readFileSync(join(flowsDir, f), 'utf8')).modules ?? {})),
+    );
+    expect(neighbours.size, 'read no requires.json: this guard would pass over nothing').toBeGreaterThan(0);
+    for (const module of neighbours) {
+      const key = NEIGHBOUR_NAME_KEYS[module];
+      expect(key, `\`${module}\` is a floor of a recipe here and has no name: its discard would fall back`).toBeTruthy();
+      const k = key!.split('.')[1];
+      expect((enLocale.ui as Record<string, string>)[k], `missing \`${key}\` in en.json`).toBeTruthy();
+      expect((esLocale.ui as Record<string, string>)[k], `missing \`${key}\` in es.json`).toBeTruthy();
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
 // STEP 3 · the ONE decision, and where it lives
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
 describe('step 3 · «se confirman solas / las reviso yo» is a setting of the diary, not of this module', () => {
@@ -921,6 +1084,7 @@ describe('every sentence of this screen ships in both languages, translated', ()
     'advancedInAutomations', 'advancedMetaTemplates',
     'usesNeedsNewerHub', 'usesNeedBookingModule', 'usesNeedNewerBookingModule', 'usesGoToApps',
     'activateForbidden', 'errActivate', 'errTemplates',
+    'usesNeedMissingModule', 'usesNeedPausedModule', 'usesNeedUpdatedModule',
     // Derived, never listed: every sentence a card owns — its name, its summary, its consent, its
     // «text your number» line AND the four words of its switch — comes off the use itself, so a
     // card added later cannot ship half-translated by being forgotten in a list over here.

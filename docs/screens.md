@@ -129,6 +129,14 @@ says what it does, and opens the gallery with that template named — or, once t
 already set up, the list of automations, where the owner's flow is. Without the `flows` module there
 is no destination at all, so the block points at the app list instead.
 
+When the hub does not offer a card because an app its automation needs is missing, paused or too
+old, the card is replaced by a warning that names **that** app and what to do — «“Book
+appointments” needs the Staff app, and it is paused. Turn it back on in Apps.» — with a button to
+Apps ([#210](https://github.com/ERPlora/whatsapp_inbox/issues/210)). «Book appointments» needs
+Appointments, Customers, Services and Staff; «Book a table» needs Reservations and Customers. On a
+hub that does not say which app fails yet, the warning stays the general «Update Appointments or
+Reservations».
+
 Each card also says whether that automation is **already set up here**
 ([#79](https://github.com/ERPlora/whatsapp_inbox/issues/79)), so the salon that has been taking
 appointments through WhatsApp for weeks is not invited to build a second one that answers the same

@@ -6,6 +6,7 @@ import {
   APPS_PATH,
   AUTOMATIONS_PATH,
   MODULE_ID,
+  NEIGHBOUR_NAME_KEYS,
   WHATSAPP_USES,
   bookingPolicyOn,
   probeAutomations,
@@ -79,7 +80,23 @@ interface ScopedFlows {
   /** Absent on a hub older than hub#1677 — that absence is the version probe, see {@link door}. */
   activateTemplate?(family: string): Promise<unknown>;
   deactivateTemplate?(family: string): Promise<unknown>;
+  /** Absent on a hub older than hub#2123 — the card then keeps its generic sentence. */
+  templateDiscards?(): Promise<TemplateDiscard[]>;
 }
+
+/** A family of this module the hub is NOT offering, and why (hub#2123). `detail` is never read. */
+interface TemplateDiscard {
+  family: string;
+  code: string;
+  requires?: { module: string; floor: string; installed: string | null };
+}
+
+/** The floor codes the hub names a neighbour on, and the sentence each one reads as. */
+const DISCARD_SENTENCE: Readonly<Record<string, string>> = {
+  template_floor_module_missing: 'ui.usesNeedMissingModule',
+  template_floor_module_paused: 'ui.usesNeedPausedModule',
+  template_floor_module_too_old: 'ui.usesNeedUpdatedModule',
+};
 
 interface ModuleFlowTemplate {
   module: string;
@@ -120,6 +137,33 @@ function door(): ScopedFlows | null {
 /** What the kernel answered about one family, once. `undefined` = the question was never answered. */
 type Built = { flow_id: string; enabled: boolean } | null | undefined;
 
+/**
+ * Why the hub left a use out, in the owner's words — or `null` when it cannot be said precisely.
+ *
+ * Only a floor code that names a neighbour this module has a name for is spoken: anything else
+ * (`template_floor_unreadable`, an unknown code, an id with no name) falls back to the card's
+ * generic sentence rather than painting a raw id or the hub's Spanish `detail` (ADR-0055).
+ */
+function discardReason(
+  use: WhatsAppUse,
+  discards: readonly TemplateDiscard[],
+  t: (key: string, params?: Record<string, unknown>) => string,
+): string | null {
+  for (const d of discards) {
+    if (d.family !== use.family || !d.requires) continue;
+    const sentence = DISCARD_SENTENCE[d.code];
+    const nameKey = NEIGHBOUR_NAME_KEYS[d.requires.module];
+    if (!sentence || !nameKey) continue;
+    return t(sentence, {
+      use: t(use.nameKey),
+      module: t(nameKey),
+      floor: d.requires.floor,
+      installed: d.requires.installed ?? '',
+    });
+  }
+  return null;
+}
+
 /** Which of the two ways a use can fail is being read on its card. */
 type CardError = { key: string } | { detail: string } | null;
 
@@ -155,6 +199,8 @@ class ErpWhatsappInboxSettings extends LitElement {
   @state() private built: Record<string, Built> = {};
   /** The listing itself refused — NOT the same as «nothing is built», see `renderUses`. */
   @state() private templatesFailed = false;
+  /** The families the hub left out and why (hub#2123). Empty on an older hub or a refused read. */
+  @state() private discards: TemplateDiscard[] = [];
   /** Which module ids answered «I am not here», so a use whose module is gone is not offered. */
   @state() private missing = new Set<string>();
   /** `false` until the first round of answers is in: before that the screen says nothing. */
@@ -198,6 +244,15 @@ class ErpWhatsappInboxSettings extends LitElement {
         this.templatesFailed = true;
         this.built = {};
       }
+      if (typeof flows.templateDiscards === 'function') {
+        try {
+          this.discards = await flows.templateDiscards();
+        } catch (e) {
+          // Only the precision is lost: the card falls back to the sentence it always had.
+          console.warn(`[${MODULE_ID}] could not read why the hub left recipes out`, e);
+          this.discards = [];
+        }
+      }
     }
 
     const missing = new Set<string>();
@@ -235,8 +290,8 @@ class ErpWhatsappInboxSettings extends LitElement {
     }
   }
 
-  private t(key: string): string {
-    return erplora().t(CATALOG, key);
+  private t(key: string, params?: Record<string, unknown>): string {
+    return erplora().t(CATALOG, key, params);
   }
 
   private go(path: string) {
@@ -400,18 +455,31 @@ class ErpWhatsappInboxSettings extends LitElement {
     // to «what can be turned on here», so it is the one the card follows.
     const installed = WHATSAPP_USES.filter((use) => !this.missing.has(use.module));
     const available = installed.filter((use) => this.built[use.family] !== undefined);
+    // A use left out names the app that fails when the hub says which (whatsapp_inbox#210): since
+    // #197 «Reservar citas» also needs Services and Staff, and «update Appointments» sent a salon
+    // with Citas up to date to a screen with nothing to do.
+    const blocked = installed
+      .filter((use) => this.built[use.family] === undefined)
+      .map((use) => ({ use, reason: discardReason(use, this.discards, (k, p) => this.t(k, p)) }))
+      .filter((b): b is { use: WhatsAppUse; reason: string } => b.reason !== null);
+    const reasons = blocked.map(
+      ({ use, reason }) =>
+        html`<ok-inline-feedback data-testid=${`whatsapp-settings-uses-blocked-${use.family}`} tone="warning">${reason}</ok-inline-feedback>`,
+    );
+    const goToApps = html`<ion-button data-testid="whatsapp-settings-uses-go-to-apps" size="small" @click=${() => this.go(APPS_PATH)}>
+      ${this.t('ui.usesGoToApps')}
+    </ion-button>`;
     if (available.length === 0) {
+      if (blocked.length > 0) return html`${heading}${reasons}${goToApps}`;
       // «Install one» and «update the one you have» send the owner to the same screen and are not
       // the same sentence: telling a salon that is already paying for Citas to install a booking
       // module sends her looking for something she owns.
       const why = installed.length === 0 ? 'ui.usesNeedBookingModule' : 'ui.usesNeedNewerBookingModule';
       return html`${heading}
         <ok-inline-feedback data-testid="whatsapp-settings-uses-need-module" tone="warning">${this.t(why)}</ok-inline-feedback>
-        <ion-button data-testid="whatsapp-settings-uses-go-to-apps" size="small" @click=${() => this.go(APPS_PATH)}>
-          ${this.t('ui.usesGoToApps')}
-        </ion-button>`;
+        ${goToApps}`;
     }
-    return html`${heading}${available.map((use) => this.renderUse(use))}`;
+    return html`${heading}${available.map((use) => this.renderUse(use))}${blocked.length > 0 ? html`${reasons}${goToApps}` : nothing}`;
   }
 
   private renderUse(use: WhatsAppUse) {
