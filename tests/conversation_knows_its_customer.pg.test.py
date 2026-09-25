@@ -71,6 +71,8 @@ import pathlib
 import sys
 import uuid
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from module_migrations import declared_migrations  # noqa: E402
 MODULE_DIR = pathlib.Path(__file__).resolve().parent.parent
 MANIFEST = json.loads((MODULE_DIR / "module.json").read_text())
 
@@ -555,8 +557,8 @@ def main():
         db = "wa_link_" + uuid.uuid4().hex[:8]
         psql("postgres", f'CREATE DATABASE "{db}";')
         try:
-            for rel in MANIFEST["migrations"]["postgres"]:
-                r = psql(db, (MODULE_DIR / rel).read_text())
+            for rel, migration in declared_migrations():
+                r = psql(db, migration)
                 if r.returncode != 0:
                     error = " ".join(x for x in r.stderr.splitlines() if x.startswith("ERROR"))
                     problems.append(f"migration `{rel}` failed: {error}")

@@ -7,14 +7,14 @@
 | **Fulfilling a request creates the object in another module** | ❌ **Broken.** Returns `cross_module_dispatch_unsupported`; only the status changes |
 | **Sending a WhatsApp message** | ❌ **Does not exist.** The permission exists; no command does |
 | **Receiving messages automatically** | ❌ No webhook and no declared network access to Meta |
-| **Auto-replies, greetings, out-of-hours messages** | ❌ Configurable, never sent |
+| **Auto-replies, greetings, out-of-hours messages** | ❌ Not here — what an automatic reply says is written in the flow that answers (Automations); the old settings that never sent anything were retired (#127) |
 | **Calling an LLM to parse a message** | ❌ Not here — the parsed data must arrive already parsed |
 | **Syncing template status with Meta** | ✅ Each time the Templates tab opens (never on a timer). A template deleted in WhatsApp Manager is marked «Deleted in WhatsApp Manager», not removed; one created there is imported with its text and verdict (#179) — image/video/document headers and quick reply, link and call buttons included (#180), shown read-only in its panel — unless it uses a carousel, a limited-time offer, a copy-code or Flow button, a location header, named variables or a header variable — those are named in a notice |
 | **Per-employee routing** | ❌ Table exists; no command, no screen |
 | **Fulfilling a request** (status only) | ✅ Works |
 | **Ingesting a message and a request** | ✅ Works, when something calls it |
 | **Approve / reject / delete a request** | ✅ Works |
-| **Templates and settings CRUD** | ✅ Works |
+| **Templates CRUD** | ✅ Works |
 | **Knowing whose a conversation is** | ✅ Automatic when the number is on a customer card, typed any way (`+34 600 111 222`, `0034…`, or `600 111 222` without the country code, #162; 7 digits at least); only fills an empty link. A customer filed (or whose phone is corrected) after she wrote gets her conversation when the card is saved (#160); a conversation from before is linked by a background sweep a few minutes after the update, in batches of 200 every 15 minutes (#163) |
 
 ## Errors and refusals
@@ -22,7 +22,7 @@
 | Error | What happened | What to do |
 |---|---|---|
 | `cross_module_dispatch_unsupported` | Fulfilment tried to create an object in another module | Do it by hand in the destination module |
-| Request schema validation failed | The parsed data is missing a required field or has a wrong type | Fix the payload, or the schema in settings |
+| Request schema validation failed | The parsed data is missing a required field or has a wrong type | Fix the payload, or the schema the caller passes |
 
 These fail as **silent no-ops**:
 
@@ -64,7 +64,7 @@ These fail as **silent no-ops**:
 | See requests | `whatsapp_inbox.view_request` |
 | Approve, reject or fulfil a request | `whatsapp_inbox.change_request` |
 | Delete a request | `whatsapp_inbox.delete_request` |
-| Assign a conversation; list, create, update or delete templates; read or save the settings | `whatsapp_inbox.manage_settings` |
+| Assign a conversation; list, create, update or delete templates; read the monthly usage | `whatsapp_inbox.manage_settings` |
 | Ingest a message or a request | `whatsapp_inbox.manage_connections` |
 
 By role:
@@ -103,10 +103,11 @@ declared here is a webhook receiver or network access to Meta.
 before, migration 005 kept the oldest copy of each and soft-deleted the rest.
 
 **"The auto-reply never went out."** This module sends nothing, auto-replies included — that is a
-flow's notify step, and the auto-reply settings here have no owner (WASM-TODO.md §5).
+flow's notify step. The old auto-reply settings, which nothing ever sent, were retired (#127).
 
-**"I cannot find the channel settings screen."** There is none yet
-([whatsapp_inbox#6](https://github.com/ERPlora/whatsapp_inbox/issues/6)).
+**"I cannot find the greeting or out-of-hours text."** They are gone from Settings on purpose
+(#127): nothing ever sent them. An automatic reply is written in the flow that answers, in
+Automations.
 
 **"A manager cannot see the templates."** Correct — templates are behind the settings permission,
 which is admin-only.
@@ -123,8 +124,8 @@ rejected.
 **"The confidence score is not what the parser said."** It is clamped to the range 0 to 1.
 
 **"A request was accepted with missing data."** Validation is done against the schema **the caller
-passed in**, and it checks a subset. It is deliberately non-authoritative — tighten the schema in
-settings.
+passed in**, and it checks a subset. It is deliberately non-authoritative — tighten the schema the
+caller passes.
 
 **"Meta approved my template and the hub still says pending."** The verdict is refreshed when the
 Templates tab opens. If a notice says Meta could not be reached, open the tab again later.

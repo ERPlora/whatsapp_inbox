@@ -69,7 +69,7 @@ primitive is tracked in [hub#1076](https://github.com/ERPlora/hub/issues/1076).
 ## The request schema is supplied, not enforced by the module
 
 When a request is ingested, its parsed data is validated against the hub's **dynamic request
-schema** — but the schema is **passed in by the caller**, which read it from settings first. The
+schema** — but the schema is **passed in by the caller**; the module keeps none of its own. The
 module checks a subset: which fields are required and what type they should be.
 
 That means validation is only as good as the schema the caller passed. It is deliberately
