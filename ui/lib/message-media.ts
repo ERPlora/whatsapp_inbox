@@ -52,3 +52,24 @@ export function messageMedia(m: { message_type?: unknown; extra_metadata?: unkno
     filename: text(asset.filename),
   };
 }
+
+/** Extension of each format WhatsApp sends a voice note or a video in (whatsapp_inbox#223). */
+const EXTENSIONS: Record<string, string> = {
+  'audio/ogg': 'ogg',
+  'audio/opus': 'opus',
+  'audio/mpeg': 'mp3',
+  'audio/mp4': 'm4a',
+  'audio/aac': 'aac',
+  'audio/amr': 'amr',
+  'video/mp4': 'mp4',
+  'video/3gpp': '3gp',
+};
+
+/** The name an attachment is saved under: the customer's own file name, or the kind's label with
+ *  the extension of its format so the phone or computer knows what opens it. An unknown format
+ *  gets no extension rather than a wrong one. */
+export function mediaFileName(media: MessageMedia, label: string): string {
+  if (media.filename) return media.filename;
+  const extension = EXTENSIONS[media.mimeType.split(';')[0].trim().toLowerCase()];
+  return extension ? `${label}.${extension}` : label;
+}

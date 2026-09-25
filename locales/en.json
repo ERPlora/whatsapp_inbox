@@ -179,6 +179,7 @@
     "mediaPlay": "Play",
     "mediaDownload": "Download",
     "mediaOpen": "Open",
+    "mediaCannotPlay": "This device cannot play it: download it and open it with another app.",
     "threadRepliesElsewhere": "Replies are not sent from this screen: answer from WhatsApp on your phone, or let an automation reply.",
     "viewerOpen": "See the photo large",
     "viewerPrev": "Previous photo",
