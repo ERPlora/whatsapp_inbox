@@ -598,4 +598,28 @@ describe('the thread SHOWS what the customer sent (whatsapp_inbox#192)', () => {
     expect(burbuja(el).querySelector('img'), 'the thread did not reopen').toBeTruthy();
     expect(visor(el)?.open ?? false, 'reopening the thread opened the photo large by itself').toBe(false);
   });
+
+  // A sticker already shows at its full size, so it is not a door to the viewer and the viewer
+  // does not page through it: the sequence is the customer's PHOTOS only.
+  it('a sticker is not a door to the viewer, and the viewer does not page through stickers', async () => {
+    conPuerta();
+    const PEGATINA = adjunto('s1', 'sticker', { id: 'media-7', mime_type: 'image/webp', animated: false });
+    const OTRA = adjunto('p2', 'image', { id: 'media-9', mime_type: 'image/jpeg' });
+    hiloDelHub = [FOTO, PEGATINA, OTRA];
+    const el = await montar();
+    await abrirConversacion(el);
+    await esperar(el);
+    expect(burbuja(el, 1).querySelector('img'), 'the sticker is not shown').toBeTruthy();
+    expect(burbuja(el, 1).querySelector('[data-testid="whatsapp-inbox-media-open"]'),
+      'the sticker opens large like a photo').toBeNull();
+
+    (burbuja(el, 2).querySelector('[data-testid="whatsapp-inbox-media-open"]') as HTMLElement).click();
+    await esperar(el);
+    const v = visor(el)!;
+    expect(v.items.map((i) => i.src), 'the viewer pages through the sticker').toEqual([
+      burbuja(el, 0).querySelector('img')!.getAttribute('src'),
+      burbuja(el, 2).querySelector('img')!.getAttribute('src'),
+    ]);
+    expect(v.index).toBe(1);
+  });
 });
