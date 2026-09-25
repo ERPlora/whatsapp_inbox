@@ -394,17 +394,247 @@ fn phone_number(v: &Value) -> String {
     digits.trim_start_matches('0').to_string()
 }
 
+/// The international calling code (ITU-T E.164) of a hub's `country_code` (ISO 3166-1 alpha-2, as
+/// the hub's settings hold it — `context.country_code`), or `None` for a country it does not know.
+/// A customer card typed without a prefix is a number of THIS country (whatsapp_inbox#167).
+fn calling_code(country_code: &str) -> Option<&'static str> {
+    let code = match country_code.trim().to_ascii_uppercase().as_str() {
+        "US" | "CA" | "AG" | "AI" | "AS" | "BB" | "BM" | "BS" | "DM" | "DO" | "GD" | "GU" | "JM" | "KN" | "KY" | "LC" | "MP" | "MS" | "PR" | "SX" | "TC" | "TT" | "VC" | "VG" | "VI" | "UM" => "1",
+        "RU" | "KZ" => "7",
+        "EG" => "20",
+        "ZA" => "27",
+        "GR" => "30",
+        "NL" => "31",
+        "BE" => "32",
+        "FR" => "33",
+        "ES" => "34",
+        "HU" => "36",
+        "IT" | "VA" => "39",
+        "RO" => "40",
+        "CH" => "41",
+        "AT" => "43",
+        "GB" | "GG" | "IM" | "JE" => "44",
+        "DK" => "45",
+        "SE" => "46",
+        "NO" | "SJ" => "47",
+        "PL" => "48",
+        "DE" => "49",
+        "PE" => "51",
+        "MX" => "52",
+        "CU" => "53",
+        "AR" => "54",
+        "BR" => "55",
+        "CL" => "56",
+        "CO" => "57",
+        "VE" => "58",
+        "MY" => "60",
+        "AU" | "CX" | "CC" => "61",
+        "ID" => "62",
+        "PH" => "63",
+        "NZ" | "PN" => "64",
+        "SG" => "65",
+        "TH" => "66",
+        "JP" => "81",
+        "KR" => "82",
+        "VN" => "84",
+        "CN" => "86",
+        "TR" => "90",
+        "IN" => "91",
+        "PK" => "92",
+        "AF" => "93",
+        "LK" => "94",
+        "MM" => "95",
+        "IR" => "98",
+        "SS" => "211",
+        "MA" | "EH" => "212",
+        "DZ" => "213",
+        "TN" => "216",
+        "LY" => "218",
+        "GM" => "220",
+        "SN" => "221",
+        "MR" => "222",
+        "ML" => "223",
+        "GN" => "224",
+        "CI" => "225",
+        "BF" => "226",
+        "NE" => "227",
+        "TG" => "228",
+        "BJ" => "229",
+        "MU" => "230",
+        "LR" => "231",
+        "SL" => "232",
+        "GH" => "233",
+        "NG" => "234",
+        "TD" => "235",
+        "CF" => "236",
+        "CM" => "237",
+        "CV" => "238",
+        "ST" => "239",
+        "GQ" => "240",
+        "GA" => "241",
+        "CG" => "242",
+        "CD" => "243",
+        "AO" => "244",
+        "GW" => "245",
+        "IO" => "246",
+        "SC" => "248",
+        "SD" => "249",
+        "RW" => "250",
+        "ET" => "251",
+        "SO" => "252",
+        "DJ" => "253",
+        "KE" => "254",
+        "TZ" => "255",
+        "UG" => "256",
+        "BI" => "257",
+        "MZ" => "258",
+        "ZM" => "260",
+        "MG" => "261",
+        "RE" | "YT" => "262",
+        "ZW" => "263",
+        "NA" => "264",
+        "MW" => "265",
+        "LS" => "266",
+        "BW" => "267",
+        "SZ" => "268",
+        "KM" => "269",
+        "SH" => "290",
+        "ER" => "291",
+        "AW" => "297",
+        "FO" => "298",
+        "GL" => "299",
+        "GI" => "350",
+        "PT" => "351",
+        "LU" => "352",
+        "IE" => "353",
+        "IS" => "354",
+        "AL" => "355",
+        "MT" => "356",
+        "CY" => "357",
+        "FI" | "AX" => "358",
+        "BG" => "359",
+        "LT" => "370",
+        "LV" => "371",
+        "EE" => "372",
+        "MD" => "373",
+        "AM" => "374",
+        "BY" => "375",
+        "AD" => "376",
+        "MC" => "377",
+        "SM" => "378",
+        "UA" => "380",
+        "RS" => "381",
+        "ME" => "382",
+        "XK" => "383",
+        "HR" => "385",
+        "SI" => "386",
+        "BA" => "387",
+        "MK" => "389",
+        "CZ" => "420",
+        "SK" => "421",
+        "LI" => "423",
+        "FK" | "GS" => "500",
+        "BZ" => "501",
+        "GT" => "502",
+        "SV" => "503",
+        "HN" => "504",
+        "NI" => "505",
+        "CR" => "506",
+        "PA" => "507",
+        "PM" => "508",
+        "HT" => "509",
+        "GP" | "BL" | "MF" => "590",
+        "BO" => "591",
+        "GY" => "592",
+        "EC" => "593",
+        "GF" => "594",
+        "PY" => "595",
+        "MQ" => "596",
+        "SR" => "597",
+        "UY" => "598",
+        "CW" | "BQ" => "599",
+        "TL" => "670",
+        "NF" | "AQ" => "672",
+        "BN" => "673",
+        "NR" => "674",
+        "PG" => "675",
+        "TO" => "676",
+        "SB" => "677",
+        "VU" => "678",
+        "FJ" => "679",
+        "PW" => "680",
+        "WF" => "681",
+        "CK" => "682",
+        "NU" => "683",
+        "WS" => "685",
+        "KI" => "686",
+        "NC" => "687",
+        "TV" => "688",
+        "PF" => "689",
+        "TK" => "690",
+        "FM" => "691",
+        "MH" => "692",
+        "KP" => "850",
+        "HK" => "852",
+        "MO" => "853",
+        "KH" => "855",
+        "LA" => "856",
+        "BD" => "880",
+        "TW" => "886",
+        "MV" => "960",
+        "LB" => "961",
+        "JO" => "962",
+        "SY" => "963",
+        "IQ" => "964",
+        "KW" => "965",
+        "SA" => "966",
+        "YE" => "967",
+        "OM" => "968",
+        "PS" => "970",
+        "AE" => "971",
+        "IL" => "972",
+        "BH" => "973",
+        "QA" => "974",
+        "BT" => "975",
+        "MN" => "976",
+        "NP" => "977",
+        "TJ" => "992",
+        "TM" => "993",
+        "AZ" => "994",
+        "GE" => "995",
+        "KG" => "996",
+        "UZ" => "998",
+        _ => return None,
+    };
+    Some(code)
+}
+
+/// The calling code of the business's country, from the context the runtime hands every handler.
+/// `None` when the hub's country is missing or unknown: then only the exact number is anybody.
+fn home_calling_code(input: &Value) -> Option<&'static str> {
+    calling_code(&as_str(input.get("context")?.get("country_code")?))
+}
+
 /// Whether two numbers (as `phone_number` leaves them) are the same person's: equal, or one is the
-/// other plus a 1-3 digit country code — a card typed without it is still her. The SAME rule as
-/// `customers.by_phone` (customers/queries/by_phone.sql): the read narrows, this decides, and both
-/// must agree or a row the read let through would be judged by a different yardstick.
-fn same_number(a: &str, b: &str) -> bool {
+/// other with the BUSINESS's calling code in front — a card typed without it is a number of the
+/// business's country, so it is still her (whatsapp_inbox#162). Another country's prefix is
+/// somebody else, even with the same national digits (whatsapp_inbox#167): 33 600 111 222 is not
+/// the Spanish shop's «600 111 222». With no known home country, only the exact number counts.
+///
+/// `customers.by_phone` (customers/queries/by_phone.sql) lets through any 1-3 digit prefix: the
+/// read narrows, this decides, and `_link_customer_threads_write.sql` lands exactly the numbers
+/// `home_country_number` names here.
+fn same_number(a: &str, b: &str, home: Option<&str>) -> bool {
     if a.len() < MIN_NUMBER_DIGITS || b.len() < MIN_NUMBER_DIGITS {
         return false;
     }
-    let (long, short) = if a.len() >= b.len() { (a, b) } else { (b, a) };
-    let extra = long.len() - short.len();
-    (extra == 0 && long == short) || ((1..=3).contains(&extra) && long.ends_with(short))
+    a == b || home_country_number(a, home).as_deref() == Some(b) || home_country_number(b, home).as_deref() == Some(a)
+}
+
+/// `number` as it reads from abroad if it is a number of the business's country: the home calling
+/// code in front. `None` without a known home country.
+fn home_country_number(number: &str, home: Option<&str>) -> Option<String> {
+    home.map(|code| format!("{code}{number}"))
 }
 
 /// The contact the thread is keyed by — the value `wa_contact_id` holds for this message — or
@@ -450,7 +680,8 @@ pub fn link_known_customer_pure(input: Value) -> Result<Output, String> {
         return Ok(Output::new());
     };
     let wanted = phone_number(&Value::String(contact.clone()));
-    let Some(customer_id) = the_only_card(&input, &wanted) else {
+    let home = home_calling_code(&input);
+    let Some(customer_id) = the_only_card(&input, &wanted, home) else {
         return Ok(Output::new());
     };
     let mut params = Map::new();
@@ -466,11 +697,11 @@ pub fn link_known_customer_pure(input: Value) -> Result<Output, String> {
 /// `wanted`. Every doubt resolves to «nobody»: the read did not arrive, no card is the same number
 /// (a longer number that merely contains it is somebody else, a fragment is nobody), or two
 /// different cards share it — picking one would file the thread under the wrong person.
-fn the_only_card(input: &Value, wanted: &str) -> Option<String> {
+fn the_only_card(input: &Value, wanted: &str, home: Option<&str>) -> Option<String> {
     let rows = read_rows(input, CUSTOMERS_READ)?;
     let mut matches: Vec<String> = rows
         .iter()
-        .filter(|row| same_number(&phone_number(row.get("phone").unwrap_or(&Value::Null)), wanted))
+        .filter(|row| same_number(&phone_number(row.get("phone").unwrap_or(&Value::Null)), wanted, home))
         .map(|row| as_str(row.get("id").unwrap_or(&Value::Null)))
         .filter(|id| !id.is_empty())
         .collect();
@@ -504,14 +735,21 @@ fn the_only_card(input: &Value, wanted: &str) -> Option<String> {
 pub fn link_customer_threads_pure(input: Value) -> Result<Output, String> {
     let payload = input.get("payload").cloned().unwrap_or(Value::Null);
     let wanted = phone_number(payload.get("phone").unwrap_or(&Value::Null));
-    let Some(customer_id) = the_only_card(&input, &wanted) else {
+    let home = home_calling_code(&input);
+    let Some(customer_id) = the_only_card(&input, &wanted, home) else {
         return Ok(Output::new());
     };
     // The card knows a NUMBER, not the thread key: a card typed without the country code is
     // `600111222` while WhatsApp keyed her thread `34600111222`. The write finds the thread by the
-    // same number rule (`_link_customer_threads_write.sql`).
+    // card's number or by that number in the business's country — the two `same_number` accepts
+    // for a thread, which WhatsApp always keys by the full international number. With no known
+    // home country the second is the first again: only the exact number.
     let mut params = Map::new();
     params.insert("phone".into(), json!(wanted));
+    params.insert(
+        "home_country_phone".into(),
+        json!(home_country_number(&wanted, home).unwrap_or_else(|| wanted.clone())),
+    );
     params.insert("customer_id".into(), json!(customer_id));
     Ok(Output::new().with_operation(Operation::sql(
         "whatsapp_inbox._link_customer_threads_write",
@@ -583,8 +821,14 @@ mod tests {
     }
 
     /// `reads` arrive as `{query: [rows]}` under `context.reads` — the host's half of ADR-0069.
+    /// The context carries the hub's `country_code` like the runtime does (hub `settings`, default
+    /// `ES`): the WhatsApp link reads it to know which country a card typed without a prefix is in.
     fn input_with(payload: Value, reads: Value) -> Value {
-        json!({ "payload": payload, "context": { "reads": reads, "now": "2026-08-22T09:00:00+00:00", "new_ids": ["n1"] } })
+        input_in("ES", payload, reads)
+    }
+
+    fn input_in(country_code: &str, payload: Value, reads: Value) -> Value {
+        json!({ "payload": payload, "context": { "reads": reads, "country_code": country_code, "now": "2026-08-22T09:00:00+00:00", "new_ids": ["n1"] } })
     }
 
     // ── fulfill_request: the state guard the WHERE alone could not give (whatsapp_inbox#40) ──
@@ -721,6 +965,13 @@ mod tests {
         (as_str(&op.params["phone"]), as_str(&op.params["customer_id"]))
     }
 
+    /// The number the write also accepts for the thread: the card's number as it would read in the
+    /// business's own country (whatsapp_inbox#167).
+    fn claimed_at_home(out: &Output) -> String {
+        claimed(out);
+        as_str(&out.operations[0].params["home_country_phone"])
+    }
+
     fn untouched(out: &Output) {
         assert!(out.error.is_none(), "a listener must never refuse (it would dead-letter the message): {out:?}");
         assert!(out.operations.is_empty(), "nothing may be linked here: {out:?}");
@@ -764,7 +1015,7 @@ mod tests {
     fn a_card_with_the_national_trunk_zero_is_her() {
         // UK: the card says «07700 900123», WhatsApp says 447700900123. The trunk 0 is not part of
         // the number; without dropping it the card is one digit off and never matches.
-        let input = input_with(core_event("447700900123"), json!({ "customers.by_phone": [customer("cu-tom", "07700 900123")] }));
+        let input = input_in("GB", core_event("447700900123"), json!({ "customers.by_phone": [customer("cu-tom", "07700 900123")] }));
         assert_eq!(linked(&link_known_customer_pure(input).unwrap()).1, "cu-tom");
     }
 
@@ -862,6 +1113,79 @@ mod tests {
     fn a_customer_card_without_a_phone_is_never_a_match() {
         let input = input_with(core_event("34600111222"), json!({ "customers.by_phone": [customer("cu-x", ""), json!({"id": "cu-y"})] }));
         untouched(&link_known_customer_pure(input).unwrap());
+    }
+
+    // ── whatsapp_inbox#167: a card without a prefix is a number of the BUSINESS's country ──
+
+    #[test]
+    fn a_foreign_number_with_the_same_national_digits_is_not_the_local_card() {
+        // A French number, 33 + 600 111 222, writes to a Spanish shop that has Ana on file as
+        // «600 111 222». Ana's card has no prefix, so it is a Spanish number: it is not her.
+        let input = input_with(core_event("33600111222"), json!({ "customers.by_phone": [customer("cu-ana", "600 111 222")] }));
+        untouched(&link_known_customer_pure(input).unwrap());
+    }
+
+    #[test]
+    fn a_card_without_a_prefix_is_a_number_of_the_business_country() {
+        // The same card in a French shop IS the French number — and no longer the Spanish one.
+        let french_shop = input_in("FR", core_event("33600111222"), json!({ "customers.by_phone": [customer("cu-ana", "600 111 222")] }));
+        assert_eq!(linked(&link_known_customer_pure(french_shop).unwrap()).1, "cu-ana");
+        let spanish_writer = input_in("FR", core_event("34600111222"), json!({ "customers.by_phone": [customer("cu-ana", "600 111 222")] }));
+        untouched(&link_known_customer_pure(spanish_writer).unwrap());
+    }
+
+    #[test]
+    fn a_foreign_writer_goes_to_the_card_that_carries_her_prefix_not_to_nobody() {
+        // Two cards share the national digits, but only one is French: that one is her.
+        let input = input_with(
+            core_event("33600111222"),
+            json!({ "customers.by_phone": [customer("cu-ana", "600111222"), customer("cu-pierre", "+33 600 111 222")] }),
+        );
+        assert_eq!(linked(&link_known_customer_pure(input).unwrap()).1, "cu-pierre");
+    }
+
+    #[test]
+    fn a_hub_whose_country_is_unknown_only_links_the_exact_number() {
+        // No country, no way to tell which prefix a bare card lacks: every doubt is «nobody».
+        let no_country = json!({ "payload": core_event("34600111222"), "context": { "reads": { "customers.by_phone": [customer("cu-ana", "600 111 222")] } } });
+        untouched(&link_known_customer_pure(no_country).unwrap());
+        let unknown = input_in("XX", core_event("34600111222"), json!({ "customers.by_phone": [customer("cu-ana", "600 111 222")] }));
+        untouched(&link_known_customer_pure(unknown).unwrap());
+        let exact = input_in("", core_event("34600111222"), json!({ "customers.by_phone": [customer("cu-ana", "+34 600 111 222")] }));
+        assert_eq!(linked(&link_known_customer_pure(exact).unwrap()).1, "cu-ana");
+    }
+
+    #[test]
+    fn the_country_code_is_read_case_insensitively() {
+        let input = input_in("es", core_event("34600111222"), json!({ "customers.by_phone": [customer("cu-ana", "600 111 222")] }));
+        assert_eq!(linked(&link_known_customer_pure(input).unwrap()).1, "cu-ana");
+    }
+
+    #[test]
+    fn a_saved_card_claims_only_the_thread_of_its_number_in_the_business_country() {
+        // The #160 direction: the write finds the thread by the card's number or by that number
+        // with the BUSINESS's prefix — never with «any 1-3 digits».
+        let spain = input_with(
+            json!({ "customer_id": "cu-ana", "phone": "600 111 222" }),
+            json!({ "customers.by_phone": [customer("cu-ana", "600 111 222")] }),
+        );
+        assert_eq!(claimed_at_home(&link_customer_threads_pure(spain).unwrap()), "34600111222");
+        let france = input_in(
+            "FR",
+            json!({ "customer_id": "cu-ana", "phone": "06 00 11 12 22" }),
+            json!({ "customers.by_phone": [customer("cu-ana", "06 00 11 12 22")] }),
+        );
+        assert_eq!(claimed_at_home(&link_customer_threads_pure(france).unwrap()), "33600111222");
+    }
+
+    #[test]
+    fn a_saved_card_in_a_hub_without_a_country_claims_only_its_exact_number() {
+        let input = input_in(
+            "",
+            json!({ "customer_id": "cu-ana", "phone": "+34 600 111 222" }),
+            json!({ "customers.by_phone": [customer("cu-ana", "+34 600 111 222")] }),
+        );
+        assert_eq!(claimed_at_home(&link_customer_threads_pure(input).unwrap()), "34600111222");
     }
 
     // ── link_customer_threads: the card saved AFTER she wrote claims her thread (whatsapp_inbox#160) ──
