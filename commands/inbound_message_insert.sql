@@ -70,6 +70,15 @@
 -- message the hub already has — absorbing is what «at-least-once delivery» is owed. The `WHERE`
 -- repeats the index predicate because the index is PARTIAL over `is_deleted = 0`.
 --
+-- **Except a backlog message the platform COMPLETED** (ERPlora/hub#2102). Meta announces a recent
+-- photo, voice note or document of the coexistence backlog as an empty `media_placeholder` and
+-- sends the real message in a second webhook; the SaaS completes its row (saas#1913) and the hub
+-- raises the completed copy under the same `wa_message_id`. Absorbing it kept the placeholder
+-- forever and lost the attachment's id, so a `history` row hit by a `history` event takes the new
+-- Meta object and its type (`body` stays: a media message has no text to complete). Same row, same `created_at` (when it was said), and the stats
+-- statement does not fire (it follows `:new_id`, which did not land): completing an old message is
+-- not news. A LIVE row is never rewritten — whatever comes back under its id.
+--
 -- **`created_at` is when the message was SAID** (whatsapp_inbox#92). For live traffic that is the
 -- runtime clock: the poll drains every few seconds, and `:now` is the clock every other timestamp of
 -- this hub is ordered by. For the coexistence backlog (`source = 'history'`) it is NOT: the backfill
@@ -157,4 +166,10 @@ WHERE (
           >= s.free_tier_monthly_limit
   )
 )
-ON CONFLICT (hub_id, wa_message_id) WHERE is_deleted = 0 DO NOTHING;
+ON CONFLICT (hub_id, wa_message_id) WHERE is_deleted = 0 DO UPDATE SET
+  extra_metadata = EXCLUDED.extra_metadata,
+  message_type   = EXCLUDED.message_type,
+  updated_by     = EXCLUDED.updated_by,
+  updated_at     = EXCLUDED.updated_at
+WHERE whatsapp_inbox_message.source = 'history'
+  AND EXCLUDED.source = 'history';

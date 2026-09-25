@@ -15,7 +15,7 @@
 | **Ingesting a message and a request** | ✅ Works, when something calls it |
 | **Approve / reject / delete a request** | ✅ Works |
 | **Templates CRUD** | ✅ Works |
-| **Knowing whose a conversation is** | ✅ Automatic when the number is on a customer card, typed any way (`+34 600 111 222`, `0034…`, or `600 111 222` without the country code, #162; 7 digits at least); only fills an empty link. A customer filed (or whose phone is corrected) after she wrote gets her conversation when the card is saved (#160); a conversation from before is linked by a background sweep a few minutes after the update, in batches of 200 every 15 minutes (#163) |
+| **Knowing whose a conversation is** | ✅ Automatic when the number is on a customer card, typed any way (`+34 600 111 222`, `0034…`, or `600 111 222` without the country code, #162; 7 digits at least). A card without a prefix is a number of the business's country (the hub's country setting): the same digits from another country's prefix are somebody else and are not linked to her (#167); only fills an empty link. A customer filed (or whose phone is corrected) after she wrote gets her conversation when the card is saved (#160); a conversation from before is linked by a background sweep a few minutes after the update, in batches of 200 every 15 minutes (#163) |
 
 ## Errors and refusals
 

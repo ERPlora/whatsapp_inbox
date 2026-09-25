@@ -11,7 +11,9 @@
 //!
 //! whatsapp_inbox#160 adds the other direction: `customer.created` / `customer.updated` →
 //! `_link_customer_threads` → `_link_customer_threads_write`, for a thread that existed before the
-//! card; whatsapp_inbox#162 makes both find a card typed without the country code (`600 111 222`).
+//! card; whatsapp_inbox#162 makes both find a card typed without the country code (`600 111 222`),
+//! and whatsapp_inbox#167 reads such a card as a number of the hub's country (`country_code`, which
+//! the runtime hands the listener's handler): another country's prefix is somebody else.
 //!
 //! What only the runtime can prove, and the module's own tests cannot: that a module may listen to
 //! its OWN event, that the `reads` of a listener are served (in scope through `depends_on`,
@@ -72,15 +74,19 @@ fn params(v: Value) -> Params {
 /// Exactly the keys `crates/server/src/inbound_poll.rs::event_payload` writes for a customer's
 /// message (hub#1612: `contact` is the other end, `direction` who spoke).
 async fn a_customer_writes(rt: &Runtime, wa_message_id: &str) {
+    a_number_writes(rt, WA_ID, wa_message_id).await;
+}
+
+async fn a_number_writes(rt: &Runtime, wa_id: &str, wa_message_id: &str) {
     let payload = params(json!({
         "wa_message_id": wa_message_id,
-        "from": WA_ID,
+        "from": wa_id,
         "direction": "inbound",
-        "contact": WA_ID,
+        "contact": wa_id,
         "source": "live",
         "text": "hola",
         "received_at": "2026-09-24T09:00:00+00:00",
-        "message": { "id": wa_message_id, "from": WA_ID, "type": "text", "text": { "body": "hola" } },
+        "message": { "id": wa_message_id, "from": wa_id, "type": "text", "text": { "body": "hola" } },
     }));
     assert!(outbox::insert_core_event_once(
         rt.db_for_test(),
@@ -245,6 +251,47 @@ async fn a_national_card_and_an_international_twin_leave_the_thread_for_a_human(
     a_customer_writes(&rt, "wamid.TWINS-TYPED-APART").await;
 
     assert_eq!(thread_customer(&rt).await, Value::Null, "two cards, one number: nobody");
+    nothing_dead_lettered(&rt).await;
+}
+
+// ── whatsapp_inbox#167: a card without a prefix is a number of the business's country ─────────────
+
+/// A French number with Ana's national digits: 33 + 600 111 222.
+const FRENCH_WA_ID: &str = "33600111222";
+
+#[tokio::test]
+async fn a_foreign_number_with_the_same_digits_is_not_the_local_card() {
+    // The hub's country is Spain (the settings default): Ana's «600 111 222» is 34600111222.
+    let rt = runtime().await;
+    customer_on_file(&rt, "Ana", "600 111 222").await;
+
+    a_number_writes(&rt, FRENCH_WA_ID, "wamid.FRENCH-SAME-DIGITS").await;
+
+    assert_eq!(thread_customer(&rt).await, Value::Null, "33 600 111 222 is not the Spanish Ana");
+    nothing_dead_lettered(&rt).await;
+}
+
+#[tokio::test]
+async fn saving_the_local_card_does_not_claim_the_foreign_thread() {
+    let rt = runtime().await;
+    a_number_writes(&rt, FRENCH_WA_ID, "wamid.FRENCH-BEFORE-CARD").await;
+
+    customer_on_file(&rt, "Ana", "600 111 222").await;
+    rt.drain_outbox().await.unwrap();
+
+    assert_eq!(thread_customer(&rt).await, Value::Null, "the Spanish card claimed a French thread");
+    nothing_dead_lettered(&rt).await;
+}
+
+#[tokio::test]
+async fn the_foreign_writer_goes_to_the_card_that_carries_her_prefix() {
+    let rt = runtime().await;
+    customer_on_file(&rt, "Ana", "600 111 222").await;
+    let pierre = customer_on_file(&rt, "Pierre", "+33 600 111 222").await;
+
+    a_number_writes(&rt, FRENCH_WA_ID, "wamid.FRENCH-WITH-HIS-CARD").await;
+
+    assert_eq!(thread_customer(&rt).await, json!(pierre), "only Pierre's card is 33600111222");
     nothing_dead_lettered(&rt).await;
 }
 

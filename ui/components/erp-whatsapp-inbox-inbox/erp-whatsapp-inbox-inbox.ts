@@ -9,6 +9,7 @@ import type { ListController, ListClient, ListParams, ListPage } from '@erplora/
 import esLocale from '../../../locales/es.json';
 import enLocale from '../../../locales/en.json';
 import { domainErrorText as declaredErrorText } from '../../lib/domain-error-text';
+import { businessTimezone, formatMessageTime } from '../../lib/message-time';
 const CATALOG: Record<string, unknown> = { es: esLocale, en: enLocale };
 
 // erp-whatsapp-inbox-inbox — the list of conversations AND the thread you open from it.
@@ -70,6 +71,17 @@ function erplora(): ErploraClientLike {
   const c = (globalThis as { erplora?: ErploraClientLike }).erplora;
   if (!c) throw new Error('erplora SDK no inicializado por el shell');
   return c;
+}
+
+/** A message instant on the hub clock and in the hub language (whatsapp_inbox#183). */
+function whenText(value: string | null | undefined, withTime = false): string {
+  const client = erplora();
+  return formatMessageTime(value, {
+    locale: client.locale,
+    timezone: businessTimezone(),
+    yesterday: client.t(CATALOG, 'ui.yesterday'),
+    withTime,
+  });
 }
 
 /** UI visibility only; the runtime re-checks the permission on every call. */
@@ -178,7 +190,15 @@ export class ErpWhatsappInboxInbox extends LitElement {
       filterType: 'range',
       format: (r) => (Number(r.unread_count) > 0 ? String(r.unread_count) : '—'),
     },
-    { key: 'last_message_at', header: t('ui.colLastMessage'), sortable: true, filterable: true, filterType: 'daterange' },
+    {
+      key: 'last_message_at',
+      header: t('ui.colLastMessage'),
+      sortable: true,
+      filterable: true,
+      filterType: 'daterange',
+      // Sorting and the date-range filter go to the server on the raw instant; this is display only.
+      format: (r) => whenText(r.last_message_at as string | null),
+    },
     ];
   }
 
@@ -306,7 +326,7 @@ export class ErpWhatsappInboxInbox extends LitElement {
       ${bodyless ? html`<span class="kind">${m.message_type}</span>` : nothing}
       ${m.body ? html`<p class="body">${m.body}</p>` : nothing}
       ${m.media_url ? html`<span class="kind">${t('ui.attachment')}</span>` : nothing}
-      <span class="when">${m.created_at}</span>
+      <span class="when">${whenText(m.created_at, true)}</span>
     </div>`;
   }
 
