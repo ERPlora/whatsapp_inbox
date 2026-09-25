@@ -24,13 +24,14 @@
 > | §3 `parse_inbound_message` | ✅ implementada, **fuera del camino del caso estrella** | Sigue siendo el pipeline de `whatsapp_inbox_request`. La cita que reserva la IA **no** pasa por ahí: la escribe el flujo en el turno, por la puerta del dispatcher (`Origin::Automation`), que es la que chequea el grant y su `payload` fijado. Desde whatsapp_inbox#124 ninguna receta viva aparca nada en `_flow_approvals`. |
 > | §7 `sync_with_meta`, §8 per-empleado | ⏸ sin cambios | Ni bloquean el caso estrella ni los toca el kernel. |
 >
-> **Columnas de settings que quedan sin dueño** (`input_modules`, `output_modules`,
+> **Columnas de settings que quedaron sin dueño** (`input_modules`, `output_modules`,
 > `gpt_system_prompt`, `auto_reply_enabled`, `greeting_message`, `out_of_hours_message`,
-> `require_confirmation`, `auto_close_hours`): **no se borran de paso**. Son contrato externo —
-> columna de BD, campos requeridos del schema de `settings.upsert` y pantalla de ajustes—, y
-> quitarlas rompe a quien ya las escribe. Su contenido lo dice ahora el **documento del flujo**
+> `require_confirmation`, `auto_close_hours`, y también `is_enabled`, `account_mode`,
+> `notify_staff_new_request`, `request_schema`): **retiradas en whatsapp_inbox#127** con la
+> migración `contract` 012 (apartadas a `_deprecated_*`, no borradas), junto con `settings.get` /
+> `settings.upsert`, que no tenían llamador. Su contenido lo dice ahora el **documento del flujo**
 > (el prompt, el texto de la respuesta inmediata, qué tools se ofrecen), que además el dueño puede
-> editar sin republicar el módulo. Retirarlas es un cambio propio, con su deprecación.
+> editar sin republicar el módulo.
 
 El CRUD plano (plantillas, settings, asignación de conversación) y las transiciones de
 estado simples con guarda (`approve`/`reject`/`delete` de requests) ya están en SQL
