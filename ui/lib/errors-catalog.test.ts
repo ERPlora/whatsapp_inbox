@@ -72,6 +72,17 @@ function emittedCodes(): string[] {
   return [...found].sort();
 }
 
+type ErrorDecl = { deprecated?: string };
+const isRetired = (value: unknown): boolean => typeof (value as ErrorDecl)?.deprecated === 'string';
+/** Declared codes the module still raises. */
+function liveCodes(): string[] {
+  return Object.entries(declared).filter(([, v]) => !isRetired(v)).map(([code]) => code).sort();
+}
+/** Declared codes marked `deprecated`: announced in this release, deleted in a later one. */
+function retiredCodes(): string[] {
+  return Object.entries(declared).filter(([, v]) => isRetired(v)).map(([code]) => code).sort();
+}
+
 describe('module.json → errors (ADR-0398)', () => {
   // A catalogue that emptied itself would make every loop below pass over nothing, and an empty
   // guard is greener than a working one (the silent-skip trap).
@@ -79,8 +90,17 @@ describe('module.json → errors (ADR-0398)', () => {
     expect(Object.keys(declared).length).toBeGreaterThan(0);
   });
 
-  it('declares every code the handler raises, and raises every code it declares', () => {
-    expect(Object.keys(declared).sort()).toEqual(emittedCodes());
+  // A `deprecated` code is the one exception to «raises every code it declares»: retiring a code is
+  // two releases (ADR-0398 §3) — the release that stops raising it keeps it declared, marked, so a
+  // consumer still finds it in the catalogue; the next release deletes it. The toolkit gate compares
+  // the manifest against the last `chore(release)` and refuses a code that vanished unmarked.
+  it('declares every code the handler raises, and raises every LIVE code it declares (ADR-0398 §3)', () => {
+    expect(liveCodes()).toEqual(emittedCodes());
+  });
+
+  it('a `deprecated` code is one nothing raises any more — it only waits for its deletion release', () => {
+    const raised = new Set(emittedCodes());
+    for (const code of retiredCodes()) expect(raised.has(code), code).toBe(false);
   });
 
   // The handler is found from THIS file, not from the folder vitest was launched in: `erplora test`
