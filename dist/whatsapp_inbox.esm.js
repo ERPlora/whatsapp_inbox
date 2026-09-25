@@ -3710,7 +3710,7 @@ function createListController(client, queryName, onChange = () => {
 // locales/es.json
 var es_default = {
   name: "Bandeja de WhatsApp",
-  description: "Conversaciones de WhatsApp, solicitudes entrantes, plantillas de mensaje y ajustes del canal.",
+  description: "Conversaciones de WhatsApp, plantillas de mensaje y ajustes del canal.",
   navigation: {
     inbox: {
       label: "Bandeja de entrada"
@@ -3792,7 +3792,6 @@ var es_default = {
     errLoadThread: "No se pudo cargar la conversaci\xF3n",
     errAssign: "No se pudo asignar la conversaci\xF3n",
     delete: "Borrar",
-    confirmFulfil: "\xBFMarcar la solicitud como atendida? No se crea nada en otro m\xF3dulo: es una nota de que alguien la resolvi\xF3.",
     edit: "Editar",
     save: "Guardar",
     cancel: "Cancelar",
@@ -3802,7 +3801,6 @@ var es_default = {
     errDeleteTemplate: "No se pudo borrar la plantilla",
     settingsTitle: "Ajustes del canal",
     helpConnectNeedsNewerHub: "Este hub es demasiado antiguo para conectar el n\xFAmero desde aqu\xED. Actualiza el hub y vuelve a esta pantalla.",
-    requestDetail: "Petici\xF3n",
     useAppointmentsName: "Reservar citas",
     useAppointmentsSummary: "Una clienta pide cita por WhatsApp, el asistente le ofrece las horas que de verdad tienes libres y le reserva la que elija; luego le dice que ya est\xE1, y le avisa cuando t\xFA confirmas su cita.",
     usesGoToApps: "Ver aplicaciones",
@@ -3991,7 +3989,6 @@ var en_default = {
     errLoadThread: "Could not load the conversation",
     errAssign: "Could not assign the conversation",
     delete: "Delete",
-    confirmFulfil: "Mark this request as handled? Nothing is created in another module \u2014 it is a note that somebody dealt with it.",
     edit: "Edit",
     save: "Save",
     cancel: "Cancel",
@@ -4001,7 +3998,6 @@ var en_default = {
     errDeleteTemplate: "Could not delete the template",
     settingsTitle: "Channel settings",
     helpConnectNeedsNewerHub: "This hub is too old to connect the number from here. Update the hub and come back to this screen.",
-    requestDetail: "Request",
     useAppointmentsName: "Book appointments",
     useAppointmentsSummary: "A customer asks for an appointment on WhatsApp, the assistant offers the hours you actually have free, and books the one they pick \u2014 then tells them it is done, and tells them when you confirm their appointment.",
     usesGoToApps: "See apps",

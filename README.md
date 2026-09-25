@@ -29,7 +29,7 @@ canal.
 
 > **Module id:** `whatsapp_inbox`. **Depende de:** `customers` (referencia blanda, por queries
 > públicas, sin FK). Módulo híbrido: SQL + handler WASM **parcial**
-> (`fulfill_request`, `parse_inbound_message`).
+> (`link_known_customer`, `link_customer_threads`, `sweep_unlinked_threads`).
 > ⚠️ Su doc de arquitectura sigue en `architecture/_frozen/modules/whatsapp_inbox.md` — el módulo
 > salió de `_frozen/` (pm#112, ADR-0283) pero el `.md` no se ha movido todavía.
 
@@ -37,7 +37,7 @@ canal.
 
 > 🗺️ **Empieza por [`docs/como-funciona.md`](docs/como-funciona.md)**: el módulo de punta a punta con
 > dibujos — conectar el número (QR), cómo llega un mensaje, cómo lo usa **Automatizaciones** para
-> contestar y reservar, las peticiones, las pantallas, el dinero y la lista de la prueba real.
+> contestar y reservar, las pantallas, el dinero y la lista de la prueba real.
 
 Viaja **dentro** del módulo y se versiona con él: el asistente del hub (ADR-0282) la indexa por
 versión instalada y cita la de TU versión, no la de la última publicada. En inglés (idioma fuente).
@@ -45,8 +45,8 @@ versión instalada y cita la de TU versión, no la de la última publicada. En i
 | Fichero | Para qué |
 | ------- | -------- |
 | [`docs/overview.md`](docs/overview.md) | Qué hace, qué NO hace y **la limitación central** |
-| [`docs/screens.md`](docs/screens.md) | Inbox / Requests / Templates y los ajustes del canal |
-| [`docs/concepts.md`](docs/concepts.md) | Cumplir **no crea nada**, no hay envío, el `request_schema` lo aporta el CALLER (no autoritativo), tipo desconocido → `custom`, permisos **muy** admin |
+| [`docs/screens.md`](docs/screens.md) | Inbox / Templates y los ajustes del canal |
+| [`docs/concepts.md`](docs/concepts.md) | Conceptos del canal y permisos **muy** admin |
 | [`docs/limits.md`](docs/limits.md) | Tabla de qué funciona y qué no, permisos por acción y diagnóstico |
 
 ## Permisos: muy cargados hacia admin
@@ -54,8 +54,8 @@ versión instalada y cita la de TU versión, no la de la última publicada. En i
 | Rol | Puede |
 | --- | ----- |
 | `admin` | todo |
-| `manager` | ver conversaciones y peticiones; **aprobar/rechazar/cumplir**. **No** puede asignar conversación, **ni ver plantillas**, **ni** ver/guardar ajustes, ni ingerir, ni borrar |
-| `employee` | solo leer conversaciones y peticiones |
+| `manager` | leer conversaciones. **No** puede asignar conversación, **ni ver plantillas**, **ni** ver/guardar ajustes, ni ingerir |
+| `employee` | solo leer conversaciones |
 
 ⚠️ `send_message` **ya no existe** (whatsapp_inbox#29): no había command detrás, y un permiso que no
 gatea nada contesta «sí» a una auditoría que debería decir que no.
@@ -65,22 +65,19 @@ gatea nada contesta «sí» a una auditoría que debería decir que no.
 | Tipo | Nombre | Permiso |
 | ---- | ------ | ------- |
 | query | `conversations.list` / `.get` · `messages.list` | `view_conversation` |
-| query | `requests.list` / `.get` | `view_request` |
 | query | `templates.list` · `usage.get` | `manage_settings` (solo admin) |
-| command | `requests.approve` / `.reject` / `.fulfill` (WASM) | `change_request` |
-| command | `requests.delete` (rechaza si ya está `fulfilled`) | `delete_request` |
 | command | `conversations.assign` · `templates.create/update/delete` | `manage_settings` |
-| command | `messages.ingest` · `requests.ingest` (WASM) | `manage_connections` |
-| emite | `message.received`, `request.created/approved/rejected/fulfilled/deleted`, `conversation.assigned`, `template.*` | — |
-| escucha | `hub.whatsapp.message_received` (core) · `appointments.booking_request.fulfilled` / `.failed` | — |
+| command | `messages.ingest` | `manage_connections` |
+| emite | `message.received`, `conversation.assigned`, `conversation.link_pending`, `template.*` | — |
+| escucha | `hub.whatsapp.message_received` (core) · `customer.created` / `.updated` | — |
 
-Navegación: `erp-whatsapp-inbox-inbox` y `erp-whatsapp-inbox-settings` (que embebe `-templates`). La pestaña de solicitudes se retiró en #193; sus commands y queries salen en #206.
+Navegación: `erp-whatsapp-inbox-inbox` y `erp-whatsapp-inbox-settings` (que embebe `-templates`). La pestaña de solicitudes se retiró en #193 y todo lo que la alimentaba (commands, queries, permisos, eventos, tablas y `approval_mode`) en #206: una reserva pendiente se confirma en Citas.
 
 ## Layout
 
 ```text
 module.json                   # manifest (contrato técnico)
-migrations/                   # esquema §2.5 + contador atómico de reference_number (ADR-0008)
+migrations/                   # esquema §2.5 (las `contract` apartan lo retirado como _deprecated_*)
 queries/*.sql                 # lecturas declarativas (:hub_id inyectado)
 commands/*.sql                # escrituras declarativas (las `_` son intenciones del WASM)
 schemas/*.json                # JSON Schemas de input (draft 2020-12)
@@ -93,8 +90,8 @@ docs/                         # documentación de usuario + corpus del asistente
 
 **Ya no está congelado** (pm#112, ADR-0283): es el caso estrella del kernel de automatización.
 
-El «bloqueo» del dispatch cross-módulo de `fulfill_request` **no es un pendiente**: está prohibido a
-propósito y la prohibición se reforzó (hub#659, ADR-0283 §7). Reaccionar ejecutando el command de
+El dispatch cross-módulo que prometía el antiguo `fulfill_request` (retirado en #206) **no era un
+pendiente**: está prohibido a propósito y la prohibición se reforzó (hub#659, ADR-0283 §7). Reaccionar ejecutando el command de
 otro módulo es territorio de un **flujo con grant explícito** —auditable y revocable—, no de un
 handler. Ver la tabla de decisiones al principio de [`WASM-TODO.md`](WASM-TODO.md), donde tres piezas
 de esa lista quedaron descartadas por la misma razón.

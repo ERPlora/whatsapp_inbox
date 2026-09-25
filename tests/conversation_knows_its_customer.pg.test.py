@@ -9,11 +9,6 @@ conversations» answered *nothing*, always, for everybody: not an empty result b
 written, an empty result because the link did not exist. A door that never opens is worse than no
 door — a person who asks twice concludes the customer is not there.
 
-And it broke a second thing one step further on: `commands/_insert_request.sql` inherits
-`c.customer_id` from the conversation, so every request parsed out of WhatsApp was born with NO
-customer. `appointments.appointments.create` resolves the customer against the hub and FAILS CLOSED,
-so what the inheritance actually inherited was a booking that could never complete.
-
 What is checked here, and each one is a separate way the chain breaks silently:
 
 1. **There is a door, and it is a real one.** The manifest declares
@@ -36,10 +31,9 @@ What is checked here, and each one is a separate way the chain breaks silently:
    is the wrong trade. `uq_wa_conv_hub_contact (hub_id, wa_contact_id)` is UNIQUE, so the contact
    picks out exactly one row anyway.
 
-3. **The link is actually written, and the request inherits it.** Against a real Postgres: a fresh
-   conversation carries no customer (this is the bug, reproduced), the door writes it, the filtered
-   read that used to answer nothing now returns the thread, and a request inserted afterwards is
-   born carrying the customer. Steps 3a/3b are the before/after of the same measurement — the
+3. **The link is actually written.** Against a real Postgres: a fresh conversation carries no
+   customer (this is the bug, reproduced), the door writes it, and the filtered read that used to
+   answer nothing now returns the thread. Steps 3a/3b are the before/after of the same measurement — the
    `before` is what stops this test passing on the code that has the bug.
 
 4. **The link does not cross hubs, and does not raise the dead.** Two hubs can hold the same
@@ -77,8 +71,6 @@ MODULE_DIR = pathlib.Path(__file__).resolve().parent.parent
 MANIFEST = json.loads((MODULE_DIR / "module.json").read_text())
 
 LINK = "whatsapp_inbox.conversations.link_customer"
-INSERT_REQUEST = "whatsapp_inbox._insert_request"
-BUMP_COUNTER = "whatsapp_inbox._bump_request_counter"
 
 HUB = "hub-133"
 OTHER_HUB = "hub-133-other"
@@ -400,35 +392,6 @@ def check_behaviour(db):
             f"door is used (filtered count = {before!r})"
         )
 
-    err, _ = run_command(db, BUMP_COUNTER, {"day": "20260909"}, "bump_before")
-    if err:
-        return problems + [err]
-    err, _ = run_command(
-        db,
-        INSERT_REQUEST,
-        {
-            "request_id": "r-before",
-            "conversation_id": "c1",
-            "day": "20260909",
-            "request_type": "appointment",
-            "data": '{"service":"corte"}',
-            "raw_summary": "cut tomorrow",
-            "confidence_score": "0.8",
-        },
-        "req_before",
-    )
-    if err:
-        return problems + [err]
-    inherited_before = scalar(
-        db, "SELECT coalesce(customer_id, '<null>') FROM whatsapp_inbox_request "
-        "WHERE id = 'r-before';"
-    )
-    if inherited_before != "<null>":
-        problems.append(
-            "the fixture is not measuring the bug: a request born from an unlinked conversation "
-            f"already carries a customer ({inherited_before!r})"
-        )
-
     # 3b) AFTER — the door writes the link.
     err, affected = run_command(
         db, LINK, {"wa_contact_id": CONTACT, "customer_id": CUSTOMER}, "link"
@@ -453,36 +416,6 @@ def check_behaviour(db):
         problems.append(
             "the filter the manifest offers still answers nothing after the link: filtered "
             f"count = {after!r}, expected 1"
-        )
-
-    # 3c) the request born afterwards inherits her.
-    err, _ = run_command(db, BUMP_COUNTER, {"day": "20260909"}, "bump_after")
-    if err:
-        return problems + [err]
-    err, _ = run_command(
-        db,
-        INSERT_REQUEST,
-        {
-            "request_id": "r-after",
-            "conversation_id": "c1",
-            "day": "20260909",
-            "request_type": "appointment",
-            "data": '{"service":"corte"}',
-            "raw_summary": "cut tomorrow",
-            "confidence_score": "0.8",
-        },
-        "req_after",
-    )
-    if err:
-        return problems + [err]
-    inherited_after = scalar(
-        db,
-        "SELECT coalesce(customer_id, '<null>') FROM whatsapp_inbox_request WHERE id = 'r-after';",
-    )
-    if inherited_after != CUSTOMER:
-        problems.append(
-            "a request parsed after the link is STILL born without a customer: "
-            f"r-after.customer_id = {inherited_after!r}"
         )
 
     # 4) tenancy — the other hub's thread with the same person is untouched.
@@ -573,7 +506,7 @@ def main():
         for p in problems:
             print(f"  · {p}")
         return 1
-    print("OK — the conversation carries its customer, the filter opens, and the request inherits.")
+    print("OK — the conversation carries its customer and the filter opens.")
     return 0
 
 
