@@ -547,6 +547,24 @@
   },
   "errors": {
     "whatsapp_inbox.conversation_not_found": {},
+    "whatsapp_inbox.conversation_unreadable": {
+      "deprecated": "2.1.83"
+    },
+    "whatsapp_inbox.request_not_deletable": {
+      "deprecated": "2.1.83"
+    },
+    "whatsapp_inbox.request_not_found": {
+      "deprecated": "2.1.83"
+    },
+    "whatsapp_inbox.request_not_fulfillable": {
+      "deprecated": "2.1.83"
+    },
+    "whatsapp_inbox.request_not_pending": {
+      "deprecated": "2.1.83"
+    },
+    "whatsapp_inbox.request_unreadable": {
+      "deprecated": "2.1.83"
+    },
     "whatsapp_inbox.template_already_here": {},
     "whatsapp_inbox.template_not_found": {}
   },

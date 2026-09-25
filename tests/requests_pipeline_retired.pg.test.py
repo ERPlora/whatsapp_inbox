@@ -10,8 +10,12 @@ assistant could still offer to approve, reject or delete a request nobody can se
 
 This battery asserts the retirement:
 
-  1. **No surface left**: no query, command, permission, role grant, error code, emitted event or
-     listener of the pipeline is declared, and their SQL, schema and handler files are gone.
+  1. **No surface left**: no query, command, permission, role grant, emitted event or listener of
+     the pipeline is declared, and their SQL, schema and handler files are gone. Its error codes
+     are the one thing that CANNOT leave in this release: a declared code is ABI and retiring it is
+     two publications — mark it `deprecated`, delete it in a later release (ADR-0398 §3, the gate
+     compares against the last `chore(release)`). So here they stay declared, `deprecated` since
+     this version, with their `en`/`es` text (the toolkit demands a text for every declared code).
   2. **Declared the only way the runtime accepts a `DROP`**: `kind: "contract"` with `since`
      (hub#542, ADR-0269 §5), one table or one column per statement (hub#1145), and no
      `IF EXISTS` on a `DROP COLUMN` (hub#2108).
@@ -81,7 +85,10 @@ GONE_LISTENS = (
     "appointments.booking_request.fulfilled",
     "appointments.booking_request.failed",
 )
-GONE_ERRORS = (
+# Declared `deprecated` in this release, deleted in a later one (ADR-0398 §3). The version that
+# announces the retirement is the one this manifest ships as.
+DEPRECATED_ERRORS = (
+    "whatsapp_inbox.conversation_unreadable",
     "whatsapp_inbox.request_not_deletable",
     "whatsapp_inbox.request_not_found",
     "whatsapp_inbox.request_not_fulfillable",
@@ -181,10 +188,13 @@ def check_no_surface_left() -> None:
     listen = MANIFEST.get("events", {}).get("listen", {})
     for event in GONE_LISTENS:
         ok(f"`{event}` is no longer listened to", event not in listen)
-    for code in GONE_ERRORS:
+    declared_errors = MANIFEST.get("errors", {})
+    for code in DEPRECATED_ERRORS:
+        decl = declared_errors.get(code)
         ok(
-            f"error `{code}` is no longer declared",
-            code not in MANIFEST.get("errors", {}),
+            f"error `{code}` is still declared, marked `deprecated` (ADR-0398: two releases)",
+            isinstance(decl, dict) and isinstance(decl.get("deprecated"), str) and bool(decl["deprecated"]),
+            f"declared as {decl!r}",
         )
     for rel in GONE_FILES:
         ok(f"`{rel}` is gone from the package", not (MODULE_DIR / rel).exists())
@@ -207,9 +217,14 @@ def check_no_surface_left() -> None:
         strings = json.loads((MODULE_DIR / "locales" / f"{locale}.json").read_text())
         leftovers = sorted(
             key
-            for key in (*GONE_ERRORS, "requestDetail", "confirmFulfil")
-            if key in strings.get("errors", {}) or key in strings.get("ui", {})
+            for key in ("requestDetail", "confirmFulfil")
+            if key in strings.get("ui", {})
         )
+        for code in DEPRECATED_ERRORS:
+            ok(
+                f"`{locale}` still texts the deprecated `{code}` (a declared code needs its text)",
+                bool(str(strings.get("errors", {}).get(code, "")).strip()),
+            )
         ok(
             f"`{locale}` carries no string of the pipeline",
             not leftovers,
