@@ -11,7 +11,7 @@ import esLocale from '../../../locales/es.json';
 import enLocale from '../../../locales/en.json';
 import { domainErrorText as declaredErrorText } from '../../lib/domain-error-text';
 import { businessTimezone, formatMessageTime } from '../../lib/message-time';
-import { messageMedia, type MessageMedia } from '../../lib/message-media';
+import { mediaFileName, messageMedia, type MessageMedia } from '../../lib/message-media';
 const CATALOG: Record<string, unknown> = { es: esLocale, en: enLocale };
 
 // erp-whatsapp-inbox-inbox — the list of conversations AND the thread you open from it.
@@ -83,6 +83,15 @@ type MediaState = { status: 'loading' } | { status: 'ready'; url: string } | { s
 /** Shown as soon as the thread opens, like any inbox; the rest wait for a tap, because every
  *  download is a round trip to Meta and a thread can hold a dozen voice notes. */
 const SHOWN_INLINE: ReadonlySet<string> = new Set(['image', 'sticker']);
+
+/** Whether this device can play a voice note or video in the format Meta declared
+ *  (whatsapp_inbox#223): Safari on iPhone, iPad and older Macs cannot play WhatsApp's own
+ *  `audio/ogg; codecs=opus`. An undeclared format is tried, and a player that fails falls back. */
+function devicePlays(media: MessageMedia): boolean {
+  if (!media.mimeType) return true;
+  const probe = document.createElement(media.kind === 'video' ? 'video' : 'audio');
+  return probe.canPlayType(media.mimeType) !== '';
+}
 
 /** Catalogue key of each text of the photo viewer (`ok-lightbox` ships English defaults only). */
 const VIEWER_LABELS: Record<keyof OkLightboxLabels, string> = {
@@ -202,6 +211,9 @@ export class ErpWhatsappInboxInbox extends LitElement {
 
   /** Downloads of the open thread's attachments, by asset id. Released when the thread closes. */
   @state() media: Record<string, MediaState> = {};
+
+  /** Asset ids of the downloaded voice notes and videos whose player failed on this device. */
+  @state() unplayable: ReadonlySet<string> = new Set();
 
   /** Asset id of the photo open large, or `null` while nobody is looking at one. */
   @state() viewing: string | null = null;
@@ -374,6 +386,17 @@ export class ErpWhatsappInboxInbox extends LitElement {
       if (state.status === 'ready') URL.revokeObjectURL(state.url);
     }
     this.media = {};
+    this.unplayable = new Set();
+  }
+
+  /** The device cannot play it: said up front by `canPlayType`, or found out when the player
+   *  failed on the downloaded file. Either way the owner gets the file instead of silence. */
+  private playable(media: MessageMedia): boolean {
+    return !this.unplayable.has(media.mediaId) && devicePlays(media);
+  }
+
+  private markUnplayable(mediaId: string) {
+    this.unplayable = new Set(this.unplayable).add(mediaId);
   }
 
   /** Assigns the open conversation, or unassigns it: `employee_id: ''` is the SQL's own contract. */
@@ -413,7 +436,7 @@ export class ErpWhatsappInboxInbox extends LitElement {
         ? html`<p class="note">${t('ui.mediaLoading')}</p>`
         : html`<ion-button data-testid="whatsapp-inbox-media-load" size="small" fill="outline"
             @click=${() => this.loadMedia(media.mediaId)}>
-            ${t(media.kind === 'document' ? 'ui.mediaDownload' : 'ui.mediaPlay')}
+            ${t(media.kind === 'document' || !this.playable(media) ? 'ui.mediaDownload' : 'ui.mediaPlay')}
           </ion-button>`;
     } else if (state.status === 'loading') {
       content = html`<p class="note">${t('ui.mediaLoading')}</p>`;
@@ -428,13 +451,19 @@ export class ErpWhatsappInboxInbox extends LitElement {
         ? html`<button type="button" class="open-photo" data-testid="whatsapp-inbox-media-open"
             aria-label=${t('ui.viewerOpen')} @click=${() => { this.viewing = media.mediaId; }}>${img}</button>`
         : img;
+    } else if ((media.kind === 'audio' || media.kind === 'video') && !this.playable(media)) {
+      const name = mediaFileName(media, label);
+      content = html`<p class="note" data-testid="whatsapp-inbox-media-cannot-play">${t('ui.mediaCannotPlay')}</p>
+        <a href=${state.url} download=${name} target="_blank" rel="noopener">${t('ui.mediaDownload')} ${name}</a>`;
     } else if (media.kind === 'audio') {
-      content = html`<audio controls src=${state.url}></audio>`;
+      content = html`<audio controls src=${state.url} @error=${() => this.markUnplayable(media.mediaId)}></audio>`;
     } else if (media.kind === 'video') {
-      content = html`<video controls playsinline src=${state.url}></video>`;
+      content = html`<video controls playsinline src=${state.url}
+        @error=${() => this.markUnplayable(media.mediaId)}></video>`;
     } else {
-      content = html`<a href=${state.url} download=${media.filename || label} target="_blank" rel="noopener">
-        ${t('ui.mediaOpen')} ${media.filename || label}</a>`;
+      const name = mediaFileName(media, label);
+      content = html`<a href=${state.url} download=${name} target="_blank" rel="noopener">
+        ${t('ui.mediaOpen')} ${name}</a>`;
     }
     return html`<div class="media">
       <span class="kind">${label}${media.filename ? html` · ${media.filename}` : nothing}</span>

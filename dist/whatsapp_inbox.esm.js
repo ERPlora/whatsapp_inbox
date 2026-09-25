@@ -4483,6 +4483,7 @@ var es_default = {
     mediaPlay: "Reproducir",
     mediaDownload: "Descargar",
     mediaOpen: "Abrir",
+    mediaCannotPlay: "Este dispositivo no puede reproducirlo: desc\xE1rgalo y \xE1brelo con otra aplicaci\xF3n.",
     threadRepliesElsewhere: "Desde esta pantalla no se contesta: responde desde el WhatsApp de tu m\xF3vil o deja que conteste una automatizaci\xF3n.",
     viewerOpen: "Ver la foto en grande",
     viewerPrev: "Foto anterior",
@@ -4681,6 +4682,7 @@ var en_default = {
     mediaPlay: "Play",
     mediaDownload: "Download",
     mediaOpen: "Open",
+    mediaCannotPlay: "This device cannot play it: download it and open it with another app.",
     threadRepliesElsewhere: "Replies are not sent from this screen: answer from WhatsApp on your phone, or let an automation reply.",
     viewerOpen: "See the photo large",
     viewerPrev: "Previous photo",
@@ -4803,10 +4805,30 @@ function messageMedia(m4) {
     filename: text(asset.filename)
   };
 }
+var EXTENSIONS = {
+  "audio/ogg": "ogg",
+  "audio/opus": "opus",
+  "audio/mpeg": "mp3",
+  "audio/mp4": "m4a",
+  "audio/aac": "aac",
+  "audio/amr": "amr",
+  "video/mp4": "mp4",
+  "video/3gpp": "3gp"
+};
+function mediaFileName(media, label) {
+  if (media.filename) return media.filename;
+  const extension = EXTENSIONS[media.mimeType.split(";")[0].trim().toLowerCase()];
+  return extension ? `${label}.${extension}` : label;
+}
 
 // ui/components/erp-whatsapp-inbox-inbox/erp-whatsapp-inbox-inbox.ts
 var CATALOG = { es: es_default, en: en_default };
 var SHOWN_INLINE = /* @__PURE__ */ new Set(["image", "sticker"]);
+function devicePlays(media) {
+  if (!media.mimeType) return true;
+  const probe = document.createElement(media.kind === "video" ? "video" : "audio");
+  return probe.canPlayType(media.mimeType) !== "";
+}
 var VIEWER_LABELS = {
   prev: "ui.viewerPrev",
   next: "ui.viewerNext",
@@ -4855,6 +4877,7 @@ var ErpWhatsappInboxInbox = class extends i3 {
     this.detailError = "";
     this.detailBusy = false;
     this.media = {};
+    this.unplayable = /* @__PURE__ */ new Set();
     this.viewing = null;
     this.assignTo = "";
     this.onLocaleChange = () => this.requestUpdate();
@@ -5043,6 +5066,15 @@ var ErpWhatsappInboxInbox = class extends i3 {
       if (state.status === "ready") URL.revokeObjectURL(state.url);
     }
     this.media = {};
+    this.unplayable = /* @__PURE__ */ new Set();
+  }
+  /** The device cannot play it: said up front by `canPlayType`, or found out when the player
+   *  failed on the downloaded file. Either way the owner gets the file instead of silence. */
+  playable(media) {
+    return !this.unplayable.has(media.mediaId) && devicePlays(media);
+  }
+  markUnplayable(mediaId) {
+    this.unplayable = new Set(this.unplayable).add(mediaId);
   }
   /** Assigns the open conversation, or unassigns it: `employee_id: ''` is the SQL's own contract. */
   async assign() {
@@ -5076,7 +5108,7 @@ var ErpWhatsappInboxInbox = class extends i3 {
     } else if (!state) {
       content = SHOWN_INLINE.has(media.kind) ? b2`<p class="note">${t5("ui.mediaLoading")}</p>` : b2`<ion-button data-testid="whatsapp-inbox-media-load" size="small" fill="outline"
             @click=${() => this.loadMedia(media.mediaId)}>
-            ${t5(media.kind === "document" ? "ui.mediaDownload" : "ui.mediaPlay")}
+            ${t5(media.kind === "document" || !this.playable(media) ? "ui.mediaDownload" : "ui.mediaPlay")}
           </ion-button>`;
     } else if (state.status === "loading") {
       content = b2`<p class="note">${t5("ui.mediaLoading")}</p>`;
@@ -5090,13 +5122,19 @@ var ErpWhatsappInboxInbox = class extends i3 {
             aria-label=${t5("ui.viewerOpen")} @click=${() => {
         this.viewing = media.mediaId;
       }}>${img}</button>` : img;
+    } else if ((media.kind === "audio" || media.kind === "video") && !this.playable(media)) {
+      const name = mediaFileName(media, label);
+      content = b2`<p class="note" data-testid="whatsapp-inbox-media-cannot-play">${t5("ui.mediaCannotPlay")}</p>
+        <a href=${state.url} download=${name} target="_blank" rel="noopener">${t5("ui.mediaDownload")} ${name}</a>`;
     } else if (media.kind === "audio") {
-      content = b2`<audio controls src=${state.url}></audio>`;
+      content = b2`<audio controls src=${state.url} @error=${() => this.markUnplayable(media.mediaId)}></audio>`;
     } else if (media.kind === "video") {
-      content = b2`<video controls playsinline src=${state.url}></video>`;
+      content = b2`<video controls playsinline src=${state.url}
+        @error=${() => this.markUnplayable(media.mediaId)}></video>`;
     } else {
-      content = b2`<a href=${state.url} download=${media.filename || label} target="_blank" rel="noopener">
-        ${t5("ui.mediaOpen")} ${media.filename || label}</a>`;
+      const name = mediaFileName(media, label);
+      content = b2`<a href=${state.url} download=${name} target="_blank" rel="noopener">
+        ${t5("ui.mediaOpen")} ${name}</a>`;
     }
     return b2`<div class="media">
       <span class="kind">${label}${media.filename ? b2` · ${media.filename}` : A}</span>
@@ -5199,6 +5237,9 @@ __decorateClass([
 __decorateClass([
   r5()
 ], ErpWhatsappInboxInbox.prototype, "media", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxInbox.prototype, "unplayable", 2);
 __decorateClass([
   r5()
 ], ErpWhatsappInboxInbox.prototype, "viewing", 2);
