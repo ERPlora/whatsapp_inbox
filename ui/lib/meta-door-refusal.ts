@@ -51,6 +51,14 @@ export const META_DOOR_REFUSAL_CODES = [
   'missing_example',
   'no_whatsapp_number',
   'template_not_found',
+  // — the SaaS on the template's buttons (whatsapp_inbox#185) —
+  'invalid_buttons',
+  'invalid_button_text',
+  'invalid_button_url',
+  'invalid_button_phone',
+  'too_many_buttons',
+  'buttons_not_grouped',
+  'buttons_not_allowed_for_category',
   // — the SaaS on Meta itself: not the text's fault, and retryable (saas#1905) —
   'meta_rate_limited',
   'meta_permission_denied',

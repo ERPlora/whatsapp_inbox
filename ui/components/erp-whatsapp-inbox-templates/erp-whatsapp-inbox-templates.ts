@@ -108,6 +108,33 @@ const BUTTON_LABEL: Record<string, string> = {
   PHONE_NUMBER: 'ui.buttonPhone',
 };
 
+/** Meta's ceiling on buttons per template (quick replies included), and on a button's label. */
+const MAX_BUTTONS = 10;
+const MAX_BUTTON_TEXT = 25;
+
+/** A button carrying exactly the keys its kind takes, in the order `templateFromMeta` stores them
+ *  (`type`, `text`, then `url` or `phone_number`): a template opened and saved untouched must
+ *  serialise byte for byte as stored, or `templates.update` would send it back to Meta's review. */
+function cleanButton(b: { type?: unknown; text?: unknown; url?: unknown; phone_number?: unknown }): TemplateButton {
+  const text = typeof b.text === 'string' ? b.text : '';
+  if (b.type === 'URL') return { type: 'URL', text, url: typeof b.url === 'string' ? b.url : '' };
+  if (b.type === 'PHONE_NUMBER') {
+    return { type: 'PHONE_NUMBER', text, phone_number: typeof b.phone_number === 'string' ? b.phone_number : '' };
+  }
+  return { type: 'QUICK_REPLY', text };
+}
+
+/** Meta refuses quick replies interleaved with link/call buttons: each kind sits in one block.
+ *  A stable partition — the block of the first button goes first — so the owner's order survives
+ *  within each block and an already valid list comes back unchanged. */
+function groupedButtons(buttons: TemplateButton[]): TemplateButton[] {
+  if (!buttons.length) return [];
+  const firstIsReply = buttons[0].type === 'QUICK_REPLY';
+  const replies = buttons.filter((b) => b.type === 'QUICK_REPLY');
+  const calls = buttons.filter((b) => b.type !== 'QUICK_REPLY');
+  return firstIsReply ? [...replies, ...calls] : [...calls, ...replies];
+}
+
 /**
  * How Meta names a template: by NAME **and** LANGUAGE (whatsapp_inbox#134).
  *
@@ -121,14 +148,14 @@ function metaKey(name: unknown, language: unknown): string {
   return `${word(name)}\u0000${word(language)}`;
 }
 
-/** The seven fields Meta REVIEWS. `is_active` is deliberately not among them: it is this hub's own
+/** The eight fields Meta REVIEWS (the buttons since whatsapp_inbox#185). `is_active` is deliberately not among them: it is this hub's own
  *  switch and Meta has never seen it. They travel to the door, and they travel back with the
  *  answer so `template_record_meta_answer.sql` can refuse to write a verdict onto a row whose text
  *  moved on while Meta was thinking. */
 type ReviewedFields = Pick<
   Template,
   'name' | 'language' | 'category' | 'header' | 'body' | 'footer' | 'variables'
->;
+> & { buttons: string };
 
 function erplora(): ErploraClientLike {
   const c = (globalThis as { erplora?: ErploraClientLike }).erplora;
@@ -203,6 +230,9 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     .rich li { border:1px solid var(--ion-border-color,#e7e2d6); border-radius: var(--ok-radius-sm, 10px);
       padding:.4rem .6rem; font-size:.9rem; overflow-wrap:anywhere; }
     .rich li small { display:block; color: var(--ion-color-medium, #6b675d); }
+    .button-row { display:flex; flex-direction:column; gap:.4rem; padding:.5rem;
+      border:1px solid var(--ion-border-color,#e7e2d6); border-radius: var(--ok-radius-sm, 10px); }
+    .button-row ion-button, .rich > ion-button { align-self:flex-start; }
   `;
 
   @state() newName = '';
@@ -260,16 +290,51 @@ export class ErpWhatsappInboxTemplates extends LitElement {
    *  false while the panel is an ADD, and `startEdit` sets it on every open. */
   @state() editingHeaderFormat = 'TEXT';
 
-  /** The buttons of the template being edited, in Meta's order. Same lifecycle as the header kind. */
+  /** The buttons in the panel, in Meta's order: the template's on an edit, the owner's on an add
+   *  (whatsapp_inbox#185). `resetForm` empties them. */
   @state() editingButtons: TemplateButton[] = [];
 
-  /** A template with a media header or buttons is read-only here (whatsapp_inbox#180): «Guardar»
-   *  registers the template again at Meta from what this panel holds, and this panel cannot write
-   *  those parts yet — saving would strip them at Meta. It is edited in WhatsApp Manager and the
-   *  tab brings Meta's verdict back on the next open. Named body variables (`{{nombre}}`) no longer
-   *  lock it: the SaaS registers them as `parameter_format: NAMED` (saas#2281, whatsapp_inbox#196). */
+  /** The template being edited was STORED with a link button carrying a variable (`…/{{1}}`).
+   *  Read from the row on open, never from what the owner types, so the panel cannot lock itself
+   *  mid-edit. */
+  @state() editingDynamicLink = false;
+
+  /** Some parts of a template are still read-only here (whatsapp_inbox#180): «Guardar» registers
+   *  the template again at Meta from what this panel holds, and this panel cannot write those parts
+   *  yet — saving would strip them at Meta. A media header (whatsapp_inbox#218) and a link button
+   *  with a variable, which needs an example and a value on every send, lock the panel; plain quick
+   *  reply, link and call buttons do not since whatsapp_inbox#185, nor named body variables
+   *  (`{{nombre}}`), which the SaaS registers as `parameter_format: NAMED` (saas#2281,
+   *  whatsapp_inbox#196). It is edited in WhatsApp Manager and the tab brings Meta's verdict back
+   *  on the next open. */
   private get managedInMeta(): boolean {
-    return !!this.editingId && (this.editingHeaderFormat !== 'TEXT' || this.editingButtons.length > 0);
+    return !!this.editingId && (this.editingHeaderFormat !== 'TEXT' || this.editingDynamicLink);
+  }
+
+  /** A button still missing its label, its link or its number: Meta would refuse the template. */
+  private get buttonsIncomplete(): boolean {
+    return this.editingButtons.some(
+      (b) =>
+        !b.text.trim() ||
+        ('url' in b && !b.url.trim()) ||
+        ('phone_number' in b && !b.phone_number.trim()),
+    );
+  }
+
+  /** Adds an empty quick reply at the end, up to Meta's ten. */
+  addButton(): void {
+    if (this.editingButtons.length >= MAX_BUTTONS) return;
+    this.editingButtons = [...this.editingButtons, { type: 'QUICK_REPLY', text: '' }];
+  }
+
+  removeButton(index: number): void {
+    this.editingButtons = this.editingButtons.filter((_, i) => i !== index);
+  }
+
+  /** Changes one button. Changing its kind keeps the label and drops what the old kind carried: a
+   *  link does not drag a phone number along to Meta. */
+  setButton(index: number, patch: Partial<{ type: string; text: string; url: string; phone_number: string }>): void {
+    this.editingButtons = this.editingButtons.map((b, i) => (i === index ? cleanButton({ ...b, ...patch }) : b));
   }
 
   /** The example Meta holds for each named variable of the template being edited, by name. Named
@@ -459,7 +524,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
           meta_template_id: metaId,
           meta_status: status,
           meta_rejected_reason: reason,
-          // The seven fields Meta reviewed travel with the answer: the command only writes if the
+          // The eight fields Meta reviewed travel with the answer: the command only writes if the
           // row still holds them, so a verdict never lands on a text the owner has since changed.
           name: row.name,
           language: row.language,
@@ -468,6 +533,8 @@ export class ErpWhatsappInboxTemplates extends LitElement {
           body: row.body,
           footer: row.footer,
           variables: row.variables,
+          // A row read before the column existed stores the column's default.
+          buttons: row.buttons ?? '[]',
         });
         written += 1;
       } catch (e) {
@@ -533,6 +600,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
       body: this.newBody,
       footer: this.editingRest.footer,
       variables: this.variablesFor(this.newBody),
+      buttons: JSON.stringify(groupedButtons(this.editingButtons.map(cleanButton))),
     };
   }
 
@@ -561,7 +629,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     let verdict: { status?: unknown; meta_id?: unknown; rejected_reason?: unknown };
     try {
       // The header variable's example (whatsapp_inbox#230) goes to the registry only: Meta needs it,
-      // but it is not one of the seven fields `templates.update` and `record_meta_answer` compare —
+      // but it is not one of the eight fields `templates.update` and `record_meta_answer` compare —
       // nothing in this hub can change it (only the import writes it, the panel never edits it), so
       // comparing it would guard no race. Sent only when there is one, so a registry that predates
       // it (ERPlora/saas, whatsapp_inbox#226) never sees an unknown field.
@@ -607,7 +675,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
 
   private async createTemplate(ev: Event) {
     ev.preventDefault();
-    if (!this.newName.trim() || this.managedInMeta) return;
+    if (!this.newName.trim() || this.managedInMeta || this.buttonsIncomplete) return;
     if (this.editingId) {
       await this.updateTemplate();
       return;
@@ -643,7 +711,8 @@ export class ErpWhatsappInboxTemplates extends LitElement {
       header_example: String(row.header_example ?? ''),
     };
     this.editingHeaderFormat = String(row.header_format ?? '').trim().toUpperCase() || 'TEXT';
-    this.editingButtons = storedButtons(row.buttons);
+    this.editingButtons = storedButtons(row.buttons).map(cleanButton);
+    this.editingDynamicLink = this.editingButtons.some((b) => 'url' in b && b.url.includes('{{'));
     this.namedExamples = namedExamplesOf(this.newBody, this.editingRest.variables);
     this.editingMeta = metaTemplateView(row.meta_status);
     this.editingMetaCode = String(row.meta_status ?? '');
@@ -674,6 +743,8 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     this.newLanguage = 'es';
     this.newCategory = 'UTILITY';
     this.editingRest = { header: '', footer: '', variables: '[]', is_active: 1, header_example: '' };
+    this.editingButtons = [];
+    this.editingDynamicLink = false;
     this.namedExamples = {};
     this.editingMeta = null;
     this.editingMetaCode = '';
@@ -784,6 +855,44 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     </div>`;
   }
 
+  /** The buttons editor (whatsapp_inbox#185): kind, label and — for a link or a call — where it
+   *  goes. Nothing while the panel is read-only: `renderRichParts` lists them instead. */
+  private renderButtonsEditor() {
+    if (this.managedInMeta) return nothing;
+    const t = (k: string): string => erplora().t(CATALOG, k);
+    return html`<div class="rich" data-testid="whatsapp-templates-buttons">
+      <strong>${t('ui.templateButtons')}</strong>
+      <p>${t('ui.buttonsHint')}</p>
+      ${this.editingButtons.map(
+        (b, i) => html`<div class="button-row" data-testid="whatsapp-templates-button-row" data-type=${b.type}>
+          <ion-select data-testid="whatsapp-templates-button-type" mode="md" fill="outline" label-placement="floating"
+            label=${t('ui.buttonType')} .value=${b.type} @ionChange=${(e: any) => this.setButton(i, { type: e.target.value })}>
+            <ion-select-option value="QUICK_REPLY">${t('ui.buttonQuickReply')}</ion-select-option>
+            <ion-select-option value="URL">${t('ui.buttonUrl')}</ion-select-option>
+            <ion-select-option value="PHONE_NUMBER">${t('ui.buttonPhone')}</ion-select-option>
+          </ion-select>
+          <ion-input data-testid="whatsapp-templates-button-text" mode="md" fill="outline" label-placement="floating"
+            label=${t('ui.buttonText')} maxlength=${MAX_BUTTON_TEXT} counter .value=${b.text}
+            @ionInput=${(e: any) => this.setButton(i, { text: e.target.value ?? '' })}></ion-input>
+          ${'url' in b
+            ? html`<ion-input data-testid="whatsapp-templates-button-url" type="url" inputmode="url" mode="md" fill="outline"
+                label-placement="floating" label=${t('ui.buttonUrlField')} placeholder="https://" .value=${b.url}
+                @ionInput=${(e: any) => this.setButton(i, { url: e.target.value ?? '' })}></ion-input>`
+            : nothing}
+          ${'phone_number' in b
+            ? html`<ion-input data-testid="whatsapp-templates-button-phone" type="tel" inputmode="tel" mode="md" fill="outline"
+                label-placement="floating" label=${t('ui.buttonPhoneField')} placeholder="+34600111222" .value=${b.phone_number}
+                @ionInput=${(e: any) => this.setButton(i, { phone_number: e.target.value ?? '' })}></ion-input>`
+            : nothing}
+          <ion-button data-testid="whatsapp-templates-button-remove" fill="clear" size="small"
+            @click=${() => this.removeButton(i)}>${t('ui.removeButton')}</ion-button>
+        </div>`,
+      )}
+      <ion-button data-testid="whatsapp-templates-button-add" fill="outline" size="small"
+        ?disabled=${this.editingButtons.length >= MAX_BUTTONS} @click=${() => this.addButton()}>${t('ui.addButton')}</ion-button>
+    </div>`;
+  }
+
   private renderDeleteConfirm() {
     if (!this.pendingDelete) return nothing;
     const t = (k: string): string => erplora().t(CATALOG, k);
@@ -826,9 +935,10 @@ export class ErpWhatsappInboxTemplates extends LitElement {
               <ion-select-option value="AUTHENTICATION">${t('ui.categoryAuthentication')}</ion-select-option>
             </ion-select>
             <ion-textarea data-testid="whatsapp-templates-body" .disabled=${locked} mode="md" fill="outline" label-placement="floating" label=${t('ui.colBody')} placeholder=${t('ui.placeholderBody')} .value=${this.newBody} @ionInput=${(e: any) => (this.newBody = e.target.value)}></ion-textarea>
+            ${this.renderButtonsEditor()}
             ${locked
               ? nothing
-              : html`<ion-button data-testid="whatsapp-templates-submit" type="submit" ?disabled=${this.saving || !this.newName}>${this.saving ? t('ui.saving') : this.editingId ? t('ui.save') : t('ui.add')}</ion-button>`}
+              : html`<ion-button data-testid="whatsapp-templates-submit" type="submit" ?disabled=${this.saving || !this.newName || this.buttonsIncomplete}>${this.saving ? t('ui.saving') : this.editingId ? t('ui.save') : t('ui.add')}</ion-button>`}
             ${this.editingId
               ? html`<ion-button data-testid="whatsapp-templates-cancel" fill="clear" size="small" ?disabled=${this.saving}
                   @click=${() => this.cancelEdit()}>${t('ui.cancel')}</ion-button>`
