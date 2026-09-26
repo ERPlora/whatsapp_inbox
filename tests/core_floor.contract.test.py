@@ -102,7 +102,10 @@ HUB_CHECKOUT = MODULE_DIR.parent.parent.parent / "hub"
 # is written down right here. Rebake against a different OutfitKit and this line stops matching the
 # artifact, so the floor has to be derived again instead of being inherited by accident.
 OUTFITKIT_STAMP = MODULE_DIR / "dist" / "outfitkit.json"
-OUTFITKIT_BAKE_FLOOR = ("0.1.70", (1, 1, 22))
+# 0.1.89 (whatsapp_inbox#225): since module-toolkit#346 `erplora validate` judges the stamp by the
+# API the module uses on the shell's `ok-*`, type-checked against the floor hub's OutfitKit; the
+# bundle passes at 1.1.22 (ok-lightbox, the reason for the rebake, is painted by the module itself).
+OUTFITKIT_BAKE_FLOOR = ("0.1.89", (1, 1, 22))
 
 
 class KernelNeed(NamedTuple):

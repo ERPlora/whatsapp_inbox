@@ -2,7 +2,7 @@
 // «image». Meta never sends a URL, only its own message object with the asset id; this is the one
 // place that reads that object, so the screen never guesses at Meta's shape.
 import { describe, expect, it } from 'vitest';
-import { messageMedia } from './message-media';
+import { mediaFileName, messageMedia, type MediaKind, type MessageMedia } from './message-media';
 
 const photo = {
   message_type: 'image',
@@ -62,5 +62,36 @@ describe('messageMedia — what the thread shows an attachment with', () => {
     ['a row whose metadata is JSON null', { message_type: 'image', extra_metadata: 'null' }],
   ])('%s is not a downloadable attachment', (_label, m) => {
     expect(messageMedia(m)).toBeNull();
+  });
+});
+
+// whatsapp_inbox#223 — a voice note or video the device cannot play is handed over as a file; the
+// file needs an extension the phone or computer recognises, and a document keeps its own name.
+describe('mediaFileName', () => {
+  const media = (kind: MediaKind, mimeType: string, filename = ''): MessageMedia =>
+    ({ kind, mediaId: 'm', mimeType, caption: '', filename });
+
+  it.each([
+    ['audio/ogg; codecs=opus', 'Voice note.ogg'],
+    ['audio/mpeg', 'Voice note.mp3'],
+    ['audio/mp4', 'Voice note.m4a'],
+    ['audio/aac', 'Voice note.aac'],
+    ['audio/amr', 'Voice note.amr'],
+  ])('a voice note sent as %s is saved as %s', (mime, name) => {
+    expect(mediaFileName(media('audio', mime), 'Voice note')).toBe(name);
+  });
+
+  it('a video keeps an extension its player knows', () => {
+    expect(mediaFileName(media('video', 'video/mp4'), 'Video')).toBe('Video.mp4');
+    expect(mediaFileName(media('video', 'video/3gpp'), 'Video')).toBe('Video.3gp');
+  });
+
+  it('the file name the customer gave wins', () => {
+    expect(mediaFileName(media('document', 'application/pdf', 'presupuesto.pdf'), 'Document')).toBe('presupuesto.pdf');
+  });
+
+  it('an unknown format is not given a made-up extension', () => {
+    expect(mediaFileName(media('audio', 'audio/x-weird'), 'Voice note')).toBe('Voice note');
+    expect(mediaFileName(media('audio', ''), 'Voice note')).toBe('Voice note');
   });
 });

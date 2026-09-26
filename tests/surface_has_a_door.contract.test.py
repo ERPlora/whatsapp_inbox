@@ -57,25 +57,6 @@ PENDING = {
         "channel intake point, not a user action: the hub's inbound pipeline calls it with the "
         "`manage_connections` permission (see docs/overview.md)"
     ),
-    "whatsapp_inbox.requests.ingest": (
-        "same intake point, one step later: the caller hands over the payload the LLM already "
-        "parsed (WASM-TODO.md §3). No recipe ever called it; it is retired with the rest of the "
-        "requests pipeline in whatsapp_inbox#206"
-    ),
-    # whatsapp_inbox#193 retired the «Requests» tab: nothing fed it (the recipes book straight into
-    # Appointments/Reservations), so it was an always-empty list. The surface it called has no door
-    # left and comes out of the manifest in whatsapp_inbox#206; until then it is debt, written down.
-    **{
-        name: "the «Requests» tab was its only door and it was retired in whatsapp_inbox#193; "
-        "the surface itself is retired in whatsapp_inbox#206"
-        for name in (
-            "whatsapp_inbox.requests.list",
-            "whatsapp_inbox.requests.approve",
-            "whatsapp_inbox.requests.reject",
-            "whatsapp_inbox.requests.delete",
-            "whatsapp_inbox.requests.fulfill",
-        )
-    },
 }
 
 

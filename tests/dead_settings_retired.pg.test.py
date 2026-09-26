@@ -22,8 +22,8 @@ So this battery asserts the retirement and the three things around it:
   4. **What stays keeps working** (the positive control): the billing meter's door `_quota.set`
      still seeds and moves the singleton row, and `usage.get` still reads it.
 
-`approval_mode` is NOT retired here on purpose: `commands/_insert_request.sql` still reads it, and
-it leaves together with the requests pipeline (the issue that «Sale de #127»).
+`approval_mode` was NOT retired here: `commands/_insert_request.sql` still read it then, and it left
+together with the requests pipeline in whatsapp_inbox#206 (migration 013, its own battery).
 
 The Postgres half needs the workspace container (`erplora-test-pg-5433`, override with
 ERPLORA_TEST_PG_CONTAINER); without it that half reports SKIPPED, never passed.
@@ -68,8 +68,8 @@ RETIRED = (
     "greeting_message",
     "out_of_hours_message",
 )
-# What the singleton row still is after the retirement: the row contract, the billing meter and
-# `approval_mode` (still read by the requests pipeline, which leaves with its own issue).
+# What the singleton row still is after THIS retirement: the row contract, the billing meter and
+# `approval_mode` (set aside later by 013, whatsapp_inbox#206 — this check stops before 013).
 KEPT = {
     "id",
     "hub_id",
@@ -204,8 +204,8 @@ def check_no_door_left() -> None:
         ok(f"no query or command names `{column}`", not hits, f"named in {hits}")
     # Positive control: the sweep DOES see a column that is still read.
     ok(
-        "control — the sweep finds `approval_mode` where the requests pipeline still reads it",
-        "commands/_insert_request.sql" in sql_files_naming("approval_mode"),
+        "control — the sweep finds `free_tier_monthly_limit` where the billing meter reads it",
+        "commands/quota_set.sql" in sql_files_naming("free_tier_monthly_limit"),
     )
 
 
@@ -242,7 +242,8 @@ def run_sql_file(db: str, rel: str, binds: dict) -> str:
 
 def check_against_postgres(db: str) -> None:
     migrations = declared_migrations()
-    before = [(rel, sql) for rel, sql in migrations if rel != CONTRACT_FILE]
+    # The chain up to this contract, not past it: a later contract (013) retires more of the row.
+    before = [(rel, sql) for rel, sql in migrations if rel < CONTRACT_FILE]
     for rel, sql in before:
         r = psql(db, sql)
         if r.returncode != 0:

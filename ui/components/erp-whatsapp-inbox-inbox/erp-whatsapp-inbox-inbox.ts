@@ -3,14 +3,15 @@ import { state } from 'lit/decorators.js';
 import { define } from '@erplora/outfitkit/define';
 import '@erplora/outfitkit/ok-data-table';
 import '@erplora/outfitkit/ok-status-pill';
-import type { DataTableColumn } from '@erplora/outfitkit';
+import '@erplora/outfitkit/ok-lightbox';
+import type { DataTableColumn, OkLightboxItem, OkLightboxLabels } from '@erplora/outfitkit';
 import { createListController } from '@erplora/module-sdk';
 import type { ListController, ListClient, ListParams, ListPage } from '@erplora/module-sdk';
 import esLocale from '../../../locales/es.json';
 import enLocale from '../../../locales/en.json';
 import { domainErrorText as declaredErrorText } from '../../lib/domain-error-text';
 import { businessTimezone, formatMessageTime } from '../../lib/message-time';
-import { messageMedia, type MessageMedia } from '../../lib/message-media';
+import { mediaFileName, messageMedia, type MessageMedia } from '../../lib/message-media';
 const CATALOG: Record<string, unknown> = { es: esLocale, en: enLocale };
 
 // erp-whatsapp-inbox-inbox — the list of conversations AND the thread you open from it.
@@ -82,6 +83,25 @@ type MediaState = { status: 'loading' } | { status: 'ready'; url: string } | { s
 /** Shown as soon as the thread opens, like any inbox; the rest wait for a tap, because every
  *  download is a round trip to Meta and a thread can hold a dozen voice notes. */
 const SHOWN_INLINE: ReadonlySet<string> = new Set(['image', 'sticker']);
+
+/** Whether this device can play a voice note or video in the format Meta declared
+ *  (whatsapp_inbox#223): Safari on iPhone, iPad and older Macs cannot play WhatsApp's own
+ *  `audio/ogg; codecs=opus`. An undeclared format is tried, and a player that fails falls back. */
+function devicePlays(media: MessageMedia): boolean {
+  if (!media.mimeType) return true;
+  const probe = document.createElement(media.kind === 'video' ? 'video' : 'audio');
+  return probe.canPlayType(media.mimeType) !== '';
+}
+
+/** Catalogue key of each text of the photo viewer (`ok-lightbox` ships English defaults only). */
+const VIEWER_LABELS: Record<keyof OkLightboxLabels, string> = {
+  prev: 'ui.viewerPrev',
+  next: 'ui.viewerNext',
+  close: 'ui.viewerClose',
+  download: 'ui.viewerDownload',
+  fullscreen: 'ui.viewerFullscreen',
+  exitFullscreen: 'ui.viewerExitFullscreen',
+};
 
 /** The whole thread of one conversation in one read. 50 is the query's own page size. */
 const THREAD_PAGE = 200;
@@ -165,7 +185,8 @@ export class ErpWhatsappInboxInbox extends LitElement {
     .msg .when { display:block; font-size:.75rem; color:var(--ion-color-medium,#6f6a5e); margin-top:.15rem; }
     .msg .kind { font-size:.75rem; font-weight:600; color:var(--ion-color-medium,#6f6a5e); }
     .msg .media { display:flex; flex-direction:column; gap:.3rem; margin:.2rem 0; }
-    .msg .media img { display:block; max-width:100%; max-height:20rem; border-radius:8px; object-fit:contain; }
+    .msg .media img { display:block; max-width:100%; max-height:16rem; border-radius:8px; object-fit:contain; }
+    .msg .media .open-photo { display:block; padding:0; border:0; background:none; cursor:zoom-in; max-width:100%; }
     .msg .media audio, .msg .media video { max-width:100%; }
     .msg .media video { max-height:20rem; border-radius:8px; }
     .msg .media a { color:var(--ion-color-primary,#1971c2); font-weight:600; word-break:break-all; }
@@ -190,6 +211,12 @@ export class ErpWhatsappInboxInbox extends LitElement {
 
   /** Downloads of the open thread's attachments, by asset id. Released when the thread closes. */
   @state() media: Record<string, MediaState> = {};
+
+  /** Asset ids of the downloaded voice notes and videos whose player failed on this device. */
+  @state() unplayable: ReadonlySet<string> = new Set();
+
+  /** Asset id of the photo open large, or `null` while nobody is looking at one. */
+  @state() viewing: string | null = null;
 
   /** Employee id typed into the assign box. `''` means "unassign" — the SQL's own contract. */
   @state() assignTo = '';
@@ -323,6 +350,7 @@ export class ErpWhatsappInboxInbox extends LitElement {
   }
 
   private closeDetail() {
+    this.viewing = null;
     this.releaseMedia();
     this.detail = null;
     this.messages = [];
@@ -358,6 +386,17 @@ export class ErpWhatsappInboxInbox extends LitElement {
       if (state.status === 'ready') URL.revokeObjectURL(state.url);
     }
     this.media = {};
+    this.unplayable = new Set();
+  }
+
+  /** The device cannot play it: said up front by `canPlayType`, or found out when the player
+   *  failed on the downloaded file. Either way the owner gets the file instead of silence. */
+  private playable(media: MessageMedia): boolean {
+    return !this.unplayable.has(media.mediaId) && devicePlays(media);
+  }
+
+  private markUnplayable(mediaId: string) {
+    this.unplayable = new Set(this.unplayable).add(mediaId);
   }
 
   /** Assigns the open conversation, or unassigns it: `employee_id: ''` is the SQL's own contract. */
@@ -397,7 +436,7 @@ export class ErpWhatsappInboxInbox extends LitElement {
         ? html`<p class="note">${t('ui.mediaLoading')}</p>`
         : html`<ion-button data-testid="whatsapp-inbox-media-load" size="small" fill="outline"
             @click=${() => this.loadMedia(media.mediaId)}>
-            ${t(media.kind === 'document' ? 'ui.mediaDownload' : 'ui.mediaPlay')}
+            ${t(media.kind === 'document' || !this.playable(media) ? 'ui.mediaDownload' : 'ui.mediaPlay')}
           </ion-button>`;
     } else if (state.status === 'loading') {
       content = html`<p class="note">${t('ui.mediaLoading')}</p>`;
@@ -406,20 +445,51 @@ export class ErpWhatsappInboxInbox extends LitElement {
         <ion-button data-testid="whatsapp-inbox-media-retry" size="small" fill="clear"
           @click=${() => this.loadMedia(media.mediaId, true)}>${t('ui.mediaRetry')}</ion-button>`;
     } else if (media.kind === 'image' || media.kind === 'sticker') {
-      content = html`<img src=${state.url} alt=${media.caption || label} />`;
+      const img = html`<img src=${state.url} alt=${media.caption || label} />`;
+      // A sticker is already its full size; a photo is a thumbnail that opens large on a tap.
+      content = media.kind === 'image'
+        ? html`<button type="button" class="open-photo" data-testid="whatsapp-inbox-media-open"
+            aria-label=${t('ui.viewerOpen')} @click=${() => { this.viewing = media.mediaId; }}>${img}</button>`
+        : img;
+    } else if ((media.kind === 'audio' || media.kind === 'video') && !this.playable(media)) {
+      const name = mediaFileName(media, label);
+      content = html`<p class="note" data-testid="whatsapp-inbox-media-cannot-play">${t('ui.mediaCannotPlay')}</p>
+        <a href=${state.url} download=${name} target="_blank" rel="noopener">${t('ui.mediaDownload')} ${name}</a>`;
     } else if (media.kind === 'audio') {
-      content = html`<audio controls src=${state.url}></audio>`;
+      content = html`<audio controls src=${state.url} @error=${() => this.markUnplayable(media.mediaId)}></audio>`;
     } else if (media.kind === 'video') {
-      content = html`<video controls playsinline src=${state.url}></video>`;
+      content = html`<video controls playsinline src=${state.url}
+        @error=${() => this.markUnplayable(media.mediaId)}></video>`;
     } else {
-      content = html`<a href=${state.url} download=${media.filename || label} target="_blank" rel="noopener">
-        ${t('ui.mediaOpen')} ${media.filename || label}</a>`;
+      const name = mediaFileName(media, label);
+      content = html`<a href=${state.url} download=${name} target="_blank" rel="noopener">
+        ${t('ui.mediaOpen')} ${name}</a>`;
     }
     return html`<div class="media">
       <span class="kind">${label}${media.filename ? html` · ${media.filename}` : nothing}</span>
       ${content}
       ${media.caption && media.caption !== body ? html`<p class="body">${media.caption}</p>` : nothing}
     </div>`;
+  }
+
+  /** Every downloaded photo of the thread, oldest first, so the viewer pages through them all. */
+  private renderViewer() {
+    if (!this.viewing) return nothing;
+    const photos: { mediaId: string; item: OkLightboxItem }[] = [];
+    for (const m of this.messages) {
+      const media = messageMedia(m);
+      const state = media && media.kind === 'image' ? this.media[media.mediaId] : undefined;
+      if (!media || state?.status !== 'ready') continue;
+      const alt = media.caption || erplora().t(CATALOG, 'ui.mediaKind.image');
+      photos.push({ mediaId: media.mediaId, item: { src: state.url, alt, type: 'img' } });
+    }
+    const index = photos.findIndex((p) => p.mediaId === this.viewing);
+    if (index < 0) return nothing;
+    const labels = Object.fromEntries(
+      Object.entries(VIEWER_LABELS).map(([k, key]) => [k, erplora().t(CATALOG, key)]),
+    ) as unknown as OkLightboxLabels;
+    return html`<ok-lightbox open .items=${photos.map((p) => p.item)} .index=${index}
+      .labels=${labels} @ok-close=${() => { this.viewing = null; }}></ok-lightbox>`;
   }
 
   private renderMessage(m: Message) {
@@ -470,6 +540,7 @@ export class ErpWhatsappInboxInbox extends LitElement {
           ? this.messages.map((m) => this.renderMessage(m))
           : html`<p class="empty">${t('ui.emptyThread')}</p>`}
       </div>
+      ${this.renderViewer()}
       ${can('whatsapp_inbox.manage_settings')
         ? html`<div class="assign">
             <ion-input data-testid="whatsapp-inbox-assign-to" mode="md" fill="outline" label-placement="floating" label=${t('ui.assignedTo')}

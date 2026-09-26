@@ -36,8 +36,8 @@ function textFor(catalog: Catalogs, lang: string, code: string): string {
  * door this closed.
  *
  * `{message}` is spliced with the handler's own detail exactly as `refusalText()` does in the hub
- * SDK: the module owns the sentence, the handler owns which field and which value, and codes like
- * `whatsapp_inbox.request_not_pending` say nothing on their own without the second half.
+ * SDK: the module owns the sentence, the handler owns which field and which value, and a code whose
+ * sentence ends in `{message}` says nothing on its own without the second half.
  */
 /**
  * Has the sentence the error carries ALREADY been through this template?

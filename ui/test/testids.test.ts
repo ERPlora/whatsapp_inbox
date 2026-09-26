@@ -68,8 +68,11 @@ const COVERED: Record<
       'whatsapp-inbox-detail-error',
       'whatsapp-inbox-load-error',
       // An attachment in the thread (whatsapp_inbox#192): play/download it, retry a failed
-      // download, and the notice of a hub that cannot serve attachments yet.
+      // download, the notice of a hub that cannot serve attachments yet, and the notice of a
+      // device that cannot play a voice note or video (whatsapp_inbox#223).
+      'whatsapp-inbox-media-cannot-play',
       'whatsapp-inbox-media-load',
+      'whatsapp-inbox-media-open',
       'whatsapp-inbox-media-retry',
       'whatsapp-inbox-media-unavailable',
     ],

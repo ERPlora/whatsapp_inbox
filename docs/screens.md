@@ -1,6 +1,6 @@
 # WhatsApp Inbox — Screens
 
-The module contributes three tabs to the hub navigation: **Inbox**, **Requests** and **Templates**.
+The module contributes two tabs to the hub navigation: **Inbox** and **Templates**.
 
 ## Inbox — conversations
 
@@ -30,14 +30,19 @@ Messages that carry no text (a location, a button reply) show the **kind** Meta 
 an empty bubble.
 
 **Attachments** (#192). A photo or a sticker the customer sent shows inside the thread as soon as it
-opens, with its caption. A voice note or a video gets a **Play** button, and a document a
+opens, with its caption. Tapping a photo opens it large, in a full-screen viewer that pages through
+every photo of the thread (arrows or the keys ← →) and closes with ✕ or Esc. A voice note or a video gets a **Play** button, and a document a
 **Download** button with its file name: they are fetched only when tapped, because every attachment
 travels from WhatsApp through the platform. While it loads the bubble says so; if it fails it says
 so and offers **Try again**. The file is kept only while the thread is open.
+WhatsApp sends voice notes as OGG/Opus, which Safari on iPhone, iPad and older Macs cannot play
+(#223): on a device that cannot play it the button says **Download** instead of **Play**, and the
+bubble says the device cannot play it and hands over the file (with its `.ogg`, `.mp3`… extension)
+to open with another app. A player that fails on the downloaded file falls back the same way.
 
 Until whatsapp_inbox#29 those two reads had no caller and a module called *inbox* could not open a
-message. That matters since appointments#38: approving a request creates a real appointment, so
-whoever approves has to be able to read what the customer actually wrote.
+message. Whoever confirms a booking asked for over WhatsApp has to be able to read what the customer
+actually wrote.
 
 ### Assign a conversation
 
@@ -71,8 +76,8 @@ There is still no webhook receiver and no network access to Meta declared here.
 There is no «Requests» tab any more (whatsapp_inbox#193). Nothing fed it: the WhatsApp recipes book
 straight into Appointments or Reservations, so the owner saw a list that was always empty. A booking
 that waits for the owner's OK is a **pending appointment**, and it is confirmed in Appointments, next
-to the rest of the diary. The requests commands, queries and table still ship without a screen until
-they are retired too (whatsapp_inbox#206).
+to the rest of the diary. The requests commands, queries, table and events behind it were retired
+too (whatsapp_inbox#206).
 
 ## Templates
 

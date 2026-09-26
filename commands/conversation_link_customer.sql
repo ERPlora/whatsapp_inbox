@@ -1,6 +1,5 @@
 -- Remembers WHOSE this WhatsApp conversation is, so the inbox filter by customer stops answering
--- nothing and every request parsed from the thread is born carrying her (`_insert_request.sql`
--- inherits `c.customer_id`).
+-- nothing.
 --
 -- Keyed by the CONTACT, not by the conversation id, and that is deliberate: what the automations
 -- hold is the phone the message came from (`input.from`), never the thread's id — keying by the id
