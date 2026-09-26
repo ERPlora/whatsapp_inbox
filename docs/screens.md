@@ -118,6 +118,13 @@ never blanks a header somebody set. **Delete** asks for confirmation in the page
 > mixed with the other kind in the body) comes in with its example (`header_example`, Meta's or a
 > stand-in), and «Save» sends that example back to the registry. A template with named `{{name}}` body variables is imported and edited like any
 > other (#186, #196): «Guardar» sends one example per distinct name, in first-appearance order.
+>
+> **Variable samples (#208).** Under the body the panel shows one «Sample for {{n}}» field per
+> variable, as WhatsApp Manager does: numbered `{{1}}…{{n}}` in number order, named ones in
+> first-appearance order. Meta reviews the template with them and refuses it without, so «Guardar»
+> stays off while a numbered variable has no sample; a named one starts with its own name. Opening a
+> template fills each field with its stored sample; removing a variable from the body drops its
+> sample. The samples are stored in `variables` and sent to Meta with the rest.
 
 ## Settings — the channel
 

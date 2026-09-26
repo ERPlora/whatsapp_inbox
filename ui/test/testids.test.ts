@@ -136,6 +136,8 @@ const COVERED: Record<
       'whatsapp-templates-category',
       'whatsapp-templates-delete-cancel',
       'whatsapp-templates-delete-confirm',
+      'whatsapp-templates-example',
+      'whatsapp-templates-examples',
       'whatsapp-templates-form',
       'whatsapp-templates-form-error',
       'whatsapp-templates-header-media',

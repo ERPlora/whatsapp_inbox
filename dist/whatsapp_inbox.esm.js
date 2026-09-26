@@ -4620,6 +4620,9 @@ var es_default = {
     viewerDownload: "Descargar",
     viewerFullscreen: "Pantalla completa",
     viewerExitFullscreen: "Salir de pantalla completa",
+    examples: "Ejemplos de las variables",
+    examplesHint: "Meta revisa la plantilla con un ejemplo de cada variable. Escribe lo que pondr\xEDa en un mensaje real, por ejemplo un nombre o una fecha.",
+    exampleFor: "Ejemplo de {variable}",
     buttonsHint: "Opcional. Hasta 10 botones: respuestas r\xE1pidas, hasta 2 enlaces y 1 bot\xF3n de llamada. Las respuestas r\xE1pidas se mantienen juntas.",
     buttonType: "Tipo de bot\xF3n",
     buttonText: "Texto del bot\xF3n",
@@ -4834,6 +4837,9 @@ var en_default = {
     viewerDownload: "Download",
     viewerFullscreen: "Full screen",
     viewerExitFullscreen: "Exit full screen",
+    examples: "Variable samples",
+    examplesHint: "Meta reviews the template with a sample of each variable. Write what it would say in a real message, e.g. a name or a date.",
+    exampleFor: "Sample for {variable}",
     buttonsHint: "Optional. Up to 10 buttons: quick replies, up to 2 links and 1 call button. Quick replies are kept together.",
     buttonType: "Button type",
     buttonText: "Button text",
@@ -6253,6 +6259,27 @@ function namedExamplesOf(body, variables) {
   });
   return out;
 }
+function bodyVariables(body) {
+  const names = namedVariables(body);
+  if (names.length) return names;
+  const numbers = [...body.matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map((m4) => Number(m4[1]));
+  return [...new Set(numbers)].sort((a3, b3) => a3 - b3).map(String);
+}
+function bodyExamplesOf(body, variables) {
+  if (namedVariables(body).length) return namedExamplesOf(body, variables);
+  let examples;
+  try {
+    examples = JSON.parse(variables);
+  } catch {
+    return {};
+  }
+  if (!Array.isArray(examples)) return {};
+  const out = {};
+  bodyVariables(body).forEach((key, i7) => {
+    if (i7 < examples.length) out[key] = String(examples[i7]);
+  });
+  return out;
+}
 function buttonsFromMeta(raw) {
   if (!Array.isArray(raw) || raw.length === 0) return null;
   const out = [];
@@ -6458,10 +6485,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     this.editingHeaderFormat = "TEXT";
     this.editingButtons = [];
     this.editingDynamicLink = false;
-    /** The example Meta holds for each named variable of the template being edited, by name. Named
-     *  templates store one example per distinct name in first-appearance order (whatsapp_inbox#186),
-     *  so this is how the examples follow their NAME when the owner rewrites the body. */
-    this.namedExamples = {};
+    this.bodyExamples = {};
     this.editingRest = {
       header: "",
       footer: "",
@@ -6535,6 +6559,19 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     return this.editingButtons.some(
       (b3) => !b3.text.trim() || "url" in b3 && !b3.url.trim() || "phone_number" in b3 && !b3.phone_number.trim()
     );
+  }
+  /** The example of `variable` as the panel shows it: the stored or typed one, else — for a named
+   *  variable — the name itself, the default since whatsapp_inbox#196; a number has no sensible
+   *  default, so it stays empty until the owner writes one. */
+  exampleFor(variable) {
+    return this.bodyExamples[variable] ?? (/^\d+$/.test(variable) ? "" : variable);
+  }
+  /** A variable of the body still without its example: Meta would refuse it (`missing_example`). */
+  get examplesIncomplete() {
+    return bodyVariables(this.newBody).some((v3) => !this.exampleFor(v3).trim());
+  }
+  setExample(variable, value) {
+    this.bodyExamples = { ...this.bodyExamples, [variable]: value };
   }
   /** Adds an empty quick reply at the end, up to Meta's ten. */
   addButton() {
@@ -6747,14 +6784,20 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
       buttons: JSON.stringify(groupedButtons(this.editingButtons.map(cleanButton)))
     };
   }
-  /** The examples the door must send with `body`. A NAMED body takes one example per distinct name,
-   *  in the order the body first uses it — the SaaS pairs them by position (saas#2281): a name the
-   *  body kept keeps its example, a name it dropped loses it, and a new one is its own example, the
-   *  same way a numbered variable's name is its sample. A numbered body travels as it was. */
+  /** The examples the door must send with `body`, one per variable in the order the SaaS pairs
+   *  them (saas#2281, whatsapp_inbox#208): a named body, per distinct name in first-appearance
+   *  order; a numbered one, `{{1}}`…`{{n}}`. Only the variables the body still uses travel — Meta
+   *  refuses an example too many as much as one too few. When they are the examples already stored,
+   *  the stored TEXT travels untouched: `template_update.sql` compares it byte for byte, and a
+   *  no-op «Guardar» must not cost an approved template its approval. */
   variablesFor(body) {
-    const names = namedVariables(body);
-    if (!names.length) return this.editingRest.variables;
-    return JSON.stringify(names.map((name) => this.namedExamples[name] ?? name));
+    const examples = JSON.stringify(bodyVariables(body).map((v3) => this.exampleFor(v3)));
+    const stored = this.editingRest.variables;
+    try {
+      if (JSON.stringify(JSON.parse(stored)) === examples) return stored;
+    } catch {
+    }
+    return examples;
   }
   /**
    * Register the template with Meta and put back what Meta answered (whatsapp_inbox#87).
@@ -6803,7 +6846,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
   }
   async createTemplate(ev) {
     ev.preventDefault();
-    if (!this.newName.trim() || this.managedInMeta || this.buttonsIncomplete) return;
+    if (!this.newName.trim() || this.managedInMeta || this.buttonsIncomplete || this.examplesIncomplete) return;
     if (this.editingId) {
       await this.updateTemplate();
       return;
@@ -6840,7 +6883,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     this.editingHeaderFormat = String(row.header_format ?? "").trim().toUpperCase() || "TEXT";
     this.editingButtons = storedButtons(row.buttons).map(cleanButton);
     this.editingDynamicLink = this.editingButtons.some((b3) => "url" in b3 && b3.url.includes("{{"));
-    this.namedExamples = namedExamplesOf(this.newBody, this.editingRest.variables);
+    this.bodyExamples = bodyExamplesOf(this.newBody, this.editingRest.variables);
     this.editingMeta = metaTemplateView(row.meta_status);
     this.editingMetaCode = String(row.meta_status ?? "");
     this.editingMetaReason = String(row.meta_rejected_reason ?? "");
@@ -6870,7 +6913,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     this.editingRest = { header: "", footer: "", variables: "[]", is_active: 1, header_example: "" };
     this.editingButtons = [];
     this.editingDynamicLink = false;
-    this.namedExamples = {};
+    this.bodyExamples = {};
     this.editingMeta = null;
     this.editingMetaCode = "";
     this.editingMetaReason = "";
@@ -6998,6 +7041,23 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
         ?disabled=${this.editingButtons.length >= MAX_BUTTONS} @click=${() => this.addButton()}>${t5("ui.addButton")}</ion-button>
     </div>`;
   }
+  /** One example field per variable of the body, under it, as WhatsApp Manager asks for them
+   *  (whatsapp_inbox#208): Meta reviews the template with them and refuses it without. Shown but
+   *  not editable while the panel is read-only. */
+  renderExamples(locked) {
+    const variables = bodyVariables(this.newBody);
+    if (!variables.length) return A;
+    const t5 = (k2, params) => erplora3().t(CATALOG3, k2, params);
+    return b2`<div class="rich" data-testid="whatsapp-templates-examples">
+      <strong>${t5("ui.examples")}</strong>
+      <p>${t5("ui.examplesHint")}</p>
+      ${variables.map(
+      (v3) => b2`<ion-input data-testid="whatsapp-templates-example" data-variable=${v3} .disabled=${locked}
+          mode="md" fill="outline" label-placement="floating" label=${t5("ui.exampleFor", { variable: `{{${v3}}}` })}
+          .value=${this.exampleFor(v3)} @ionInput=${(e5) => this.setExample(v3, e5.target.value ?? "")}></ion-input>`
+    )}
+    </div>`;
+  }
   renderDeleteConfirm() {
     if (!this.pendingDelete) return A;
     const t5 = (k2) => erplora3().t(CATALOG3, k2);
@@ -7031,8 +7091,9 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
               <ion-select-option value="AUTHENTICATION">${t5("ui.categoryAuthentication")}</ion-select-option>
             </ion-select>
             <ion-textarea data-testid="whatsapp-templates-body" .disabled=${locked} mode="md" fill="outline" label-placement="floating" label=${t5("ui.colBody")} placeholder=${t5("ui.placeholderBody")} .value=${this.newBody} @ionInput=${(e5) => this.newBody = e5.target.value}></ion-textarea>
+            ${this.renderExamples(locked)}
             ${this.renderButtonsEditor()}
-            ${locked ? A : b2`<ion-button data-testid="whatsapp-templates-submit" type="submit" ?disabled=${this.saving || !this.newName || this.buttonsIncomplete}>${this.saving ? t5("ui.saving") : this.editingId ? t5("ui.save") : t5("ui.add")}</ion-button>`}
+            ${locked ? A : b2`<ion-button data-testid="whatsapp-templates-submit" type="submit" ?disabled=${this.saving || !this.newName || this.buttonsIncomplete || this.examplesIncomplete}>${this.saving ? t5("ui.saving") : this.editingId ? t5("ui.save") : t5("ui.add")}</ion-button>`}
             ${this.editingId ? b2`<ion-button data-testid="whatsapp-templates-cancel" fill="clear" size="small" ?disabled=${this.saving}
                   @click=${() => this.cancelEdit()}>${t5("ui.cancel")}</ion-button>` : A}
           </form>
@@ -7091,5 +7152,8 @@ __decorateClass([
 __decorateClass([
   r5()
 ], _ErpWhatsappInboxTemplates.prototype, "editingDynamicLink", 2);
+__decorateClass([
+  r5()
+], _ErpWhatsappInboxTemplates.prototype, "bodyExamples", 2);
 var ErpWhatsappInboxTemplates = _ErpWhatsappInboxTemplates;
 define("erp-whatsapp-inbox-templates", ErpWhatsappInboxTemplates);

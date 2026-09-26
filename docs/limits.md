@@ -95,6 +95,10 @@ Templates tab opens. If a notice says Meta could not be reached, open the tab ag
 in the tab, or write a new one with a different name. The mark needs a fresh answer from Meta that
 lists at least one template; with no WhatsApp number connected nothing is marked.
 
+**"Meta says my template is missing an example."** Every variable of the body (`{{1}}`, `{{2}}`… or
+`{{name}}`) needs a sample of what it will say in a real message. Write it in the «Sample for …»
+field under the body (#208): «Guardar» stays off until every numbered variable has one.
+
 **"A template I created in WhatsApp Manager is not in the list."** Open the Templates tab: it is
 brought in with its text, its media header kind and its quick reply, link and call buttons (#180).
 Plain buttons are edited here since #185. A template with a media header, or with a link button that
