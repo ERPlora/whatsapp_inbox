@@ -6787,9 +6787,17 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
   /** The examples the door must send with `body`, one per variable in the order the SaaS pairs
    *  them (saas#2281, whatsapp_inbox#208): a named body, per distinct name in first-appearance
    *  order; a numbered one, `{{1}}`…`{{n}}`. Only the variables the body still uses travel — Meta
-   *  refuses an example too many as much as one too few. */
+   *  refuses an example too many as much as one too few. When they are the examples already stored,
+   *  the stored TEXT travels untouched: `template_update.sql` compares it byte for byte, and a
+   *  no-op «Guardar» must not cost an approved template its approval. */
   variablesFor(body) {
-    return JSON.stringify(bodyVariables(body).map((v3) => this.exampleFor(v3)));
+    const examples = JSON.stringify(bodyVariables(body).map((v3) => this.exampleFor(v3)));
+    const stored = this.editingRest.variables;
+    try {
+      if (JSON.stringify(JSON.parse(stored)) === examples) return stored;
+    } catch {
+    }
+    return examples;
   }
   /**
    * Register the template with Meta and put back what Meta answered (whatsapp_inbox#87).

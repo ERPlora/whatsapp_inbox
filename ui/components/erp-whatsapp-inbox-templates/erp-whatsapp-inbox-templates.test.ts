@@ -1995,6 +1995,22 @@ describe('un ejemplo por variable, debajo del cuerpo (whatsapp_inbox#208)', () =
     expect(puerta[0].variables).toBe('["Lucía","lunes"]');
   });
 
+  it('abrir y guardar sin tocar nada manda `variables` BYTE a BYTE: Meta no pierde la aprobación', async () => {
+    // A row whose TEXT is not the panel's compact JSON (written by another writer, e.g. with
+    // spaces): `template_update.sql` compares the TEXT, so rewriting it on a no-op save would drop
+    // the approval and send an approved template back to Meta's review queue.
+    for (const variables of ['["Ana", "lunes"]', '[ "Ana","lunes" ]']) {
+      comandos.length = 0;
+      const el = await panel();
+      el.startEdit({ ...NUMERADA, variables });
+      await el.updateComplete;
+      await enviar(el);
+
+      const update = comandos.find((c) => c.name === 'whatsapp_inbox.templates.update');
+      expect(update?.payload.variables, 'un guardado sin cambios reescribe los ejemplos').toBe(variables);
+    }
+  });
+
   it('las variables con nombre también tienen su campo, con el ejemplo guardado o el propio nombre', async () => {
     const conNombre = { ...NUMERADA, body: 'Hola {{nombre}}, el {{fecha}}.', variables: '["Ana","lunes"]' };
     const el = await panel();
