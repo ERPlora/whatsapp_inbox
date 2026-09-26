@@ -107,10 +107,11 @@ never blanks a header somebody set. **Delete** asks for confirmation in the page
 > (`buttons`, Meta's order) come in too: the panel lists them and keeps the template read-only, with
 > no «Guardar», because saving would register it at Meta without them. Those with parts this module
 > has no field for (a carousel, a limited-time offer, a copy-code or Flow button, a location header,
-> more than one header variable, named `{{name}}` variables) are not imported without them: they are
-> named in a notice above the table, `name (language)`. Since #230 a text header with ONE variable
-> (`{{1}}` or `{{name}}`, never mixed with the other kind in the body) comes in with its example
-> (`header_example`, Meta's or a stand-in), and «Save» sends that example back to the registry.
+> more than one header variable) are not imported without them: they are named in a notice above the
+> table, `name (language)`. Since #230 a text header with ONE variable (`{{1}}` or `{{name}}`, never
+> mixed with the other kind in the body) comes in with its example (`header_example`, Meta's or a
+> stand-in), and «Save» sends that example back to the registry. A template with named `{{name}}` body variables is imported and edited like any
+> other (#186, #196): «Guardar» sends one example per distinct name, in first-appearance order.
 
 ## Settings — the channel
 

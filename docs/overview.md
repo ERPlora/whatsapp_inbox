@@ -47,6 +47,11 @@ this same module — a listener may only ever call a command of its own module.
 That closes the intake gap described above: an inbound message lands in a conversation by itself,
 exactly once. Turning it into a booking is the flow template shipped in `flows/`.
 
+It also listens to `customer.merged` (from `customers`): when two customer sheets are merged, every
+WhatsApp thread linked to the absorbed sheet (live or deleted, any status) moves to the surviving one,
+in this hub only, through `whatsapp_inbox._on_customer_merged` (customers#86). Nothing else on the
+thread changes, and a redelivered event moves nothing.
+
 ## The vocabulary
 
 | Concept | Values |

@@ -14,7 +14,7 @@ import {
   metaTemplateView,
 } from '../../lib/meta-template-status';
 import type { MetaTemplateView } from '../../lib/meta-template-status';
-import { namedVariables, templateFromMeta } from '../../lib/meta-template-import';
+import { namedExamplesOf, namedVariables, templateFromMeta } from '../../lib/meta-template-import';
 import type { TemplateButton } from '../../lib/meta-template-import';
 const CATALOG: Record<string, unknown> = { es: esLocale, en: enLocale };
 
@@ -266,20 +266,16 @@ export class ErpWhatsappInboxTemplates extends LitElement {
   /** A template with a media header or buttons is read-only here (whatsapp_inbox#180): «Guardar»
    *  registers the template again at Meta from what this panel holds, and this panel cannot write
    *  those parts yet — saving would strip them at Meta. It is edited in WhatsApp Manager and the
-   *  tab brings Meta's verdict back on the next open. */
+   *  tab brings Meta's verdict back on the next open. Named body variables (`{{nombre}}`) no longer
+   *  lock it: the SaaS registers them as `parameter_format: NAMED` (saas#2281, whatsapp_inbox#196). */
   private get managedInMeta(): boolean {
-    return (
-      !!this.editingId &&
-      (this.editingHeaderFormat !== 'TEXT' || this.editingButtons.length > 0 || this.hasNamedVariables)
-    );
+    return !!this.editingId && (this.editingHeaderFormat !== 'TEXT' || this.editingButtons.length > 0);
   }
 
-  /** A body with NAMED variables (`{{nombre}}`, whatsapp_inbox#186) locks the panel too: the SaaS
-   *  registers `{{1}}…{{n}}` only, so «Guardar» would be refused (`missing_example`) until it
-   *  sends Meta `parameter_format: NAMED`. */
-  private get hasNamedVariables(): boolean {
-    return !!this.editingId && namedVariables(this.newBody).length > 0;
-  }
+  /** The example Meta holds for each named variable of the template being edited, by name. Named
+   *  templates store one example per distinct name in first-appearance order (whatsapp_inbox#186),
+   *  so this is how the examples follow their NAME when the owner rewrites the body. */
+  private namedExamples: Record<string, string> = {};
 
   private editingRest: Pick<Template, 'header' | 'footer' | 'variables' | 'is_active'> & { header_example: string } = {
     header: '',
@@ -536,8 +532,18 @@ export class ErpWhatsappInboxTemplates extends LitElement {
       header: this.editingRest.header,
       body: this.newBody,
       footer: this.editingRest.footer,
-      variables: this.editingRest.variables,
+      variables: this.variablesFor(this.newBody),
     };
+  }
+
+  /** The examples the door must send with `body`. A NAMED body takes one example per distinct name,
+   *  in the order the body first uses it — the SaaS pairs them by position (saas#2281): a name the
+   *  body kept keeps its example, a name it dropped loses it, and a new one is its own example, the
+   *  same way a numbered variable's name is its sample. A numbered body travels as it was. */
+  private variablesFor(body: string): string {
+    const names = namedVariables(body);
+    if (!names.length) return this.editingRest.variables;
+    return JSON.stringify(names.map((name) => this.namedExamples[name] ?? name));
   }
 
   /**
@@ -638,6 +644,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     };
     this.editingHeaderFormat = String(row.header_format ?? '').trim().toUpperCase() || 'TEXT';
     this.editingButtons = storedButtons(row.buttons);
+    this.namedExamples = namedExamplesOf(this.newBody, this.editingRest.variables);
     this.editingMeta = metaTemplateView(row.meta_status);
     this.editingMetaCode = String(row.meta_status ?? '');
     this.editingMetaReason = String(row.meta_rejected_reason ?? '');
@@ -667,6 +674,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     this.newLanguage = 'es';
     this.newCategory = 'UTILITY';
     this.editingRest = { header: '', footer: '', variables: '[]', is_active: 1, header_example: '' };
+    this.namedExamples = {};
     this.editingMeta = null;
     this.editingMetaCode = '';
     this.editingMetaReason = '';
@@ -752,7 +760,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
   }
 
   /** The media header and the buttons of a template brought from WhatsApp Manager, and why its
-   *  text is not saved from here (whatsapp_inbox#180, #186). Nothing for a text-only template. */
+   *  text is not saved from here (whatsapp_inbox#180). Nothing for a text-only template. */
   private renderRichParts() {
     if (!this.managedInMeta) return nothing;
     const t = (k: string): string => erplora().t(CATALOG, k);
@@ -772,9 +780,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
               )}
             </ul>`
         : nothing}
-      ${this.hasNamedVariables
-        ? html`<p data-testid="whatsapp-templates-named-variables">${t('ui.templateNamedVariablesInMeta')}</p>`
-        : html`<p data-testid="whatsapp-templates-managed-in-meta">${t('ui.templateManagedInMeta')}</p>`}
+      <p data-testid="whatsapp-templates-managed-in-meta">${t('ui.templateManagedInMeta')}</p>
     </div>`;
   }
 

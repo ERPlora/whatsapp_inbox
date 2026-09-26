@@ -1,7 +1,7 @@
 {
   "id": "whatsapp_inbox",
   "name": "WhatsApp Inbox",
-  "version": "2.1.85",
+  "version": "2.1.88",
   "description": "WhatsApp conversations, message templates and channel settings.",
   "agent": {
     "description": "Manages WhatsApp conversations, message templates, and channel settings: list and read conversations/messages, assign conversations, and configure the WhatsApp channel.",
@@ -512,6 +512,14 @@
       ],
       "schema": "schemas/link_known_customer_write.json"
     },
+    "whatsapp_inbox._on_customer_merged": {
+      "permission": "whatsapp_inbox.manage_connections",
+      "internal": true,
+      "transaction": true,
+      "sql": [
+        "commands/_on_customer_merged.sql"
+      ]
+    },
     "whatsapp_inbox._quota.set": {
       "permission": "whatsapp_inbox.manage_connections",
       "internal": true,
@@ -564,6 +572,9 @@
       },
       "customer.updated": {
         "command": "whatsapp_inbox._link_customer_threads"
+      },
+      "customer.merged": {
+        "command": "whatsapp_inbox._on_customer_merged"
       },
       "whatsapp_inbox.conversation.link_pending": {
         "command": "whatsapp_inbox._link_known_customer"
