@@ -16,7 +16,8 @@
     "meta_status",
     "meta_rejected_reason",
     "header_format",
-    "buttons"
+    "buttons",
+    "header_example"
   ],
   "properties": {
     "name": { "type": "string", "minLength": 1, "maxLength": 255 },
@@ -42,6 +43,11 @@
     "buttons": {
       "type": "string",
       "description": "JSON array of the template's buttons in Meta's order: {type: QUICK_REPLY|URL|PHONE_NUMBER, text, url?, phone_number?}"
+    },
+    "header_example": {
+      "type": "string",
+      "maxLength": 1024,
+      "description": "The example of the header's ONE variable ({{1}} or {{name}}) Meta reviewed the template with, empty when the header has none (whatsapp_inbox#230). The panel sends it back to the registry on the next save."
     }
   }
 }
