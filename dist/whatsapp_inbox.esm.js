@@ -1403,6 +1403,50 @@ var o6 = e4(class extends i4 {
   }
 });
 
+// @erplora/outfitkit/dist/shared/ion-tone.js
+var DEFAULT_HEX = {
+  primary: "#0054e9",
+  secondary: "#0163aa",
+  tertiary: "#6030ff",
+  success: "#2dd55b",
+  warning: "#ffc409",
+  danger: "#c5000f",
+  light: "#f4f5f8",
+  medium: "#636469",
+  dark: "#222428"
+};
+var DEFAULT_CONTRAST = {
+  primary: "#fff",
+  secondary: "#fff",
+  tertiary: "#fff",
+  success: "#000",
+  warning: "#000",
+  danger: "#fff",
+  light: "#000",
+  medium: "#fff",
+  dark: "#fff"
+};
+var TONE_NAME = /^[a-z][a-z0-9-]*$/;
+function tokenChain(okName, ionName, hex) {
+  return `var(--ok-${okName}, var(--ion-color-${ionName}${hex ? `, ${hex}` : ""}))`;
+}
+function ionTone(tone, variant) {
+  if (!tone || !TONE_NAME.test(tone)) return void 0;
+  const value = tokenChain(tone, tone, DEFAULT_HEX[tone]);
+  switch (variant) {
+    case "text":
+      return `color: ${value};`;
+    case "clear":
+      return `--color: ${value};`;
+    case "outline":
+      return `--color: ${value}; --border-color: ${value}; --background-activated: ${value}; --background-focused: ${value};`;
+    case "solid": {
+      const contrast = tokenChain(`${tone}-contrast`, `${tone}-contrast`, DEFAULT_CONTRAST[tone]);
+      return `--background: ${value}; --color: ${contrast}; --background-hover: var(--ion-color-${tone}-tint, ${value}); --background-activated: var(--ion-color-${tone}-shade, ${value}); --background-focused: var(--ion-color-${tone}-shade, ${value});`;
+    }
+  }
+}
+
 // @erplora/outfitkit/dist/shared/icons.js
 var rawAdd = '<svg viewBox="0 0 512 512" width="1.2em" height="1.2em" ><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="32" d="M256 112v288m144-144H112"/></svg>';
 var rawAlertCircle = '<svg viewBox="0 0 512 512" width="1.2em" height="1.2em" ><path fill="currentColor" d="M256 48C141.31 48 48 141.31 48 256s93.31 208 208 208s208-93.31 208-208S370.69 48 256 48m0 319.91a20 20 0 1 1 20-20a20 20 0 0 1-20 20m21.72-201.15l-5.74 122a16 16 0 0 1-32 0l-5.74-121.94v-.05a21.74 21.74 0 1 1 43.44 0Z"/></svg>';
@@ -1660,7 +1704,9 @@ var DEFAULT_LABELS = {
   showing: "Showing {from}\u2013{to} of",
   recordSingular: "record",
   recordPlural: "records",
-  loadMore: "Load more"
+  loadMore: "Load more",
+  noMatches: "No results match your search or filters",
+  showAll: "Show all"
 };
 var ES_LABELS = {
   search: "Buscar\u2026",
@@ -1697,7 +1743,9 @@ var ES_LABELS = {
   showing: "Mostrando {from}\u2013{to} de",
   recordSingular: "registro",
   recordPlural: "registros",
-  loadMore: "Cargar m\xE1s"
+  loadMore: "Cargar m\xE1s",
+  noMatches: "Ning\xFAn resultado coincide con la b\xFAsqueda o los filtros",
+  showAll: "Mostrar todo"
 };
 var _OkDataTable = class _OkDataTable2 extends i3 {
   constructor() {
@@ -2151,8 +2199,9 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
       if (this.actionsTrackPx !== 0) this.actionsTrackPx = 0;
       return;
     }
-    const el = this.renderRoot?.querySelector?.(".grow-data .gcell.actions-col .actions");
-    const width = el ? Math.ceil(el.scrollWidth) : 0;
+    const boxes = this.renderRoot?.querySelectorAll?.(".grow-data .gcell.actions-col .actions") ?? [];
+    let width = 0;
+    for (const el of boxes) width = Math.max(width, Math.ceil(el.scrollWidth));
     if (width > 0 && width !== this.actionsTrackPx) this.actionsTrackPx = width;
   }
   /** #122 — Decide si los botones de acción de la fila caben o se pliegan en el menú «⋮».
@@ -2242,6 +2291,10 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
   get effEmptyMessage() {
     return this.emptyMessage ?? this.t.empty;
   }
+  /** #171 — Effective "no matches" message (explicit prop → i18n label → English default). */
+  get effNoMatchesMessage() {
+    return this.noMatchesMessage ?? this.t.noMatches;
+  }
   // ── Resolución de alias (compat + documentados) ──────────────────────────────────────────
   get effPageSizes() {
     return this.pageSizes ?? this.pageSizeOptions;
@@ -2279,6 +2332,13 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     if (typeof this.rowKey === "function") return String(this.rowKey(row) ?? "");
     if (typeof this.rowKey === "string") return String(row[this.rowKey] ?? "");
     return String(row[this.rowKeyField] ?? "");
+  }
+  /** #143 — `<prefix>-<suffix>`, or `nothing` (= the attribute is not painted) when the host gave
+   *  no prefix. A blank prefix counts as absent: `" "` would leave dangling `-add` hooks, identical
+   *  on every table of the screen, which is exactly what the prefix prevents. */
+  tid(suffix) {
+    const prefix = this.testid?.trim();
+    return prefix ? `${prefix}-${suffix}` : A;
   }
   get selection() {
     return this.selectedKeys ?? this.internalSelection;
@@ -2320,8 +2380,9 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     a3.download = this.csvName;
     a3.click();
     URL.revokeObjectURL(url);
-    this.emit("csvExport", { rows: this.rows.length });
-    this.emit("export", { rows: this.rows.length });
+    const count = this.rows.length;
+    this.emit("csvExport", { rows: count, count });
+    this.emit("export", { rows: count, count });
   }
   parseCsv(text3) {
     const out = [];
@@ -2363,8 +2424,8 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     if (!file) return;
     const text3 = decodeCsvBuffer(await file.arrayBuffer());
     const { headers, rows } = this.parseCsv(text3);
-    this.emit("csvImport", { headers, rows });
-    this.emit("import", { headers, rows });
+    this.emit("csvImport", { headers, rows, count: rows.length });
+    this.emit("import", { headers, rows, count: rows.length });
     input.value = "";
   }
   toggle(p4) {
@@ -2407,6 +2468,17 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
   }
   clearFilters() {
     this.filterDraft = {};
+  }
+  /** #171 — "Show all" under the no-matches state: drops the search AND the column filters, so
+   *  every row is back in one tap. Consumers listening to `filterChange` hear the reset. */
+  resetSearchAndFilters() {
+    const hadFilters = Object.keys(this.clientFilters).length > 0;
+    this.q = "";
+    this.clientFilters = {};
+    this.filterDraft = {};
+    this.clientPage = 0;
+    this.mobileShown = 0;
+    if (hadFilters) this.emit("filterChange", { filters: {} });
   }
   serializeFilters(src) {
     const out = {};
@@ -2646,6 +2718,8 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
   renderRowMenu() {
     const row = this.rowMenuRow;
     if (!this.actions.length || !row) return A;
+    const actions = this.visibleActions(row);
+    const key = this.keyOf(row);
     return b2`
       <ion-popover
         class="row-menu"
@@ -2656,12 +2730,18 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
       >
         <ion-content>
           <ion-list lines="none">
-            ${this.actions.map((a3) => {
+            ${actions.map((a3) => {
       const disabled = a3.loading?.(row) === true || a3.disabled?.(row) === true;
       const label = typeof a3.label === "function" ? a3.label(row) : a3.label;
       return b2`
+                <!-- #143 — The action is named the SAME collapsed or not, so one spec works at any
+                     width. It carries the hook only while the direct buttons are NOT there: the
+                     popover survives its dismissal («rowMenuRow» is not cleared), and if the table
+                     widened again there would be TWO elements with the hook and «getByTestId»
+                     would pick one at random. -->
                 <ion-item
                   button
+                  data-testid=${this.rowActionsCollapsed ? this.tid(`row-${key}-${a3.id}`) : A}
                   ?disabled=${disabled}
                   aria-disabled=${disabled ? "true" : A}
                   .detail=${false}
@@ -2671,8 +2751,8 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
         this.emit("rowAction", { actionId: a3.id, row });
       }}
                 >
-                  ${a3.icon ? b2`<ion-icon slot="start" .icon=${okIcon(a3.icon)} color=${a3.color ?? A}></ion-icon>` : A}
-                  <ion-label color=${a3.color ?? A}>${label}</ion-label>
+                  ${a3.icon ? b2`<ion-icon slot="start" .icon=${okIcon(a3.icon)} style=${ionTone(a3.color, "text") ?? A}></ion-icon>` : A}
+                  <ion-label style=${ionTone(a3.color, "text") ?? A}>${label}</ion-label>
                 </ion-item>
               `;
     })}
@@ -2854,8 +2934,8 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
         this.menuOpen = false;
         this.emit("menuAction", { actionId: a3.id });
       }}>
-                  ${a3.icon ? b2`<ion-icon slot="start" .icon=${okIcon(a3.icon)} color=${a3.color ?? A}></ion-icon>` : A}
-                  <ion-label color=${a3.color ?? A}>${a3.label}</ion-label>
+                  ${a3.icon ? b2`<ion-icon slot="start" .icon=${okIcon(a3.icon)} style=${ionTone(a3.color, "text") ?? A}></ion-icon>` : A}
+                  <ion-label style=${ionTone(a3.color, "text") ?? A}>${a3.label}</ion-label>
                 </ion-item>
               `
     )}
@@ -2875,15 +2955,23 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
   // appointment carries, the row asks for 380px and the card gives 379px at 411dp, 237px at 768px
   // and 272px at 1440px — so the first button hung off the card at ALL THREE widths, not just on
   // a phone. If you add a view that lays these buttons out, MEASURE it.
+  /** hub#2014 — The row actions that exist for THIS row (`hidden` filtered out), in their order. */
+  visibleActions(row) {
+    return this.actions.filter((a3) => a3.hidden?.(row) !== true);
+  }
   actionButtons(row, collapsible = false) {
     if (!this.actions.length) return A;
+    const key = this.keyOf(row);
+    const actions = this.visibleActions(row);
     if (collapsible && this.rowActionsCollapsed) {
+      if (!actions.length) return b2`<div class="actions"></div>`;
       return b2`
         <div class="actions">
           <ion-button
             size="small"
             fill="clear"
-            color="medium"
+            style=${ionTone("medium", "clear")}
+            data-testid=${this.tid(`row-${key}-menu`)}
             aria-label=${this.t.moreActions}
             title=${this.t.moreActions}
             aria-haspopup="menu"
@@ -2896,7 +2984,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     }
     return b2`
       <div class="actions">
-        ${this.actions.map(
+        ${actions.map(
       (a3) => {
         const loading = a3.loading?.(row) === true;
         const disabled = loading || a3.disabled?.(row) === true;
@@ -2905,7 +2993,8 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
             <ion-button
               size="small"
               fill="clear"
-              color=${a3.color ?? "medium"}
+              style=${ionTone(a3.color ?? "medium", "clear") ?? A}
+              data-testid=${this.tid(`row-${key}-${a3.id}`)}
               ?disabled=${disabled}
               aria-disabled=${disabled ? "true" : A}
               aria-label=${label}
@@ -2922,9 +3011,9 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
   }
   // Botón de barra icon-only (filtros / alta / conmutador de vista). `on` = estado activo.
   // `badge` opcional → contador (p.ej. nº de filtros activos), look del Hub.
-  toolButton(icon, on, onClick, label, badge) {
+  toolButton(icon, on, onClick, label, badge, testid = A) {
     return b2`
-      <ion-button class="toolbtn" size="small" fill=${on ? "solid" : "outline"} title=${label} aria-label=${label} @click=${onClick}>
+      <ion-button class="toolbtn" size="small" fill=${on ? "solid" : "outline"} data-testid=${testid} title=${label} aria-label=${label} @click=${onClick}>
         <ion-icon slot="icon-only" .icon=${okIcon(icon)}></ion-icon>
         ${badge && badge > 0 ? b2`<span class="badge">${badge}</span>` : A}
       </ion-button>
@@ -2989,6 +3078,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     }
     const served = this.serverSide ? (current + 1) * ps : Math.min(this.mobileShown || ps, count);
     const canLoadMore = this.isMobile && served < count;
+    const rangeTo = this.isMobile && !this.serverSide ? Math.min(served, count) : Math.min((current + 1) * ps, count);
     const loadMore = () => {
       if (this.serverSide) this.emit("pageChange", current + 1);
       else this.mobileShown = Math.min((this.mobileShown || ps) + ps, count);
@@ -3005,7 +3095,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
         this.mobileShown = 0;
       }
     };
-    const searchbar = b2`<ion-searchbar class="ion-no-border" .value=${this.q} placeholder=${this.effSearchPlaceholder} debounce="250" @ionInput=${this.onSearch}></ion-searchbar>`;
+    const searchbar = b2`<ion-searchbar class="ion-no-border" data-testid=${this.tid("search")} .value=${this.q} placeholder=${this.effSearchPlaceholder} debounce="250" @ionInput=${this.onSearch}></ion-searchbar>`;
     const selCount = this.selection.size;
     const showTopbar = !!this.title || this.hasSearch || this.viewToggle || this.effColumnPicker || this.effExport || this.effImport || this.hasFilterRow || this.addable || !!this.primaryAction;
     return b2`
@@ -3050,20 +3140,30 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
                     ${this.hasFilterRow && !this.inlineFilters ? this.toolButton("funnel-outline", this.panel === "filters" || this.activeFilterCount > 0, () => this.toggle("filters"), this.t.filters, this.activeFilterCount) : A}
                     ${this.effImport ? b2`
                           ${this.toolButton("cloud-upload-outline", false, () => this.renderRoot.querySelector(".tk-file")?.click(), this.t.importCsv)}
-                          <input class="tk-file" type="file" accept=".csv,text/csv" hidden @change=${(e5) => this.onImportFile(e5)} />
+                          <!-- #143 — The import hook goes on the INPUT, not on the button that
+                               triggers it: what a spec drives is «setInputFiles», and nobody opens
+                               the button's native dialog from a test. Same criterion as
+                               «GrantFilePicker.vue» in the Hub (the hook goes on the control, not
+                               on its disguise). -->
+                          <input class="tk-file" data-testid=${this.tid("csv-import")} type="file" accept=".csv,text/csv" hidden @change=${(e5) => this.onImportFile(e5)} />
                         ` : A}
-                    ${this.effExport ? this.toolButton("download-outline", false, () => this.exportCsv(), this.t.exportCsv) : A}
+                    ${this.effExport ? this.toolButton("download-outline", false, () => this.exportCsv(), this.t.exportCsv, void 0, this.tid("csv-export")) : A}
                     <!-- #113 — Mismo botón en los dos viewports: la acción principal de la pantalla
                          se lee, no se adivina. En escritorio era un «+» de 36px idéntico a los
                          iconos de vista/filtrar/exportar, y era el último de cuatro. -->
                     ${this.addable ? b2`
-                          <ion-button class="primary-btn add-btn" size="small" @click=${() => this.toggle("create")}>
+                          <ion-button class="primary-btn add-btn" data-testid=${this.tid("add")} size="small" @click=${() => this.toggle("create")}>
                             <ion-icon slot="start" .icon=${okIcon("add")}></ion-icon>${this.t.add}
                           </ion-button>
                         ` : A}
                     ${this.renderOverflowMenu()}
                     ${this.primaryAction ? b2`
-                          <ion-button class="primary-btn add-btn" size="small" @click=${() => this.emit("primaryAction", {})}>
+                          <!-- #143 — Its own hook and NOT «-add»: «addable» and «primaryAction» are
+                               two different buttons that may coexist, and both are really used
+                               («addable» in the modules, «primaryAction» in the SaaS screens).
+                               Sharing the name would give two elements with the same hook as soon
+                               as a screen declared both. -->
+                          <ion-button class="primary-btn add-btn" data-testid=${this.tid("primary-action")} size="small" @click=${() => this.emit("primaryAction", {})}>
                             <ion-icon slot="start" .icon=${okIcon(this.primaryAction.icon ?? "add")}></ion-icon>${this.primaryAction.label}
                           </ion-button>
                         ` : A}
@@ -3087,7 +3187,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
               <div class="pager">
                 <div class="left">
                   <span>
-                    ${pages > 1 ? b2`${this.t.showing.replace("{from}", String(this.isMobile && !this.serverSide ? 1 : current * ps + 1)).replace("{to}", String(Math.min(served, count)))} ` : A}
+                    ${pages > 1 ? b2`${this.t.showing.replace("{from}", String(this.isMobile && !this.serverSide ? 1 : current * ps + 1)).replace("{to}", String(rangeTo))} ` : A}
                     <span class="strong">${count}</span> ${count === 1 ? this.t.recordSingular : this.t.recordPlural}
                   </span>
                   ${!showTopbar && this.effPageSizes.length ? b2`
@@ -3096,13 +3196,13 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
                         </select>
                       ` : A}
                 </div>
-                ${this.isMobile ? canLoadMore ? b2`<ion-button class="load-more" size="small" @click=${loadMore}>${this.t.loadMore}</ion-button>` : A : pages > 1 ? b2`
+                ${this.isMobile ? canLoadMore ? b2`<ion-button class="load-more" data-testid=${this.tid("load-more")} size="small" @click=${loadMore}>${this.t.loadMore}</ion-button>` : A : pages > 1 ? b2`
                       <div class="nav">
-                        <ion-button size="small" fill="clear" ?disabled=${current === 0} @click=${() => goTo(current - 1)}><ion-icon slot="icon-only" .icon=${iconChevronBack}></ion-icon></ion-button>
+                        <ion-button size="small" fill="clear" data-testid=${this.tid("page-prev")} ?disabled=${current === 0} @click=${() => goTo(current - 1)}><ion-icon slot="icon-only" .icon=${iconChevronBack}></ion-icon></ion-button>
                         ${this.pageList(current + 1, pages).map(
       (p4) => p4 === "\u2026" ? b2`<span class="pgap">…</span>` : b2`<button class=${`pnum${p4 === current + 1 ? " on" : ""}`} @click=${() => goTo(p4 - 1)}>${p4}</button>`
     )}
-                        <ion-button size="small" fill="clear" ?disabled=${current >= pages - 1} @click=${() => goTo(current + 1)}><ion-icon slot="icon-only" .icon=${iconChevronForward}></ion-icon></ion-button>
+                        <ion-button size="small" fill="clear" data-testid=${this.tid("page-next")} ?disabled=${current >= pages - 1} @click=${() => goTo(current + 1)}><ion-icon slot="icon-only" .icon=${iconChevronForward}></ion-icon></ion-button>
                       </div>
                     ` : A}
               </div>
@@ -3178,10 +3278,12 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     this.emit("rowClick", { row });
   }
   emptyState() {
+    const noMatches = this.rows.length > 0;
     return b2`
       <div class="empty">
         <span class="empty-ic"><ion-icon .icon=${iconFileTrayOutline}></ion-icon></span>
-        <span>${this.effEmptyMessage}</span>
+        <span>${noMatches ? this.effNoMatchesMessage : this.effEmptyMessage}</span>
+        ${noMatches ? b2`<ion-button fill="clear" size="small" data-role="no-matches-reset" data-testid=${this.tid("show-all")} @click=${() => this.resetSearchAndFilters()}>${this.t.showAll}</ion-button>` : A}
       </div>
     `;
   }
@@ -3230,6 +3332,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
                 <div
                   class=${`grow grow-data${selected ? " selected" : ""}${this.rowClickable ? " clickable" : ""}`}
                   role="row"
+                  data-testid=${this.tid(`row-${key}`)}
                   style=${o6(tpl)}
                   tabindex=${this.rowClickable ? "0" : A}
                   @click=${this.rowClickable ? () => this.emit("rowClick", { row }) : A}
@@ -3264,6 +3367,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
         return b2`
               <ion-card
                 class=${`rcard${selected ? " selected" : ""}${this.rowClickable ? " clickable" : ""}`}
+                data-testid=${this.tid(`row-${key}`)}
                 role=${this.rowClickable ? "button" : A}
                 tabindex=${this.rowClickable ? "0" : A}
                 @click=${this.rowClickable ? () => this.emit("rowClick", { row }) : A}
@@ -3311,6 +3415,9 @@ __decorateClass2([
 __decorateClass2([
   n4({ attribute: "empty-message" })
 ], _OkDataTable.prototype, "emptyMessage");
+__decorateClass2([
+  n4({ attribute: "no-matches-message" })
+], _OkDataTable.prototype, "noMatchesMessage");
 __decorateClass2([
   n4({ attribute: "search-placeholder" })
 ], _OkDataTable.prototype, "searchPlaceholder");
@@ -3410,6 +3517,9 @@ __decorateClass2([
 __decorateClass2([
   n4({ attribute: false })
 ], _OkDataTable.prototype, "renderCard");
+__decorateClass2([
+  n4({ type: String })
+], _OkDataTable.prototype, "testid");
 __decorateClass2([
   r5()
 ], _OkDataTable.prototype, "q");
@@ -3589,16 +3699,619 @@ __decorateClass3([
 ], OkStatusPill.prototype, "size");
 define("ok-status-pill", OkStatusPill);
 
+// @erplora/outfitkit/dist/shared/fullscreen.js
+function notCapable() {
+  return Promise.reject(new Error("Not capable"));
+}
+function isCapable(target) {
+  if (typeof document === "undefined") return false;
+  if (document.fullscreenEnabled === false) return false;
+  const el = target ?? document.documentElement;
+  return typeof el?.requestFullscreen === "function";
+}
+function activeEl() {
+  if (typeof document === "undefined") return null;
+  return document.fullscreenElement ?? null;
+}
+function isActive(el) {
+  if (typeof document === "undefined") return false;
+  if (!el) return activeEl() !== null;
+  const root = el.getRootNode();
+  if (root !== document && root.fullscreenElement === el) return true;
+  return document.fullscreenElement === el;
+}
+function request(target) {
+  if (typeof document === "undefined") return notCapable();
+  const el = target ?? document.documentElement;
+  if (!isCapable(el)) return notCapable();
+  return el.requestFullscreen();
+}
+function exit() {
+  if (typeof document === "undefined") return Promise.resolve();
+  if (activeEl() === null) return Promise.resolve();
+  const exitFn = document.exitFullscreen;
+  if (typeof exitFn !== "function") return notCapable();
+  return exitFn.call(document);
+}
+function toggle(target) {
+  return isActive(target) ? exit() : request(target);
+}
+function onChange(fn) {
+  if (typeof document === "undefined") return () => {
+  };
+  const handler = () => fn(activeEl());
+  document.addEventListener("fullscreenchange", handler);
+  let stopped = false;
+  return () => {
+    if (stopped) return;
+    stopped = true;
+    document.removeEventListener("fullscreenchange", handler);
+  };
+}
+
+// @erplora/outfitkit/dist/shared/tap-target.js
+var tapTarget = i`
+  /* The host positions itself. Leaving this to each component was not a contract but a trap: an
+     absolutely positioned overlay resolves against the nearest POSITIONED ancestor, so a host that
+     forgot position:relative sent its hit area somewhere else entirely -- ok-color-picker shipped
+     with its 10 preset swatches stacked in the middle of the panel, over the saturation square,
+     where a click set the colour to #000000.
+     A component that genuinely needs another value declares it in its own rule, which comes later in
+     static styles and wins. */
+  .ok-tap,
+  [data-ok-tap] {
+    position: relative;
+  }
+
+  .ok-tap::before,
+  [data-ok-tap]::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: max(100%, var(--ok-tap-min, 44px));
+    height: max(100%, var(--ok-tap-min, 44px));
+  }
+`;
+
+// @erplora/outfitkit/dist/ok-lightbox.js
+var __defProp4 = Object.defineProperty;
+var __decorateClass4 = (decorators, target, key, kind) => {
+  var result = void 0;
+  for (var i7 = decorators.length - 1, decorator; i7 >= 0; i7--)
+    if (decorator = decorators[i7])
+      result = decorator(target, key, result) || result;
+  if (result) __defProp4(target, key, result);
+  return result;
+};
+var DEFAULT_LABELS2 = {
+  prev: "Previous",
+  next: "Next",
+  close: "Close",
+  download: "Download",
+  fullscreen: "Fullscreen",
+  exitFullscreen: "Exit fullscreen"
+};
+var OkLightbox = class extends i3 {
+  constructor() {
+    super(...arguments);
+    this.items = [];
+    this.index = 0;
+    this.open = false;
+    this.labels = {};
+    this.shown = false;
+    this.fullscreenOn = false;
+    this.portalRoot = null;
+    this.onKeydown = (e5) => {
+      if (!this.open) return;
+      if (e5.key === "Escape") {
+        e5.preventDefault();
+        this.requestClose();
+      } else if (e5.key === "ArrowLeft") {
+        e5.preventDefault();
+        this.go(-1);
+      } else if (e5.key === "ArrowRight") {
+        e5.preventDefault();
+        this.go(1);
+      }
+    };
+  }
+  static {
+    this.styles = [tapTarget, i`
+    :host {
+      display: block;
+      width: 100%;
+      /* Vars overridable (estilo Ionic), default = cadena --ok-* → --ion-* → hex/literal. */
+      --overlay-bg: var(--ok-media-bg, rgba(0, 0, 0, 0.92));
+      --fg-soft: var(--ok-media-fg, rgba(255, 255, 255, 0.7));
+      --glass: var(--ok-overlay-glass, rgba(255, 255, 255, 0.1));
+      --glass-hover: var(--ok-overlay-glass-2, rgba(255, 255, 255, 0.18));
+      --brand: var(--ok-primary, var(--ion-color-primary, #e8552a));
+      --media-bg: var(--ok-media-frame, rgba(255, 255, 255, 0.06));
+      --radius-lg: var(--ok-radius-lg, 10px);
+      --radius-sm: var(--ok-radius-sm, 6px);
+      --font: var(--ok-font, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif);
+      --font-mono: var(--ok-font-mono, ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace);
+    }
+
+    /* Overlay a pantalla completa: columna [cabecera | medio | filmstrip]. */
+    .lightbox {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+      box-sizing: border-box;
+      background: var(--overlay-bg);
+      color: var(--fg-soft);
+      font-family: var(--font);
+      opacity: 0;
+      transition: opacity var(--ok-transition, 200ms ease);
+    }
+    .lightbox.shown {
+      opacity: 1;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .lightbox {
+        transition: none;
+      }
+    }
+
+    /* Cabecera mono: contador + nombre a la izquierda; acciones a la derecha. */
+    .head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--fg-soft);
+    }
+    .head .meta {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .head .count {
+      font-variant-numeric: tabular-nums;
+    }
+    .head .sep {
+      opacity: 0.5;
+      margin: 0 6px;
+    }
+    .head .actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      flex: none;
+    }
+    .icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: var(--ok-tap-min, 44px);
+      height: var(--ok-tap-min, 44px);
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--fg-soft);
+      cursor: pointer;
+      text-decoration: none;
+      transition: background var(--ok-transition, 150ms ease), color var(--ok-transition, 150ms ease);
+    }
+    @media (hover: hover) {
+      .icon-btn:hover {
+        background: var(--glass);
+        color: #fff;
+      }
+    }
+    .icon-btn ion-icon {
+      font-size: 1.25rem;
+    }
+
+    /* Zona central: medio centrado con flechas de navegación absolutas. */
+    .main {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px 0;
+      position: relative;
+      min-height: 0;
+    }
+    .media {
+      max-width: 60%;
+      max-height: 100%;
+      width: auto;
+      object-fit: contain;
+      background: var(--media-bg);
+      border-radius: var(--radius-lg);
+      display: block;
+    }
+    /* Reserva de proporción 16:10 cuando no hay medio o como marco de fondo. */
+    .media-empty {
+      width: 60%;
+      aspect-ratio: 16 / 10;
+      max-height: 100%;
+      background: var(--media-bg);
+      border-radius: var(--radius-lg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--fg-soft);
+    }
+    video.media {
+      max-height: 100%;
+    }
+    /* Phones: the 60% cap painted the photo smaller than its thumbnail in the conversation (#175);
+       use the full width like any phone gallery. The nav arrows stay on top of the media. */
+    @media (max-width: 767px) {
+      .media {
+        max-width: 100%;
+      }
+      .media-empty {
+        width: 100%;
+      }
+    }
+
+    /* Navegación circular glass de 44px. */
+    .nav {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 0;
+      background: var(--glass);
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      backdrop-filter: blur(4px);
+      transition: background var(--ok-transition, 150ms ease), opacity var(--ok-transition, 150ms ease);
+    }
+    @media (hover: hover) {
+      .nav:hover {
+        background: var(--glass-hover);
+      }
+    }
+    .nav[disabled] {
+      opacity: 0.25;
+      cursor: default;
+      pointer-events: none;
+    }
+    .nav ion-icon {
+      font-size: 1.5rem;
+    }
+    .nav.prev {
+      left: 20px;
+    }
+    .nav.next {
+      right: 20px;
+    }
+
+    /* Filmstrip inferior: miniaturas 50×36, la activa a opacidad total con outline de marca. */
+    .strip {
+      display: flex;
+      gap: 6px;
+      justify-content: center;
+      flex-wrap: wrap;
+      padding-top: 12px;
+      max-height: 96px;
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+    .thumb {
+      /* ok-tap-exempt: filmstrip thumbnail, 50x36 is the drawn size of the strip; growing it
+         would reflow the whole strip's composition. The hit area is widened by tapTarget
+         instead (its ::before below), the drawing stays put. */
+      position: relative;
+      flex: none;
+      width: 50px;
+      height: 36px;
+      padding: 0;
+      border: 0;
+      border-radius: var(--radius-sm);
+      background: var(--media-bg);
+      background-size: cover;
+      background-position: center;
+      cursor: pointer;
+      opacity: 0.5;
+      /* No overflow:hidden here: it would clip tapTarget's ::before hit-area extension along
+         with the drawing. The rounded corners are clipped on the children instead (below). */
+      transition: opacity var(--ok-transition, 150ms ease);
+    }
+    @media (hover: hover) {
+      .thumb:hover {
+        opacity: 0.8;
+      }
+    }
+    .thumb.active {
+      opacity: 1;
+      outline: 2px solid var(--brand);
+      outline-offset: 2px;
+    }
+    .thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      border-radius: inherit;
+    }
+    .thumb .vid {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      color: var(--fg-soft);
+      border-radius: inherit;
+      overflow: hidden;
+    }
+    .thumb .vid ion-icon {
+      font-size: 1rem;
+    }
+  `];
+  }
+  // Textos efectivos: defaults en inglés + overrides del consumidor.
+  get t() {
+    return { ...DEFAULT_LABELS2, ...this.labels };
+  }
+  connectedCallback() {
+    super.connectedCallback();
+    this.stopFullscreenWatch = onChange(() => {
+      this.fullscreenOn = isActive(this.boxEl() ?? void 0);
+    });
+  }
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this.stopFullscreenWatch?.();
+    this.stopFullscreenWatch = void 0;
+    this.unbind();
+    const host = this.portalRoot?.host;
+    this.portalRoot = null;
+    if (host && host.parentNode) host.parentNode.removeChild(host);
+  }
+  bind() {
+    document.addEventListener("keydown", this.onKeydown);
+  }
+  unbind() {
+    document.removeEventListener("keydown", this.onKeydown);
+  }
+  // Crea (una vez) el portal: un div en `document.body` con shadow propio que ADOPTA la misma hoja
+  // de estilos del componente.
+  ensurePortal() {
+    if (this.portalRoot) return this.portalRoot;
+    const host = document.createElement("div");
+    host.setAttribute("data-ok-lightbox-portal", "");
+    document.body.appendChild(host);
+    const root = host.attachShadow({ mode: "open" });
+    const styles = this.constructor.elementStyles ?? [];
+    root.adoptedStyleSheets = styles.map((s5) => s5 instanceof CSSStyleSheet ? s5 : s5.styleSheet).filter((s5) => !!s5);
+    this.portalRoot = root;
+    return root;
+  }
+  updated(changed) {
+    if (changed.has("open")) {
+      if (this.open) {
+        this.bind();
+        requestAnimationFrame(() => requestAnimationFrame(() => this.shown = true));
+      } else {
+        this.unbind();
+        this.shown = false;
+      }
+    }
+    if (!this.open && !this.portalRoot) return;
+    D(this.open ? this.overlayTemplate() : A, this.ensurePortal());
+  }
+  // Índice saneado dentro de los límites.
+  get safeIndex() {
+    const n6 = this.items.length;
+    if (n6 === 0) return 0;
+    return Math.max(0, Math.min(this.index, n6 - 1));
+  }
+  prefersReducedMotion() {
+    return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+  }
+  // Navega delta posiciones (clamp, sin wrap). Emite `ok-index` si cambia.
+  go(delta) {
+    const next = this.safeIndex + delta;
+    if (next < 0 || next >= this.items.length || next === this.safeIndex) return;
+    this.setIndex(next);
+  }
+  setIndex(i7) {
+    if (i7 === this.safeIndex) return;
+    this.index = i7;
+    this.dispatchEvent(
+      new CustomEvent("ok-index", { detail: { index: i7 }, bubbles: true, composed: true })
+    );
+  }
+  // Pide cerrar: anima el fade-out y al terminar emite `ok-close` (el consumidor pone `open=false`).
+  requestClose() {
+    this.unbind();
+    this.shown = false;
+    const box = this.portalRoot?.querySelector(".lightbox");
+    const finish = () => {
+      this.dispatchEvent(new CustomEvent("ok-close", { bubbles: true, composed: true }));
+    };
+    if (box && !this.prefersReducedMotion()) {
+      box.addEventListener("transitionend", finish, { once: true });
+    } else {
+      finish();
+    }
+  }
+  // Nombre de fichero mostrado en la cabecera (alt o último segmento de la URL).
+  fileName(item) {
+    if (!item) return "";
+    if (item.alt) return item.alt;
+    try {
+      const path = item.src.split(/[?#]/)[0];
+      return path.substring(path.lastIndexOf("/") + 1) || item.src;
+    } catch {
+      return item.src;
+    }
+  }
+  render() {
+    return A;
+  }
+  // Overlay (cabecera + medio + filmstrip). Se renderiza en el portal de `document.body`.
+  overlayTemplate() {
+    const items = this.items;
+    const i7 = this.safeIndex;
+    const current = items[i7];
+    const isVideo = current?.type === "video";
+    const name = this.fileName(current);
+    const total = items.length;
+    return b2`
+      <div
+        class="lightbox ${this.shown ? "shown" : ""}"
+        role="dialog"
+        aria-modal="true"
+        aria-label=${name}
+      >
+        <div class="head">
+          <div class="meta">
+            <span class="count">${total ? i7 + 1 : 0} / ${total}</span>
+            ${name ? b2`<span class="sep">·</span><span>${name}</span>` : null}
+          </div>
+          <div class="actions">
+            ${current ? b2`<a
+                  class="icon-btn"
+                  href=${current.src}
+                  download
+                  target="_blank"
+                  rel="noopener"
+                  aria-label=${this.t.download}
+                >
+                  <ion-icon .icon=${iconDownloadOutline}></ion-icon>
+                </a>` : null}
+            ${isCapable() ? b2`<button
+                  type="button"
+                  class="icon-btn"
+                  aria-label=${this.fullscreenOn ? this.t.exitFullscreen : this.t.fullscreen}
+                  @click=${() => void this.toggleFullscreen()}
+                >
+                  <ion-icon
+                    .icon=${this.fullscreenOn ? iconContractOutline : iconExpandOutline}
+                  ></ion-icon>
+                </button>` : null}
+            <button
+              type="button"
+              class="icon-btn"
+              aria-label=${this.t.close}
+              @click=${() => this.requestClose()}
+            >
+              <ion-icon .icon=${iconCloseOutline}></ion-icon>
+            </button>
+          </div>
+        </div>
+
+        <div class="main">
+          <button
+            type="button"
+            class="nav prev"
+            aria-label=${this.t.prev}
+            ?disabled=${i7 <= 0}
+            @click=${() => this.go(-1)}
+          >
+            <ion-icon .icon=${iconChevronBackOutline}></ion-icon>
+          </button>
+
+          ${current ? isVideo ? b2`<video
+                  class="media"
+                  src=${current.src}
+                  controls
+                  playsinline
+                  aria-label=${name}
+                ></video>` : b2`<img class="media" src=${current.src} alt=${name} />` : b2`<div class="media-empty"></div>`}
+
+          <button
+            type="button"
+            class="nav next"
+            aria-label=${this.t.next}
+            ?disabled=${i7 >= total - 1}
+            @click=${() => this.go(1)}
+          >
+            <ion-icon .icon=${iconChevronForwardOutline}></ion-icon>
+          </button>
+        </div>
+
+        ${total > 1 ? b2`<div class="strip" role="tablist">
+              ${items.map((it, idx) => this.renderThumb(it, idx, idx === i7))}
+            </div>` : null}
+      </div>
+    `;
+  }
+  renderThumb(item, idx, active) {
+    const isVideo = item.type === "video";
+    return b2`<button
+      type="button"
+      class="thumb ok-tap ${active ? "active" : ""}"
+      role="tab"
+      aria-selected=${active ? "true" : "false"}
+      aria-label=${this.fileName(item)}
+      @click=${() => this.setIndex(idx)}
+    >
+      ${isVideo ? b2`<span class="vid"><ion-icon .icon=${iconPlayOutline}></ion-icon></span>` : b2`<img src=${item.thumb ?? item.src} alt="" loading="lazy" />`}
+    </button>`;
+  }
+  /** El `.lightbox` vive en el portal, que tiene shadow root PROPIO: no está en este `shadowRoot`. */
+  boxEl() {
+    return this.portalRoot?.querySelector(".lightbox") ?? null;
+  }
+  // Pantalla completa nativa sobre el overlay portado.
+  //
+  // Pregunta por ESTE overlay, no por «¿hay algo a pantalla completa?»: con el shell del Hub en modo
+  // inmersivo la pregunta global era siempre que sí, y el botón cerraba el modo del shell en vez de
+  // agrandar la galería. `isActive` mira además el shadow root del portal, porque
+  // `document.fullscreenElement` reporta el HOST del portal y nunca el `.lightbox`.
+  async toggleFullscreen() {
+    const box = this.boxEl();
+    if (!box) return;
+    try {
+      await toggle(box);
+    } catch {
+    }
+  }
+};
+__decorateClass4([
+  n4({ attribute: false })
+], OkLightbox.prototype, "items");
+__decorateClass4([
+  n4({ type: Number })
+], OkLightbox.prototype, "index");
+__decorateClass4([
+  n4({ type: Boolean })
+], OkLightbox.prototype, "open");
+__decorateClass4([
+  n4({ attribute: false })
+], OkLightbox.prototype, "labels");
+__decorateClass4([
+  r5()
+], OkLightbox.prototype, "shown");
+__decorateClass4([
+  r5()
+], OkLightbox.prototype, "fullscreenOn");
+define("ok-lightbox", OkLightbox);
+
 // @erplora/module-sdk/src/index.ts
 function isEmpty(v3) {
   return v3 === null || v3 === void 0 || v3 === "";
 }
 var ListController = class {
-  constructor(client, queryName, onChange = () => {
+  constructor(client, queryName, onChange2 = () => {
   }, opts = {}) {
     this.client = client;
     this.queryName = queryName;
-    this.onChange = onChange;
+    this.onChange = onChange2;
     this.rows = [];
     this.total = 0;
     this.loading = false;
@@ -3702,15 +4415,15 @@ var ListController = class {
     void this.load();
   }
 };
-function createListController(client, queryName, onChange = () => {
+function createListController(client, queryName, onChange2 = () => {
 }, opts = {}) {
-  return new ListController(client, queryName, onChange, opts);
+  return new ListController(client, queryName, onChange2, opts);
 }
 
 // locales/es.json
 var es_default = {
   name: "Bandeja de WhatsApp",
-  description: "Conversaciones de WhatsApp, solicitudes entrantes, plantillas de mensaje y ajustes del canal.",
+  description: "Conversaciones de WhatsApp, plantillas de mensaje y ajustes del canal.",
   navigation: {
     inbox: {
       label: "Bandeja de entrada"
@@ -3792,7 +4505,6 @@ var es_default = {
     errLoadThread: "No se pudo cargar la conversaci\xF3n",
     errAssign: "No se pudo asignar la conversaci\xF3n",
     delete: "Borrar",
-    confirmFulfil: "\xBFMarcar la solicitud como atendida? No se crea nada en otro m\xF3dulo: es una nota de que alguien la resolvi\xF3.",
     edit: "Editar",
     save: "Guardar",
     cancel: "Cancelar",
@@ -3802,7 +4514,6 @@ var es_default = {
     errDeleteTemplate: "No se pudo borrar la plantilla",
     settingsTitle: "Ajustes del canal",
     helpConnectNeedsNewerHub: "Este hub es demasiado antiguo para conectar el n\xFAmero desde aqu\xED. Actualiza el hub y vuelve a esta pantalla.",
-    requestDetail: "Petici\xF3n",
     useAppointmentsName: "Reservar citas",
     useAppointmentsSummary: "Una clienta pide cita por WhatsApp, el asistente le ofrece las horas que de verdad tienes libres y le reserva la que elija; luego le dice que ya est\xE1, y le avisa cuando t\xFA confirmas su cita.",
     usesGoToApps: "Ver aplicaciones",
@@ -3823,6 +4534,14 @@ var es_default = {
     usesNeedsNewerHub: "Este hub es demasiado antiguo para activarlo desde aqu\xED. Actualiza el hub.",
     usesNeedBookingModule: "Instala Citas o Reservas para que WhatsApp reserve solo",
     usesNeedNewerBookingModule: "Actualiza Citas o Reservas para que WhatsApp reserve solo",
+    usesNeedMissingModule: "\xAB{use}\xBB necesita la aplicaci\xF3n {module}, y no est\xE1 instalada. Inst\xE1lala desde Aplicaciones.",
+    usesNeedPausedModule: "\xAB{use}\xBB necesita la aplicaci\xF3n {module}, y est\xE1 en pausa. React\xEDvala en Aplicaciones.",
+    usesNeedUpdatedModule: "\xAB{use}\xBB necesita la aplicaci\xF3n {module} en la versi\xF3n {floor} o posterior, y este hub tiene la {installed}. Actual\xEDzala en Aplicaciones.",
+    neighbourAppointments: "Citas",
+    neighbourCustomers: "Clientes",
+    neighbourReservations: "Reservas",
+    neighbourServices: "Servicios",
+    neighbourStaff: "Personal",
     activateForbidden: "Solo un due\xF1o o un administrador puede activarlo.",
     errActivate: "No se pudo activar. No se ha cambiado nada: int\xE9ntalo otra vez.",
     errTemplates: "No hemos podido saber qu\xE9 hay activo ahora mismo. Vuelve a cargar la pantalla.",
@@ -3885,16 +4604,18 @@ var es_default = {
     mediaPlay: "Reproducir",
     mediaDownload: "Descargar",
     mediaOpen: "Abrir",
-    threadRepliesElsewhere: "Desde esta pantalla no se contesta: responde desde el WhatsApp de tu m\xF3vil o deja que conteste una automatizaci\xF3n."
+    mediaCannotPlay: "Este dispositivo no puede reproducirlo: desc\xE1rgalo y \xE1brelo con otra aplicaci\xF3n.",
+    threadRepliesElsewhere: "Desde esta pantalla no se contesta: responde desde el WhatsApp de tu m\xF3vil o deja que conteste una automatizaci\xF3n.",
+    viewerOpen: "Ver la foto en grande",
+    viewerPrev: "Foto anterior",
+    viewerNext: "Foto siguiente",
+    viewerClose: "Cerrar",
+    viewerDownload: "Descargar",
+    viewerFullscreen: "Pantalla completa",
+    viewerExitFullscreen: "Salir de pantalla completa"
   },
   errors: {
     "whatsapp_inbox.conversation_not_found": "Esa conversaci\xF3n no existe en este negocio.",
-    "whatsapp_inbox.conversation_unreadable": "No se ha podido leer la conversaci\xF3n, as\xED que no se ha creado nada. Prueba otra vez.",
-    "whatsapp_inbox.request_not_deletable": "Esa solicitud no se puede borrar: no existe en este negocio, o est\xE1 cumplida y debe conservarse por auditor\xEDa.",
-    "whatsapp_inbox.request_not_found": "Esa solicitud no existe en este negocio.",
-    "whatsapp_inbox.request_not_fulfillable": "Solo una solicitud confirmada se puede marcar como atendida.",
-    "whatsapp_inbox.request_not_pending": "Esa solicitud no est\xE1 pendiente de revisi\xF3n: no existe en este negocio, o ya se aprob\xF3, rechaz\xF3 o atendi\xF3.",
-    "whatsapp_inbox.request_unreadable": "No se ha podido leer la solicitud, as\xED que no se ha cambiado nada. Prueba otra vez.",
     "whatsapp_inbox.template_already_here": "Este negocio ya tiene una plantilla con ese nombre e idioma (viva o borrada aqu\xED), as\xED que no se ha tra\xEDdo nada.",
     "whatsapp_inbox.template_not_found": "Esa plantilla no existe en este negocio."
   }
@@ -3984,7 +4705,6 @@ var en_default = {
     errLoadThread: "Could not load the conversation",
     errAssign: "Could not assign the conversation",
     delete: "Delete",
-    confirmFulfil: "Mark this request as handled? Nothing is created in another module \u2014 it is a note that somebody dealt with it.",
     edit: "Edit",
     save: "Save",
     cancel: "Cancel",
@@ -3994,7 +4714,6 @@ var en_default = {
     errDeleteTemplate: "Could not delete the template",
     settingsTitle: "Channel settings",
     helpConnectNeedsNewerHub: "This hub is too old to connect the number from here. Update the hub and come back to this screen.",
-    requestDetail: "Request",
     useAppointmentsName: "Book appointments",
     useAppointmentsSummary: "A customer asks for an appointment on WhatsApp, the assistant offers the hours you actually have free, and books the one they pick \u2014 then tells them it is done, and tells them when you confirm their appointment.",
     usesGoToApps: "See apps",
@@ -4015,6 +4734,14 @@ var en_default = {
     usesNeedsNewerHub: "This hub is too old to turn this on from here. Update the hub.",
     usesNeedBookingModule: "Install Appointments or Reservations so WhatsApp can book on its own",
     usesNeedNewerBookingModule: "Update Appointments or Reservations so WhatsApp can book on its own",
+    usesNeedMissingModule: "\u201C{use}\u201D needs the {module} app, and it is not installed. Install it from Apps.",
+    usesNeedPausedModule: "\u201C{use}\u201D needs the {module} app, and it is paused. Turn it back on in Apps.",
+    usesNeedUpdatedModule: "\u201C{use}\u201D needs the {module} app at version {floor} or later, and this hub has {installed}. Update it in Apps.",
+    neighbourAppointments: "Appointments",
+    neighbourCustomers: "Customers",
+    neighbourReservations: "Reservations",
+    neighbourServices: "Services",
+    neighbourStaff: "Staff",
     activateForbidden: "Only an owner or an administrator can turn this on.",
     errActivate: "It could not be turned on. Nothing was changed \u2014 try again.",
     errTemplates: "We could not find out what is already turned on. Reload the screen.",
@@ -4077,16 +4804,18 @@ var en_default = {
     mediaPlay: "Play",
     mediaDownload: "Download",
     mediaOpen: "Open",
-    threadRepliesElsewhere: "Replies are not sent from this screen: answer from WhatsApp on your phone, or let an automation reply."
+    mediaCannotPlay: "This device cannot play it: download it and open it with another app.",
+    threadRepliesElsewhere: "Replies are not sent from this screen: answer from WhatsApp on your phone, or let an automation reply.",
+    viewerOpen: "See the photo large",
+    viewerPrev: "Previous photo",
+    viewerNext: "Next photo",
+    viewerClose: "Close",
+    viewerDownload: "Download",
+    viewerFullscreen: "Full screen",
+    viewerExitFullscreen: "Exit full screen"
   },
   errors: {
     "whatsapp_inbox.conversation_not_found": "That conversation does not exist in this business.",
-    "whatsapp_inbox.conversation_unreadable": "That conversation could not be read, so nothing was created. Try again.",
-    "whatsapp_inbox.request_not_deletable": "That request cannot be deleted: it does not exist in this business, or it was fulfilled and has to stay for audit.",
-    "whatsapp_inbox.request_not_found": "That request does not exist in this business.",
-    "whatsapp_inbox.request_not_fulfillable": "Only a confirmed request can be marked as handled.",
-    "whatsapp_inbox.request_not_pending": "That request is not waiting for review: it does not exist in this business, or it was already approved, rejected or handled.",
-    "whatsapp_inbox.request_unreadable": "That request could not be read, so nothing was changed. Try again.",
     "whatsapp_inbox.template_already_here": "This business already holds a template with that name and language (live or deleted here), so nothing was brought in.",
     "whatsapp_inbox.template_not_found": "That template does not exist in this business."
   }
@@ -4198,10 +4927,38 @@ function messageMedia(m4) {
     filename: text(asset.filename)
   };
 }
+var EXTENSIONS = {
+  "audio/ogg": "ogg",
+  "audio/opus": "opus",
+  "audio/mpeg": "mp3",
+  "audio/mp4": "m4a",
+  "audio/aac": "aac",
+  "audio/amr": "amr",
+  "video/mp4": "mp4",
+  "video/3gpp": "3gp"
+};
+function mediaFileName(media, label) {
+  if (media.filename) return media.filename;
+  const extension = EXTENSIONS[media.mimeType.split(";")[0].trim().toLowerCase()];
+  return extension ? `${label}.${extension}` : label;
+}
 
 // ui/components/erp-whatsapp-inbox-inbox/erp-whatsapp-inbox-inbox.ts
 var CATALOG = { es: es_default, en: en_default };
 var SHOWN_INLINE = /* @__PURE__ */ new Set(["image", "sticker"]);
+function devicePlays(media) {
+  if (!media.mimeType) return true;
+  const probe = document.createElement(media.kind === "video" ? "video" : "audio");
+  return probe.canPlayType(media.mimeType) !== "";
+}
+var VIEWER_LABELS = {
+  prev: "ui.viewerPrev",
+  next: "ui.viewerNext",
+  close: "ui.viewerClose",
+  download: "ui.viewerDownload",
+  fullscreen: "ui.viewerFullscreen",
+  exitFullscreen: "ui.viewerExitFullscreen"
+};
 var THREAD_PAGE = 200;
 var STATUS_KEYS = { active: "ui.statusActive", closed: "ui.statusClosed" };
 function erplora() {
@@ -4242,6 +4999,8 @@ var ErpWhatsappInboxInbox = class extends i3 {
     this.detailError = "";
     this.detailBusy = false;
     this.media = {};
+    this.unplayable = /* @__PURE__ */ new Set();
+    this.viewing = null;
     this.assignTo = "";
     this.onLocaleChange = () => this.requestUpdate();
   }
@@ -4275,7 +5034,8 @@ var ErpWhatsappInboxInbox = class extends i3 {
     .msg .when { display:block; font-size:.75rem; color:var(--ion-color-medium,#6f6a5e); margin-top:.15rem; }
     .msg .kind { font-size:.75rem; font-weight:600; color:var(--ion-color-medium,#6f6a5e); }
     .msg .media { display:flex; flex-direction:column; gap:.3rem; margin:.2rem 0; }
-    .msg .media img { display:block; max-width:100%; max-height:20rem; border-radius:8px; object-fit:contain; }
+    .msg .media img { display:block; max-width:100%; max-height:16rem; border-radius:8px; object-fit:contain; }
+    .msg .media .open-photo { display:block; padding:0; border:0; background:none; cursor:zoom-in; max-width:100%; }
     .msg .media audio, .msg .media video { max-width:100%; }
     .msg .media video { max-height:20rem; border-radius:8px; }
     .msg .media a { color:var(--ion-color-primary,#1971c2); font-weight:600; word-break:break-all; }
@@ -4396,6 +5156,7 @@ var ErpWhatsappInboxInbox = class extends i3 {
     }
   }
   closeDetail() {
+    this.viewing = null;
     this.releaseMedia();
     this.detail = null;
     this.messages = [];
@@ -4427,6 +5188,15 @@ var ErpWhatsappInboxInbox = class extends i3 {
       if (state.status === "ready") URL.revokeObjectURL(state.url);
     }
     this.media = {};
+    this.unplayable = /* @__PURE__ */ new Set();
+  }
+  /** The device cannot play it: said up front by `canPlayType`, or found out when the player
+   *  failed on the downloaded file. Either way the owner gets the file instead of silence. */
+  playable(media) {
+    return !this.unplayable.has(media.mediaId) && devicePlays(media);
+  }
+  markUnplayable(mediaId) {
+    this.unplayable = new Set(this.unplayable).add(mediaId);
   }
   /** Assigns the open conversation, or unassigns it: `employee_id: ''` is the SQL's own contract. */
   async assign() {
@@ -4460,7 +5230,7 @@ var ErpWhatsappInboxInbox = class extends i3 {
     } else if (!state) {
       content = SHOWN_INLINE.has(media.kind) ? b2`<p class="note">${t5("ui.mediaLoading")}</p>` : b2`<ion-button data-testid="whatsapp-inbox-media-load" size="small" fill="outline"
             @click=${() => this.loadMedia(media.mediaId)}>
-            ${t5(media.kind === "document" ? "ui.mediaDownload" : "ui.mediaPlay")}
+            ${t5(media.kind === "document" || !this.playable(media) ? "ui.mediaDownload" : "ui.mediaPlay")}
           </ion-button>`;
     } else if (state.status === "loading") {
       content = b2`<p class="note">${t5("ui.mediaLoading")}</p>`;
@@ -4469,20 +5239,51 @@ var ErpWhatsappInboxInbox = class extends i3 {
         <ion-button data-testid="whatsapp-inbox-media-retry" size="small" fill="clear"
           @click=${() => this.loadMedia(media.mediaId, true)}>${t5("ui.mediaRetry")}</ion-button>`;
     } else if (media.kind === "image" || media.kind === "sticker") {
-      content = b2`<img src=${state.url} alt=${media.caption || label} />`;
+      const img = b2`<img src=${state.url} alt=${media.caption || label} />`;
+      content = media.kind === "image" ? b2`<button type="button" class="open-photo" data-testid="whatsapp-inbox-media-open"
+            aria-label=${t5("ui.viewerOpen")} @click=${() => {
+        this.viewing = media.mediaId;
+      }}>${img}</button>` : img;
+    } else if ((media.kind === "audio" || media.kind === "video") && !this.playable(media)) {
+      const name = mediaFileName(media, label);
+      content = b2`<p class="note" data-testid="whatsapp-inbox-media-cannot-play">${t5("ui.mediaCannotPlay")}</p>
+        <a href=${state.url} download=${name} target="_blank" rel="noopener">${t5("ui.mediaDownload")} ${name}</a>`;
     } else if (media.kind === "audio") {
-      content = b2`<audio controls src=${state.url}></audio>`;
+      content = b2`<audio controls src=${state.url} @error=${() => this.markUnplayable(media.mediaId)}></audio>`;
     } else if (media.kind === "video") {
-      content = b2`<video controls playsinline src=${state.url}></video>`;
+      content = b2`<video controls playsinline src=${state.url}
+        @error=${() => this.markUnplayable(media.mediaId)}></video>`;
     } else {
-      content = b2`<a href=${state.url} download=${media.filename || label} target="_blank" rel="noopener">
-        ${t5("ui.mediaOpen")} ${media.filename || label}</a>`;
+      const name = mediaFileName(media, label);
+      content = b2`<a href=${state.url} download=${name} target="_blank" rel="noopener">
+        ${t5("ui.mediaOpen")} ${name}</a>`;
     }
     return b2`<div class="media">
       <span class="kind">${label}${media.filename ? b2` · ${media.filename}` : A}</span>
       ${content}
       ${media.caption && media.caption !== body ? b2`<p class="body">${media.caption}</p>` : A}
     </div>`;
+  }
+  /** Every downloaded photo of the thread, oldest first, so the viewer pages through them all. */
+  renderViewer() {
+    if (!this.viewing) return A;
+    const photos = [];
+    for (const m4 of this.messages) {
+      const media = messageMedia(m4);
+      const state = media && media.kind === "image" ? this.media[media.mediaId] : void 0;
+      if (!media || state?.status !== "ready") continue;
+      const alt = media.caption || erplora().t(CATALOG, "ui.mediaKind.image");
+      photos.push({ mediaId: media.mediaId, item: { src: state.url, alt, type: "img" } });
+    }
+    const index = photos.findIndex((p4) => p4.mediaId === this.viewing);
+    if (index < 0) return A;
+    const labels = Object.fromEntries(
+      Object.entries(VIEWER_LABELS).map(([k2, key]) => [k2, erplora().t(CATALOG, key)])
+    );
+    return b2`<ok-lightbox open .items=${photos.map((p4) => p4.item)} .index=${index}
+      .labels=${labels} @ok-close=${() => {
+      this.viewing = null;
+    }}></ok-lightbox>`;
   }
   renderMessage(m4) {
     const t5 = (k2) => erplora().t(CATALOG, k2);
@@ -4516,6 +5317,7 @@ var ErpWhatsappInboxInbox = class extends i3 {
       <div class="thread">
         ${this.messages.length ? this.messages.map((m4) => this.renderMessage(m4)) : b2`<p class="empty">${t5("ui.emptyThread")}</p>`}
       </div>
+      ${this.renderViewer()}
       ${can("whatsapp_inbox.manage_settings") ? b2`<div class="assign">
             <ion-input data-testid="whatsapp-inbox-assign-to" mode="md" fill="outline" label-placement="floating" label=${t5("ui.assignedTo")}
               placeholder=${t5("ui.assignPlaceholder")} .value=${this.assignTo}
@@ -4559,20 +5361,26 @@ __decorateClass([
 ], ErpWhatsappInboxInbox.prototype, "media", 2);
 __decorateClass([
   r5()
+], ErpWhatsappInboxInbox.prototype, "unplayable", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxInbox.prototype, "viewing", 2);
+__decorateClass([
+  r5()
 ], ErpWhatsappInboxInbox.prototype, "assignTo", 2);
 define("erp-whatsapp-inbox-inbox", ErpWhatsappInboxInbox);
 
 // @erplora/outfitkit/dist/ok-inline-feedback.js
-var __defProp4 = Object.defineProperty;
-var __decorateClass4 = (decorators, target, key, kind) => {
+var __defProp5 = Object.defineProperty;
+var __decorateClass5 = (decorators, target, key, kind) => {
   var result = void 0;
   for (var i7 = decorators.length - 1, decorator; i7 >= 0; i7--)
     if (decorator = decorators[i7])
       result = decorator(target, key, result) || result;
-  if (result) __defProp4(target, key, result);
+  if (result) __defProp5(target, key, result);
   return result;
 };
-var DEFAULT_LABELS2 = {
+var DEFAULT_LABELS3 = {
   dismiss: "Dismiss"
 };
 var OkInlineFeedback = class extends i3 {
@@ -4708,7 +5516,7 @@ var OkInlineFeedback = class extends i3 {
   }
   // Textos efectivos: defaults en inglés + overrides del consumidor.
   get t() {
-    return { ...DEFAULT_LABELS2, ...this.labels };
+    return { ...DEFAULT_LABELS3, ...this.labels };
   }
   // Icono por defecto según el tono (overridable por la prop `icon`).
   defaultIcon() {
@@ -4756,25 +5564,25 @@ var OkInlineFeedback = class extends i3 {
     `;
   }
 };
-__decorateClass4([
+__decorateClass5([
   n4({ type: String, reflect: true })
 ], OkInlineFeedback.prototype, "tone");
-__decorateClass4([
+__decorateClass5([
   n4({ type: String })
 ], OkInlineFeedback.prototype, "heading");
-__decorateClass4([
+__decorateClass5([
   n4({ type: String })
 ], OkInlineFeedback.prototype, "icon");
-__decorateClass4([
+__decorateClass5([
   n4({ type: Boolean, reflect: true })
 ], OkInlineFeedback.prototype, "dismissible");
-__decorateClass4([
+__decorateClass5([
   n4({ type: Boolean, reflect: true })
 ], OkInlineFeedback.prototype, "hidden");
-__decorateClass4([
+__decorateClass5([
   n4({ attribute: false })
 ], OkInlineFeedback.prototype, "labels");
-__decorateClass4([
+__decorateClass5([
   r5()
 ], OkInlineFeedback.prototype, "hasActions");
 define("ok-inline-feedback", OkInlineFeedback);
@@ -4869,11 +5677,23 @@ function templateState(installed) {
 }
 var AUTOMATIONS_MODULE = "flows";
 var probeAutomations = (client) => client.queryOptional("flows.drafts.list");
+var NEIGHBOUR_NAME_KEYS = {
+  appointments: "ui.neighbourAppointments",
+  customers: "ui.neighbourCustomers",
+  reservations: "ui.neighbourReservations",
+  services: "ui.neighbourServices",
+  staff: "ui.neighbourStaff"
+};
 var APPS_PATH = "/apps";
 var AUTOMATIONS_PATH = `/m/${AUTOMATIONS_MODULE}/automations`;
 
 // ui/components/erp-whatsapp-inbox-settings/erp-whatsapp-inbox-settings.ts
 var CATALOG2 = { es: es_default, en: en_default };
+var DISCARD_SENTENCE = {
+  template_floor_module_missing: "ui.usesNeedMissingModule",
+  template_floor_module_paused: "ui.usesNeedPausedModule",
+  template_floor_module_too_old: "ui.usesNeedUpdatedModule"
+};
 function erplora2() {
   const c5 = globalThis.erplora;
   if (!c5) throw new Error("erplora SDK no inicializado por el shell");
@@ -4886,11 +5706,27 @@ function door() {
   if (typeof flows?.activateTemplate !== "function") return null;
   return flows;
 }
+function discardReason(use, discards, t5) {
+  for (const d3 of discards) {
+    if (d3.family !== use.family || !d3.requires) continue;
+    const sentence = DISCARD_SENTENCE[d3.code];
+    const nameKey = NEIGHBOUR_NAME_KEYS[d3.requires.module];
+    if (!sentence || !nameKey) continue;
+    return t5(sentence, {
+      use: t5(use.nameKey),
+      module: t5(nameKey),
+      floor: d3.requires.floor,
+      installed: d3.requires.installed ?? ""
+    });
+  }
+  return null;
+}
 var ErpWhatsappInboxSettings = class extends i3 {
   constructor() {
     super(...arguments);
     this.built = {};
     this.templatesFailed = false;
+    this.discards = [];
     this.missing = /* @__PURE__ */ new Set();
     this.loaded = false;
     this.asking = "";
@@ -4952,6 +5788,14 @@ var ErpWhatsappInboxSettings = class extends i3 {
         this.templatesFailed = true;
         this.built = {};
       }
+      if (typeof flows.templateDiscards === "function") {
+        try {
+          this.discards = await flows.templateDiscards();
+        } catch (e5) {
+          console.warn(`[${MODULE_ID}] could not read why the hub left recipes out`, e5);
+          this.discards = [];
+        }
+      }
     }
     const missing = /* @__PURE__ */ new Set();
     await Promise.all(
@@ -4982,8 +5826,8 @@ var ErpWhatsappInboxSettings = class extends i3 {
       this.policy = { ...this.policy, [use.family]: use.policy.defaultOn };
     }
   }
-  t(key) {
-    return erplora2().t(CATALOG2, key);
+  t(key, params) {
+    return erplora2().t(CATALOG2, key, params);
   }
   go(path) {
     window.history.pushState({}, "", path);
@@ -5122,15 +5966,21 @@ var ErpWhatsappInboxSettings = class extends i3 {
     }
     const installed = WHATSAPP_USES.filter((use) => !this.missing.has(use.module));
     const available = installed.filter((use) => this.built[use.family] !== void 0);
+    const blocked = installed.filter((use) => this.built[use.family] === void 0).map((use) => ({ use, reason: discardReason(use, this.discards, (k2, p4) => this.t(k2, p4)) })).filter((b3) => b3.reason !== null);
+    const reasons = blocked.map(
+      ({ use, reason }) => b2`<ok-inline-feedback data-testid=${`whatsapp-settings-uses-blocked-${use.family}`} tone="warning">${reason}</ok-inline-feedback>`
+    );
+    const goToApps = b2`<ion-button data-testid="whatsapp-settings-uses-go-to-apps" size="small" @click=${() => this.go(APPS_PATH)}>
+      ${this.t("ui.usesGoToApps")}
+    </ion-button>`;
     if (available.length === 0) {
+      if (blocked.length > 0) return b2`${heading}${reasons}${goToApps}`;
       const why = installed.length === 0 ? "ui.usesNeedBookingModule" : "ui.usesNeedNewerBookingModule";
       return b2`${heading}
         <ok-inline-feedback data-testid="whatsapp-settings-uses-need-module" tone="warning">${this.t(why)}</ok-inline-feedback>
-        <ion-button data-testid="whatsapp-settings-uses-go-to-apps" size="small" @click=${() => this.go(APPS_PATH)}>
-          ${this.t("ui.usesGoToApps")}
-        </ion-button>`;
+        ${goToApps}`;
     }
-    return b2`${heading}${available.map((use) => this.renderUse(use))}`;
+    return b2`${heading}${available.map((use) => this.renderUse(use))}${blocked.length > 0 ? b2`${reasons}${goToApps}` : A}`;
   }
   renderUse(use) {
     const stateOf = templateState(this.built[use.family]);
@@ -5245,6 +6095,9 @@ __decorateClass([
 __decorateClass([
   r5()
 ], ErpWhatsappInboxSettings.prototype, "templatesFailed", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxSettings.prototype, "discards", 2);
 __decorateClass([
   r5()
 ], ErpWhatsappInboxSettings.prototype, "missing", 2);

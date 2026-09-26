@@ -392,7 +392,18 @@ describe('the thread SHOWS what the customer sent (whatsapp_inbox#192)', () => {
     respuesta = async (mediaId) => new Blob([mediaId], { type: 'application/octet-stream' });
     URL.createObjectURL = (b: Blob) => `blob:test/${(b as Blob).size}-${Math.random()}`;
     URL.revokeObjectURL = (u: string) => { revocadas.push(u); };
+    formatos = [];
+    reproduce = () => 'maybe';
+    HTMLMediaElement.prototype.canPlayType = (mime: string) => {
+      formatos.push(mime);
+      return reproduce(mime) as CanPlayTypeResult;
+    };
   });
+
+  // What the device answers `canPlayType` (whatsapp_inbox#223): Safari on iPhone, iPad and older
+  // Macs answers "" for WhatsApp's own voice-note format, `audio/ogg; codecs=opus`.
+  let formatos: string[] = [];
+  let reproduce: (mime: string) => string;
 
   const esperar = async (el: HTMLElement) => {
     for (let i = 0; i < 4; i++) {
@@ -469,6 +480,86 @@ describe('the thread SHOWS what the customer sent (whatsapp_inbox#192)', () => {
     expect(audio!.getAttribute('src')).toMatch(/^blob:/);
   });
 
+  // whatsapp_inbox#223 — WhatsApp sends voice notes as OGG/Opus, which some Safari (iPhone, iPad,
+  // Mac) cannot play: a bare player there stays mute and the owner hears nothing. The thread asks
+  // the device first and, when it cannot play the file, says so and hands the file over instead.
+  const NOTA_OPUS = adjunto('a2', 'audio', { id: 'media-5', mime_type: 'audio/ogg; codecs=opus', voice: true });
+
+  it('the device is asked about the exact format Meta declared for the voice note', async () => {
+    conPuerta();
+    hiloDelHub = [NOTA_OPUS];
+    const el = await montar();
+    await abrirConversacion(el);
+    await esperar(el);
+    expect(formatos, 'nobody asked the device whether it can play the voice note').toContain('audio/ogg; codecs=opus');
+  });
+
+  it('a voice note this device cannot play says so and offers the file, never a mute player', async () => {
+    conPuerta();
+    reproduce = (mime) => (mime.startsWith('audio/ogg') ? '' : 'maybe');
+    hiloDelHub = [NOTA_OPUS];
+    const el = await montar();
+    await abrirConversacion(el);
+    await esperar(el);
+    const boton = burbuja(el).querySelector('[data-testid="whatsapp-inbox-media-load"]') as HTMLElement;
+    expect(boton.textContent, 'the button promises to play what this device cannot play').toContain('ui.mediaDownload');
+    boton.click();
+    await esperar(el);
+    expect(burbuja(el).querySelector('audio'), 'a player that will stay mute is on screen').toBeNull();
+    expect(
+      burbuja(el).querySelector('[data-testid="whatsapp-inbox-media-cannot-play"]')?.textContent,
+    ).toContain('ui.mediaCannotPlay');
+    const enlace = burbuja(el).querySelector('a[download]');
+    expect(enlace, 'the voice note cannot be taken to another app').toBeTruthy();
+    expect(enlace!.getAttribute('href')).toMatch(/^blob:/);
+    expect(enlace!.getAttribute('download'), 'the file has no extension to open it with').toBe('ui.mediaKind.audio.ogg');
+  });
+
+  it('a voice note whose player fails once loaded falls back to the file, not silence', async () => {
+    conPuerta();
+    hiloDelHub = [NOTA_OPUS];
+    const el = await montar();
+    await abrirConversacion(el);
+    await esperar(el);
+    (burbuja(el).querySelector('[data-testid="whatsapp-inbox-media-load"]') as HTMLElement).click();
+    await esperar(el);
+    const audio = burbuja(el).querySelector('audio');
+    expect(audio, 'a playable voice note has no player').toBeTruthy();
+    audio!.dispatchEvent(new Event('error'));
+    await esperar(el);
+    expect(burbuja(el).querySelector('audio'), 'the broken player is still there').toBeNull();
+    expect(burbuja(el).textContent).toContain('ui.mediaCannotPlay');
+    expect(burbuja(el).querySelector('a[download]')?.getAttribute('href')).toMatch(/^blob:/);
+  });
+
+  it('a video this device cannot play is handed over as a file too', async () => {
+    conPuerta();
+    reproduce = () => '';
+    hiloDelHub = [adjunto('v1', 'video', { id: 'media-6', mime_type: 'video/3gpp' })];
+    const el = await montar();
+    await abrirConversacion(el);
+    await esperar(el);
+    (burbuja(el).querySelector('[data-testid="whatsapp-inbox-media-load"]') as HTMLElement).click();
+    await esperar(el);
+    expect(burbuja(el).querySelector('video')).toBeNull();
+    expect(burbuja(el).textContent).toContain('ui.mediaCannotPlay');
+    expect(burbuja(el).querySelector('a[download]')?.getAttribute('download')).toBe('ui.mediaKind.video.3gp');
+  });
+
+  it('a video whose player fails once loaded falls back to the file too', async () => {
+    conPuerta();
+    hiloDelHub = [adjunto('v2', 'video', { id: 'media-8', mime_type: 'video/mp4' })];
+    const el = await montar();
+    await abrirConversacion(el);
+    await esperar(el);
+    (burbuja(el).querySelector('[data-testid="whatsapp-inbox-media-load"]') as HTMLElement).click();
+    await esperar(el);
+    burbuja(el).querySelector('video')!.dispatchEvent(new Event('error'));
+    await esperar(el);
+    expect(burbuja(el).querySelector('video'), 'the broken player is still there').toBeNull();
+    expect(burbuja(el).querySelector('a[download]')?.getAttribute('download')).toBe('ui.mediaKind.video.mp4');
+  });
+
   it('a document opens under its own file name', async () => {
     conPuerta();
     hiloDelHub = [DOC];
@@ -503,5 +594,123 @@ describe('the thread SHOWS what the customer sent (whatsapp_inbox#192)', () => {
     const src = burbuja(el).querySelector('img')!.getAttribute('src');
     (el as unknown as { closeDetail: () => void }).closeDetail();
     expect(revocadas, 'the photo stays in memory after the thread is closed').toContain(src);
+  });
+
+  // The photo in the bubble is a thumbnail; a tap opens it LARGE, like WhatsApp Web, Messenger,
+  // Front or Zendesk do — a detail on a nail or a hair colour is not readable at bubble size.
+  const visor = (el: HTMLElement & { shadowRoot: ShadowRoot }) =>
+    el.shadowRoot.querySelector('ok-lightbox') as (HTMLElement & {
+      open: boolean;
+      index: number;
+      items: { src: string; alt?: string; type?: string }[];
+      labels: Record<string, string>;
+    }) | null;
+
+  it('tapping the photo opens it large, with the same picture and its caption', async () => {
+    conPuerta();
+    hiloDelHub = [FOTO];
+    const el = await montar();
+    await abrirConversacion(el);
+    await esperar(el);
+    expect(visor(el)?.open ?? false, 'the viewer is open before anyone taps').toBe(false);
+
+    const abrir = burbuja(el).querySelector('[data-testid="whatsapp-inbox-media-open"]') as HTMLElement;
+    expect(abrir, 'the photo is not a door to see it large').toBeTruthy();
+    expect(abrir.querySelector('img'), 'the door is not the photo itself').toBeTruthy();
+    abrir.click();
+    await esperar(el);
+
+    const v = visor(el);
+    expect(v, 'no viewer').toBeTruthy();
+    expect(v!.open, 'tapping the photo did not open it large').toBe(true);
+    const src = burbuja(el).querySelector('img')!.getAttribute('src');
+    expect(v!.items[v!.index]).toEqual({ src, alt: 'mi pelo ahora', type: 'img' });
+  });
+
+  it('the viewer speaks the hub language, not the component\'s English defaults', async () => {
+    conPuerta();
+    hiloDelHub = [FOTO];
+    const el = await montar();
+    await abrirConversacion(el);
+    await esperar(el);
+    (burbuja(el).querySelector('[data-testid="whatsapp-inbox-media-open"]') as HTMLElement).click();
+    await esperar(el);
+    expect(visor(el)!.labels).toEqual({
+      prev: 'ui.viewerPrev',
+      next: 'ui.viewerNext',
+      close: 'ui.viewerClose',
+      download: 'ui.viewerDownload',
+      fullscreen: 'ui.viewerFullscreen',
+      exitFullscreen: 'ui.viewerExitFullscreen',
+    });
+  });
+
+  it('with several photos in the thread, the viewer opens on the one tapped and can page through all', async () => {
+    conPuerta();
+    const OTRA = adjunto('p2', 'image', { id: 'media-9', mime_type: 'image/jpeg' });
+    hiloDelHub = [FOTO, MESSAGES[1], OTRA];
+    const el = await montar();
+    await abrirConversacion(el);
+    await esperar(el);
+    (burbuja(el, 2).querySelector('[data-testid="whatsapp-inbox-media-open"]') as HTMLElement).click();
+    await esperar(el);
+    const v = visor(el)!;
+    expect(v.items.map((i) => i.src)).toEqual([
+      burbuja(el, 0).querySelector('img')!.getAttribute('src'),
+      burbuja(el, 2).querySelector('img')!.getAttribute('src'),
+    ]);
+    expect(v.index, 'it opened on another photo').toBe(1);
+  });
+
+  it('closing the viewer goes back to the thread, and closing the thread closes the viewer', async () => {
+    conPuerta();
+    hiloDelHub = [FOTO];
+    const el = await montar();
+    await abrirConversacion(el);
+    await esperar(el);
+    const abrir = () => (burbuja(el).querySelector('[data-testid="whatsapp-inbox-media-open"]') as HTMLElement).click();
+    abrir();
+    await esperar(el);
+    visor(el)!.dispatchEvent(new CustomEvent('ok-close', { bubbles: true, composed: true }));
+    await esperar(el);
+    expect(visor(el)?.open ?? false, 'the viewer stays open after closing it').toBe(false);
+    expect(burbuja(el).querySelector('img'), 'closing the viewer lost the thread').toBeTruthy();
+
+    abrir();
+    await esperar(el);
+    (el as unknown as { closeDetail: () => void }).closeDetail();
+    await esperar(el);
+    expect(visor(el)?.open ?? false, 'the viewer outlives the thread it belongs to').toBe(false);
+
+    // Opening the same conversation again downloads the photo again: it must not pop up large
+    // on its own because it was the last one looked at.
+    await abrirConversacion(el);
+    await esperar(el);
+    expect(burbuja(el).querySelector('img'), 'the thread did not reopen').toBeTruthy();
+    expect(visor(el)?.open ?? false, 'reopening the thread opened the photo large by itself').toBe(false);
+  });
+
+  // A sticker already shows at its full size, so it is not a door to the viewer and the viewer
+  // does not page through it: the sequence is the customer's PHOTOS only.
+  it('a sticker is not a door to the viewer, and the viewer does not page through stickers', async () => {
+    conPuerta();
+    const PEGATINA = adjunto('s1', 'sticker', { id: 'media-7', mime_type: 'image/webp', animated: false });
+    const OTRA = adjunto('p2', 'image', { id: 'media-9', mime_type: 'image/jpeg' });
+    hiloDelHub = [FOTO, PEGATINA, OTRA];
+    const el = await montar();
+    await abrirConversacion(el);
+    await esperar(el);
+    expect(burbuja(el, 1).querySelector('img'), 'the sticker is not shown').toBeTruthy();
+    expect(burbuja(el, 1).querySelector('[data-testid="whatsapp-inbox-media-open"]'),
+      'the sticker opens large like a photo').toBeNull();
+
+    (burbuja(el, 2).querySelector('[data-testid="whatsapp-inbox-media-open"]') as HTMLElement).click();
+    await esperar(el);
+    const v = visor(el)!;
+    expect(v.items.map((i) => i.src), 'the viewer pages through the sticker').toEqual([
+      burbuja(el, 0).querySelector('img')!.getAttribute('src'),
+      burbuja(el, 2).querySelector('img')!.getAttribute('src'),
+    ]);
+    expect(v.index).toBe(1);
   });
 });

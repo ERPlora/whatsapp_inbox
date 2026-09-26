@@ -1,6 +1,6 @@
 {
   "name": "Bandeja de WhatsApp",
-  "description": "Conversaciones de WhatsApp, solicitudes entrantes, plantillas de mensaje y ajustes del canal.",
+  "description": "Conversaciones de WhatsApp, plantillas de mensaje y ajustes del canal.",
   "navigation": {
     "inbox": {
       "label": "Bandeja de entrada"
@@ -82,7 +82,6 @@
     "errLoadThread": "No se pudo cargar la conversación",
     "errAssign": "No se pudo asignar la conversación",
     "delete": "Borrar",
-    "confirmFulfil": "¿Marcar la solicitud como atendida? No se crea nada en otro módulo: es una nota de que alguien la resolvió.",
     "edit": "Editar",
     "save": "Guardar",
     "cancel": "Cancelar",
@@ -92,7 +91,6 @@
     "errDeleteTemplate": "No se pudo borrar la plantilla",
     "settingsTitle": "Ajustes del canal",
     "helpConnectNeedsNewerHub": "Este hub es demasiado antiguo para conectar el número desde aquí. Actualiza el hub y vuelve a esta pantalla.",
-    "requestDetail": "Petición",
     "useAppointmentsName": "Reservar citas",
     "useAppointmentsSummary": "Una clienta pide cita por WhatsApp, el asistente le ofrece las horas que de verdad tienes libres y le reserva la que elija; luego le dice que ya está, y le avisa cuando tú confirmas su cita.",
     "usesGoToApps": "Ver aplicaciones",
@@ -113,6 +111,14 @@
     "usesNeedsNewerHub": "Este hub es demasiado antiguo para activarlo desde aquí. Actualiza el hub.",
     "usesNeedBookingModule": "Instala Citas o Reservas para que WhatsApp reserve solo",
     "usesNeedNewerBookingModule": "Actualiza Citas o Reservas para que WhatsApp reserve solo",
+    "usesNeedMissingModule": "«{use}» necesita la aplicación {module}, y no está instalada. Instálala desde Aplicaciones.",
+    "usesNeedPausedModule": "«{use}» necesita la aplicación {module}, y está en pausa. Reactívala en Aplicaciones.",
+    "usesNeedUpdatedModule": "«{use}» necesita la aplicación {module} en la versión {floor} o posterior, y este hub tiene la {installed}. Actualízala en Aplicaciones.",
+    "neighbourAppointments": "Citas",
+    "neighbourCustomers": "Clientes",
+    "neighbourReservations": "Reservas",
+    "neighbourServices": "Servicios",
+    "neighbourStaff": "Personal",
     "activateForbidden": "Solo un dueño o un administrador puede activarlo.",
     "errActivate": "No se pudo activar. No se ha cambiado nada: inténtalo otra vez.",
     "errTemplates": "No hemos podido saber qué hay activo ahora mismo. Vuelve a cargar la pantalla.",
@@ -175,16 +181,18 @@
     "mediaPlay": "Reproducir",
     "mediaDownload": "Descargar",
     "mediaOpen": "Abrir",
-    "threadRepliesElsewhere": "Desde esta pantalla no se contesta: responde desde el WhatsApp de tu móvil o deja que conteste una automatización."
+    "mediaCannotPlay": "Este dispositivo no puede reproducirlo: descárgalo y ábrelo con otra aplicación.",
+    "threadRepliesElsewhere": "Desde esta pantalla no se contesta: responde desde el WhatsApp de tu móvil o deja que conteste una automatización.",
+    "viewerOpen": "Ver la foto en grande",
+    "viewerPrev": "Foto anterior",
+    "viewerNext": "Foto siguiente",
+    "viewerClose": "Cerrar",
+    "viewerDownload": "Descargar",
+    "viewerFullscreen": "Pantalla completa",
+    "viewerExitFullscreen": "Salir de pantalla completa"
   },
   "errors": {
     "whatsapp_inbox.conversation_not_found": "Esa conversación no existe en este negocio.",
-    "whatsapp_inbox.conversation_unreadable": "No se ha podido leer la conversación, así que no se ha creado nada. Prueba otra vez.",
-    "whatsapp_inbox.request_not_deletable": "Esa solicitud no se puede borrar: no existe en este negocio, o está cumplida y debe conservarse por auditoría.",
-    "whatsapp_inbox.request_not_found": "Esa solicitud no existe en este negocio.",
-    "whatsapp_inbox.request_not_fulfillable": "Solo una solicitud confirmada se puede marcar como atendida.",
-    "whatsapp_inbox.request_not_pending": "Esa solicitud no está pendiente de revisión: no existe en este negocio, o ya se aprobó, rechazó o atendió.",
-    "whatsapp_inbox.request_unreadable": "No se ha podido leer la solicitud, así que no se ha cambiado nada. Prueba otra vez.",
     "whatsapp_inbox.template_already_here": "Este negocio ya tiene una plantilla con ese nombre e idioma (viva o borrada aquí), así que no se ha traído nada.",
     "whatsapp_inbox.template_not_found": "Esa plantilla no existe en este negocio."
   }

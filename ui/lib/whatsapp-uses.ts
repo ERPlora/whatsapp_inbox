@@ -298,6 +298,21 @@ export const AUTOMATIONS_WITNESS = 'flows.drafts.list';
 export const probeAutomations = (client: WitnessAsker): Promise<unknown> =>
   client.queryOptional('flows.drafts.list');
 
+/**
+ * The name of each neighbour a recipe of this module declares a version floor on
+ * (`flows/*.requires.json`), so a card the hub does not offer can say WHICH app fails
+ * (whatsapp_inbox#210). The hub hands the neighbour as an id (`requires.module`, hub#2123); the
+ * name the owner reads is this module's catalog. A floor added without a name here is caught by
+ * «every neighbour a recipe of this module declares a floor on has a name in both languages».
+ */
+export const NEIGHBOUR_NAME_KEYS: Readonly<Record<string, string>> = {
+  appointments: 'ui.neighbourAppointments',
+  customers: 'ui.neighbourCustomers',
+  reservations: 'ui.neighbourReservations',
+  services: 'ui.neighbourServices',
+  staff: 'ui.neighbourStaff',
+};
+
 /** Where the hub lists what can be installed — where a missing booking module is fixed. */
 export const APPS_PATH = '/apps';
 

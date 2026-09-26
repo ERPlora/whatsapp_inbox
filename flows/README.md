@@ -186,15 +186,9 @@ esperaba la escritura, y en la mitad de los casos hacía que la receta dijese lo
 la agenda tenía. Así que hoy la receta es una, corre en `auto`, y **lee** la decisión donde vive
 (whatsapp_inbox#124).
 
-⚠️ **El ajuste `approval_mode` de este módulo no gobierna nada de esto** — y hoy no gobierna nada en
-absoluto. Decide el estado inicial de una `request` (`commands/_insert_request.sql`: `auto` →
-`confirmed`, `manual` → `pending_review`), y ese pipeline está desconectado: lo único que emite
-`whatsapp_inbox.request.approved` —el evento que `appointments` escucha para reservar— es
-`requests.approve`, cuyo SQL exige `status = 'pending_review'` y devuelve
-`whatsapp_inbox.request_not_pending` en cualquier otro caso. O sea que una request nacida
-`confirmed` **no se puede aprobar y nadie la reserva**; y `whatsapp_inbox.request.created` no lo
-escucha ningún módulo. Además hoy **nadie llama a `requests.ingest`**, así que ese camino no se ha
-ejecutado nunca.
+El antiguo ajuste `approval_mode` de este módulo, que decidía el estado inicial de una «request»
+de la bandeja, se retiró con todo ese pipeline en whatsapp_inbox#206 (migración 013): nadie lo
+alimentaba y nada de lo que hacen estas recetas pasaba por él.
 
 ### `UNATTENDED_FAMILIES` es la DECLARACIÓN
 
@@ -399,6 +393,17 @@ porque el commit más nuevo que `-S` devuelve suele ser el que SUBIÓ la versió
 campo que estas plantillas mandan ya estuviera declarado ahí. Si no se puede leer, lo dice en voz
 alta; nunca calla.
 
+**Y todo vecino que la receta USA tiene suelo, también el que solo llega como tool del asistente**
+(whatsapp_inbox#173, #197). Las reglas de arriba solo leen lo que `requires.json` declara, así que
+un vecino que falta ahí no las pone en rojo: las deja mudas, y el hub ofrece la receta junto a
+cualquier copia de ese vecino. `unfloored_read_problems` exige suelo para cada módulo ajeno que un
+paso `query` o `command` nombra **y** para cada uno de los `tools.queries`/`tools.commands` de un
+paso `ai`. Por eso `appointment-from-whatsapp` fija `services` y `staff`: `book_appointment` le da
+al asistente `services.services.list`, `staff.members.list` y `staff.schedules.list_for_member`, y
+sin suelo un hub sin Servicios o Personal (o con uno de ellos en pausa) recibía la receta y el
+asistente fallaba en la primera pregunta. Los números son los del primer árbol de cada repo (1.1.7
+y 2.0.4), que ya declaran esas lecturas con su bloque `ai`.
+
 **La duración estimada se ve.** Va en `duration_minutes` del payload propuesto (que es lo que se
 ejecuta al aprobar, sin re-derivar) y además **en palabras en `internal_notes`**, para que se lea en
 cualquier pantalla que pinte la cita y se pueda corregir antes de que llegue el día.
@@ -424,6 +429,15 @@ WhatsApp— no encontraba la ficha apuntada como `600 111 222` o `+34 600-111-22
 por nueva y le creaba una segunda ficha. `customers.by_phone` (customers ≥ 2.3.45, suelo en
 `*.requires.json`) aplica la misma regla que la bandeja desde #162. Lo vigila la marca 6 de
 `own_customer_only_problems` en `tests/flow_templates.test.py`.
+
+**Y lee el número como uno del PAÍS del negocio** (whatsapp_inbox#202): la receta reserva sobre la
+**primera** ficha que contesta la consulta, y hasta customers#81 `customers.by_phone` dejaba pasar
+cualquier prefijo de país, así que un francés `33 600 111 222` que escribía a una peluquería de
+España salía como la clienta local `600 111 222` y la cita iba a su ficha. Desde Clientes 2.3.47 la
+consulta lee `hub_settings.country_code` y solo acepta ese prefijo; por eso el suelo de `customers`
+en los dos `*.requires.json` y en el `depends_on` de `module.json` es 2.3.47. Una versión de
+Clientes cuyo SQL no nombra el país se trata como «no sabe el país», nunca como «seguramente vale»:
+lo vigila `home_country_match_problems`, que lee ese SQL en el árbol publicado como suelo.
 
 1. **`acknowledge`** — contesta al instante por WhatsApp, igual que en citas.
 2. **`book_table`** — decide qué le están pidiendo y, si es una mesa, **mira y reserva en el mismo

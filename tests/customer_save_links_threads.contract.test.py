@@ -49,6 +49,13 @@ READ = "customers.by_phone"
 # that updates this module but keeps an older `customers` loses the read: the runtime omits it
 # (graceful) and the link silently stops for everybody (hub#681 is the refusal that prevents it).
 BY_PHONE_SINCE = (2, 3, 45)
+# First `customers` release whose `customers.by_phone` reads the number as one of the BUSINESS's
+# country (customers#81). The inbox's own listeners re-decide every row, but the WhatsApp recipes
+# book on the FIRST row it answers: below this release a French `33 600 111 222` is the Spanish
+# card `600 111 222`. `requires.json` stops the hub OFFERING the recipe on an older Customers; this
+# floor is what drags Customers up when a hub whose recipe is ALREADY running updates this module
+# (whatsapp_inbox#202).
+HOME_COUNTRY_SINCE = (2, 3, 47)
 
 
 def customers_floor():
@@ -68,6 +75,12 @@ def check():
         problems.append(
             f"`depends_on` does not require customers >= {'.'.join(map(str, BY_PHONE_SINCE))} "
             f"(got {floor!r}): with an older customers `{READ}` is missing and nobody is linked"
+        )
+    elif floor < HOME_COUNTRY_SINCE:
+        problems.append(
+            f"`depends_on` does not require customers >= {'.'.join(map(str, HOME_COUNTRY_SINCE))} "
+            f"(got {'.'.join(map(str, floor))}): with an older customers `{READ}` lets any country "
+            "prefix through and the WhatsApp recipes book somebody from abroad on the local card"
         )
     listen = (MANIFEST.get("events") or {}).get("listen") or {}
     for event in EVENTS:
