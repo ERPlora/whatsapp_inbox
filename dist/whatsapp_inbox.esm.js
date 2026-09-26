@@ -4565,7 +4565,7 @@ var es_default = {
     buttonQuickReply: "Respuesta r\xE1pida",
     buttonUrl: "Abre un enlace",
     buttonPhone: "Llama al n\xFAmero",
-    templateManagedInMeta: "Esta plantilla lleva botones o una imagen, v\xEDdeo o documento en la cabecera, as\xED que su texto se cambia en WhatsApp Manager. Al volver a abrir esta pesta\xF1a ver\xE1s lo que diga Meta.",
+    templateManagedInMeta: "Esta plantilla lleva una imagen, v\xEDdeo o documento en la cabecera, o un bot\xF3n de enlace con variable, as\xED que su texto se cambia en WhatsApp Manager. Al volver a abrir esta pesta\xF1a ver\xE1s lo que diga Meta.",
     metaOnlyTemplates: "Estas plantillas de WhatsApp Manager todav\xEDa no se pueden traer a esta lista (llevan un carrusel, una oferta por tiempo limitado, un bot\xF3n de copiar c\xF3digo o de WhatsApp Flow, una ubicaci\xF3n en la cabecera o una variable en la cabecera). Gesti\xF3nalas en WhatsApp Manager: {names}",
     doorRefusal: {
       invalid_name: "Meta no ha aceptado el nombre. Usa solo min\xFAsculas, n\xFAmeros y guiones bajos \u2014sin espacios ni acentos\u2014 y vuelve a intentarlo.",
@@ -4588,7 +4588,14 @@ var es_default = {
       cloud_unreachable: "Esta caja no ha podido conectar con erplora.com. La plantilla queda guardada aqu\xED; revisa la conexi\xF3n a internet y vuelve a guardarla para enviarla a revisi\xF3n.",
       cloud_unreadable: "erplora.com ha contestado algo que esta caja no ha sabido leer. La plantilla queda guardada aqu\xED: int\xE9ntalo dentro de un rato.",
       hub_not_enrolled: "Esta caja todav\xEDa no est\xE1 emparejada con erplora.com, as\xED que no puede enviar plantillas a Meta. Avisa a soporte.",
-      capability_denied: "WhatsApp no tiene permiso para enviar mensajes desde este hub. Conc\xE9deselo en Ajustes \u2192 Permisos y vuelve a guardar la plantilla."
+      capability_denied: "WhatsApp no tiene permiso para enviar mensajes desde este hub. Conc\xE9deselo en Ajustes \u2192 Permisos y vuelve a guardar la plantilla.",
+      invalid_buttons: "Meta no ha aceptado los botones. Cada uno tiene que ser una respuesta r\xE1pida, un enlace o una llamada: rev\xEDsalos y vuelve a guardar.",
+      invalid_button_text: "Meta no ha aceptado un bot\xF3n: todos necesitan un texto de 25 caracteres como mucho.",
+      invalid_button_url: "Meta no ha aceptado un bot\xF3n de enlace. Escribe la direcci\xF3n completa, empezando por https://, y sin variables tipo {{1}}.",
+      invalid_button_phone: "Meta no ha aceptado un bot\xF3n de llamada. Escribe el n\xFAmero con su prefijo de pa\xEDs, por ejemplo +34600111222.",
+      too_many_buttons: "Meta no ha aceptado los botones: una plantilla lleva 10 como mucho, y no m\xE1s de 2 enlaces y 1 bot\xF3n de llamada.",
+      buttons_not_grouped: "Meta no ha aceptado el orden de los botones: las respuestas r\xE1pidas van juntas, y los enlaces y llamadas, juntos.",
+      buttons_not_allowed_for_category: "Las plantillas de autenticaci\xF3n no pueden llevar botones desde aqu\xED. Quita los botones o elige otra categor\xEDa."
     },
     mediaKind: {
       image: "Foto",
@@ -4612,7 +4619,14 @@ var es_default = {
     viewerClose: "Cerrar",
     viewerDownload: "Descargar",
     viewerFullscreen: "Pantalla completa",
-    viewerExitFullscreen: "Salir de pantalla completa"
+    viewerExitFullscreen: "Salir de pantalla completa",
+    buttonsHint: "Opcional. Hasta 10 botones: respuestas r\xE1pidas, hasta 2 enlaces y 1 bot\xF3n de llamada. Las respuestas r\xE1pidas se mantienen juntas.",
+    buttonType: "Tipo de bot\xF3n",
+    buttonText: "Texto del bot\xF3n",
+    buttonUrlField: "Enlace (https://\u2026)",
+    buttonPhoneField: "Tel\xE9fono con prefijo de pa\xEDs",
+    addButton: "A\xF1adir bot\xF3n",
+    removeButton: "Quitar bot\xF3n"
   },
   errors: {
     "whatsapp_inbox.conversation_not_found": "Esa conversaci\xF3n no existe en este negocio.",
@@ -4765,7 +4779,7 @@ var en_default = {
     buttonQuickReply: "Quick reply",
     buttonUrl: "Opens a link",
     buttonPhone: "Calls the number",
-    templateManagedInMeta: "This template has buttons or an image, video or document header, so its wording is changed in WhatsApp Manager. Open this tab again to see what Meta says.",
+    templateManagedInMeta: "This template has an image, video or document header, or a link button with a variable, so its wording is changed in WhatsApp Manager. Open this tab again to see what Meta says.",
     metaOnlyTemplates: "These WhatsApp Manager templates cannot be brought into this list yet (they use a carousel, a limited-time offer, a copy-code or WhatsApp Flow button, a location header, or a variable in the header). Manage them in WhatsApp Manager: {names}",
     doorRefusal: {
       invalid_name: "Meta did not accept the name. Use lowercase letters, numbers and underscores only \u2014 no spaces or accents \u2014 and try again.",
@@ -4788,7 +4802,14 @@ var en_default = {
       cloud_unreachable: "This till could not reach erplora.com. The template is saved here; check the internet connection and save it again to send it for review.",
       cloud_unreadable: "erplora.com answered something this till could not read. The template is saved here \u2014 try again in a moment.",
       hub_not_enrolled: "This till is not yet paired with erplora.com, so it cannot send templates to Meta. Contact support.",
-      capability_denied: "WhatsApp Inbox is not allowed to send WhatsApp messages on this hub. Grant it in Settings \u2192 Permissions and save the template again."
+      capability_denied: "WhatsApp Inbox is not allowed to send WhatsApp messages on this hub. Grant it in Settings \u2192 Permissions and save the template again.",
+      invalid_buttons: "Meta did not accept the buttons. Each one has to be a quick reply, a link or a call \u2014 check them and save again.",
+      invalid_button_text: "Meta did not accept a button: every button needs a label of up to 25 characters.",
+      invalid_button_url: "Meta did not accept a link button. Write the full address, starting with https://, and without {{1}}-style variables.",
+      invalid_button_phone: "Meta did not accept a call button. Write the number with its country code, for example +34600111222.",
+      too_many_buttons: "Meta did not accept the buttons: a template takes at most 10, with no more than 2 links and 1 call button.",
+      buttons_not_grouped: "Meta did not accept the order of the buttons: quick replies go together, and links and calls go together.",
+      buttons_not_allowed_for_category: "Authentication templates cannot carry buttons from here. Remove the buttons or choose another category."
     },
     mediaKind: {
       image: "Photo",
@@ -4812,7 +4833,14 @@ var en_default = {
     viewerClose: "Close",
     viewerDownload: "Download",
     viewerFullscreen: "Full screen",
-    viewerExitFullscreen: "Exit full screen"
+    viewerExitFullscreen: "Exit full screen",
+    buttonsHint: "Optional. Up to 10 buttons: quick replies, up to 2 links and 1 call button. Quick replies are kept together.",
+    buttonType: "Button type",
+    buttonText: "Button text",
+    buttonUrlField: "Link (https://\u2026)",
+    buttonPhoneField: "Phone number with country code",
+    addButton: "Add button",
+    removeButton: "Remove button"
   },
   errors: {
     "whatsapp_inbox.conversation_not_found": "That conversation does not exist in this business.",
@@ -6350,6 +6378,23 @@ var BUTTON_LABEL = {
   URL: "ui.buttonUrl",
   PHONE_NUMBER: "ui.buttonPhone"
 };
+var MAX_BUTTONS = 10;
+var MAX_BUTTON_TEXT = 25;
+function cleanButton(b3) {
+  const text3 = typeof b3.text === "string" ? b3.text : "";
+  if (b3.type === "URL") return { type: "URL", text: text3, url: typeof b3.url === "string" ? b3.url : "" };
+  if (b3.type === "PHONE_NUMBER") {
+    return { type: "PHONE_NUMBER", text: text3, phone_number: typeof b3.phone_number === "string" ? b3.phone_number : "" };
+  }
+  return { type: "QUICK_REPLY", text: text3 };
+}
+function groupedButtons(buttons) {
+  if (!buttons.length) return [];
+  const firstIsReply = buttons[0].type === "QUICK_REPLY";
+  const replies = buttons.filter((b3) => b3.type === "QUICK_REPLY");
+  const calls = buttons.filter((b3) => b3.type !== "QUICK_REPLY");
+  return firstIsReply ? [...replies, ...calls] : [...calls, ...replies];
+}
 function metaKey(name, language) {
   const word = (value) => String(value ?? "").trim().toLowerCase();
   return `${word(name)}\0${word(language)}`;
@@ -6387,6 +6432,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     this.editingMetaReason = "";
     this.editingHeaderFormat = "TEXT";
     this.editingButtons = [];
+    this.editingDynamicLink = false;
     /** The example Meta holds for each named variable of the template being edited, by name. Named
      *  templates store one example per distinct name in first-appearance order (whatsapp_inbox#186),
      *  so this is how the examples follow their NAME when the owner rewrites the body. */
@@ -6442,15 +6488,40 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     .rich li { border:1px solid var(--ion-border-color,#e7e2d6); border-radius: var(--ok-radius-sm, 10px);
       padding:.4rem .6rem; font-size:.9rem; overflow-wrap:anywhere; }
     .rich li small { display:block; color: var(--ion-color-medium, #6b675d); }
+    .button-row { display:flex; flex-direction:column; gap:.4rem; padding:.5rem;
+      border:1px solid var(--ion-border-color,#e7e2d6); border-radius: var(--ok-radius-sm, 10px); }
+    .button-row ion-button, .rich > ion-button { align-self:flex-start; }
   `;
   }
-  /** A template with a media header or buttons is read-only here (whatsapp_inbox#180): «Guardar»
-   *  registers the template again at Meta from what this panel holds, and this panel cannot write
-   *  those parts yet — saving would strip them at Meta. It is edited in WhatsApp Manager and the
-   *  tab brings Meta's verdict back on the next open. Named body variables (`{{nombre}}`) no longer
-   *  lock it: the SaaS registers them as `parameter_format: NAMED` (saas#2281, whatsapp_inbox#196). */
+  /** Some parts of a template are still read-only here (whatsapp_inbox#180): «Guardar» registers
+   *  the template again at Meta from what this panel holds, and this panel cannot write those parts
+   *  yet — saving would strip them at Meta. A media header (whatsapp_inbox#218) and a link button
+   *  with a variable, which needs an example and a value on every send, lock the panel; plain quick
+   *  reply, link and call buttons do not since whatsapp_inbox#185, nor named body variables
+   *  (`{{nombre}}`), which the SaaS registers as `parameter_format: NAMED` (saas#2281,
+   *  whatsapp_inbox#196). It is edited in WhatsApp Manager and the tab brings Meta's verdict back
+   *  on the next open. */
   get managedInMeta() {
-    return !!this.editingId && (this.editingHeaderFormat !== "TEXT" || this.editingButtons.length > 0);
+    return !!this.editingId && (this.editingHeaderFormat !== "TEXT" || this.editingDynamicLink);
+  }
+  /** A button still missing its label, its link or its number: Meta would refuse the template. */
+  get buttonsIncomplete() {
+    return this.editingButtons.some(
+      (b3) => !b3.text.trim() || "url" in b3 && !b3.url.trim() || "phone_number" in b3 && !b3.phone_number.trim()
+    );
+  }
+  /** Adds an empty quick reply at the end, up to Meta's ten. */
+  addButton() {
+    if (this.editingButtons.length >= MAX_BUTTONS) return;
+    this.editingButtons = [...this.editingButtons, { type: "QUICK_REPLY", text: "" }];
+  }
+  removeButton(index) {
+    this.editingButtons = this.editingButtons.filter((_2, i7) => i7 !== index);
+  }
+  /** Changes one button. Changing its kind keeps the label and drops what the old kind carried: a
+   *  link does not drag a phone number along to Meta. */
+  setButton(index, patch) {
+    this.editingButtons = this.editingButtons.map((b3, i7) => i7 === index ? cleanButton({ ...b3, ...patch }) : b3);
   }
   get rowActions() {
     const t5 = (k2) => erplora3().t(CATALOG3, k2);
@@ -6585,7 +6656,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
           meta_template_id: metaId,
           meta_status: status,
           meta_rejected_reason: reason,
-          // The seven fields Meta reviewed travel with the answer: the command only writes if the
+          // The eight fields Meta reviewed travel with the answer: the command only writes if the
           // row still holds them, so a verdict never lands on a text the owner has since changed.
           name: row.name,
           language: row.language,
@@ -6593,7 +6664,9 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
           header: row.header,
           body: row.body,
           footer: row.footer,
-          variables: row.variables
+          variables: row.variables,
+          // A row read before the column existed stores the column's default.
+          buttons: row.buttons ?? "[]"
         });
         written += 1;
       } catch (e5) {
@@ -6644,7 +6717,8 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
       header: this.editingRest.header,
       body: this.newBody,
       footer: this.editingRest.footer,
-      variables: this.variablesFor(this.newBody)
+      variables: this.variablesFor(this.newBody),
+      buttons: JSON.stringify(groupedButtons(this.editingButtons.map(cleanButton)))
     };
   }
   /** The examples the door must send with `body`. A NAMED body takes one example per distinct name,
@@ -6702,7 +6776,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
   }
   async createTemplate(ev) {
     ev.preventDefault();
-    if (!this.newName.trim() || this.managedInMeta) return;
+    if (!this.newName.trim() || this.managedInMeta || this.buttonsIncomplete) return;
     if (this.editingId) {
       await this.updateTemplate();
       return;
@@ -6736,7 +6810,8 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
       is_active: Number(row.is_active ?? 1)
     };
     this.editingHeaderFormat = String(row.header_format ?? "").trim().toUpperCase() || "TEXT";
-    this.editingButtons = storedButtons(row.buttons);
+    this.editingButtons = storedButtons(row.buttons).map(cleanButton);
+    this.editingDynamicLink = this.editingButtons.some((b3) => "url" in b3 && b3.url.includes("{{"));
     this.namedExamples = namedExamplesOf(this.newBody, this.editingRest.variables);
     this.editingMeta = metaTemplateView(row.meta_status);
     this.editingMetaCode = String(row.meta_status ?? "");
@@ -6765,6 +6840,8 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     this.newLanguage = "es";
     this.newCategory = "UTILITY";
     this.editingRest = { header: "", footer: "", variables: "[]", is_active: 1 };
+    this.editingButtons = [];
+    this.editingDynamicLink = false;
     this.namedExamples = {};
     this.editingMeta = null;
     this.editingMetaCode = "";
@@ -6860,6 +6937,39 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
       <p data-testid="whatsapp-templates-managed-in-meta">${t5("ui.templateManagedInMeta")}</p>
     </div>`;
   }
+  /** The buttons editor (whatsapp_inbox#185): kind, label and — for a link or a call — where it
+   *  goes. Nothing while the panel is read-only: `renderRichParts` lists them instead. */
+  renderButtonsEditor() {
+    if (this.managedInMeta) return A;
+    const t5 = (k2) => erplora3().t(CATALOG3, k2);
+    return b2`<div class="rich" data-testid="whatsapp-templates-buttons">
+      <strong>${t5("ui.templateButtons")}</strong>
+      <p>${t5("ui.buttonsHint")}</p>
+      ${this.editingButtons.map(
+      (b3, i7) => b2`<div class="button-row" data-testid="whatsapp-templates-button-row" data-type=${b3.type}>
+          <ion-select data-testid="whatsapp-templates-button-type" mode="md" fill="outline" label-placement="floating"
+            label=${t5("ui.buttonType")} .value=${b3.type} @ionChange=${(e5) => this.setButton(i7, { type: e5.target.value })}>
+            <ion-select-option value="QUICK_REPLY">${t5("ui.buttonQuickReply")}</ion-select-option>
+            <ion-select-option value="URL">${t5("ui.buttonUrl")}</ion-select-option>
+            <ion-select-option value="PHONE_NUMBER">${t5("ui.buttonPhone")}</ion-select-option>
+          </ion-select>
+          <ion-input data-testid="whatsapp-templates-button-text" mode="md" fill="outline" label-placement="floating"
+            label=${t5("ui.buttonText")} maxlength=${MAX_BUTTON_TEXT} counter .value=${b3.text}
+            @ionInput=${(e5) => this.setButton(i7, { text: e5.target.value ?? "" })}></ion-input>
+          ${"url" in b3 ? b2`<ion-input data-testid="whatsapp-templates-button-url" type="url" inputmode="url" mode="md" fill="outline"
+                label-placement="floating" label=${t5("ui.buttonUrlField")} placeholder="https://" .value=${b3.url}
+                @ionInput=${(e5) => this.setButton(i7, { url: e5.target.value ?? "" })}></ion-input>` : A}
+          ${"phone_number" in b3 ? b2`<ion-input data-testid="whatsapp-templates-button-phone" type="tel" inputmode="tel" mode="md" fill="outline"
+                label-placement="floating" label=${t5("ui.buttonPhoneField")} placeholder="+34600111222" .value=${b3.phone_number}
+                @ionInput=${(e5) => this.setButton(i7, { phone_number: e5.target.value ?? "" })}></ion-input>` : A}
+          <ion-button data-testid="whatsapp-templates-button-remove" fill="clear" size="small"
+            @click=${() => this.removeButton(i7)}>${t5("ui.removeButton")}</ion-button>
+        </div>`
+    )}
+      <ion-button data-testid="whatsapp-templates-button-add" fill="outline" size="small"
+        ?disabled=${this.editingButtons.length >= MAX_BUTTONS} @click=${() => this.addButton()}>${t5("ui.addButton")}</ion-button>
+    </div>`;
+  }
   renderDeleteConfirm() {
     if (!this.pendingDelete) return A;
     const t5 = (k2) => erplora3().t(CATALOG3, k2);
@@ -6893,7 +7003,8 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
               <ion-select-option value="AUTHENTICATION">${t5("ui.categoryAuthentication")}</ion-select-option>
             </ion-select>
             <ion-textarea data-testid="whatsapp-templates-body" .disabled=${locked} mode="md" fill="outline" label-placement="floating" label=${t5("ui.colBody")} placeholder=${t5("ui.placeholderBody")} .value=${this.newBody} @ionInput=${(e5) => this.newBody = e5.target.value}></ion-textarea>
-            ${locked ? A : b2`<ion-button data-testid="whatsapp-templates-submit" type="submit" ?disabled=${this.saving || !this.newName}>${this.saving ? t5("ui.saving") : this.editingId ? t5("ui.save") : t5("ui.add")}</ion-button>`}
+            ${this.renderButtonsEditor()}
+            ${locked ? A : b2`<ion-button data-testid="whatsapp-templates-submit" type="submit" ?disabled=${this.saving || !this.newName || this.buttonsIncomplete}>${this.saving ? t5("ui.saving") : this.editingId ? t5("ui.save") : t5("ui.add")}</ion-button>`}
             ${this.editingId ? b2`<ion-button data-testid="whatsapp-templates-cancel" fill="clear" size="small" ?disabled=${this.saving}
                   @click=${() => this.cancelEdit()}>${t5("ui.cancel")}</ion-button>` : A}
           </form>
@@ -6949,5 +7060,8 @@ __decorateClass([
 __decorateClass([
   r5()
 ], _ErpWhatsappInboxTemplates.prototype, "editingButtons", 2);
+__decorateClass([
+  r5()
+], _ErpWhatsappInboxTemplates.prototype, "editingDynamicLink", 2);
 var ErpWhatsappInboxTemplates = _ErpWhatsappInboxTemplates;
 define("erp-whatsapp-inbox-templates", ErpWhatsappInboxTemplates);

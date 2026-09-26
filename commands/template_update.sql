@@ -27,8 +27,9 @@
 -- would say «Sin enviar» about a template Meta had accepted, and re-sending it would put a working
 -- template back at the end of Meta's review queue for nothing.
 --
--- What Meta re-reviews is the text: name, language, category, header, body, footer and the
--- variables (its numbered placeholders and their examples). `is_active` is this hub's own switch —
+-- What Meta re-reviews is the text: name, language, category, header, body, footer, the
+-- variables (its numbered placeholders and their examples) and, since whatsapp_inbox#185, the
+-- buttons. `is_active` is this hub's own switch —
 -- whether the module uses the template — and Meta has never seen it, so it is deliberately NOT in
 -- the comparison. Every SET expression reads the row as it was BEFORE the update, so comparing the
 -- column against its bind here is comparing «what is stored» against «what was just typed»; and
@@ -38,14 +39,14 @@ UPDATE whatsapp_inbox_template
 SET meta_template_id = CASE
       WHEN name = :name AND language = :language AND category = :category
        AND header = :header AND body = :body AND footer = :footer
-       AND variables = :variables
+       AND variables = :variables AND buttons = :buttons
       THEN meta_template_id
       ELSE ''
     END,
     meta_status      = CASE
       WHEN name = :name AND language = :language AND category = :category
        AND header = :header AND body = :body AND footer = :footer
-       AND variables = :variables
+       AND variables = :variables AND buttons = :buttons
       THEN meta_status
       ELSE 'pending'
     END,
@@ -56,6 +57,7 @@ SET meta_template_id = CASE
     body             = :body,
     footer           = :footer,
     variables        = :variables,
+    buttons          = :buttons,
     is_active        = :is_active,
     updated_by       = :current_user_id,
     updated_at       = :now

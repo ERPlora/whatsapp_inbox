@@ -89,6 +89,20 @@ describe('la lista de códigos es la de la puerta, no una invención', () => {
     }
   });
 
+  it('lleva los de los BOTONES de la plantilla (whatsapp_inbox#185)', () => {
+    for (const code of [
+      'invalid_buttons',
+      'invalid_button_text',
+      'invalid_button_url',
+      'invalid_button_phone',
+      'too_many_buttons',
+      'buttons_not_grouped',
+      'buttons_not_allowed_for_category',
+    ]) {
+      expect(META_DOOR_REFUSAL_CODES, `falta \`${code}\``).toContain(code);
+    }
+  });
+
   it('lleva los cuatro estables de saas#1905, que NO son culpa del texto', () => {
     for (const code of [
       'meta_rate_limited',
