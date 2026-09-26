@@ -168,12 +168,14 @@ describe('el alta sigue funcionando desde el panel', () => {
 
     const wc = el as unknown as {
       newName: string; newLanguage: string; newCategory: string; newBody: string;
+      bodyExamples: Record<string, string>;
       createTemplate: (ev: Event) => Promise<void>;
     };
     wc.newName = 'recordatorio_cita';
     wc.newLanguage = 'es';
     wc.newCategory = 'UTILITY';
     wc.newBody = 'Hola {{1}}, te esperamos el {{2}}.';
+    wc.bodyExamples = { '1': 'Ana', '2': 'lunes' }; // Meta refuses a variable without its example (#208)
     await wc.createTemplate(new Event('submit'));
 
     const alta = comandos.find((c) => c.name === 'whatsapp_inbox.templates.create');
@@ -390,7 +392,8 @@ describe('guardar una plantilla la REGISTRA en Meta (whatsapp_inbox#87)', () => 
   }
 
   async function crear(el: HTMLElement & { shadowRoot: ShadowRoot }, campos: Record<string, unknown> = {}) {
-    Object.assign(el, { newName: 'recordatorio_cita', newBody: 'Te esperamos el {{1}}', ...campos });
+    // `{{1}}` goes with its example: without it the panel does not save (whatsapp_inbox#208).
+    Object.assign(el, { newName: 'recordatorio_cita', newBody: 'Te esperamos el {{1}}', bodyExamples: { '1': 'lunes' }, ...campos });
     await (el as unknown as { createTemplate: (e: Event) => Promise<void> }).createTemplate(
       new Event('submit'),
     );
@@ -406,7 +409,7 @@ describe('guardar una plantilla la REGISTRA en Meta (whatsapp_inbox#87)', () => 
     expect(pasos[1]).toBe('door.register');
   });
 
-  it('la puerta recibe el texto que escribió el dueño, con `variables` tal cual (TEXT)', async () => {
+  it('la puerta recibe el texto que escribió el dueño, con `variables` como TEXT', async () => {
     const el = await montarConPanel();
     await crear(el, { newLanguage: 'es', newCategory: 'UTILITY' });
     expect(puerta, 'guardar no registró nada en Meta').toHaveLength(1);
@@ -420,7 +423,9 @@ describe('guardar una plantilla la REGISTRA en Meta (whatsapp_inbox#87)', () => 
     });
     // El SaaS hace `json.loads` de la cadena (`services/templates.py::_variables`). Parsearla aquí
     // la convertiría en un array y el contrato de la columna es TEXT.
-    expect(puerta[0].variables, '`variables` viaja parseado: la columna es TEXT').toBe('[]');
+    // Until whatsapp_inbox#208 this pinned `'[]'` — the very `missing_example` Meta refuses. Now it
+    // carries the example of `{{1}}`, still as the TEXT the column holds.
+    expect(puerta[0].variables, '`variables` viaja parseado: la columna es TEXT').toBe('["lunes"]');
   });
 
   it('lo que Meta contesta se escribe en la fila, sobre la plantilla recién creada', async () => {
@@ -442,7 +447,7 @@ describe('guardar una plantilla la REGISTRA en Meta (whatsapp_inbox#87)', () => 
       header: '',
       body: 'Te esperamos el {{1}}',
       footer: '',
-      variables: '[]',
+      variables: '["lunes"]', // the example of {{1}}, as the row stored it (#208)
     });
   });
 
@@ -1723,5 +1728,193 @@ describe('botones de respuesta rápida, enlace y llamada desde el panel (whatsap
     expect(q(el, 'whatsapp-templates-submit')).toBeNull();
     expect(qa(el, 'whatsapp-templates-button-row'), 'se ofrece editar botones de una plantilla bloqueada').toHaveLength(0);
     expect(qa(el, 'whatsapp-templates-button'), 'sus botones dejan de verse').toHaveLength(4);
+  });
+});
+
+// whatsapp_inbox#208 — Meta reviews a template with one example per variable (`example.body_text`)
+// and refuses it without them (`missing_example`). The panel had nowhere to write them, so a new
+// template with {{1}} reached Meta with `variables: '[]'`. Like WhatsApp Manager, each variable of
+// the body now has its example field under the body.
+describe('un ejemplo por variable, debajo del cuerpo (whatsapp_inbox#208)', () => {
+  type Panel = HTMLElement & {
+    shadowRoot: ShadowRoot;
+    newName: string;
+    newBody: string;
+    startEdit: (r: Record<string, unknown>) => void;
+    openCreate: () => Promise<void>;
+    createTemplate: (e: Event) => Promise<void>;
+    updateComplete: Promise<unknown>;
+  };
+  const q = (el: Panel, id: string) => el.shadowRoot.querySelector(`[data-testid="${id}"]`);
+  const ejemplos = (el: Panel) =>
+    [...el.shadowRoot.querySelectorAll('[data-testid="whatsapp-templates-example"]')] as (HTMLElement & {
+      value?: string;
+      disabled?: boolean;
+    })[];
+  const NUMERADA = {
+    id: 't20', name: 'cita_manana', language: 'es', category: 'UTILITY', header: '',
+    body: 'Hola {{1}}, te esperamos el {{2}}.', footer: '', variables: '["Ana","lunes"]',
+    meta_template_id: '120', meta_status: 'approved', meta_rejected_reason: '', is_active: 1,
+    header_format: 'TEXT', buttons: '[]',
+  };
+
+  async function panel(): Promise<Panel> {
+    filas = [NUMERADA];
+    const el = (await montar()) as Panel;
+    const t = tabla(el)!;
+    t.open = () => {};
+    t.close = () => {};
+    return el;
+  }
+
+  /** Types into the example field of `variable`, the way Ionic reports it: `ionInput` with the
+   *  field's new value. Goes through the rendered field, so a field that is not wired fails here. */
+  async function escribirEjemplo(el: Panel, variable: string, value: string) {
+    const campo = ejemplos(el).find((c) => c.getAttribute('data-variable') === variable);
+    expect(campo, `no hay campo de ejemplo para {{${variable}}}`).toBeTruthy();
+    campo!.value = value;
+    campo!.dispatchEvent(new CustomEvent('ionInput', { detail: { value } }));
+    await el.updateComplete;
+  }
+
+  async function escribirCuerpo(el: Panel, body: string) {
+    el.newBody = body;
+    await el.updateComplete;
+  }
+
+  async function enviar(el: Panel) {
+    const form = q(el, 'whatsapp-templates-form') as HTMLFormElement;
+    form.dispatchEvent(new Event('submit', { cancelable: true }));
+    for (let i = 0; i < 3; i += 1) await new Promise((r) => setTimeout(r, 0));
+  }
+
+  it('un alta con {{1}} y {{2}} pinta un campo de ejemplo por hueco, en orden de número', async () => {
+    const el = await panel();
+    el.newName = 'cita_manana';
+    await escribirCuerpo(el, 'El {{2}} te esperamos, {{1}}.');
+
+    expect(ejemplos(el).map((c) => c.getAttribute('data-variable'))).toEqual(['1', '2']);
+    expect(ejemplos(el).map((c) => c.value ?? ''), 'un hueco nuevo no trae ejemplo inventado').toEqual(['', '']);
+  });
+
+  it('un alta sin variables no pinta ningún campo de ejemplo', async () => {
+    const el = await panel();
+    await escribirCuerpo(el, 'Te esperamos mañana.');
+    expect(ejemplos(el)).toHaveLength(0);
+  });
+
+  it('con los ejemplos escritos, el alta llega a Meta con un ejemplo por hueco (y la fila los guarda)', async () => {
+    const el = await panel();
+    el.newName = 'cita_manana';
+    await escribirCuerpo(el, 'Hola {{1}}, te esperamos el {{2}}.');
+    await escribirEjemplo(el, '2', 'lunes');
+    await escribirEjemplo(el, '1', 'Ana');
+
+    await enviar(el);
+
+    const altas = comandos.filter((c) => c.name === 'whatsapp_inbox.templates.create');
+    expect(altas, 'no se guardó el alta').toHaveLength(1);
+    expect(altas[0].payload.variables, 'la fila no guarda los ejemplos que se mandaron a Meta').toBe('["Ana","lunes"]');
+    expect(puerta, 'no se mandó a Meta').toHaveLength(1);
+    expect(puerta[0].variables, '{{1}} lleva el primer ejemplo y {{2}} el segundo').toBe('["Ana","lunes"]');
+  });
+
+  it('sin el ejemplo de un hueco no deja guardar: Meta la rechazaría con `missing_example`', async () => {
+    const el = await panel();
+    el.newName = 'cita_manana';
+    await escribirCuerpo(el, 'Hola {{1}}, te esperamos el {{2}}.');
+    await escribirEjemplo(el, '1', 'Ana');
+    await escribirEjemplo(el, '2', '   ');
+
+    expect(q(el, 'whatsapp-templates-submit')?.hasAttribute('disabled'), '«Añadir» se ofrece sin un ejemplo').toBe(true);
+    await el.createTemplate(new Event('submit'));
+    expect(comandos.filter((c) => c.name === 'whatsapp_inbox.templates.create'), 'se guardó sin ejemplo').toHaveLength(0);
+    expect(puerta, 'se mandó a Meta sin ejemplo').toHaveLength(0);
+
+    await escribirEjemplo(el, '2', 'lunes');
+    expect(q(el, 'whatsapp-templates-submit')?.hasAttribute('disabled')).toBe(false);
+  });
+
+  it('al abrir una numerada cada campo trae su ejemplo guardado; un hueco nuevo pide el suyo', async () => {
+    const el = await panel();
+    el.startEdit(NUMERADA);
+    await el.updateComplete;
+    expect(ejemplos(el).map((c) => [c.getAttribute('data-variable'), c.value])).toEqual([
+      ['1', 'Ana'],
+      ['2', 'lunes'],
+    ]);
+
+    await escribirCuerpo(el, 'Hola {{1}}, te esperamos el {{2}} a las {{3}}.');
+    expect(ejemplos(el).map((c) => [c.getAttribute('data-variable'), c.value ?? ''])).toEqual([
+      ['1', 'Ana'],
+      ['2', 'lunes'],
+      ['3', ''],
+    ]);
+    await escribirEjemplo(el, '3', '10:00');
+    await enviar(el);
+
+    const updates = comandos.filter((c) => c.name === 'whatsapp_inbox.templates.update');
+    expect(updates, 'no se guardó la edición').toHaveLength(1);
+    expect(updates[0].payload.variables).toBe('["Ana","lunes","10:00"]');
+    expect(puerta[0].variables).toBe('["Ana","lunes","10:00"]');
+  });
+
+  it('quitar un hueco quita su ejemplo: Meta rechaza ejemplos de más', async () => {
+    const el = await panel();
+    el.startEdit(NUMERADA);
+    await escribirCuerpo(el, 'Hola {{1}}, te esperamos pronto.');
+    expect(ejemplos(el)).toHaveLength(1);
+
+    await enviar(el);
+    expect(puerta[0].variables).toBe('["Ana"]');
+  });
+
+  it('cambiar un ejemplo guardado lo cambia en la fila y en Meta', async () => {
+    const el = await panel();
+    el.startEdit(NUMERADA);
+    await el.updateComplete;
+    await escribirEjemplo(el, '1', 'Lucía');
+    await enviar(el);
+    expect(puerta[0].variables).toBe('["Lucía","lunes"]');
+  });
+
+  it('las variables con nombre también tienen su campo, con el ejemplo guardado o el propio nombre', async () => {
+    const conNombre = { ...NUMERADA, body: 'Hola {{nombre}}, el {{fecha}}.', variables: '["Ana","lunes"]' };
+    const el = await panel();
+    el.startEdit(conNombre);
+    await escribirCuerpo(el, 'Hola {{nombre}}, el {{fecha}} a las {{hora}}.');
+    expect(ejemplos(el).map((c) => [c.getAttribute('data-variable'), c.value])).toEqual([
+      ['nombre', 'Ana'],
+      ['fecha', 'lunes'],
+      ['hora', 'hora'],
+    ]);
+
+    await escribirEjemplo(el, 'hora', '10:00');
+    await enviar(el);
+    expect(puerta[0].variables).toBe('["Ana","lunes","10:00"]');
+  });
+
+  it('el «+» después de abrir una numerada no hereda sus ejemplos', async () => {
+    const el = await panel();
+    el.startEdit(NUMERADA);
+    await el.updateComplete;
+    await el.openCreate();
+    await escribirCuerpo(el, 'Hola {{1}}');
+    expect(ejemplos(el).map((c) => c.value ?? '')).toEqual(['']);
+  });
+
+  it('en una plantilla de solo lectura (cabecera con imagen) los ejemplos se ven pero no se editan', async () => {
+    const el = await panel();
+    el.startEdit({ ...NUMERADA, header_format: 'IMAGE' });
+    await el.updateComplete;
+    expect(ejemplos(el).map((c) => c.value)).toEqual(['Ana', 'lunes']);
+    expect(ejemplos(el).every((c) => c.disabled === true), 'un ejemplo se edita en una plantilla bloqueada').toBe(true);
+  });
+
+  it('el campo dice a qué hueco pertenece y el panel explica para qué sirve (cadena en y es)', async () => {
+    const el = await panel();
+    await escribirCuerpo(el, 'Hola {{1}}');
+    expect(ejemplos(el)[0].getAttribute('label')).toBe('ui.exampleFor:{{1}}');
+    expect(q(el, 'whatsapp-templates-examples')?.textContent).toContain('ui.examplesHint');
   });
 });

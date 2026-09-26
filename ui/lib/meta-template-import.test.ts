@@ -7,7 +7,7 @@
 // is NOT imported with a piece missing, because the next «Guardar» would register the mutilated
 // text at Meta and silently strip the buttons the owner put there.
 import { describe, expect, it } from 'vitest';
-import { namedExamplesOf, templateFromMeta } from './meta-template-import';
+import { bodyExamplesOf, bodyVariables, namedExamplesOf, templateFromMeta } from './meta-template-import';
 
 const BASE = {
   name: 'recordatorio_cita',
@@ -323,5 +323,48 @@ describe('namedExamplesOf: el ejemplo de cada variable con nombre, por nombre (w
 
   it('un nombre sin ejemplo guardado se queda fuera: no se le cuelga el de otro', () => {
     expect(namedExamplesOf('Hola {{nombre}}, el {{fecha}}', '["Ana"]')).toEqual({ nombre: 'Ana' });
+  });
+});
+
+describe('bodyVariables: the variables the owner gives an example for, in the order Meta pairs them (whatsapp_inbox#208)', () => {
+  it('a numbered body takes one per distinct number, in number order — not in the order they are written', () => {
+    expect(bodyVariables('El {{2}} te esperamos, {{1}}. Recuerda: {{2}}')).toEqual(['1', '2']);
+  });
+
+  it('a named body takes one per distinct name, in first-appearance order', () => {
+    expect(bodyVariables('Hola {{nombre}}, el {{fecha}}. Adiós {{nombre}}')).toEqual(['nombre', 'fecha']);
+  });
+
+  it('numbers are numbers: {{10}} goes after {{9}}, not after {{1}}', () => {
+    const body = Array.from({ length: 10 }, (_, i) => `{{${10 - i}}}`).join(' ');
+    expect(bodyVariables(body)).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']);
+  });
+
+  it('a body with no variable asks for no example', () => {
+    expect(bodyVariables('Hola, te esperamos mañana.')).toEqual([]);
+  });
+});
+
+describe('bodyExamplesOf: the stored example of each variable, by variable (whatsapp_inbox#208)', () => {
+  it('a numbered body: {{n}} holds the n-th example, whatever the order it is written in', () => {
+    expect(bodyExamplesOf('El {{2}} te esperamos, {{1}}.', '["Ana","lunes"]')).toEqual({ '1': 'Ana', '2': 'lunes' });
+  });
+
+  it('a body with a gap (Meta refuses it, but the row can hold it) reads back what the panel wrote', () => {
+    expect(bodyExamplesOf('Hola {{2}}, el {{4}}', '["Ana","lunes"]')).toEqual({ '2': 'Ana', '4': 'lunes' });
+  });
+
+  it('a number with no stored example gets none: the owner writes it', () => {
+    expect(bodyExamplesOf('Hola {{1}}, el {{2}}', '["Ana"]')).toEqual({ '1': 'Ana' });
+    expect(bodyExamplesOf('Hola {{1}}', '[]')).toEqual({});
+  });
+
+  it('a named body pairs by name, as namedExamplesOf', () => {
+    expect(bodyExamplesOf('Hola {{nombre}}, el {{fecha}}', '["Ana","lunes"]')).toEqual({ nombre: 'Ana', fecha: 'lunes' });
+  });
+
+  it('unreadable examples invent none', () => {
+    expect(bodyExamplesOf('Hola {{1}}', 'no es json')).toEqual({});
+    expect(bodyExamplesOf('Hola {{1}}', '{"1":"Ana"}')).toEqual({});
   });
 });

@@ -88,6 +88,36 @@ export function namedExamplesOf(body: string, variables: string): Record<string,
   return out;
 }
 
+/** The variables of `body` that each need an example, in the order Meta pairs `variables` with
+ *  them (whatsapp_inbox#208): a named body, one per distinct name in first-appearance order; a
+ *  numbered one, one per distinct number in NUMBER order, since `{{n}}` takes the n-th example. */
+export function bodyVariables(body: string): string[] {
+  const names = namedVariables(body);
+  if (names.length) return names;
+  const numbers = [...body.matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map((m) => Number(m[1]));
+  return [...new Set(numbers)].sort((a, b) => a - b).map(String);
+}
+
+/** The stored example of each variable of `body`, by variable (whatsapp_inbox#208): by name for a
+ *  named body (`namedExamplesOf`), and by position in `bodyVariables` for a numbered one — `{{n}}`
+ *  ↔ the n-th example, and a body with gaps (which Meta refuses) reads back what the panel wrote.
+ *  A variable with no stored example gets none. */
+export function bodyExamplesOf(body: string, variables: string): Record<string, string> {
+  if (namedVariables(body).length) return namedExamplesOf(body, variables);
+  let examples: unknown;
+  try {
+    examples = JSON.parse(variables);
+  } catch {
+    return {};
+  }
+  if (!Array.isArray(examples)) return {};
+  const out: Record<string, string> = {};
+  bodyVariables(body).forEach((key, i) => {
+    if (i < examples.length) out[key] = String(examples[i]);
+  });
+  return out;
+}
+
 /** Meta's `buttons` list as this module stores it, or `null` when one of them is a kind the
  *  screen cannot show (copy code, one-time password, WhatsApp Flow, catalogue…) or lacks what it
  *  needs to work (its text, a link's URL, a call button's number). */
