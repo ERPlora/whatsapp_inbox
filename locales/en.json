@@ -142,7 +142,6 @@
     "buttonUrl": "Opens a link",
     "buttonPhone": "Calls the number",
     "templateManagedInMeta": "This template has buttons or an image, video or document header, so its wording is changed in WhatsApp Manager. Open this tab again to see what Meta says.",
-    "templateNamedVariablesInMeta": "This template uses named variables ({{name}}), which ERPlora cannot register at Meta yet, so its wording is changed in WhatsApp Manager. Open this tab again to see what Meta says.",
     "metaOnlyTemplates": "These WhatsApp Manager templates cannot be brought into this list yet (they use a carousel, a limited-time offer, a copy-code or WhatsApp Flow button, a location header, or a variable in the header). Manage them in WhatsApp Manager: {names}",
     "doorRefusal": {
       "invalid_name": "Meta did not accept the name. Use lowercase letters, numbers and underscores only — no spaces or accents — and try again.",
@@ -150,6 +149,8 @@
       "invalid_language": "Meta did not accept the language. Write it as a Meta language code, such as es or en_US.",
       "invalid_placeholders": "Meta did not accept the placeholders in the body. Number them in order, starting at {{1}} and with no gaps.",
       "invalid_header_placeholders": "Meta did not accept the header: it takes at most one placeholder, and it has to be {{1}}.",
+      "mixed_placeholders": "The body mixes numbered variables ({{1}}) with named ones ({{name}}). Meta takes one kind per template: use only one of them.",
+      "invalid_named_placeholders": "Meta did not accept a variable name in the body. Use lowercase letters, digits and underscores only, with no spaces, such as {{first_name}}.",
       "invalid_variables": "Meta did not accept the list of variables. Give one name per placeholder used in the text.",
       "missing_body": "Meta will not review an empty template. Write the message the customer is going to read.",
       "missing_example": "Meta needs an example for every placeholder. Fill in what each one is worth in a real message.",

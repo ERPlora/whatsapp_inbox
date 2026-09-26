@@ -133,7 +133,6 @@ const COVERED: Record<
       'whatsapp-templates-header-media',
       'whatsapp-templates-language',
       'whatsapp-templates-managed-in-meta',
-      'whatsapp-templates-named-variables',
       'whatsapp-templates-load-error',
       'whatsapp-templates-meta-only',
       'whatsapp-templates-meta-sync-notice',

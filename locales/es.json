@@ -143,7 +143,6 @@
     "buttonUrl": "Abre un enlace",
     "buttonPhone": "Llama al número",
     "templateManagedInMeta": "Esta plantilla lleva botones o una imagen, vídeo o documento en la cabecera, así que su texto se cambia en WhatsApp Manager. Al volver a abrir esta pestaña verás lo que diga Meta.",
-    "templateNamedVariablesInMeta": "Esta plantilla usa variables con nombre ({{nombre}}), que ERPlora aún no puede registrar en Meta, así que su texto se cambia en WhatsApp Manager. Al volver a abrir esta pestaña verás lo que diga Meta.",
     "metaOnlyTemplates": "Estas plantillas de WhatsApp Manager todavía no se pueden traer a esta lista (llevan un carrusel, una oferta por tiempo limitado, un botón de copiar código o de WhatsApp Flow, una ubicación en la cabecera o una variable en la cabecera). Gestiónalas en WhatsApp Manager: {names}",
     "doorRefusal": {
       "invalid_name": "Meta no ha aceptado el nombre. Usa solo minúsculas, números y guiones bajos —sin espacios ni acentos— y vuelve a intentarlo.",
@@ -151,6 +150,8 @@
       "invalid_language": "Meta no ha aceptado el idioma. Escríbelo como código de idioma de Meta, por ejemplo es o en_US.",
       "invalid_placeholders": "Meta no ha aceptado los huecos del cuerpo. Numéralos en orden, empezando por {{1}} y sin saltarte ninguno.",
       "invalid_header_placeholders": "Meta no ha aceptado el encabezado: admite un hueco como mucho, y tiene que ser {{1}}.",
+      "mixed_placeholders": "El cuerpo mezcla variables numeradas ({{1}}) y con nombre ({{nombre}}). Meta admite un solo tipo por plantilla: usa solo uno de los dos.",
+      "invalid_named_placeholders": "Meta no ha aceptado el nombre de una variable del cuerpo. Usa solo minúsculas, números y guiones bajos, sin espacios, como {{nombre_cliente}}.",
       "invalid_variables": "Meta no ha aceptado la lista de variables. Pon un nombre por cada hueco que uses en el texto.",
       "missing_body": "Meta no revisa una plantilla vacía. Escribe el mensaje que va a leer el cliente.",
       "missing_example": "Meta necesita un ejemplo para cada hueco. Rellena qué vale cada uno en un mensaje real.",

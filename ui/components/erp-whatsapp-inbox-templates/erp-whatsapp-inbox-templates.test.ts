@@ -1396,29 +1396,88 @@ describe('plantillas con variables con NOMBRE, {{nombre}} (whatsapp_inbox#186)',
     expect(q(el, 'whatsapp-templates-meta-only'), 'se sigue avisando de una plantilla que ya se trajo').toBeNull();
   });
 
-  // The SaaS registers {{1}}…{{n}} only (it would answer `missing_example`): until it sends Meta
-  // `parameter_format: NAMED`, «Guardar» cannot re-register this text, so it is edited in
-  // WhatsApp Manager — the same lock as a template with buttons (whatsapp_inbox#180).
-  it('al abrirla queda en solo lectura, dice por qué, y un envío del formulario no la toca', async () => {
-    filas = [TRAIDA];
+  /** Opens TRAIDA (or `row`) in the panel as an edit, as a row click does. */
+  async function abrir(row: Record<string, unknown>) {
+    filas = [row];
     const el = await montar();
     const t = tabla(el)!;
     t.open = () => {};
     t.close = () => {};
-    (el as unknown as { startEdit: (r: Record<string, unknown>) => void }).startEdit(TRAIDA);
+    (el as unknown as { startEdit: (r: Record<string, unknown>) => void }).startEdit(row);
     await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    return el;
+  }
 
-    expect(q(el, 'whatsapp-templates-submit'), '«Guardar» la mandaría a un SaaS que la rechaza').toBeNull();
-    expect(q(el, 'whatsapp-templates-named-variables')?.textContent, 'no se dice por qué no se edita aquí').toContain(
-      'ui.templateNamedVariablesInMeta',
-    );
-    expect((q(el, 'whatsapp-templates-body') as HTMLElement & { disabled?: boolean })?.disabled).toBe(true);
-
+  async function guardarCon(el: HTMLElement & { shadowRoot: ShadowRoot }, body: string) {
+    (el as unknown as { newBody: string }).newBody = body;
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
     const form = q(el, 'whatsapp-templates-form') as HTMLFormElement;
     form.dispatchEvent(new Event('submit', { cancelable: true }));
-    await new Promise((r) => setTimeout(r, 0));
-    expect(comandos.filter((c) => c.name === 'whatsapp_inbox.templates.update'), 'se reescribió la plantilla').toHaveLength(0);
-    expect(puerta, 'se volvió a registrar en Meta').toHaveLength(0);
+    for (let i = 0; i < 3; i += 1) await new Promise((r) => setTimeout(r, 0));
+  }
+
+  // Since saas#2281 the SaaS registers `{{nombre}}` at Meta as `parameter_format: NAMED`, so the
+  // lock #186 put on these templates is gone (whatsapp_inbox#196): they are edited like any other.
+  it('al abrirla se puede editar y guardar, y vuelve a Meta con un ejemplo por nombre', async () => {
+    const el = await abrir(TRAIDA);
+
+    expect(q(el, 'whatsapp-templates-submit'), 'sigue sin «Guardar»').toBeTruthy();
+    expect((q(el, 'whatsapp-templates-body') as HTMLElement & { disabled?: boolean })?.disabled).toBe(false);
+    expect(q(el, 'whatsapp-templates-managed-in-meta')).toBeNull();
+
+    await guardarCon(el, 'Hola {{nombre}}: te esperamos el {{fecha}}.');
+
+    const updates = comandos.filter((c) => c.name === 'whatsapp_inbox.templates.update');
+    expect(updates, 'no se guardó el texto').toHaveLength(1);
+    expect(updates[0].payload).toMatchObject({ template_id: 't11', body: 'Hola {{nombre}}: te esperamos el {{fecha}}.' });
+    expect(puerta, 'no se volvió a mandar a Meta').toHaveLength(1);
+    expect(puerta[0]).toMatchObject({ body: 'Hola {{nombre}}: te esperamos el {{fecha}}.', variables: '["Ana","lunes"]' });
+    expect(pasos.indexOf('whatsapp_inbox.templates.update')).toBeLessThan(pasos.indexOf('door.register'));
+  });
+
+  it('los ejemplos siguen al NOMBRE: se reordenan, se quitan y uno nuevo lleva su nombre', async () => {
+    const el = await abrir(TRAIDA);
+
+    // `fecha` now comes first, `nombre` is gone, `hora` is new and used twice.
+    await guardarCon(el, 'El {{fecha}} a las {{hora}}. Recuerda: {{hora}}.');
+
+    expect(puerta, 'no se volvió a mandar a Meta').toHaveLength(1);
+    expect(puerta[0].variables, 'un ejemplo por nombre distinto, en orden de primera aparición').toBe('["lunes","hora"]');
+    const updates = comandos.filter((c) => c.name === 'whatsapp_inbox.templates.update');
+    expect(updates[0].payload.variables, 'la fila guarda otros ejemplos que los que se mandaron a Meta').toBe('["lunes","hora"]');
+  });
+
+  it('un nombre que Meta no admite se explica con la frase del módulo, no con el código', async () => {
+    respondePuerta = async () => {
+      throw refusal('invalid_named_placeholders');
+    };
+    const el = await abrir(TRAIDA);
+
+    await guardarCon(el, 'Hola {{Nombre Completo}}');
+
+    const error = q(el, 'whatsapp-templates-form-error')?.textContent ?? '';
+    expect(error, 'el rechazo no se dice').toBeTruthy();
+    expect(error, 'se enseña el código pelado').not.toBe('invalid_named_placeholders');
+  });
+
+  it('el «+» tras abrir una no hereda sus ejemplos: la nueva lleva los suyos', async () => {
+    const el = await abrir(TRAIDA);
+    await (el as unknown as { openCreate: () => Promise<void> }).openCreate();
+    (el as unknown as { newName: string }).newName = 'aviso_nuevo';
+
+    await guardarCon(el, 'Hola {{nombre}}');
+
+    expect(comandos.filter((c) => c.name === 'whatsapp_inbox.templates.create')).toHaveLength(1);
+    expect(puerta, 'no se mandó a Meta').toHaveLength(1);
+    expect(puerta[0].variables, 'la plantilla nueva lleva el ejemplo de la que se abrió antes').toBe('["nombre"]');
+  });
+
+  it('una plantilla con botones sigue en solo lectura aunque use variables con nombre', async () => {
+    const conBotones = { ...TRAIDA, buttons: '[{"type":"QUICK_REPLY","text":"Vale"}]' };
+    const el = await abrir(conBotones);
+
+    expect(q(el, 'whatsapp-templates-submit'), '«Guardar» quitaría los botones en Meta').toBeNull();
+    expect(q(el, 'whatsapp-templates-managed-in-meta')).toBeTruthy();
   });
 
   it('una plantilla numerada ({{1}}) se sigue editando', async () => {
@@ -1431,6 +1490,6 @@ describe('plantillas con variables con NOMBRE, {{nombre}} (whatsapp_inbox#186)',
     await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
 
     expect(q(el, 'whatsapp-templates-submit')).toBeTruthy();
-    expect(q(el, 'whatsapp-templates-named-variables')).toBeNull();
+    expect(q(el, 'whatsapp-templates-managed-in-meta')).toBeNull();
   });
 });
