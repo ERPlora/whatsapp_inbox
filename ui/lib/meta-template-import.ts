@@ -69,6 +69,25 @@ export function namedVariables(value: string): string[] {
   return [...new Set(names.filter((name) => !/^\d+$/.test(name)))];
 }
 
+/** The stored example of each named variable of `body`, by name (whatsapp_inbox#196). `variables`
+ *  holds one example per distinct name in first-appearance order, so a name and its example are
+ *  paired by position; a name with no example at that position, or examples that are not a JSON
+ *  array, get none — the caller decides what a missing example becomes. */
+export function namedExamplesOf(body: string, variables: string): Record<string, string> {
+  let examples: unknown;
+  try {
+    examples = JSON.parse(variables);
+  } catch {
+    return {};
+  }
+  if (!Array.isArray(examples)) return {};
+  const out: Record<string, string> = {};
+  namedVariables(body).forEach((name, i) => {
+    if (i < examples.length) out[name] = String(examples[i]);
+  });
+  return out;
+}
+
 /** Meta's `buttons` list as this module stores it, or `null` when one of them is a kind the
  *  screen cannot show (copy code, one-time password, WhatsApp Flow, catalogue…) or lacks what it
  *  needs to work (its text, a link's URL, a call button's number). */

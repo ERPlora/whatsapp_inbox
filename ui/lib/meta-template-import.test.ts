@@ -7,7 +7,7 @@
 // is NOT imported with a piece missing, because the next «Guardar» would register the mutilated
 // text at Meta and silently strip the buttons the owner put there.
 import { describe, expect, it } from 'vitest';
-import { templateFromMeta } from './meta-template-import';
+import { namedExamplesOf, templateFromMeta } from './meta-template-import';
 
 const BASE = {
   name: 'recordatorio_cita',
@@ -304,5 +304,24 @@ describe('what does NOT fit is refused, never imported with a piece missing', ()
 
   it('no verdict: there would be nothing true to say about its state', () => {
     expect(refused({ ...BASE, status: '', components: [{ type: 'BODY', text: 'x' }] })).toBe(false);
+  });
+});
+
+describe('namedExamplesOf: el ejemplo de cada variable con nombre, por nombre (whatsapp_inbox#196)', () => {
+  it('empareja cada nombre distinto con su ejemplo, en orden de primera aparición', () => {
+    expect(namedExamplesOf('Hola {{nombre}}, el {{fecha}}. Adiós {{nombre}}', '["Ana","lunes"]')).toEqual({
+      nombre: 'Ana',
+      fecha: 'lunes',
+    });
+  });
+
+  it('sin variables con nombre, o con ejemplos ilegibles, no inventa ninguno', () => {
+    expect(namedExamplesOf('Hola {{1}}', '["Ana"]')).toEqual({});
+    expect(namedExamplesOf('Hola {{nombre}}', 'no es json')).toEqual({});
+    expect(namedExamplesOf('Hola {{nombre}}', '{"nombre":"Ana"}')).toEqual({});
+  });
+
+  it('un nombre sin ejemplo guardado se queda fuera: no se le cuelga el de otro', () => {
+    expect(namedExamplesOf('Hola {{nombre}}, el {{fecha}}', '["Ana"]')).toEqual({ nombre: 'Ana' });
   });
 });

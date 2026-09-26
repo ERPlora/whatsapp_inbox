@@ -4566,7 +4566,6 @@ var es_default = {
     buttonUrl: "Abre un enlace",
     buttonPhone: "Llama al n\xFAmero",
     templateManagedInMeta: "Esta plantilla lleva una imagen, v\xEDdeo o documento en la cabecera, o un bot\xF3n de enlace con variable, as\xED que su texto se cambia en WhatsApp Manager. Al volver a abrir esta pesta\xF1a ver\xE1s lo que diga Meta.",
-    templateNamedVariablesInMeta: "Esta plantilla usa variables con nombre ({{nombre}}), que ERPlora a\xFAn no puede registrar en Meta, as\xED que su texto se cambia en WhatsApp Manager. Al volver a abrir esta pesta\xF1a ver\xE1s lo que diga Meta.",
     metaOnlyTemplates: "Estas plantillas de WhatsApp Manager todav\xEDa no se pueden traer a esta lista (llevan un carrusel, una oferta por tiempo limitado, un bot\xF3n de copiar c\xF3digo o de WhatsApp Flow, una ubicaci\xF3n en la cabecera o una variable en la cabecera). Gesti\xF3nalas en WhatsApp Manager: {names}",
     doorRefusal: {
       invalid_name: "Meta no ha aceptado el nombre. Usa solo min\xFAsculas, n\xFAmeros y guiones bajos \u2014sin espacios ni acentos\u2014 y vuelve a intentarlo.",
@@ -4574,6 +4573,8 @@ var es_default = {
       invalid_language: "Meta no ha aceptado el idioma. Escr\xEDbelo como c\xF3digo de idioma de Meta, por ejemplo es o en_US.",
       invalid_placeholders: "Meta no ha aceptado los huecos del cuerpo. Num\xE9ralos en orden, empezando por {{1}} y sin saltarte ninguno.",
       invalid_header_placeholders: "Meta no ha aceptado el encabezado: admite un hueco como mucho, y tiene que ser {{1}}.",
+      mixed_placeholders: "El cuerpo mezcla variables numeradas ({{1}}) y con nombre ({{nombre}}). Meta admite un solo tipo por plantilla: usa solo uno de los dos.",
+      invalid_named_placeholders: "Meta no ha aceptado el nombre de una variable del cuerpo. Usa solo min\xFAsculas, n\xFAmeros y guiones bajos, sin espacios, como {{nombre_cliente}}.",
       invalid_variables: "Meta no ha aceptado la lista de variables. Pon un nombre por cada hueco que uses en el texto.",
       missing_body: "Meta no revisa una plantilla vac\xEDa. Escribe el mensaje que va a leer el cliente.",
       missing_example: "Meta necesita un ejemplo para cada hueco. Rellena qu\xE9 vale cada uno en un mensaje real.",
@@ -4779,7 +4780,6 @@ var en_default = {
     buttonUrl: "Opens a link",
     buttonPhone: "Calls the number",
     templateManagedInMeta: "This template has an image, video or document header, or a link button with a variable, so its wording is changed in WhatsApp Manager. Open this tab again to see what Meta says.",
-    templateNamedVariablesInMeta: "This template uses named variables ({{name}}), which ERPlora cannot register at Meta yet, so its wording is changed in WhatsApp Manager. Open this tab again to see what Meta says.",
     metaOnlyTemplates: "These WhatsApp Manager templates cannot be brought into this list yet (they use a carousel, a limited-time offer, a copy-code or WhatsApp Flow button, a location header, or a variable in the header). Manage them in WhatsApp Manager: {names}",
     doorRefusal: {
       invalid_name: "Meta did not accept the name. Use lowercase letters, numbers and underscores only \u2014 no spaces or accents \u2014 and try again.",
@@ -4787,6 +4787,8 @@ var en_default = {
       invalid_language: "Meta did not accept the language. Write it as a Meta language code, such as es or en_US.",
       invalid_placeholders: "Meta did not accept the placeholders in the body. Number them in order, starting at {{1}} and with no gaps.",
       invalid_header_placeholders: "Meta did not accept the header: it takes at most one placeholder, and it has to be {{1}}.",
+      mixed_placeholders: "The body mixes numbered variables ({{1}}) with named ones ({{name}}). Meta takes one kind per template: use only one of them.",
+      invalid_named_placeholders: "Meta did not accept a variable name in the body. Use lowercase letters, digits and underscores only, with no spaces, such as {{first_name}}.",
       invalid_variables: "Meta did not accept the list of variables. Give one name per placeholder used in the text.",
       missing_body: "Meta will not review an empty template. Write the message the customer is going to read.",
       missing_example: "Meta needs an example for every placeholder. Fill in what each one is worth in a real message.",
@@ -6234,6 +6236,20 @@ function namedVariables(value) {
   const names = [...value.matchAll(/\{\{\s*([^{}]*?)\s*\}\}/g)].map((m4) => m4[1]);
   return [...new Set(names.filter((name) => !/^\d+$/.test(name)))];
 }
+function namedExamplesOf(body, variables) {
+  let examples;
+  try {
+    examples = JSON.parse(variables);
+  } catch {
+    return {};
+  }
+  if (!Array.isArray(examples)) return {};
+  const out = {};
+  namedVariables(body).forEach((name, i7) => {
+    if (i7 < examples.length) out[name] = String(examples[i7]);
+  });
+  return out;
+}
 function buttonsFromMeta(raw) {
   if (!Array.isArray(raw) || raw.length === 0) return null;
   const out = [];
@@ -6417,6 +6433,10 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     this.editingHeaderFormat = "TEXT";
     this.editingButtons = [];
     this.editingDynamicLink = false;
+    /** The example Meta holds for each named variable of the template being edited, by name. Named
+     *  templates store one example per distinct name in first-appearance order (whatsapp_inbox#186),
+     *  so this is how the examples follow their NAME when the owner rewrites the body. */
+    this.namedExamples = {};
     this.editingRest = {
       header: "",
       footer: "",
@@ -6477,10 +6497,12 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
    *  the template again at Meta from what this panel holds, and this panel cannot write those parts
    *  yet — saving would strip them at Meta. A media header (whatsapp_inbox#218) and a link button
    *  with a variable, which needs an example and a value on every send, lock the panel; plain quick
-   *  reply, link and call buttons do not since whatsapp_inbox#185. It is edited in WhatsApp Manager
-   *  and the tab brings Meta's verdict back on the next open. */
+   *  reply, link and call buttons do not since whatsapp_inbox#185, nor named body variables
+   *  (`{{nombre}}`), which the SaaS registers as `parameter_format: NAMED` (saas#2281,
+   *  whatsapp_inbox#196). It is edited in WhatsApp Manager and the tab brings Meta's verdict back
+   *  on the next open. */
   get managedInMeta() {
-    return !!this.editingId && (this.editingHeaderFormat !== "TEXT" || this.editingDynamicLink || this.hasNamedVariables);
+    return !!this.editingId && (this.editingHeaderFormat !== "TEXT" || this.editingDynamicLink);
   }
   /** A button still missing its label, its link or its number: Meta would refuse the template. */
   get buttonsIncomplete() {
@@ -6500,12 +6522,6 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
    *  link does not drag a phone number along to Meta. */
   setButton(index, patch) {
     this.editingButtons = this.editingButtons.map((b3, i7) => i7 === index ? cleanButton({ ...b3, ...patch }) : b3);
-  }
-  /** A body with NAMED variables (`{{nombre}}`, whatsapp_inbox#186) locks the panel too: the SaaS
-   *  registers `{{1}}…{{n}}` only, so «Guardar» would be refused (`missing_example`) until it
-   *  sends Meta `parameter_format: NAMED`. */
-  get hasNamedVariables() {
-    return !!this.editingId && namedVariables(this.newBody).length > 0;
   }
   get rowActions() {
     const t5 = (k2) => erplora3().t(CATALOG3, k2);
@@ -6701,9 +6717,18 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
       header: this.editingRest.header,
       body: this.newBody,
       footer: this.editingRest.footer,
-      variables: this.editingRest.variables,
+      variables: this.variablesFor(this.newBody),
       buttons: JSON.stringify(groupedButtons(this.editingButtons.map(cleanButton)))
     };
+  }
+  /** The examples the door must send with `body`. A NAMED body takes one example per distinct name,
+   *  in the order the body first uses it — the SaaS pairs them by position (saas#2281): a name the
+   *  body kept keeps its example, a name it dropped loses it, and a new one is its own example, the
+   *  same way a numbered variable's name is its sample. A numbered body travels as it was. */
+  variablesFor(body) {
+    const names = namedVariables(body);
+    if (!names.length) return this.editingRest.variables;
+    return JSON.stringify(names.map((name) => this.namedExamples[name] ?? name));
   }
   /**
    * Register the template with Meta and put back what Meta answered (whatsapp_inbox#87).
@@ -6787,6 +6812,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     this.editingHeaderFormat = String(row.header_format ?? "").trim().toUpperCase() || "TEXT";
     this.editingButtons = storedButtons(row.buttons).map(cleanButton);
     this.editingDynamicLink = this.editingButtons.some((b3) => "url" in b3 && b3.url.includes("{{"));
+    this.namedExamples = namedExamplesOf(this.newBody, this.editingRest.variables);
     this.editingMeta = metaTemplateView(row.meta_status);
     this.editingMetaCode = String(row.meta_status ?? "");
     this.editingMetaReason = String(row.meta_rejected_reason ?? "");
@@ -6816,6 +6842,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     this.editingRest = { header: "", footer: "", variables: "[]", is_active: 1 };
     this.editingButtons = [];
     this.editingDynamicLink = false;
+    this.namedExamples = {};
     this.editingMeta = null;
     this.editingMetaCode = "";
     this.editingMetaReason = "";
@@ -6891,7 +6918,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     </div>`;
   }
   /** The media header and the buttons of a template brought from WhatsApp Manager, and why its
-   *  text is not saved from here (whatsapp_inbox#180, #186). Nothing for a text-only template. */
+   *  text is not saved from here (whatsapp_inbox#180). Nothing for a text-only template. */
   renderRichParts() {
     if (!this.managedInMeta) return A;
     const t5 = (k2) => erplora3().t(CATALOG3, k2);
@@ -6907,7 +6934,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
                 </li>`
     )}
             </ul>` : A}
-      ${this.hasNamedVariables ? b2`<p data-testid="whatsapp-templates-named-variables">${t5("ui.templateNamedVariablesInMeta")}</p>` : b2`<p data-testid="whatsapp-templates-managed-in-meta">${t5("ui.templateManagedInMeta")}</p>`}
+      <p data-testid="whatsapp-templates-managed-in-meta">${t5("ui.templateManagedInMeta")}</p>
     </div>`;
   }
   /** The buttons editor (whatsapp_inbox#185): kind, label and — for a link or a call — where it

@@ -27,9 +27,9 @@ const SOURCE_LANG = 'en';
  * this list into a tautology — «every key that has a string has a string» — and the failure it
  * exists to catch is precisely a code with NO string. So the list is the independent half:
  *
- *  - the fourteen `TemplateError(...)` of the SaaS
+ *  - the sixteen `TemplateError(...)` of the SaaS
  *    (`saas: apps/whatsapp_inbox/services/templates.py`), which is the half that knows what Meta
- *    takes: ten about the text the owner wrote, four about Meta or the credential;
+ *    takes: twelve about the text the owner wrote, four about Meta or the credential;
  *  - the four the runtime's envelope adds when it never got a verdict to relay
  *    (`hub: crates/server/src/cloud_proxy.rs`, hub#1688) plus `capability_denied`, which is the
  *    door's own gate (`notify` + the `whatsapp` channel).
@@ -44,6 +44,8 @@ export const META_DOOR_REFUSAL_CODES = [
   'invalid_language',
   'invalid_placeholders',
   'invalid_header_placeholders',
+  'mixed_placeholders',
+  'invalid_named_placeholders',
   'invalid_variables',
   'missing_body',
   'missing_example',
