@@ -5,8 +5,9 @@
  * (ERPlora/saas#2253). This module stores a template as seven flat fields, the same seven Meta
  * reviews when the tab registers one, plus the KIND of its header and its buttons (whatsapp_inbox#180).
  * `templateFromMeta` translates the first into the second — or refuses: a template with a part those
- * fields cannot hold (a location header, a carousel, a copy-code or Flow button, a header variable)
- * is NOT imported without it. The panel resends every field on «Guardar», so a row
+ * fields cannot hold (a location header, a carousel, a copy-code or Flow button, a header with more
+ * than one variable) is NOT imported without it. A header with ONE variable is (whatsapp_inbox#230),
+ * with its example in `header_example`. The panel resends every field on «Guardar», so a row
  * missing a part would register the template again at Meta without it.
  */
 
@@ -28,6 +29,10 @@ export interface ImportedTemplateFields {
   header_format: string;
   /** JSON array of the template's buttons in Meta's order, as `TemplateButton`s. */
   buttons: string;
+  /** The example of the header's ONE variable (`{{1}}` or `{{nombre}}`, whatsapp_inbox#230), `''`
+   *  when the header has none: what the SaaS sends to Meta as `example.header_text` (or
+   *  `header_text_named_params`) when the template is registered again. */
+  header_example: string;
 }
 
 /** A button of a template, with what the screen needs to say what it does. */
@@ -55,6 +60,11 @@ export type TemplateImport =
 const CATEGORIES = new Set(['MARKETING', 'UTILITY', 'AUTHENTICATION']);
 
 const text = (value: unknown): string => (typeof value === 'string' ? value : '');
+
+/** Every `{{…}}` of a text, as written between the braces (trimmed), repeats included. */
+function allVariables(value: string): string[] {
+  return [...value.matchAll(/\{\{\s*([^{}]*?)\s*\}\}/g)].map((m) => m[1]);
+}
 
 /** Distinct `{{n}}` numbers in a text, which is how Meta counts placeholders. */
 function placeholders(value: string): number {
@@ -157,6 +167,8 @@ export function templateFromMeta(template: Record<string, unknown>): TemplateImp
   if (!Array.isArray(template.components)) return refused;
 
   let header = '';
+  let headerExample = '';
+  let headerVariable = '';
   let headerFormat = 'TEXT';
   let buttons: TemplateButton[] = [];
   let body = '';
@@ -174,7 +186,23 @@ export function templateFromMeta(template: Record<string, unknown>): TemplateImp
         header = '';
       } else if (format === 'TEXT') {
         header = text(part.text);
-        if (placeholders(header) > 0 || namedVariables(header).length > 0) return refused;
+        // Meta takes ONE variable in a text header, and a numbered one is `{{1}}` (the SaaS refuses
+        // anything else as `invalid_header_placeholders`, whatsapp_inbox#226).
+        const found = allVariables(header);
+        if (found.length > 1 || (found.length === 1 && /^\d+$/.test(found[0]) && found[0] !== '1')) {
+          return refused;
+        }
+        headerVariable = found[0] ?? '';
+        const example = part.example as { header_text?: unknown; header_text_named_params?: unknown } | undefined;
+        if (headerVariable === '1') {
+          headerExample = Array.isArray(example?.header_text) ? text(example.header_text[0]).trim() : '';
+        } else if (headerVariable) {
+          const params = Array.isArray(example?.header_text_named_params) ? example.header_text_named_params : [];
+          const param = params.find(
+            (item) => text((item as { param_name?: unknown } | null)?.param_name).trim() === headerVariable,
+          ) as { example?: unknown } | undefined;
+          headerExample = text(param?.example).trim();
+        }
       } else {
         return refused;
       }
@@ -195,6 +223,14 @@ export function templateFromMeta(template: Record<string, unknown>): TemplateImp
     }
   }
   if (!body.trim()) return refused;
+  // A variable in the header without Meta's example gets a stand-in, as the body's do: the SaaS
+  // refuses a header variable with no example (`missing_example`).
+  if (headerVariable && !headerExample) headerExample = headerVariable === '1' ? 'var1' : headerVariable;
+  // Meta takes ONE kind of variable per template (its `parameter_format`), header included.
+  const headerNamed = headerVariable !== '' && headerVariable !== '1';
+  if ((headerNamed && placeholders(body) > 0) || (headerVariable === '1' && namedVariables(body).length > 0)) {
+    return refused;
+  }
 
   // One value per variable, or the SaaS refuses the next save (`missing_example`). Meta's own
   // examples first; a hole Meta left without one gets a stand-in the owner can overwrite.
@@ -226,6 +262,7 @@ export function templateFromMeta(template: Record<string, unknown>): TemplateImp
       variables: JSON.stringify(variables),
       header_format: headerFormat,
       buttons: JSON.stringify(buttons),
+      header_example: headerExample,
     },
     meta: {
       meta_template_id: text(template.meta_id).trim(),

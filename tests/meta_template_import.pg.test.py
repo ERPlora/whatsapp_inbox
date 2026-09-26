@@ -19,6 +19,9 @@ imports the ones this hub does not hold through `whatsapp_inbox.templates.import
 5. **The header's KIND and the buttons travel with it** (whatsapp_inbox#180): a template with an
    image header and «Confirmar» / «Cambiar cita» lists them back, and one created in the tab lists
    as a text header with no buttons — what every row was before the columns existed.
+6. **The example of a header variable travels with it** (whatsapp_inbox#230): «Tu cita del {{1}}»
+   lists back with the example Meta reviewed, a template created in the tab lists `''`, and the
+   migration that adds the column rolls back (its DOWN is run once) and applies again.
 
 Usage: tests/meta_template_import.pg.test.py   (exit 0 = green)
   Uses the `erplora-test-pg-5433` container by default (override: ERPLORA_TEST_PG_CONTAINER).
@@ -73,6 +76,7 @@ def import_binds(
         "meta_rejected_reason": "",
         "header_format": "TEXT",
         "buttons": "[]",
+        "header_example": "",
     }
 
 
@@ -120,6 +124,48 @@ def check_rich_parts_round_trip(db, base):
     want = ["c-plain|TEXT|[]", f"i-rich|IMAGE|{RICH_BUTTONS}"]
     if got != want:
         return [f"the header kind and the buttons must list back as {want!r}, got {got!r}"]
+    return []
+
+
+HEADER_EXAMPLE_MIGRATION = "migrations/postgres/014_template_header_example.sql"
+HEADER_EXAMPLE_DOWN = "ALTER TABLE whatsapp_inbox_template DROP COLUMN header_example;"
+
+
+def check_header_example_round_trip(db, base):
+    binds = import_binds("i-title", name="cita_titulo")
+    binds.update(header="Tu cita del {{1}}", header_example="25 de septiembre")
+    problems = P.run_command(db, IMPORT_COMMAND, binds)
+    problems += P.run_command(db, P.CREATE_COMMAND, P.create_binds("c-title", "sin_titulo"))
+    if problems:
+        return problems
+    sql = base.replace("$1", P.sql_literal(P.HUB))
+    got, error = P.rows(
+        db,
+        f"SELECT id, header, header_example FROM ({sql}) AS sub "
+        "WHERE id IN ('i-title', 'c-title') ORDER BY id;",
+    )
+    if error:
+        return [f"the list did not run: {error}"]
+    want = ["c-title||", "i-title|Tu cita del {{1}}|25 de septiembre"]
+    if got != want:
+        return [f"the header variable's example must list back as {want!r}, got {got!r}"]
+    return []
+
+
+def check_header_example_migration_rolls_back(db, base):
+    """The DOWN of 014 runs once and the UP applies again on top of it, the column back empty."""
+    down = P.psql(db, HEADER_EXAMPLE_DOWN)
+    if down.returncode != 0:
+        return [f"the DOWN of {HEADER_EXAMPLE_MIGRATION} does not apply: {down.stderr.strip()}"]
+    up = P.psql(db, (P.MODULE_DIR / HEADER_EXAMPLE_MIGRATION).read_text())
+    if up.returncode != 0:
+        return [f"{HEADER_EXAMPLE_MIGRATION} does not apply again after its DOWN: {up.stderr.strip()}"]
+    sql = base.replace("$1", P.sql_literal(P.HUB))
+    got, error = P.rows(db, f"SELECT id, header_example FROM ({sql}) AS sub WHERE id = 'i-title';")
+    if error:
+        return [f"the list did not run after the DOWN and the UP: {error}"]
+    if got != ["i-title|"]:
+        return [f"after DOWN + UP the column must be back with its default, got {got!r}"]
     return []
 
 
@@ -216,6 +262,8 @@ def main():
             check_other_language_and_hub,
             check_deleted_here_stays_deleted,
             check_rich_parts_round_trip,
+            check_header_example_round_trip,
+            check_header_example_migration_rolls_back,
         ):
             if not problems:
                 problems += check(db, base)
@@ -226,7 +274,8 @@ def main():
         print(
             "OK: a template from WhatsApp Manager is imported with its text and Meta's verdict, "
             "once per name and language (caseless), never over a row the owner deleted here, and "
-            "never blocked by another hub, with its header kind and its buttons"
+            "never blocked by another hub, with its header kind, its buttons and its header example "
+            "(migration 014 rolled back and applied again)"
         )
         return 0
     finally:

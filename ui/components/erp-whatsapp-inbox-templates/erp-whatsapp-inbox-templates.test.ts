@@ -1111,7 +1111,7 @@ describe('lo creado en WhatsApp Manager se trae a la lista con su texto (whatsap
       name: 'promo_otono', language: 'es', category: 'MARKETING', header: 'Otoño',
       body: 'Hola {{1}}, 20 % en tintes.', footer: 'Salón Elena', variables: '["Ana"]',
       meta_template_id: '90', meta_status: 'APPROVED', meta_rejected_reason: '',
-      header_format: 'TEXT', buttons: '[]',
+      header_format: 'TEXT', buttons: '[]', header_example: '',
     });
     expect(
       comandos.filter((c) => c.name === 'whatsapp_inbox.templates.create'),
@@ -1527,6 +1527,123 @@ describe('plantillas con variables con NOMBRE, {{nombre}} (whatsapp_inbox#186)',
 
     expect(q(el, 'whatsapp-templates-submit')).toBeTruthy();
     expect(q(el, 'whatsapp-templates-managed-in-meta')).toBeNull();
+  });
+});
+
+// whatsapp_inbox#230 — a template with ONE variable in its title («Tu cita del {{1}}») is brought in
+// from WhatsApp Manager with the example Meta reviewed it with, and «Guardar» sends that example back
+// to the registry (`header_example`): without it the SaaS refuses the save (`missing_example`, #226).
+describe('una plantilla con una variable en el título (whatsapp_inbox#230)', () => {
+  const TITULO_EN_META = {
+    name: 'cita_titulo', language: 'es', category: 'UTILITY', status: 'APPROVED', meta_id: '93',
+    rejected_reason: '',
+    components: [
+      { type: 'HEADER', format: 'TEXT', text: 'Tu cita del {{1}}', example: { header_text: ['25 de septiembre'] } },
+      { type: 'BODY', text: 'Hola {{1}}, te esperamos.', example: { body_text: [['Ana']] } },
+    ],
+  };
+  const TITULO = {
+    id: 't7', name: 'cita_titulo', language: 'es', category: 'UTILITY', header: 'Tu cita del {{1}}',
+    body: 'Hola {{1}}, te esperamos.', footer: '', variables: '["Ana"]', meta_template_id: '93',
+    meta_status: 'approved', meta_rejected_reason: '', is_active: 1, header_format: 'TEXT', buttons: '[]',
+    header_example: '25 de septiembre',
+  };
+  const importados = () => comandos.filter((c) => c.name === 'whatsapp_inbox.templates.import_from_meta');
+
+  async function guardar(row: Record<string, unknown>) {
+    filas = [row];
+    const el = await montar();
+    const t = tabla(el)!;
+    t.open = () => {};
+    t.close = () => {};
+    (el as unknown as { startEdit: (r: Record<string, unknown>) => void }).startEdit(row);
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    comandos.length = 0;
+    puerta.length = 0;
+    await (el as unknown as { createTemplate: (e: Event) => Promise<void> }).createTemplate(new Event('submit'));
+    return el;
+  }
+
+  it('se trae de WhatsApp Manager con el ejemplo del título', async () => {
+    filas = [];
+    respondeListado = async () => ({ templates: [TITULO_EN_META], stale: false });
+
+    const el = await montar();
+
+    expect(importados(), 'la plantilla con variable en el título no se trajo').toHaveLength(1);
+    expect(importados()[0].payload).toMatchObject({ header: 'Tu cita del {{1}}', header_example: '25 de septiembre' });
+    expect(el.shadowRoot.querySelector('[data-testid="whatsapp-templates-meta-only"]'), 'se sigue avisando de que no se trajo').toBeNull();
+  });
+
+  it('se puede guardar: no queda bloqueada y el ejemplo del título viaja al registro', async () => {
+    const el = await guardar(TITULO);
+
+    expect(el.shadowRoot.querySelector('[data-testid="whatsapp-templates-submit"]'), 'no hay «Guardar»').toBeTruthy();
+    expect(puerta, 'guardar no la registró en Meta').toHaveLength(1);
+    expect(puerta[0]).toMatchObject({ header: 'Tu cita del {{1}}', header_example: '25 de septiembre' });
+  });
+
+  it('el ejemplo va SOLO a la puerta: los comandos del hub no lo declaran y lo rechazarían', async () => {
+    await guardar(TITULO);
+
+    const update = comandos.find((c) => c.name === 'whatsapp_inbox.templates.update');
+    const respuesta = comandos.find((c) => c.name === 'whatsapp_inbox.templates.record_meta_answer');
+    expect(update, 'no se guardó').toBeTruthy();
+    expect(respuesta, 'no se escribió lo que contestó Meta').toBeTruthy();
+    expect(update!.payload).not.toHaveProperty('header_example');
+    expect(respuesta!.payload).not.toHaveProperty('header_example');
+  });
+
+  // #230 + #196 together: a template NAMED end to end (`{{fecha}}` in the title, `{{nombre}}` in
+  // the body) was locked by #186 before; now it is saved from here, and the registry gets both the
+  // title's example and one example per body name.
+  it('con variables con nombre en el título y en el cuerpo se guarda, con el ejemplo de cada una', async () => {
+    const el = await guardar({
+      ...TITULO,
+      header: 'Tu cita del {{fecha}}',
+      header_example: '25 de septiembre',
+      body: 'Hola {{nombre}}, te esperamos.',
+      variables: '["Ana"]',
+    });
+
+    expect(el.shadowRoot.querySelector('[data-testid="whatsapp-templates-submit"]'), 'no hay «Guardar»').toBeTruthy();
+    expect(puerta, 'guardar no la registró en Meta').toHaveLength(1);
+    expect(puerta[0]).toMatchObject({
+      header: 'Tu cita del {{fecha}}',
+      header_example: '25 de septiembre',
+      body: 'Hola {{nombre}}, te esperamos.',
+      variables: '["Ana"]',
+    });
+  });
+
+  // #230 + #185 together: plain buttons no longer lock the panel, so a template with a variable in
+  // its title AND «Confirmar» is saved from here, and the registry gets the example and the buttons.
+  it('con variable en el título y botones simples se guarda, con el ejemplo y los botones', async () => {
+    const botones = [{ type: 'QUICK_REPLY', text: 'Confirmar' }];
+    const el = await guardar({ ...TITULO, buttons: JSON.stringify(botones) });
+
+    expect(el.shadowRoot.querySelector('[data-testid="whatsapp-templates-submit"]'), 'no hay «Guardar»').toBeTruthy();
+    expect(puerta, 'guardar no la registró en Meta').toHaveLength(1);
+    expect(puerta[0]).toMatchObject({ header: 'Tu cita del {{1}}', header_example: '25 de septiembre' });
+    expect(JSON.parse(String(puerta[0].buttons))).toEqual(botones);
+  });
+
+  it('una plantilla sin variable en el título no manda `header_example` (el registro viejo no lo conoce)', async () => {
+    await guardar({ ...TITULO, header: 'Tu cita', header_example: '' });
+
+    expect(puerta).toHaveLength(1);
+    expect(puerta[0]).not.toHaveProperty('header_example');
+  });
+
+  it('el ejemplo de una plantilla NO se queda pegado al alta siguiente', async () => {
+    const el = await guardar(TITULO);
+    await (el as unknown as { openCreate: () => Promise<void> }).openCreate();
+    puerta.length = 0;
+    Object.assign(el, { newName: 'otra', newBody: 'Hola' });
+    await (el as unknown as { createTemplate: (e: Event) => Promise<void> }).createTemplate(new Event('submit'));
+
+    expect(puerta).toHaveLength(1);
+    expect(puerta[0]).not.toHaveProperty('header_example');
   });
 });
 

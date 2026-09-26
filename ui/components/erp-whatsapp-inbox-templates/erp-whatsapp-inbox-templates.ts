@@ -76,6 +76,8 @@ interface Template {
   header_format?: string;
   /** JSON array of `TemplateButton`s, `'[]'` (or absent) when it has none — whatsapp_inbox#180. */
   buttons?: string;
+  /** The example of the header's one variable, `''` (or absent) when it has none — whatsapp_inbox#230. */
+  header_example?: string;
   is_active: number;
 }
 
@@ -262,10 +264,10 @@ export class ErpWhatsappInboxTemplates extends LitElement {
 
   /** Templates Meta holds that this hub could NOT bring in (whatsapp_inbox#140, #179), as
    *  `name (language)`, the two halves of Meta's identity: parts this module has no field for
-   *  (a carousel, a copy-code or Flow button, a location header, header variables), no text from
-   *  the door, or a failed write. The ones that fit — media headers and quick reply, link and call
-   *  buttons included since whatsapp_inbox#180, named body variables since #186 — are imported and
-   *  never listed here. */
+   *  (a carousel, a copy-code or Flow button, a location header, more than one header variable), no
+   *  text from the door, or a failed write. The ones that fit — media headers and quick reply, link
+   *  and call buttons included since whatsapp_inbox#180, named body variables since #186, one header
+   *  variable since #230 — are imported and never listed here. */
   @state() metaOnly: string[] = [];
 
   /** Meta's verdict on the template being edited, and the move it asks for. `null` while the panel
@@ -357,11 +359,12 @@ export class ErpWhatsappInboxTemplates extends LitElement {
    *  body dropped stops travelling, and one it brings back gets its example again. */
   @state() bodyExamples: Record<string, string> = {};
 
-  private editingRest: Pick<Template, 'header' | 'footer' | 'variables' | 'is_active'> = {
+  private editingRest: Pick<Template, 'header' | 'footer' | 'variables' | 'is_active'> & { header_example: string } = {
     header: '',
     footer: '',
     variables: '[]',
     is_active: 1,
+    header_example: '',
   };
 
   private ctrl!: ListController<Template>;
@@ -640,7 +643,15 @@ export class ErpWhatsappInboxTemplates extends LitElement {
   private async registerWithMeta(templateId: string, reviewed: ReviewedFields): Promise<void> {
     let verdict: { status?: unknown; meta_id?: unknown; rejected_reason?: unknown };
     try {
-      verdict = await erplora().forModule('whatsapp_inbox').whatsappTemplates.register({ ...reviewed });
+      // The header variable's example (whatsapp_inbox#230) goes to the registry only: Meta needs it,
+      // but it is not one of the eight fields `templates.update` and `record_meta_answer` compare —
+      // nothing in this hub can change it (only the import writes it, the panel never edits it), so
+      // comparing it would guard no race. Sent only when there is one, so a registry that predates
+      // it (ERPlora/saas, whatsapp_inbox#226) never sees an unknown field.
+      const headerExample = this.editingRest.header_example;
+      verdict = await erplora()
+        .forModule('whatsapp_inbox')
+        .whatsappTemplates.register(headerExample ? { ...reviewed, header_example: headerExample } : { ...reviewed });
     } catch (e) {
       this.formError = doorRefusalText(CATALOG, erplora().locale, e);
       return;
@@ -712,6 +723,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
       footer: row.footer ?? '',
       variables: row.variables ?? '[]',
       is_active: Number(row.is_active ?? 1),
+      header_example: String(row.header_example ?? ''),
     };
     this.editingHeaderFormat = String(row.header_format ?? '').trim().toUpperCase() || 'TEXT';
     this.editingButtons = storedButtons(row.buttons).map(cleanButton);
@@ -745,7 +757,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     this.newBody = '';
     this.newLanguage = 'es';
     this.newCategory = 'UTILITY';
-    this.editingRest = { header: '', footer: '', variables: '[]', is_active: 1 };
+    this.editingRest = { header: '', footer: '', variables: '[]', is_active: 1, header_example: '' };
     this.editingButtons = [];
     this.editingDynamicLink = false;
     this.bodyExamples = {};

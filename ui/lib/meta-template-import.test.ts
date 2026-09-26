@@ -40,6 +40,7 @@ describe('a template Meta holds, as this module stores it', () => {
         variables: '[]',
         header_format: 'TEXT',
         buttons: '[]',
+        header_example: '',
       },
       meta: { meta_template_id: '123', meta_status: 'APPROVED', meta_rejected_reason: '' },
     });
@@ -211,7 +212,91 @@ describe('templates with buttons or a media header (whatsapp_inbox#180)', () => 
       variables: '["Ana"]',
       header_format: 'IMAGE',
       buttons: '[{"type":"QUICK_REPLY","text":"Reservar"}]',
+      header_example: '',
     });
+  });
+});
+
+// whatsapp_inbox#230 — a text header with ONE variable («Tu cita del {{1}}») is brought in, with the
+// example Meta reviewed it with. That example travels apart from the body's (`header_example`),
+// because the SaaS sends it to Meta as `example.header_text` (or `header_text_named_params`) and
+// refuses a header variable without one (`missing_example`).
+describe('a header with one variable (whatsapp_inbox#230)', () => {
+  it('a numbered {{1}} keeps the header and Meta`s example of it', () => {
+    const out = templateFromMeta({
+      ...BASE,
+      components: [
+        { type: 'HEADER', format: 'TEXT', text: 'Tu cita del {{1}}', example: { header_text: ['25 de septiembre'] } },
+        { type: 'BODY', text: 'Hola {{1}}, te esperamos.', example: { body_text: [['Ana']] } },
+      ],
+    });
+    expect(out.ok, 'a template with a variable in its title is still refused').toBe(true);
+    expect(out.ok && out.fields.header).toBe('Tu cita del {{1}}');
+    expect(out.ok && out.fields.header_example).toBe('25 de septiembre');
+    expect(out.ok && JSON.parse(out.fields.variables), 'the body`s examples must not absorb the header`s').toEqual(['Ana']);
+  });
+
+  it('a named {{fecha}} keeps the header and the example Meta pairs with that name', () => {
+    const out = templateFromMeta({
+      ...BASE,
+      components: [
+        {
+          type: 'HEADER',
+          format: 'TEXT',
+          text: 'Tu cita del {{fecha}}',
+          example: { header_text_named_params: [{ param_name: 'fecha', example: 'lunes' }] },
+        },
+        { type: 'BODY', text: 'Te esperamos.' },
+      ],
+    });
+    expect(out.ok).toBe(true);
+    expect(out.ok && out.fields.header).toBe('Tu cita del {{fecha}}');
+    expect(out.ok && out.fields.header_example).toBe('lunes');
+  });
+
+  it('a named header next to a named body: one format, both imported', () => {
+    const out = templateFromMeta({
+      ...BASE,
+      components: [
+        {
+          type: 'HEADER',
+          format: 'TEXT',
+          text: 'Hola {{nombre}}',
+          example: { header_text_named_params: [{ param_name: 'nombre', example: 'Ana' }] },
+        },
+        {
+          type: 'BODY',
+          text: 'Tu cita es el {{dia}}',
+          example: { body_text_named_params: [{ param_name: 'dia', example: 'lunes' }] },
+        },
+      ],
+    });
+    expect(out.ok && out.fields.header_example).toBe('Ana');
+    expect(out.ok && JSON.parse(out.fields.variables)).toEqual(['lunes']);
+  });
+
+  it('without Meta`s example, a stand-in the next save can send (never an empty one: `missing_example`)', () => {
+    const numbered = templateFromMeta({
+      ...BASE,
+      components: [{ type: 'HEADER', format: 'TEXT', text: 'Tu cita del {{1}}' }, { type: 'BODY', text: 'x' }],
+    });
+    expect(numbered.ok && numbered.fields.header_example).toBe('var1');
+    const named = templateFromMeta({
+      ...BASE,
+      components: [
+        { type: 'HEADER', format: 'TEXT', text: 'Tu cita del {{fecha}}', example: { header_text_named_params: [{ param_name: 'otra', example: 'x' }] } },
+        { type: 'BODY', text: 'x' },
+      ],
+    });
+    expect(named.ok && named.fields.header_example).toBe('fecha');
+  });
+
+  it('a header without a variable carries no example', () => {
+    const out = templateFromMeta({
+      ...BASE,
+      components: [{ type: 'HEADER', format: 'TEXT', text: 'Tu cita', example: { header_text: ['sobra'] } }, { type: 'BODY', text: 'x' }],
+    });
+    expect(out.ok && out.fields.header_example).toBe('');
   });
 });
 
@@ -224,21 +309,35 @@ describe('what does NOT fit is refused, never imported with a piece missing', ()
     ).toBe(false);
   });
 
-  it('a named variable in the header: the module carries body variables only', () => {
+  // whatsapp_inbox#230 — ONE variable in a text header is brought in (see the describe above); what
+  // Meta itself does not take in a header is still refused, so a later «Guardar» never sends it.
+  it('a header with more than one variable, or a numbered one that is not {{1}}', () => {
+    for (const header of ['Hola {{1}} y {{2}}', 'Tu cita del {{2}}', '{{1}} y otra vez {{1}}', '{{nombre}} {{fecha}}']) {
+      expect(
+        refused({ ...BASE, components: [{ type: 'HEADER', format: 'TEXT', text: header }, { type: 'BODY', text: 'x' }] }),
+        header,
+      ).toBe(false);
+    }
+  });
+
+  it('a header and a body that mix {{1}} with {{nombre}}: Meta takes one format per template', () => {
     expect(
-      templateFromMeta({
+      refused({
         ...BASE,
         components: [
           { type: 'HEADER', format: 'TEXT', text: 'Hola {{nombre}}' },
-          { type: 'BODY', text: 'Te esperamos.' },
+          { type: 'BODY', text: 'Tu cita es el {{1}}', example: { body_text: [['lunes']] } },
         ],
       }),
-    ).toEqual({ ok: false });
-  });
-
-  it('a header with a variable (the module carries body variables only)', () => {
+    ).toBe(false);
     expect(
-      refused({ ...BASE, components: [{ type: 'HEADER', format: 'TEXT', text: 'Hola {{1}}' }, { type: 'BODY', text: 'x' }] }),
+      refused({
+        ...BASE,
+        components: [
+          { type: 'HEADER', format: 'TEXT', text: 'Tu cita del {{1}}' },
+          { type: 'BODY', text: 'Hola {{nombre}}', example: { body_text_named_params: [{ param_name: 'nombre', example: 'Ana' }] } },
+        ],
+      }),
     ).toBe(false);
   });
 

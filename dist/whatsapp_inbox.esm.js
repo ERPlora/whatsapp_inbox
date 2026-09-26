@@ -4566,7 +4566,7 @@ var es_default = {
     buttonUrl: "Abre un enlace",
     buttonPhone: "Llama al n\xFAmero",
     templateManagedInMeta: "Esta plantilla lleva una imagen, v\xEDdeo o documento en la cabecera, o un bot\xF3n de enlace con variable, as\xED que su texto se cambia en WhatsApp Manager. Al volver a abrir esta pesta\xF1a ver\xE1s lo que diga Meta.",
-    metaOnlyTemplates: "Estas plantillas de WhatsApp Manager todav\xEDa no se pueden traer a esta lista (llevan un carrusel, una oferta por tiempo limitado, un bot\xF3n de copiar c\xF3digo o de WhatsApp Flow, una ubicaci\xF3n en la cabecera o una variable en la cabecera). Gesti\xF3nalas en WhatsApp Manager: {names}",
+    metaOnlyTemplates: "Estas plantillas de WhatsApp Manager todav\xEDa no se pueden traer a esta lista (llevan un carrusel, una oferta por tiempo limitado, un bot\xF3n de copiar c\xF3digo o de WhatsApp Flow, una ubicaci\xF3n en la cabecera o m\xE1s de una variable en la cabecera). Gesti\xF3nalas en WhatsApp Manager: {names}",
     doorRefusal: {
       invalid_name: "Meta no ha aceptado el nombre. Usa solo min\xFAsculas, n\xFAmeros y guiones bajos \u2014sin espacios ni acentos\u2014 y vuelve a intentarlo.",
       invalid_category: "Meta no ha aceptado la categor\xEDa. Elige Utilidad, Marketing o Autenticaci\xF3n y vuelve a enviarla.",
@@ -4783,7 +4783,7 @@ var en_default = {
     buttonUrl: "Opens a link",
     buttonPhone: "Calls the number",
     templateManagedInMeta: "This template has an image, video or document header, or a link button with a variable, so its wording is changed in WhatsApp Manager. Open this tab again to see what Meta says.",
-    metaOnlyTemplates: "These WhatsApp Manager templates cannot be brought into this list yet (they use a carousel, a limited-time offer, a copy-code or WhatsApp Flow button, a location header, or a variable in the header). Manage them in WhatsApp Manager: {names}",
+    metaOnlyTemplates: "These WhatsApp Manager templates cannot be brought into this list yet (they use a carousel, a limited-time offer, a copy-code or WhatsApp Flow button, a location header, or more than one variable in the header). Manage them in WhatsApp Manager: {names}",
     doorRefusal: {
       invalid_name: "Meta did not accept the name. Use lowercase letters, numbers and underscores only \u2014 no spaces or accents \u2014 and try again.",
       invalid_category: "Meta did not accept the category. Pick Utility, Marketing or Authentication and send it again.",
@@ -6235,6 +6235,9 @@ function metaTemplateView(raw) {
 var MEDIA_HEADERS = /* @__PURE__ */ new Set(["IMAGE", "VIDEO", "DOCUMENT"]);
 var CATEGORIES = /* @__PURE__ */ new Set(["MARKETING", "UTILITY", "AUTHENTICATION"]);
 var text2 = (value) => typeof value === "string" ? value : "";
+function allVariables(value) {
+  return [...value.matchAll(/\{\{\s*([^{}]*?)\s*\}\}/g)].map((m4) => m4[1]);
+}
 function placeholders(value) {
   return new Set([...value.matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map((m4) => m4[1])).size;
 }
@@ -6311,6 +6314,8 @@ function templateFromMeta(template) {
   if (!name || !language || !status || !CATEGORIES.has(category)) return refused;
   if (!Array.isArray(template.components)) return refused;
   let header = "";
+  let headerExample = "";
+  let headerVariable = "";
   let headerFormat = "TEXT";
   let buttons = [];
   let body = "";
@@ -6328,7 +6333,21 @@ function templateFromMeta(template) {
         header = "";
       } else if (format === "TEXT") {
         header = text2(part.text);
-        if (placeholders(header) > 0 || namedVariables(header).length > 0) return refused;
+        const found = allVariables(header);
+        if (found.length > 1 || found.length === 1 && /^\d+$/.test(found[0]) && found[0] !== "1") {
+          return refused;
+        }
+        headerVariable = found[0] ?? "";
+        const example = part.example;
+        if (headerVariable === "1") {
+          headerExample = Array.isArray(example?.header_text) ? text2(example.header_text[0]).trim() : "";
+        } else if (headerVariable) {
+          const params = Array.isArray(example?.header_text_named_params) ? example.header_text_named_params : [];
+          const param = params.find(
+            (item) => text2(item?.param_name).trim() === headerVariable
+          );
+          headerExample = text2(param?.example).trim();
+        }
       } else {
         return refused;
       }
@@ -6349,6 +6368,11 @@ function templateFromMeta(template) {
     }
   }
   if (!body.trim()) return refused;
+  if (headerVariable && !headerExample) headerExample = headerVariable === "1" ? "var1" : headerVariable;
+  const headerNamed = headerVariable !== "" && headerVariable !== "1";
+  if (headerNamed && placeholders(body) > 0 || headerVariable === "1" && namedVariables(body).length > 0) {
+    return refused;
+  }
   const names = namedVariables(body);
   let variables;
   if (names.length === 0) {
@@ -6374,7 +6398,8 @@ function templateFromMeta(template) {
       footer,
       variables: JSON.stringify(variables),
       header_format: headerFormat,
-      buttons: JSON.stringify(buttons)
+      buttons: JSON.stringify(buttons),
+      header_example: headerExample
     },
     meta: {
       meta_template_id: text2(template.meta_id).trim(),
@@ -6465,7 +6490,8 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
       header: "",
       footer: "",
       variables: "[]",
-      is_active: 1
+      is_active: 1,
+      header_example: ""
     };
     this.onLocaleChange = () => this.requestUpdate();
   }
@@ -6779,7 +6805,8 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
   async registerWithMeta(templateId, reviewed) {
     let verdict;
     try {
-      verdict = await erplora3().forModule("whatsapp_inbox").whatsappTemplates.register({ ...reviewed });
+      const headerExample = this.editingRest.header_example;
+      verdict = await erplora3().forModule("whatsapp_inbox").whatsappTemplates.register(headerExample ? { ...reviewed, header_example: headerExample } : { ...reviewed });
     } catch (e5) {
       this.formError = doorRefusalText(CATALOG3, erplora3().locale, e5);
       return;
@@ -6842,7 +6869,8 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
       header: row.header ?? "",
       footer: row.footer ?? "",
       variables: row.variables ?? "[]",
-      is_active: Number(row.is_active ?? 1)
+      is_active: Number(row.is_active ?? 1),
+      header_example: String(row.header_example ?? "")
     };
     this.editingHeaderFormat = String(row.header_format ?? "").trim().toUpperCase() || "TEXT";
     this.editingButtons = storedButtons(row.buttons).map(cleanButton);
@@ -6874,7 +6902,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     this.newBody = "";
     this.newLanguage = "es";
     this.newCategory = "UTILITY";
-    this.editingRest = { header: "", footer: "", variables: "[]", is_active: 1 };
+    this.editingRest = { header: "", footer: "", variables: "[]", is_active: 1, header_example: "" };
     this.editingButtons = [];
     this.editingDynamicLink = false;
     this.bodyExamples = {};
