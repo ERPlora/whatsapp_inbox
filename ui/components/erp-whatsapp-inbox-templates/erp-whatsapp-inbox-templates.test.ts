@@ -2051,3 +2051,288 @@ describe('un ejemplo por variable, debajo del cuerpo (whatsapp_inbox#208)', () =
     expect(q(el, 'whatsapp-templates-examples')?.textContent).toContain('ui.examplesHint');
   });
 });
+
+// whatsapp_inbox#218 — an image, a video or a document in the header, from the panel. Meta takes a
+// file header only with the handle of an uploaded SAMPLE (saas#2377), which the runtime's door
+// uploads (`uploadHeaderSample`, hub#2232) and which Meta asks for again on EVERY save: it keeps
+// the sample, not a handle it would take back. So the panel asks for the file on the add AND on the
+// edit, saves the text first (#87), uploads, and registers with `header_format` + `header_handle`.
+describe('una imagen, un vídeo o un documento en la cabecera desde el panel (whatsapp_inbox#218)', () => {
+  type Panel = HTMLElement & {
+    shadowRoot: ShadowRoot;
+    newName: string;
+    newBody: string;
+    newCategory: string;
+    editingId: string;
+    formError: string;
+    editingHeaderFormat: string;
+    headerSample: File | null;
+    setHeaderFormat: (kind: string) => void;
+    pickHeaderSample: (file: File | null) => void;
+    startEdit: (r: Record<string, unknown>) => void;
+    createTemplate: (e: Event) => Promise<void>;
+    updateTemplate: () => Promise<void>;
+    updateComplete: Promise<unknown>;
+  };
+  const q = (el: Panel, id: string) => el.shadowRoot.querySelector(`[data-testid="${id}"]`);
+
+  /** What the door was sent to upload, call by call. */
+  const subidas: Blob[] = [];
+  /** What the door answers to an upload; a test that wants a refusal replaces it with a thrower. */
+  let respondeSubida: (f: Blob) => Promise<Record<string, unknown>>;
+  /** `false` = a hub from before hub#2232, whose door has no `uploadHeaderSample`. */
+  let conPuertaDeMuestra: boolean;
+
+  const HANDLE = '4::aW1hZ2UvanBlZw==:ARZ';
+  const foto = (bytes = 3, type = 'image/jpeg', name = 'foto.jpg') =>
+    new File([new Uint8Array(bytes)], name, { type });
+
+  const CON_IMAGEN = {
+    id: 't12', name: 'cita_con_foto', language: 'es', category: 'UTILITY', header: '',
+    body: 'Tu cita es mañana', footer: '', variables: '[]', meta_template_id: '92',
+    meta_status: 'approved', meta_rejected_reason: '', is_active: 1, header_format: 'IMAGE', buttons: '[]',
+  };
+
+  beforeEach(() => {
+    subidas.length = 0;
+    conPuertaDeMuestra = true;
+    respondeSubida = async (f) => ({ header_handle: HANDLE, format: 'IMAGE', mime_type: 'image/jpeg', size: f.size });
+    const client = (globalThis as { erplora: { forModule: (id: string) => { whatsappTemplates: Record<string, unknown> } } }).erplora;
+    const base = client.forModule;
+    client.forModule = (id: string) => {
+      const door = base(id);
+      if (conPuertaDeMuestra) {
+        door.whatsappTemplates.uploadHeaderSample = async (f: Blob) => {
+          subidas.push(f);
+          pasos.push('door.upload');
+          return respondeSubida(f);
+        };
+      }
+      return door;
+    };
+  });
+
+  async function panel(): Promise<Panel> {
+    filas = [CON_IMAGEN];
+    const el = (await montar()) as Panel;
+    const t = tabla(el)!;
+    t.open = () => {};
+    t.close = () => {};
+    pasos.length = 0;
+    comandos.length = 0;
+    return el;
+  }
+
+  async function altaConImagen(el: Panel, file: File = foto()) {
+    el.newName = 'cita_con_foto';
+    el.newBody = 'Tu cita es mañana';
+    el.setHeaderFormat('IMAGE');
+    el.pickHeaderSample(file);
+    await el.updateComplete;
+  }
+
+  it('en un alta se elige imagen, se sube el ejemplo DESPUÉS de guardar y Meta la registra con su justificante', async () => {
+    const el = await panel();
+    const file = foto();
+    await altaConImagen(el, file);
+    await el.createTemplate(new Event('submit'));
+
+    expect(pasos, 'el orden es: el texto se guarda, se sube la muestra, se registra, se anota lo que dijo Meta').toEqual([
+      'whatsapp_inbox.templates.create', 'door.upload', 'door.register', 'whatsapp_inbox.templates.record_meta_answer',
+    ]);
+    expect(subidas[0], 'no se subió el archivo que eligió la dueña').toBe(file);
+    const alta = comandos.find((c) => c.name === 'whatsapp_inbox.templates.create')!;
+    expect(alta.payload, 'la fila no guarda que la cabecera es una imagen').toMatchObject({ header_format: 'IMAGE', header: '' });
+    expect(puerta[0], 'Meta la registraría sin la imagen').toMatchObject({ header_format: 'IMAGE', header_handle: HANDLE, header: '' });
+    const anotado = comandos.find((c) => c.name === 'whatsapp_inbox.templates.record_meta_answer')!;
+    expect(anotado.payload, 'el justificante no es un campo de la fila: el comando lo rechazaría').not.toHaveProperty('header_handle');
+    expect(el.headerSample, 'el archivo se queda pegado al alta siguiente').toBeNull();
+  });
+
+  it.each([
+    ['VIDEO', 'video/mp4', 'clip.mp4'],
+    ['DOCUMENT', 'application/pdf', 'carta.pdf'],
+  ])('un %s viaja por el mismo camino', async (kind, type, name) => {
+    respondeSubida = async (f) => ({ header_handle: HANDLE, format: kind, mime_type: type, size: f.size });
+    const el = await panel();
+    el.newName = 'con_archivo';
+    el.newBody = 'Hola';
+    el.setHeaderFormat(kind);
+    el.pickHeaderSample(foto(3, type, name));
+    await el.createTemplate(new Event('submit'));
+
+    expect(subidas).toHaveLength(1);
+    expect(puerta[0]).toMatchObject({ header_format: kind, header_handle: HANDLE });
+  });
+
+  it('el selector ofrece texto, imagen, vídeo y documento, y el archivo pide el tipo que toca', async () => {
+    const el = await panel();
+    const selector = q(el, 'whatsapp-templates-header-format');
+    expect(selector, 'no hay dónde elegir el tipo de cabecera').toBeTruthy();
+    expect([...selector!.querySelectorAll('ion-select-option')].map((o) => o.getAttribute('value'))).toEqual([
+      'TEXT', 'IMAGE', 'VIDEO', 'DOCUMENT',
+    ]);
+    expect(q(el, 'whatsapp-templates-header-file'), 'una cabecera de texto no pide archivo').toBeNull();
+
+    el.setHeaderFormat('IMAGE');
+    await el.updateComplete;
+    const input = q(el, 'whatsapp-templates-header-file') as HTMLInputElement | null;
+    expect(input, 'con imagen no se ofrece subir el ejemplo').toBeTruthy();
+    expect(input!.getAttribute('accept')).toBe('image/jpeg,image/png');
+    el.setHeaderFormat('DOCUMENT');
+    await el.updateComplete;
+    expect((q(el, 'whatsapp-templates-header-file') as HTMLInputElement).getAttribute('accept')).toBe('application/pdf');
+  });
+
+  it('elegir el archivo en el campo lo deja listo (el cambio del input llega al panel)', async () => {
+    const el = await panel();
+    el.setHeaderFormat('IMAGE');
+    await el.updateComplete;
+    const input = q(el, 'whatsapp-templates-header-file') as HTMLInputElement;
+    const file = foto();
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    input.dispatchEvent(new Event('change'));
+    await el.updateComplete;
+
+    expect(el.headerSample).toBe(file);
+    expect(q(el, 'whatsapp-templates-header-file-name')?.textContent).toContain('foto.jpg');
+  });
+
+  it('sin archivo no deja guardar: Meta la rechazaría (`missing_header_sample`)', async () => {
+    const el = await panel();
+    el.newName = 'cita_con_foto';
+    el.newBody = 'Tu cita es mañana';
+    el.setHeaderFormat('IMAGE');
+    await el.updateComplete;
+
+    expect((q(el, 'whatsapp-templates-submit') as HTMLElement & { disabled?: boolean }).disabled).toBe(true);
+    await el.createTemplate(new Event('submit'));
+    expect(comandos, 'se guardó una plantilla con imagen sin imagen').toHaveLength(0);
+    expect(subidas).toHaveLength(0);
+  });
+
+  it.each([
+    ['un PDF donde va una imagen', foto(3, 'application/pdf', 'carta.pdf'), 'ui.headerSampleWrongType'],
+    ['una imagen de más de 5 MB', foto(5 * 1024 * 1024 + 1), 'ui.headerSampleTooLarge'],
+  ])('%s se avisa al elegirlo y no se queda', async (_caso, file, key) => {
+    const el = await panel();
+    el.setHeaderFormat('IMAGE');
+    el.pickHeaderSample(file);
+    await el.updateComplete;
+
+    expect(el.headerSample, 'se aceptó un archivo que Meta no admite').toBeNull();
+    expect(q(el, 'whatsapp-templates-header-file-error')?.textContent).toContain(key);
+  });
+
+  it('si el archivo resulta ser de otro tipo, no se registra y se dice', async () => {
+    respondeSubida = async (f) => ({ header_handle: HANDLE, format: 'DOCUMENT', mime_type: 'application/pdf', size: f.size });
+    const el = await panel();
+    await altaConImagen(el);
+    await el.createTemplate(new Event('submit'));
+
+    expect(puerta, 'se registró como imagen un archivo que Meta lee como documento').toHaveLength(0);
+    expect(el.formError).toContain('ui.headerSampleKindMismatch');
+    expect(el.editingId, 'la plantilla guardada se perdería al guardar otra vez').toBe(ID_NUEVO);
+  });
+
+  it('una subida rechazada se explica con la frase del módulo, y lo guardado no se pierde', async () => {
+    respondeSubida = async () => { throw refusal('header_sample_too_large'); };
+    const el = await panel();
+    await altaConImagen(el);
+    await el.createTemplate(new Event('submit'));
+
+    expect(puerta, 'se registró sin muestra').toHaveLength(0);
+    expect(el.formError, 'el rechazo no se dice').toBeTruthy();
+    expect(el.formError, 'el código llega pelado: el módulo no lo conoce').not.toContain('header_sample_too_large');
+    expect(el.editingId, 'guardar otra vez crearía la plantilla dos veces').toBe(ID_NUEVO);
+  });
+
+  it('una con imagen se EDITA desde aquí y pide el archivo otra vez: Meta lo exige en cada guardado', async () => {
+    const el = await panel();
+    el.startEdit(CON_IMAGEN);
+    await el.updateComplete;
+
+    expect(q(el, 'whatsapp-templates-managed-in-meta'), 'sigue diciendo que se edita en WhatsApp Manager').toBeNull();
+    expect((q(el, 'whatsapp-templates-body') as HTMLElement & { disabled?: boolean }).disabled).toBeFalsy();
+    expect((q(el, 'whatsapp-templates-header-format') as HTMLElement & { value?: string }).value).toBe('IMAGE');
+    expect(q(el, 'whatsapp-templates-header-file-hint'), 'no se explica por qué pide el archivo otra vez').toBeTruthy();
+    expect((q(el, 'whatsapp-templates-submit') as HTMLElement & { disabled?: boolean }).disabled, 'sin archivo se guardaría sin imagen').toBe(true);
+
+    el.pickHeaderSample(foto());
+    await el.updateTemplate();
+
+    const update = comandos.find((c) => c.name === 'whatsapp_inbox.templates.update')!;
+    expect(update.payload).toMatchObject({ template_id: 't12', header_format: 'IMAGE', header: '' });
+    expect(pasos.slice(0, 3)).toEqual(['whatsapp_inbox.templates.update', 'door.upload', 'door.register']);
+    expect(puerta[0]).toMatchObject({ header_format: 'IMAGE', header_handle: HANDLE });
+  });
+
+  it('volver a texto no sube nada y la cabecera vuelve a ser la de texto guardada', async () => {
+    const el = await panel();
+    el.startEdit({ ...CON_IMAGEN, header_format: 'TEXT', header: 'Peluquería Lola', meta_template_id: '', meta_status: 'not_sent' });
+    el.setHeaderFormat('IMAGE');
+    el.pickHeaderSample(foto());
+    el.setHeaderFormat('TEXT');
+    await el.updateTemplate();
+
+    expect(subidas).toHaveLength(0);
+    const update = comandos.find((c) => c.name === 'whatsapp_inbox.templates.update')!;
+    expect(update.payload).toMatchObject({ header_format: 'TEXT', header: 'Peluquería Lola' });
+    expect(puerta[0]).not.toHaveProperty('header_handle');
+  });
+
+  it('una de texto con cabecera escrita pasa a imagen: el texto de la cabecera no viaja', async () => {
+    const el = await panel();
+    el.startEdit({ ...CON_IMAGEN, header_format: 'TEXT', header: 'Peluquería Lola' });
+    el.setHeaderFormat('IMAGE');
+    el.pickHeaderSample(foto());
+    await el.updateTemplate();
+
+    const update = comandos.find((c) => c.name === 'whatsapp_inbox.templates.update')!;
+    expect(update.payload, 'Meta rechaza una cabecera de archivo con texto (`invalid_header_format`)').toMatchObject({
+      header_format: 'IMAGE', header: '',
+    });
+  });
+
+  it('una de AUTENTICACIÓN no lleva cabecera de archivo: no deja guardar y dice por qué', async () => {
+    const el = await panel();
+    await altaConImagen(el);
+    el.newCategory = 'AUTHENTICATION';
+    await el.updateComplete;
+
+    expect((q(el, 'whatsapp-templates-submit') as HTMLElement & { disabled?: boolean }).disabled).toBe(true);
+    expect(q(el, 'whatsapp-templates-header-not-for-auth'), 'no se dice por qué no se puede guardar').toBeTruthy();
+    await el.createTemplate(new Event('submit'));
+    expect(comandos).toHaveLength(0);
+  });
+
+  it('el «+» después de abrir una con imagen empieza en texto y sin archivo', async () => {
+    const el = await panel();
+    el.startEdit(CON_IMAGEN);
+    el.pickHeaderSample(foto());
+    tabla(el)!.dispatchEvent(new CustomEvent('primaryAction', { detail: {}, bubbles: true, composed: true }));
+    await new Promise((r) => setTimeout(r, 0));
+    await el.updateComplete;
+
+    expect(el.editingHeaderFormat).toBe('TEXT');
+    expect(el.headerSample).toBeNull();
+    expect(q(el, 'whatsapp-templates-header-file')).toBeNull();
+  });
+
+  it('en un hub sin la puerta de la muestra (anterior a hub#2232) no se ofrece y lo guardado no se pierde', async () => {
+    conPuertaDeMuestra = false;
+    const el = await panel();
+
+    const opciones = [...q(el, 'whatsapp-templates-header-format')!.querySelectorAll('ion-select-option')];
+    expect(
+      opciones.filter((o) => o.getAttribute('value') !== 'TEXT').every((o) => (o as HTMLElement & { disabled?: boolean }).disabled),
+      'se ofrece una imagen que este hub no puede subir',
+    ).toBe(true);
+    expect(q(el, 'whatsapp-templates-header-needs-update')).toBeTruthy();
+
+    el.startEdit(CON_IMAGEN);
+    await el.updateComplete;
+    expect(q(el, 'whatsapp-templates-submit'), 'guardar la registraría en Meta sin la imagen').toBeNull();
+    expect(q(el, 'whatsapp-templates-managed-in-meta')).toBeTruthy();
+  });
+});

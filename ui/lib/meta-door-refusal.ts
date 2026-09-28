@@ -59,6 +59,15 @@ export const META_DOOR_REFUSAL_CODES = [
   'too_many_buttons',
   'buttons_not_grouped',
   'buttons_not_allowed_for_category',
+  // — the SaaS on a header that is a file (whatsapp_inbox#218, saas#2377): uploading its example
+  //   (`services/header_samples.py`; the runtime says `header_sample_too_large` too, hub#2232) and
+  //   registering with it —
+  'missing_file',
+  'unsupported_header_sample',
+  'header_sample_too_large',
+  'whatsapp_not_configured',
+  'invalid_header_format',
+  'missing_header_sample',
   // — the SaaS on Meta itself: not the text's fault, and retryable (saas#1905) —
   'meta_rate_limited',
   'meta_permission_denied',

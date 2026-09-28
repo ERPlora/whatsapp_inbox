@@ -28,8 +28,11 @@
 -- template back at the end of Meta's review queue for nothing.
 --
 -- What Meta re-reviews is the text: name, language, category, header, body, footer, the
--- variables (its numbered placeholders and their examples) and, since whatsapp_inbox#185, the
--- buttons. `is_active` is this hub's own switch —
+-- variables (its numbered placeholders and their examples), since whatsapp_inbox#185 the buttons
+-- and, since whatsapp_inbox#218, the kind of header (an image instead of a text is another template
+-- to Meta). `:header_format` = '' keeps the stored kind: the schema's default, for a caller that
+-- does not deal in files (the assistant) and so cannot turn an image template into a text one.
+-- `is_active` is this hub's own switch —
 -- whether the module uses the template — and Meta has never seen it, so it is deliberately NOT in
 -- the comparison. Every SET expression reads the row as it was BEFORE the update, so comparing the
 -- column against its bind here is comparing «what is stored» against «what was just typed»; and
@@ -40,6 +43,7 @@ SET meta_template_id = CASE
       WHEN name = :name AND language = :language AND category = :category
        AND header = :header AND body = :body AND footer = :footer
        AND variables = :variables AND buttons = :buttons
+       AND header_format = COALESCE(NULLIF(:header_format, ''), header_format)
       THEN meta_template_id
       ELSE ''
     END,
@@ -47,6 +51,7 @@ SET meta_template_id = CASE
       WHEN name = :name AND language = :language AND category = :category
        AND header = :header AND body = :body AND footer = :footer
        AND variables = :variables AND buttons = :buttons
+       AND header_format = COALESCE(NULLIF(:header_format, ''), header_format)
       THEN meta_status
       ELSE 'pending'
     END,
@@ -58,6 +63,7 @@ SET meta_template_id = CASE
     footer           = :footer,
     variables        = :variables,
     buttons          = :buttons,
+    header_format    = COALESCE(NULLIF(:header_format, ''), header_format),
     is_active        = :is_active,
     updated_by       = :current_user_id,
     updated_at       = :now

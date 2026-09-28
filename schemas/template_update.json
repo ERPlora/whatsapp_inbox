@@ -14,6 +14,7 @@
     "footer": { "type": "string" },
     "variables": { "type": "string", "description": "JSON array de nombres de variable" },
     "buttons": { "type": "string", "description": "JSON array of the template's buttons in Meta's order: {type: QUICK_REPLY|URL|PHONE_NUMBER, text, url?|phone_number?} (whatsapp_inbox#185)" },
+    "header_format": { "type": "string", "enum": ["", "TEXT", "IMAGE", "VIDEO", "DOCUMENT"], "default": "", "description": "TEXT, or the kind of file the header carries (IMAGE, VIDEO, DOCUMENT); '' keeps the stored kind (whatsapp_inbox#218)" },
     "is_active": { "type": "integer", "enum": [0, 1] }
   }
 }

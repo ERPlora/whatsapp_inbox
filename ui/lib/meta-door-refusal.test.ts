@@ -103,6 +103,22 @@ describe('la lista de códigos es la de la puerta, no una invención', () => {
     }
   });
 
+  it('lleva los de la CABECERA con imagen, vídeo o documento (whatsapp_inbox#218)', () => {
+    // Los del SaaS al subir la muestra (saas#2377, `services/header_samples.py`) y al registrar
+    // con ella (`services/templates.py`); `header_sample_too_large` lo dice también el runtime
+    // antes de reenviar (hub#2232), con el mismo código.
+    for (const code of [
+      'missing_file',
+      'unsupported_header_sample',
+      'header_sample_too_large',
+      'whatsapp_not_configured',
+      'invalid_header_format',
+      'missing_header_sample',
+    ]) {
+      expect(META_DOOR_REFUSAL_CODES, `falta \`${code}\``).toContain(code);
+    }
+  });
+
   it('lleva los cuatro estables de saas#1905, que NO son culpa del texto', () => {
     for (const code of [
       'meta_rate_limited',

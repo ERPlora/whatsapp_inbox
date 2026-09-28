@@ -44,6 +44,10 @@ interface WhatsappTemplatesDoor {
   /** Every template of this business with the verdict Meta gives it NOW, plus `stale` when the
    *  SaaS could not reach Meta and answered from what it had stored. */
   list(): Promise<{ templates?: unknown; stale?: unknown }>;
+  /** Uploads the example file of an image, video or document header to Meta and answers the
+   *  handle `register` needs (`header_handle`), with the kind Meta reads in the file's BYTES
+   *  (`format`) — hub#2232, saas#2377. Absent on a hub from before that door: optional on purpose. */
+  uploadHeaderSample?(file: Blob): Promise<{ header_handle?: unknown; format?: unknown }>;
 }
 
 interface ErploraClientLike extends ListClient {
@@ -102,6 +106,23 @@ const HEADER_MEDIA_LABEL: Record<string, string> = {
   VIDEO: 'ui.headerMediaVideo',
   DOCUMENT: 'ui.headerMediaDocument',
 };
+
+/** What Meta takes as the example of each header kind that is a file, as the SaaS checks it
+ *  (`saas: apps/whatsapp_inbox/services/header_samples.py`). Checked here as well so a wrong file is
+ *  said when it is CHOSEN, not after a save and an upload; the SaaS stays the check that counts. */
+const HEADER_SAMPLE_RULES: Record<string, { types: string[]; label: string; maxMb: number }> = {
+  IMAGE: { types: ['image/jpeg', 'image/png'], label: 'JPEG, PNG', maxMb: 5 },
+  VIDEO: { types: ['video/mp4'], label: 'MP4', maxMb: 16 },
+  DOCUMENT: { types: ['application/pdf'], label: 'PDF', maxMb: 100 },
+};
+
+/** The header kinds the panel offers, in the order WhatsApp Manager lists them. */
+const HEADER_KINDS: [string, string][] = [
+  ['TEXT', 'ui.headerKindText'],
+  ['IMAGE', 'ui.headerKindImage'],
+  ['VIDEO', 'ui.headerKindVideo'],
+  ['DOCUMENT', 'ui.headerKindDocument'],
+];
 
 /** The label of each button kind. */
 const BUTTON_LABEL: Record<string, string> = {
@@ -292,11 +313,21 @@ export class ErpWhatsappInboxTemplates extends LitElement {
    *  out (whatsapp_inbox#87). */
   @state() editingMetaReason = '';
 
-  /** Carried through an edit so `templates.update` — whose schema requires every field — can send
-   *  back untouched what this panel does not show. */
-  /** The header kind of the template being edited. Only read through `managedInMeta`, which is
-   *  false while the panel is an ADD, and `startEdit` sets it on every open. */
+  /** The header kind in the panel (whatsapp_inbox#218): `TEXT`, or the kind of file it carries —
+   *  `IMAGE`, `VIDEO` or `DOCUMENT`. The stored one on an edit, the owner's choice after that. */
   @state() editingHeaderFormat = 'TEXT';
+
+  /** The header kind the template being edited was STORED with. Read from the row on open, never
+   *  from the owner's choice, so the panel cannot lock itself mid-edit (see `managedInMeta`). */
+  @state() storedHeaderFormat = 'TEXT';
+
+  /** The example file of a file header, as chosen in this panel. Never stored in the hub: Meta
+   *  keeps the sample and asks for a new upload on EVERY save (saas#2377), so an edit asks for it
+   *  again and the «+» starts without one. */
+  @state() headerSample: File | null = null;
+
+  /** Why the file just chosen was not taken (wrong kind, too large), next to the picker. */
+  @state() headerSampleError = '';
 
   /** The buttons in the panel, in Meta's order: the template's on an edit, the owner's on an add
    *  (whatsapp_inbox#185). `resetForm` empties them. */
@@ -309,14 +340,62 @@ export class ErpWhatsappInboxTemplates extends LitElement {
 
   /** Some parts of a template are still read-only here (whatsapp_inbox#180): «Guardar» registers
    *  the template again at Meta from what this panel holds, and this panel cannot write those parts
-   *  yet — saving would strip them at Meta. A media header (whatsapp_inbox#218) and a link button
-   *  with a variable, which needs an example and a value on every send, lock the panel; plain quick
-   *  reply, link and call buttons do not since whatsapp_inbox#185, nor named body variables
-   *  (`{{nombre}}`), which the SaaS registers as `parameter_format: NAMED` (saas#2281,
+   *  yet — saving would strip them at Meta. A link button with a variable, which needs an example
+   *  and a value on every send, locks the panel; so does a file header on a hub whose door cannot
+   *  upload its example (before hub#2232) — since whatsapp_inbox#218 the panel writes it everywhere
+   *  else. Plain quick reply, link and call buttons do not since whatsapp_inbox#185, nor named body
+   *  variables (`{{nombre}}`), which the SaaS registers as `parameter_format: NAMED` (saas#2281,
    *  whatsapp_inbox#196). It is edited in WhatsApp Manager and the tab brings Meta's verdict back
    *  on the next open. */
   private get managedInMeta(): boolean {
-    return !!this.editingId && (this.editingHeaderFormat !== 'TEXT' || this.editingDynamicLink);
+    return (
+      !!this.editingId &&
+      (this.editingDynamicLink || (this.storedHeaderFormat !== 'TEXT' && !this.canUploadHeaderSample))
+    );
+  }
+
+  /** Whether this hub's door can upload a header's example file (hub#2232). */
+  private get canUploadHeaderSample(): boolean {
+    try {
+      return typeof erplora().forModule('whatsapp_inbox').whatsappTemplates.uploadHeaderSample === 'function';
+    } catch {
+      return false;
+    }
+  }
+
+  /** A file header that Meta would refuse as it stands: no example file (`missing_header_sample`),
+   *  an authentication template (`invalid_header_format`), or a door that cannot upload one. */
+  private get headerIncomplete(): boolean {
+    if (this.editingHeaderFormat === 'TEXT') return false;
+    return !this.headerSample || this.newCategory === 'AUTHENTICATION' || !this.canUploadHeaderSample;
+  }
+
+  /** Changes the header kind. A file chosen for another kind does not travel as this one's. */
+  setHeaderFormat(kind: string): void {
+    this.editingHeaderFormat = HEADER_SAMPLE_RULES[kind] ? kind : 'TEXT';
+    this.headerSampleError = '';
+    const rules = HEADER_SAMPLE_RULES[this.editingHeaderFormat];
+    if (this.headerSample && (!rules || !rules.types.includes(this.headerSample.type))) this.headerSample = null;
+  }
+
+  /** Takes the example file of the header, or says why not — the kind and the size Meta accepts. */
+  pickHeaderSample(file: File | null): void {
+    this.headerSampleError = '';
+    const rules = HEADER_SAMPLE_RULES[this.editingHeaderFormat];
+    if (!file || !rules) {
+      this.headerSample = null;
+      return;
+    }
+    const t = (k: string, params?: Record<string, unknown>): string => erplora().t(CATALOG, k, params);
+    if (!rules.types.includes(file.type)) {
+      this.headerSample = null;
+      this.headerSampleError = t('ui.headerSampleWrongType', { types: rules.label });
+    } else if (file.size > rules.maxMb * 1024 * 1024) {
+      this.headerSample = null;
+      this.headerSampleError = t('ui.headerSampleTooLarge', { max: rules.maxMb });
+    } else {
+      this.headerSample = file;
+    }
   }
 
   /** A button still missing its label, its link or its number: Meta would refuse the template. */

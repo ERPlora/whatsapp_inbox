@@ -152,6 +152,7 @@ def create_binds(new_id, name, hub=HUB):
         "footer": "",
         "variables": "[]",
         "buttons": "[]",
+        "header_format": "TEXT",
     }
 
 
@@ -172,6 +173,7 @@ def update_binds(
         "footer": "",
         "variables": "[]",
         "buttons": "[]",
+        "header_format": "TEXT",
         "is_active": is_active,
     }
 
@@ -288,6 +290,8 @@ REVIEWED_FIELDS = {
     "footer": "Responde BAJA para no recibir mas",
     "variables": '["nombre"]',
     "buttons": '[{"type":"QUICK_REPLY","text":"Confirmar"}]',
+    # An image instead of a text header is another template to Meta (whatsapp_inbox#218).
+    "header_format": "IMAGE",
 }
 
 
@@ -298,7 +302,7 @@ def restore_approved_seed(db):
     )
     r = psql(
         db,
-        f"UPDATE whatsapp_inbox_template SET {sets}, is_active = 1, "
+        f"UPDATE whatsapp_inbox_template SET {sets}, is_active = 1, header_format = 'TEXT', "
         f"meta_template_id = {sql_literal(META_ID)}, meta_status = 'APPROVED' "
         f"WHERE id = 't-meta' AND hub_id = {sql_literal(HUB)};\n",
     )
@@ -791,6 +795,55 @@ def check_buttons_are_stored_on_update(db, base):
         ]
     return []
 
+def check_media_header_is_stored(db, base):
+    """(10) the kind of file a header carries is written by the panel (whatsapp_inbox#218).
+
+    The panel registers an image, video or document header at Meta; `templates.create` or
+    `templates.update` leaving the row at `TEXT` would make the next open offer a text template,
+    and the next save register it at Meta WITHOUT its image. An update that does not send the
+    field (the assistant's, which does not deal in files) keeps the one stored, so it cannot turn
+    an image template into a text one behind the owner's back.
+    """
+    binds = create_binds("t-image", "con_imagen")
+    binds["header_format"] = "IMAGE"
+    problems = run_command(db, CREATE_COMMAND, binds)
+    if problems:
+        return problems
+
+    def stored():
+        return rows(
+            db,
+            f"PREPARE h AS SELECT sub.header_format FROM ({base}) sub WHERE sub.id = 't-image';\n"
+            f"EXECUTE h({sql_literal(HUB)});\nDEALLOCATE h;",
+        )
+
+    got, error = stored()
+    if got is None:
+        return [f"`{LIST_QUERY}` did not run: {error}"]
+    if got != ["IMAGE"]:
+        return [
+            f"a template created with an image header lists {got!r}, not ['IMAGE']: "
+            f"`commands/template_create.sql` must store `:header_format`."
+        ]
+
+    for sent, want in (("DOCUMENT", "DOCUMENT"), ("", "DOCUMENT"), ("TEXT", "TEXT")):
+        binds = update_binds("t-image", "con_imagen")
+        binds["header_format"] = sent
+        problems = run_command(db, UPDATE_COMMAND, binds)
+        if problems:
+            return problems
+        got, error = stored()
+        if got is None:
+            return [f"`{LIST_QUERY}` did not run: {error}"]
+        if got != [want]:
+            return [
+                f"an update sending header_format={sent!r} lists {got!r}, not {[want]!r}: "
+                f"`commands/template_update.sql` must SET the kind it is sent and keep the stored "
+                f"one when it is sent none."
+            ]
+    return []
+
+
 def main():
     if LIST_QUERY not in MANIFEST.get("queries", {}):
         print(f"FAIL: `{LIST_QUERY}` is not declared in module.json")
@@ -842,6 +895,8 @@ def main():
             problems += check_buttons_are_stored_on_create(db, base)
         if not problems:
             problems += check_buttons_are_stored_on_update(db, base)
+        if not problems:
+            problems += check_media_header_is_stored(db, base)
 
         for problem in problems:
             print(f"FAIL {LIST_QUERY}\n    {problem}")
