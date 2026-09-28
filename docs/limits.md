@@ -101,9 +101,11 @@ field under the body (#208): «Guardar» stays off until every numbered variable
 
 **"A template I created in WhatsApp Manager is not in the list."** Open the Templates tab: it is
 brought in with its text, its media header kind and its quick reply, link and call buttons (#180).
-Plain buttons are edited here since #185. A template with a media header, or with a link button that
-carries a variable (`…/{{1}}`), is read-only here: change its wording in WhatsApp Manager («Guardar»
-would register it at Meta without them).
+Plain buttons are edited here since #185, and an image, video or document header since #218 (pick
+the example file again on every «Save»: Meta asks for it each time). A template with a link button
+that carries a variable (`…/{{1}}`) is read-only here: change its wording in WhatsApp Manager
+(«Guardar» would register it at Meta without it). So is one with a file header on a hub whose
+ERPlora is too old to upload the example — the panel says an update brings it.
 One with named variables (`{{name}}` instead of `{{1}}`) is edited here like any other (#196): on
 «Guardar» each name keeps its example, and a name you add is its own example. If it uses a carousel,
 a limited-time offer, a copy-code or Flow button, a location header or more than one variable in the

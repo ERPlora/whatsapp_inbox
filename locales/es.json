@@ -156,7 +156,7 @@
     "buttonQuickReply": "Respuesta rápida",
     "buttonUrl": "Abre un enlace",
     "buttonPhone": "Llama al número",
-    "templateManagedInMeta": "Esta plantilla lleva una imagen, vídeo o documento en la cabecera, o un botón de enlace con variable, así que su texto se cambia en WhatsApp Manager. Al volver a abrir esta pestaña verás lo que diga Meta.",
+    "templateManagedInMeta": "Esta plantilla lleva un botón de enlace con variable, o un archivo en la cabecera que esta versión de ERPlora aún no puede subir, así que su texto se cambia en WhatsApp Manager. Al volver a abrir esta pestaña verás lo que diga Meta.",
     "metaOnlyTemplates": "Estas plantillas de WhatsApp Manager todavía no se pueden traer a esta lista (llevan un carrusel, una oferta por tiempo limitado, un botón de copiar código o de WhatsApp Flow, una ubicación en la cabecera o más de una variable en la cabecera). Gestiónalas en WhatsApp Manager: {names}",
     "doorRefusal": {
       "invalid_name": "Meta no ha aceptado el nombre. Usa solo minúsculas, números y guiones bajos —sin espacios ni acentos— y vuelve a intentarlo.",
@@ -186,7 +186,13 @@
       "invalid_button_phone": "Meta no ha aceptado un botón de llamada. Escribe el número con su prefijo de país, por ejemplo +34600111222.",
       "too_many_buttons": "Meta no ha aceptado los botones: una plantilla lleva 10 como mucho, y no más de 2 enlaces y 1 botón de llamada.",
       "buttons_not_grouped": "Meta no ha aceptado el orden de los botones: las respuestas rápidas van juntas, y los enlaces y llamadas, juntos.",
-      "buttons_not_allowed_for_category": "Las plantillas de autenticación no pueden llevar botones desde aquí. Quita los botones o elige otra categoría."
+      "buttons_not_allowed_for_category": "Las plantillas de autenticación no pueden llevar botones desde aquí. Quita los botones o elige otra categoría.",
+      "missing_file": "No ha llegado el archivo de ejemplo de la cabecera. Vuelve a elegirlo y guarda.",
+      "unsupported_header_sample": "Meta solo admite como ejemplo de cabecera una imagen JPEG o PNG, un vídeo MP4 o un documento PDF. Elige otro archivo.",
+      "header_sample_too_large": "El archivo de ejemplo es demasiado grande para Meta: hasta 5 MB una imagen, 16 MB un vídeo y 100 MB un PDF. Elige uno más pequeño.",
+      "whatsapp_not_configured": "WhatsApp no está configurado ahora mismo en ERPlora, así que el archivo de ejemplo no se ha podido enviar a Meta. La plantilla queda guardada aquí: vuelve a intentarlo más tarde.",
+      "invalid_header_format": "Meta no ha aceptado la cabecera: una cabecera con imagen, vídeo o documento no lleva texto propio, y una plantilla de autenticación no lleva ninguna.",
+      "missing_header_sample": "Meta pide el archivo de ejemplo de la cabecera en cada guardado. Elígelo y vuelve a guardar."
     },
     "mediaKind": {
       "image": "Foto",
@@ -220,7 +226,20 @@
     "buttonUrlField": "Enlace (https://…)",
     "buttonPhoneField": "Teléfono con prefijo de país",
     "addButton": "Añadir botón",
-    "removeButton": "Quitar botón"
+    "removeButton": "Quitar botón",
+    "headerFormat": "Cabecera",
+    "headerKindText": "Texto",
+    "headerKindImage": "Imagen",
+    "headerKindVideo": "Vídeo",
+    "headerKindDocument": "Documento (PDF)",
+    "headerSamplePick": "Elegir archivo de ejemplo",
+    "headerSampleChange": "Cambiar archivo",
+    "headerSampleHint": "Meta revisa la plantilla con este ejemplo ({types}, hasta {max} MB) y lo vuelve a pedir cada vez que se guarda, también al editarla. El archivo de verdad se elige al enviar el mensaje.",
+    "headerSampleWrongType": "Ese archivo no es {types}. Elige otro.",
+    "headerSampleTooLarge": "Ese archivo pasa de {max} MB, lo máximo que admite Meta para esta cabecera. Elige uno más pequeño.",
+    "headerSampleKindMismatch": "El archivo que has elegido no es del tipo de cabecera seleccionado. Elige el tipo que corresponde al archivo, u otro archivo, y vuelve a guardar.",
+    "headerNotForAuthentication": "Las plantillas de autenticación no pueden llevar imagen, vídeo ni documento en la cabecera. Elige una cabecera de texto u otra categoría.",
+    "headerMediaNeedsUpdate": "Poner una imagen, un vídeo o un documento en la cabecera necesita una versión más nueva de ERPlora en este hub. Llega con la próxima actualización."
   },
   "errors": {
     "whatsapp_inbox.conversation_not_found": "Esa conversación no existe en este negocio.",

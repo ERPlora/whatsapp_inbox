@@ -155,7 +155,7 @@
     "buttonQuickReply": "Quick reply",
     "buttonUrl": "Opens a link",
     "buttonPhone": "Calls the number",
-    "templateManagedInMeta": "This template has an image, video or document header, or a link button with a variable, so its wording is changed in WhatsApp Manager. Open this tab again to see what Meta says.",
+    "templateManagedInMeta": "This template has a link button with a variable, or a file header this version of ERPlora cannot upload yet, so its wording is changed in WhatsApp Manager. Open this tab again to see what Meta says.",
     "metaOnlyTemplates": "These WhatsApp Manager templates cannot be brought into this list yet (they use a carousel, a limited-time offer, a copy-code or WhatsApp Flow button, a location header, or more than one variable in the header). Manage them in WhatsApp Manager: {names}",
     "doorRefusal": {
       "invalid_name": "Meta did not accept the name. Use lowercase letters, numbers and underscores only — no spaces or accents — and try again.",
@@ -185,7 +185,13 @@
       "invalid_button_phone": "Meta did not accept a call button. Write the number with its country code, for example +34600111222.",
       "too_many_buttons": "Meta did not accept the buttons: a template takes at most 10, with no more than 2 links and 1 call button.",
       "buttons_not_grouped": "Meta did not accept the order of the buttons: quick replies go together, and links and calls go together.",
-      "buttons_not_allowed_for_category": "Authentication templates cannot carry buttons from here. Remove the buttons or choose another category."
+      "buttons_not_allowed_for_category": "Authentication templates cannot carry buttons from here. Remove the buttons or choose another category.",
+      "missing_file": "The example file of the header did not arrive. Choose it again and save.",
+      "unsupported_header_sample": "Meta only accepts a JPEG or PNG image, an MP4 video or a PDF document as the header example. Choose another file.",
+      "header_sample_too_large": "The example file is too large for Meta: up to 5 MB for an image, 16 MB for a video and 100 MB for a PDF. Choose a smaller one.",
+      "whatsapp_not_configured": "WhatsApp is not set up on ERPlora’s side right now, so the example file could not be sent to Meta. The template is saved here: try again later.",
+      "invalid_header_format": "Meta did not accept the header: an image, video or document header has no text of its own, and an authentication template takes none.",
+      "missing_header_sample": "Meta needs the example file of the header on every save. Choose it and save again."
     },
     "mediaKind": {
       "image": "Photo",
@@ -219,7 +225,20 @@
     "buttonUrlField": "Link (https://…)",
     "buttonPhoneField": "Phone number with country code",
     "addButton": "Add button",
-    "removeButton": "Remove button"
+    "removeButton": "Remove button",
+    "headerFormat": "Header",
+    "headerKindText": "Text",
+    "headerKindImage": "Image",
+    "headerKindVideo": "Video",
+    "headerKindDocument": "Document (PDF)",
+    "headerSamplePick": "Choose example file",
+    "headerSampleChange": "Change file",
+    "headerSampleHint": "Meta reviews the template with this example ({types}, up to {max} MB) and asks for it again every time the template is saved, also when you edit it. The real file is chosen when the message is sent.",
+    "headerSampleWrongType": "That file is not {types}. Choose another one.",
+    "headerSampleTooLarge": "That file is larger than {max} MB, the most Meta accepts for this header. Choose a smaller one.",
+    "headerSampleKindMismatch": "The file you chose is not the kind of header selected. Choose the kind that matches the file, or another file, and save again.",
+    "headerNotForAuthentication": "Authentication templates cannot have an image, video or document header. Choose a text header or another category.",
+    "headerMediaNeedsUpdate": "An image, video or document in the header needs a newer version of ERPlora on this hub. It arrives with the next update."
   },
   "errors": {
     "whatsapp_inbox.conversation_not_found": "That conversation does not exist in this business.",

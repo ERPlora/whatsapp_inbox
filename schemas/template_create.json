@@ -16,6 +16,7 @@
     "body": { "type": "string", "default": "" },
     "footer": { "type": "string", "default": "" },
     "variables": { "type": "string", "default": "[]", "description": "JSON array de nombres de variable" },
-    "buttons": { "type": "string", "default": "[]", "description": "JSON array of the template's buttons in Meta's order: {type: QUICK_REPLY|URL|PHONE_NUMBER, text, url?|phone_number?} (whatsapp_inbox#185)" }
+    "buttons": { "type": "string", "default": "[]", "description": "JSON array of the template's buttons in Meta's order: {type: QUICK_REPLY|URL|PHONE_NUMBER, text, url?|phone_number?} (whatsapp_inbox#185)" },
+    "header_format": { "type": "string", "enum": ["TEXT", "IMAGE", "VIDEO", "DOCUMENT"], "default": "TEXT", "description": "TEXT, or the kind of file the header carries (IMAGE, VIDEO, DOCUMENT); a file header has no header text (whatsapp_inbox#218)" }
   }
 }

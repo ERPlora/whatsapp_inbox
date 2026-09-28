@@ -37,7 +37,7 @@ tonight» and «nobody receives it».
    every field, so «open it, read it, press Guardar» arrives as a full update whose values are the
    ones already stored — and until now that dropped the id Meta gave the template. Asserted in both
    directions and field by field: nothing changed (and `is_active` alone changed) keeps the id;
-   each of the eight fields Meta reviews, changed on its own, drops it.
+   each of the nine fields Meta reviews, changed on its own, drops it.
 5. **An EDIT does not claim a review Meta is not doing, and walks in through the `hub_id`
    gate** (whatsapp_inbox#87). Nothing in this
    module sends a template to Meta — the runtime door landed with ERPlora/hub#1610 (v1.1.18)
@@ -61,6 +61,7 @@ import uuid
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from module_migrations import declared_migrations  # noqa: E402
+
 MODULE_DIR = pathlib.Path(__file__).resolve().parent.parent
 MANIFEST = json.loads((MODULE_DIR / "module.json").read_text())
 CONTAINER = os.environ.get("ERPLORA_TEST_PG_CONTAINER", "erplora-test-pg-5433")
@@ -152,6 +153,7 @@ def create_binds(new_id, name, hub=HUB):
         "footer": "",
         "variables": "[]",
         "buttons": "[]",
+        "header_format": "TEXT",
     }
 
 
@@ -172,6 +174,7 @@ def update_binds(
         "footer": "",
         "variables": "[]",
         "buttons": "[]",
+        "header_format": "TEXT",
         "is_active": is_active,
     }
 
@@ -276,7 +279,7 @@ def check_tenancy(db, base):
 # What the seed leaves on `t-meta`: Meta looked at this text and said yes.
 META_ID = "1122334455"
 
-# The eight fields Meta re-reviews (the buttons since whatsapp_inbox#185), each with a value that differs from the seed. `is_active` is
+# The nine fields Meta re-reviews (the buttons since whatsapp_inbox#185, the header kind since #218), each with a value that differs from the seed. `is_active` is
 # NOT here on purpose: it is this hub's own switch (whether the module uses the template) and Meta
 # has never seen it, so flipping it must not cost the approval.
 REVIEWED_FIELDS = {
@@ -288,6 +291,8 @@ REVIEWED_FIELDS = {
     "footer": "Responde BAJA para no recibir mas",
     "variables": '["nombre"]',
     "buttons": '[{"type":"QUICK_REPLY","text":"Confirmar"}]',
+    # An image instead of a text header is another template to Meta (whatsapp_inbox#218).
+    "header_format": "IMAGE",
 }
 
 
@@ -298,7 +303,7 @@ def restore_approved_seed(db):
     )
     r = psql(
         db,
-        f"UPDATE whatsapp_inbox_template SET {sets}, is_active = 1, "
+        f"UPDATE whatsapp_inbox_template SET {sets}, is_active = 1, header_format = 'TEXT', "
         f"meta_template_id = {sql_literal(META_ID)}, meta_status = 'APPROVED' "
         f"WHERE id = 't-meta' AND hub_id = {sql_literal(HUB)};\n",
     )
@@ -347,7 +352,7 @@ def check_a_save_with_no_changes_keeps_metas_verdict(db, base):
     both halves are asserted here:
 
       · nothing changed, and `is_active` alone changed  → the id and the verdict SURVIVE;
-      · each of the eight fields Meta reviews, changed ON ITS OWN → the id is dropped.
+      · each of the nine fields Meta reviews, changed ON ITS OWN → the id is dropped.
 
     The per-field half is what stops the comparison from quietly losing a field: dropping `footer`
     from it would leave a save that rewrites the footer looking, to Meta, like a template that was
@@ -366,6 +371,15 @@ def check_a_save_with_no_changes_keeps_metas_verdict(db, base):
             update_binds(
                 "t-meta", SEEDED_TEMPLATE["name"], body=SEEDED_BODY, is_active=0
             ),
+        ),
+        (
+            # `header_format` = '' is the schema's «keep the stored kind» (whatsapp_inbox#218): a
+            # caller that does not deal in files saving the same text is not an edit to Meta.
+            "a save that sent no header kind (the schema's default '')",
+            {
+                **update_binds("t-meta", SEEDED_TEMPLATE["name"], body=SEEDED_BODY),
+                "header_format": "",
+            },
         ),
     ):
         problems = run_command(db, UPDATE_COMMAND, binds)
@@ -791,6 +805,56 @@ def check_buttons_are_stored_on_update(db, base):
         ]
     return []
 
+
+def check_media_header_is_stored(db, base):
+    """(10) the kind of file a header carries is written by the panel (whatsapp_inbox#218).
+
+    The panel registers an image, video or document header at Meta; `templates.create` or
+    `templates.update` leaving the row at `TEXT` would make the next open offer a text template,
+    and the next save register it at Meta WITHOUT its image. An update that does not send the
+    field (the assistant's, which does not deal in files) keeps the one stored, so it cannot turn
+    an image template into a text one behind the owner's back.
+    """
+    binds = create_binds("t-image", "con_imagen")
+    binds["header_format"] = "IMAGE"
+    problems = run_command(db, CREATE_COMMAND, binds)
+    if problems:
+        return problems
+
+    def stored():
+        return rows(
+            db,
+            f"PREPARE h AS SELECT sub.header_format FROM ({base}) sub WHERE sub.id = 't-image';\n"
+            f"EXECUTE h({sql_literal(HUB)});\nDEALLOCATE h;",
+        )
+
+    got, error = stored()
+    if got is None:
+        return [f"`{LIST_QUERY}` did not run: {error}"]
+    if got != ["IMAGE"]:
+        return [
+            f"a template created with an image header lists {got!r}, not ['IMAGE']: "
+            f"`commands/template_create.sql` must store `:header_format`."
+        ]
+
+    for sent, want in (("DOCUMENT", "DOCUMENT"), ("", "DOCUMENT"), ("TEXT", "TEXT")):
+        binds = update_binds("t-image", "con_imagen")
+        binds["header_format"] = sent
+        problems = run_command(db, UPDATE_COMMAND, binds)
+        if problems:
+            return problems
+        got, error = stored()
+        if got is None:
+            return [f"`{LIST_QUERY}` did not run: {error}"]
+        if got != [want]:
+            return [
+                f"an update sending header_format={sent!r} lists {got!r}, not {[want]!r}: "
+                f"`commands/template_update.sql` must SET the kind it is sent and keep the stored "
+                f"one when it is sent none."
+            ]
+    return []
+
+
 def main():
     if LIST_QUERY not in MANIFEST.get("queries", {}):
         print(f"FAIL: `{LIST_QUERY}` is not declared in module.json")
@@ -842,6 +906,8 @@ def main():
             problems += check_buttons_are_stored_on_create(db, base)
         if not problems:
             problems += check_buttons_are_stored_on_update(db, base)
+        if not problems:
+            problems += check_media_header_is_stored(db, base)
 
         for problem in problems:
             print(f"FAIL {LIST_QUERY}\n    {problem}")
@@ -853,7 +919,7 @@ def main():
             "Meta never received arrives as `not_sent`, Meta's own UPPERCASE arrives lowercased, "
             "both are filterable server-side, an edit goes back to `not_sent` instead of claiming a "
             "review Meta is not doing, a save that changed nothing keeps Meta's approval (each of "
-            "the eight reviewed fields drops it on its own), and no hub sees or edits another "
+            "the nine reviewed fields drops it on its own), and no hub sees or edits another "
             "hub's templates — and what the door brings back from Meta LANDS on the row, reason "
             "included and projected, unless the row has moved on to a text Meta never reviewed"
         )
