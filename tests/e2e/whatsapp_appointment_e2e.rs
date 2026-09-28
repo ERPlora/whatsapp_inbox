@@ -1081,3 +1081,190 @@ async fn when_the_table_assistant_fails_the_guest_is_told_someone_will_answer() 
     assert!(!steps.iter().any(|s| s.step_id == "confirm_to_customer"), "{steps:?}");
     assert_eq!(unread(&rt).await, json!(1));
 }
+
+// ── 8. whatsapp_inbox#239: the assistant ANSWERS, but says nothing — she is told as if it failed ──
+
+/// The words the SHIPPED template sends when `writer` ended its turn without a word and without
+/// anything to tap: the `notify` guarded on its `text`. Read from the document, like
+/// [`apology_of`], so the test cannot pass on words the recipe does not carry.
+fn silence_apology_of(definition: &Value, writer: &str) -> Value {
+    let text = format!("steps.{writer}.text");
+    definition["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["kind"] == json!("notify") && s["run_if"].get(&text).is_some())
+        .unwrap_or_else(|| panic!("the recipe has no `notify` that runs when `{writer}` said nothing"))
+        ["vars"]["text"]
+        .clone()
+}
+
+/// **The case the issue is written about.** The booking turn ends `done` — the model called its
+/// answer tool, nothing broke — but it wrote no words and offered nothing to tap. Before #239 the
+/// run carried on to `confirm_to_customer` and queued an EMPTY message to her phone. Now she gets
+/// the recipe's fixed apology, nothing else, and the thread is still unread for the salon.
+#[tokio::test]
+async fn when_the_assistant_answers_with_no_words_she_is_told_someone_will_answer() {
+    let (rt, flow_id, definition) = the_salon_with(
+        "appointment-from-whatsapp.es.flow.json",
+        "appointment-from-whatsapp.grants.json",
+        SALON,
+    )
+    .await;
+
+    let mut seen = Vec::new();
+    ana_writes(&rt, "wamid.MUTE", "hola, ¿tenéis hueco mañana por la tarde?").await;
+    let steps = drive(
+        &rt,
+        &flow_id,
+        "book_appointment",
+        0,
+        |id| match id {
+            "know_the_customer" => json!({ "text": "she is new; card created" }),
+            "book_appointment" => json!({ "text": "", "tool_calls": [], "slots": [] }),
+            other => panic!("no other step is an agent turn: {other}"),
+        },
+        &mut seen,
+    )
+    .await;
+
+    let messages = sent(&rt).await;
+    assert!(
+        !messages.iter().any(|(_, text)| text == &json!("")),
+        "no EMPTY message reaches her phone: {messages:?} {steps:?}"
+    );
+    let apology = silence_apology_of(&definition, "book_appointment");
+    assert!(
+        apology.as_str().is_some_and(|t| !t.trim().is_empty() && !t.contains("{{")),
+        "the apology for a silent turn is fixed words: {apology}"
+    );
+    assert_eq!(
+        messages,
+        in_order(vec![(json!(E164), acknowledgement_of(&definition)), (json!(E164), apology)]),
+        "after «let me check the diary» she is told someone will answer — never an empty message: \
+         {steps:?}"
+    );
+    let runs = rt.list_flow_runs(&flow_id, 10, None).await.unwrap();
+    assert_eq!(runs[0].status, store::STATUS_DONE, "the document said what to do: {steps:?}");
+    assert_eq!(step(&steps, "book_appointment").status, "done", "{steps:?}");
+    assert_eq!(unread(&rt).await, json!(1), "the thread waits unread in the inbox for the salon");
+}
+
+/// The same silence, with no `text` key at all: `{{steps.book_appointment.text}}` resolves to
+/// nothing, which the `notify` refuses — before #239 that ended the run as `failed` with her last
+/// word from us being «let me check the diary».
+#[tokio::test]
+async fn when_the_assistant_answer_has_no_text_at_all_she_is_told_someone_will_answer() {
+    let (rt, flow_id, definition) = the_salon_with(
+        "appointment-from-whatsapp.es.flow.json",
+        "appointment-from-whatsapp.grants.json",
+        SALON,
+    )
+    .await;
+
+    let mut seen = Vec::new();
+    ana_writes(&rt, "wamid.MUTE2", "hola, quiero cita").await;
+    let steps = drive(
+        &rt,
+        &flow_id,
+        "book_appointment",
+        0,
+        |id| match id {
+            "know_the_customer" => json!({ "text": "she is new; card created" }),
+            "book_appointment" => json!({ "slots": [] }),
+            other => panic!("no other step is an agent turn: {other}"),
+        },
+        &mut seen,
+    )
+    .await;
+
+    let runs = rt.list_flow_runs(&flow_id, 10, None).await.unwrap();
+    assert_eq!(runs[0].status, store::STATUS_DONE, "{steps:?}");
+    assert_eq!(
+        sent(&rt).await,
+        in_order(vec![
+            (json!(E164), acknowledgement_of(&definition)),
+            (json!(E164), silence_apology_of(&definition, "book_appointment")),
+        ]),
+        "{steps:?}"
+    );
+}
+
+/// No words, but slots to TAP: that is an answer. She gets the list and no apology — the silence
+/// guard must not turn a working offer into «someone will answer you».
+#[tokio::test]
+async fn when_the_assistant_offers_slots_without_words_she_gets_the_list_and_no_apology() {
+    let (rt, flow_id, definition) = the_salon_with(
+        "appointment-from-whatsapp.es.flow.json",
+        "appointment-from-whatsapp.grants.json",
+        SALON,
+    )
+    .await;
+
+    let mut seen = Vec::new();
+    ana_writes(&rt, "wamid.LIST", "hola, ¿qué huecos tenéis mañana?").await;
+    let steps = drive(
+        &rt,
+        &flow_id,
+        "book_appointment",
+        0,
+        |id| match id {
+            "know_the_customer" => json!({ "text": "she is new; card created" }),
+            "book_appointment" => json!({
+                "text": "",
+                "slots": [{ "id": "2026-09-25T17:00|staff:1|service:1", "title": "Jue 17:00 Laura" }],
+            }),
+            other => panic!("no other step is an agent turn: {other}"),
+        },
+        &mut seen,
+    )
+    .await;
+
+    let texts: Vec<Value> = sent(&rt).await.into_iter().map(|(_, text)| text).collect();
+    assert!(!texts.contains(&json!("")), "no empty message: {texts:?} {steps:?}");
+    let apology = silence_apology_of(&definition, "book_appointment");
+    assert!(!texts.contains(&apology), "no apology when she has slots to tap: {texts:?} {steps:?}");
+    assert_eq!(step(&steps, "offer_slots").status, "done", "the list went out: {steps:?}");
+    let runs = rt.list_flow_runs(&flow_id, 10, None).await.unwrap();
+    assert_eq!(runs[0].status, store::STATUS_DONE, "{steps:?}");
+}
+
+/// The restaurant's recipe takes the same road: the table assistant says nothing, the guest is told.
+#[tokio::test]
+async fn when_the_table_assistant_answers_with_no_words_the_guest_is_told_someone_will_answer() {
+    let (rt, flow_id, definition) = the_salon_with(
+        "reservation-from-whatsapp.es.flow.json",
+        "reservation-from-whatsapp.grants.json",
+        &["customers", "tables", "reservations", "whatsapp_inbox"],
+    )
+    .await;
+
+    let mut seen = Vec::new();
+    ana_writes(&rt, "wamid.TMUTE", "¿tenéis mesa esta noche para 4?").await;
+    let steps = drive(
+        &rt,
+        &flow_id,
+        "book_table",
+        0,
+        |_| json!({ "text": "", "tool_calls": [], "slots": [] }),
+        &mut seen,
+    )
+    .await;
+
+    let messages = sent(&rt).await;
+    assert!(
+        !messages.iter().any(|(_, text)| text == &json!("")),
+        "no EMPTY message reaches the guest: {messages:?} {steps:?}"
+    );
+    assert_eq!(
+        messages,
+        in_order(vec![
+            (json!(E164), acknowledgement_of(&definition)),
+            (json!(E164), silence_apology_of(&definition, "book_table")),
+        ]),
+        "{steps:?}"
+    );
+    let runs = rt.list_flow_runs(&flow_id, 10, None).await.unwrap();
+    assert_eq!(runs[0].status, store::STATUS_DONE, "{steps:?}");
+    assert_eq!(unread(&rt).await, json!(1));
+}

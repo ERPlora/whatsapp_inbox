@@ -163,6 +163,33 @@
       }
     },
     {
+      "id": "sorry_book_table_said_nothing",
+      "kind": "notify",
+      "channel": "whatsapp",
+      "to": {
+        "query": "whatsapp_inbox.conversations.list",
+        "params": {
+          "f_wa_contact_id": "input.from"
+        },
+        "field": "contact_phone"
+      },
+      "template": "",
+      "vars": {
+        "text": "Sorry, I can't check the bookings right now. Someone from the team will answer you here as soon as they can."
+      },
+      "run_if": {
+        "steps.book_table.text": {
+          "in": [
+            "",
+            null
+          ]
+        },
+        "steps.book_table.slots": {
+          "eq": []
+        }
+      }
+    },
+    {
       "id": "confirm_to_customer",
       "kind": "notify",
       "channel": "whatsapp",
@@ -176,6 +203,12 @@
       "template": "",
       "vars": {
         "text": "{{steps.book_table.text}}"
+      },
+      "run_if": {
+        "steps.book_table.text": {
+          "exists": true,
+          "neq": ""
+        }
       }
     },
     {
