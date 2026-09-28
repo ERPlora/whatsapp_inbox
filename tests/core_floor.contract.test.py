@@ -379,7 +379,8 @@ PREDICATE_CASES = (
         "a step that says nothing about failure",
         {"kind": "ai"},
         False,
-    ),    (
+    ),
+    (
         NEED_STEP_GUARD,
         "the apology that runs only when the assistant failed",
         {"kind": "notify", "run_if": {"steps.book.status": {"eq": "failed"}}},
