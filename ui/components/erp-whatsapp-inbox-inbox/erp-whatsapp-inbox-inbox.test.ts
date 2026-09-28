@@ -323,9 +323,13 @@ describe('a customer the automation could not answer is marked «needs attention
     expect(pill!.getAttribute('tone')).toBe('warning');
     expect(pill!.textContent?.trim()).toBe('ui.needsAttention');
     expect(cell.textContent).toContain('Ana');
-    // On its own line: inline next to a long name or a phone it overflowed into the phone column
-    // on the bench (tablet and desktop widths).
-    expect(pill!.parentElement, 'the mark sits inline and overflows the column').not.toBe(cell);
+    // On its own line under the name: the table lays a cell out as a flex ROW, and side by side
+    // with a long name or a phone the mark overflowed into the phone column on the bench (tablet
+    // and desktop widths). So the cell is ONE block holding the name, and the mark a block inside.
+    expect(cell.children, 'name and mark are separate flex items of the cell').toHaveLength(1);
+    const block = cell.firstElementChild!;
+    expect(block.textContent).toContain('Ana');
+    expect(pill!.parentElement, 'the mark sits inline next to the name').not.toBe(block);
     expect(pill!.parentElement?.tagName).toBe('DIV');
   });
 

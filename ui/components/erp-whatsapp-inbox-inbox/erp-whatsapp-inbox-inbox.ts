@@ -249,13 +249,13 @@ export class ErpWhatsappInboxInbox extends LitElement {
       filterable: true,
       filterType: 'text',
       // A customer the automation could not answer carries the mark under her name
-      // (whatsapp_inbox#238), so the list says WHO is waiting and not only that she is on top. On
-      // its own line (a block `div`, the cell lives in the table's shadow root where this
-      // component's styles do not reach): next to a long name or a phone it overflowed into the
-      // next column.
-      render: (r) => html`${String(r.contact_name || r.contact_phone || '—')}${r.needs_attention_at
+      // (whatsapp_inbox#238), so the list says WHO is waiting and not only that she is on top. The
+      // table lays a cell out as a flex ROW and this component's styles do not reach its shadow
+      // root, so name and mark share ONE block and the mark gets a line of its own: side by side,
+      // next to a long name or a phone, it overflowed into the phone column on the bench.
+      render: (r) => html`<div>${String(r.contact_name || r.contact_phone || '—')}${r.needs_attention_at
         ? html`<div>${this.renderNeedsAttention()}</div>`
-        : nothing}`,
+        : nothing}</div>`,
     },
     { key: 'contact_phone', header: t('ui.colPhone'), sortable: true, filterable: true, filterType: 'text' },
     {
