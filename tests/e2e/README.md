@@ -64,6 +64,25 @@ cd "$HUB" && DATABASE_URL=… ERPLORA_MODULES_DIR="$MODS" \
 
 Control positivo medido: con la receta «vieja» igual a la nueva caen los 4.
 
+### `needs_attention_e2e.rs` (whatsapp_inbox#238)
+
+La clienta a la que la automatización no pudo contestar queda marcada «necesita atención» hasta que
+alguien del negocio le contesta: escribe → el asistente de la agenda **falla** (o contesta **nada**)
+→ la receta publicada le pide perdón y llama a `whatsapp_inbox.conversations.needs_attention` con
+`input.from` (sus grants lo permiten) → la lista de la bandeja, en su orden por defecto, la sirve
+**la primera** con `needs_attention_at`; un segundo fallo no mueve la fecha; el **eco** de lo que el
+dueño contesta desde el móvil (`direction: outbound`, `source: live`) quita la marca. Mismos módulos
+en `$MODS` que `recipe_update_e2e.rs`, y en el hub del suelo (`v1.1.30`):
+
+```bash
+cp tests/e2e/needs_attention_e2e.rs "$HUB/crates/runtime/tests/"
+cd "$HUB" && DATABASE_URL=… ERPLORA_MODULES_DIR="$MODS" \
+  cargo test -p erplora-runtime --test needs_attention_e2e
+```
+
+Control negativo medido: con `whatsapp_inbox` en `origin/main` sin la marca caen los 3. El
+aislamiento entre hubs lo prueba `tests/needs_attention.pg.test.py` (dos hubs en la misma BD).
+
 ## Qué NO prueba, y por qué no puede
 
 - **El mensaje de WhatsApp real.** El evento se inserta como lo inserta `inbound_poll.rs`

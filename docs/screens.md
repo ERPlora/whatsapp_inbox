@@ -10,8 +10,14 @@ Requires `whatsapp_inbox.view_conversation` — an employee can read this.
 A conversation carries the contact, a soft reference to the customer, who it is assigned to, its
 status, the time of the last message, the unread count, and the bot's context.
 
-The list shows the **most recent activity first** (`last_message_at`, newest on top), like any
-inbox. When the number is connected, WhatsApp also delivers the conversations of the last months;
+The list shows **who is waiting first**, then the **most recent activity first**
+(`last_message_at`, newest on top), like any inbox. A conversation the automation could not answer
+— its assistant failed or answered with nothing, and the customer was told that someone from the
+team would write — is marked **«Needs attention»** next to the contact and goes to the top of the
+list. The opened conversation shows the same mark and a note explaining how it goes away: answer the
+customer from the WhatsApp Business app on the phone, and the mark is removed as soon as that reply
+reaches the hub. Her own next message does not remove it, and neither do the old messages of the
+history. When the number is connected, WhatsApp also delivers the conversations of the last months;
 each of those messages keeps the time it was **actually sent** (Meta's own timestamp), so an old
 conversation stays down the list where it belongs and its thread reads in the order things were
 said. A history message that arrives without a usable time is dated when it reached the hub.

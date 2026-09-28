@@ -25,6 +25,15 @@ retries, backoff and dead-letter, and it addresses the contact through a `recipi
 over `whatsapp_inbox.conversations.list#contact_phone`. That is why the ingest normalises the phone
 to E.164 — a number without its `+` is a customer the hub cannot answer.
 
+**When the automation cannot answer, the inbox remembers it** (whatsapp_inbox#238). If the
+assistant of a WhatsApp recipe fails or answers with nothing, the recipe apologises to the customer
+(«someone from the team will answer you here soon») and then calls
+`whatsapp_inbox.conversations.needs_attention` for her contact. The conversation keeps
+`needs_attention_at` — when the automation FIRST gave up on her; a second failure does not move it —
+and the inbox lists it first with a «Needs attention» mark. The mark is cleared by the live echo of
+a reply the business sends from the WhatsApp Business app (the only outbound message that reaches
+the hub; what the automation itself sends never comes back as an echo), and by nothing else.
+
 The `send_message` permission was **retired in whatsapp_inbox#29**. It named nothing, and a
 permission that gates nothing is not a restriction: it is a label on an empty box that answers *yes*
 to an audit of "can this employee reply?".
