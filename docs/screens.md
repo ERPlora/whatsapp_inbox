@@ -101,6 +101,10 @@ the table's toolbar — the **Edit** row action loads the template into it, and 
 does not show (header, footer, variables, active flag) travel back unchanged, so editing a body
 never blanks a header somebody set. **Delete** asks for confirmation in the page.
 
+After a create the list goes back to its first page, where the new template heads the list (newest
+first) — also when Meta turned it down and the panel stays open on it; search, filters, sort and
+rows per page are kept. A refused create and an edit leave the list on the page it was on.
+
 > Editing a template resets its Meta status to `pending`: Meta re-approves content.
 
 > Meta's verdicts are refreshed once, when the tab opens — never on a timer. Meta names a template

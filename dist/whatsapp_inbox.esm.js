@@ -7211,6 +7211,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
       } else if (createdId) {
         this.editingId = createdId;
       }
+      this.ctrl.state.page = 0;
       await this.ctrl.load();
     } catch (e5) {
       this.formError = e5 instanceof Error ? e5.message : erplora3().t(CATALOG3, "ui.errCreateTemplate");
