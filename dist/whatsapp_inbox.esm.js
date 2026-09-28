@@ -3580,7 +3580,7 @@ __decorateClass2([
 var OkDataTable = _OkDataTable;
 define("ok-data-table", OkDataTable);
 
-// @erplora/outfitkit/dist/ok-status-pill.js
+// @erplora/outfitkit/dist/ok-inline-feedback.js
 var __defProp3 = Object.defineProperty;
 var __decorateClass3 = (decorators, target, key, kind) => {
   var result = void 0;
@@ -3588,6 +3588,223 @@ var __decorateClass3 = (decorators, target, key, kind) => {
     if (decorator = decorators[i7])
       result = decorator(target, key, result) || result;
   if (result) __defProp3(target, key, result);
+  return result;
+};
+var DEFAULT_LABELS2 = {
+  dismiss: "Dismiss"
+};
+var OkInlineFeedback = class extends i3 {
+  constructor() {
+    super(...arguments);
+    this.tone = "info";
+    this.dismissible = false;
+    this.hidden = false;
+    this.labels = {};
+    this.hasActions = false;
+    this.onActionsSlotChange = (e5) => {
+      const slot = e5.target;
+      this.hasActions = slot.assignedNodes({ flatten: true }).length > 0;
+    };
+  }
+  static {
+    this.styles = i`
+    :host {
+      /* Vars overridable (estilo Ionic), default = cadena --ok-* → --ion-* → hex.
+         --tone-color y --tone-icon se reasignan por tone abajo. */
+      --tone-color: var(--ok-primary, var(--ion-color-primary, #3880ff));
+      --background-opacity: 0.1;
+      --color: var(--ok-text, var(--ion-text-color, #1c1b17));
+      --border-radius: var(--ok-radius, var(--ion-border-radius, 8px));
+      --padding: var(--ok-spacing, var(--ion-padding, 16px));
+      --accent-width: 4px;
+      --font: var(--ok-font, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif);
+
+      /* Responsive: el banner ocupa el ancho del contenedor. */
+      display: block;
+      width: 100%;
+      font-family: var(--font);
+      box-sizing: border-box;
+    }
+    :host([hidden]) { display: none; }
+
+    /* Mapa de tonos → color Ionic + icono por defecto. */
+    :host([tone='success']) { --tone-color: var(--ok-success, var(--ion-color-success, #2dd55b)); }
+    :host([tone='warning']) { --tone-color: var(--ok-warning, var(--ion-color-warning, #ffc409)); }
+    :host([tone='danger'])  { --tone-color: var(--ok-danger, var(--ion-color-danger, #c5000f)); }
+    :host([tone='neutral']) { --tone-color: var(--ok-medium, var(--ion-color-medium, #5f5f5f)); }
+    /* info / sin tono → primary (default ya aplicado en :host). */
+
+    .box {
+      position: relative;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      padding: var(--padding);
+      border-radius: var(--border-radius);
+      border-inline-start: var(--accent-width) solid var(--tone-color);
+      /* Fondo tonal: el color del tono con baja opacidad (color-mix con fallback al borde fino). */
+      background: color-mix(in srgb, var(--tone-color) calc(var(--background-opacity) * 100%), transparent);
+      color: var(--color);
+    }
+
+    .icon {
+      flex: 0 0 auto;
+      font-size: 1.4rem;
+      line-height: 1;
+      color: var(--tone-color);
+      margin-top: 0.05rem;
+    }
+
+    .content {
+      flex: 1 1 auto;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .row {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+    }
+    .text {
+      flex: 1 1 auto;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+    .heading {
+      font-weight: 700;
+      font-size: 0.98rem;
+      line-height: 1.3;
+    }
+    .body {
+      font-size: 0.92rem;
+      line-height: 1.45;
+    }
+    .actions {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    /* Si no hay actions, el slot queda vacío y no ocupa espacio. */
+    .actions.empty { display: none; }
+
+    .close {
+      flex: 0 0 auto;
+      background: none;
+      border: 0;
+      cursor: pointer;
+      padding: 0.15rem;
+      margin: -0.15rem -0.15rem 0 0;
+      color: inherit;
+      opacity: 0.6;
+      font-size: 1.2rem;
+      line-height: 1;
+      border-radius: 4px;
+      transition: background-color var(--ok-transition, 150ms ease), color var(--ok-transition, 150ms ease),
+        border-color var(--ok-transition, 150ms ease), box-shadow var(--ok-transition, 150ms ease),
+        opacity 0.15s ease, transform 120ms ease;
+    }
+    @media (hover: hover) {
+      .close:hover { opacity: 1; background: rgba(var(--ion-text-color-rgb, 24, 24, 27), 0.07); }
+    }
+    .close:active { transform: scale(var(--ok-press-scale, 0.97)); }
+
+    /* Móvil: las actions bajan bajo el texto (apiladas a ancho completo). */
+    @media (max-width: 640px) {
+      .row { flex-direction: column; align-items: stretch; }
+      .actions { width: 100%; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .close:hover,
+      .close:active { transform: none; }
+    }
+  `;
+  }
+  // Textos efectivos: defaults en inglés + overrides del consumidor.
+  get t() {
+    return { ...DEFAULT_LABELS2, ...this.labels };
+  }
+  // Icono por defecto según el tono (overridable por la prop `icon`).
+  defaultIcon() {
+    switch (this.tone) {
+      case "success":
+        return iconCheckmarkCircle;
+      case "warning":
+        return iconWarning;
+      case "danger":
+        return iconAlertCircle;
+      case "neutral":
+        return iconInformationCircle;
+      case "info":
+      default:
+        return iconInformationCircle;
+    }
+  }
+  // Oculta el banner y avisa al consumidor; éste puede revertir restaurando `hidden=false`.
+  dismiss() {
+    this.hidden = true;
+    this.dispatchEvent(new CustomEvent("ok-dismiss", { bubbles: true, composed: true }));
+  }
+  render() {
+    const iconName = this.icon ?? this.defaultIcon();
+    return b2`
+      <div class="box" role="status">
+        <ion-icon class="icon" .icon=${okIcon(iconName)} aria-hidden="true"></ion-icon>
+        <div class="content">
+          <div class="row">
+            <div class="text">
+              ${this.heading ? b2`<div class="heading">${this.heading}</div>` : null}
+              <div class="body"><slot></slot></div>
+            </div>
+            <div class="actions ${this.hasActions ? "" : "empty"}">
+              <slot name="actions" @slotchange=${this.onActionsSlotChange}></slot>
+            </div>
+          </div>
+        </div>
+        ${this.dismissible ? b2`
+              <button class="close" aria-label=${this.t.dismiss} @click=${this.dismiss}>
+                <ion-icon .icon=${iconClose} aria-hidden="true"></ion-icon>
+              </button>
+            ` : null}
+      </div>
+    `;
+  }
+};
+__decorateClass3([
+  n4({ type: String, reflect: true })
+], OkInlineFeedback.prototype, "tone");
+__decorateClass3([
+  n4({ type: String })
+], OkInlineFeedback.prototype, "heading");
+__decorateClass3([
+  n4({ type: String })
+], OkInlineFeedback.prototype, "icon");
+__decorateClass3([
+  n4({ type: Boolean, reflect: true })
+], OkInlineFeedback.prototype, "dismissible");
+__decorateClass3([
+  n4({ type: Boolean, reflect: true })
+], OkInlineFeedback.prototype, "hidden");
+__decorateClass3([
+  n4({ attribute: false })
+], OkInlineFeedback.prototype, "labels");
+__decorateClass3([
+  r5()
+], OkInlineFeedback.prototype, "hasActions");
+define("ok-inline-feedback", OkInlineFeedback);
+
+// @erplora/outfitkit/dist/ok-status-pill.js
+var __defProp4 = Object.defineProperty;
+var __decorateClass4 = (decorators, target, key, kind) => {
+  var result = void 0;
+  for (var i7 = decorators.length - 1, decorator; i7 >= 0; i7--)
+    if (decorator = decorators[i7])
+      result = decorator(target, key, result) || result;
+  if (result) __defProp4(target, key, result);
   return result;
 };
 var OkStatusPill = class extends i3 {
@@ -3682,19 +3899,19 @@ var OkStatusPill = class extends i3 {
     `;
   }
 };
-__decorateClass3([
+__decorateClass4([
   n4({ type: String, reflect: true })
 ], OkStatusPill.prototype, "tone");
-__decorateClass3([
+__decorateClass4([
   n4({ type: String })
 ], OkStatusPill.prototype, "label");
-__decorateClass3([
+__decorateClass4([
   n4({ type: String })
 ], OkStatusPill.prototype, "icon");
-__decorateClass3([
+__decorateClass4([
   n4({ type: Boolean, reflect: true })
 ], OkStatusPill.prototype, "dot");
-__decorateClass3([
+__decorateClass4([
   n4({ type: String, reflect: true })
 ], OkStatusPill.prototype, "size");
 define("ok-status-pill", OkStatusPill);
@@ -3776,16 +3993,16 @@ var tapTarget = i`
 `;
 
 // @erplora/outfitkit/dist/ok-lightbox.js
-var __defProp4 = Object.defineProperty;
-var __decorateClass4 = (decorators, target, key, kind) => {
+var __defProp5 = Object.defineProperty;
+var __decorateClass5 = (decorators, target, key, kind) => {
   var result = void 0;
   for (var i7 = decorators.length - 1, decorator; i7 >= 0; i7--)
     if (decorator = decorators[i7])
       result = decorator(target, key, result) || result;
-  if (result) __defProp4(target, key, result);
+  if (result) __defProp5(target, key, result);
   return result;
 };
-var DEFAULT_LABELS2 = {
+var DEFAULT_LABELS3 = {
   prev: "Previous",
   next: "Next",
   close: "Close",
@@ -4063,7 +4280,7 @@ var OkLightbox = class extends i3 {
   }
   // Textos efectivos: defaults en inglés + overrides del consumidor.
   get t() {
-    return { ...DEFAULT_LABELS2, ...this.labels };
+    return { ...DEFAULT_LABELS3, ...this.labels };
   }
   connectedCallback() {
     super.connectedCallback();
@@ -4282,22 +4499,22 @@ var OkLightbox = class extends i3 {
     }
   }
 };
-__decorateClass4([
+__decorateClass5([
   n4({ attribute: false })
 ], OkLightbox.prototype, "items");
-__decorateClass4([
+__decorateClass5([
   n4({ type: Number })
 ], OkLightbox.prototype, "index");
-__decorateClass4([
+__decorateClass5([
   n4({ type: Boolean })
 ], OkLightbox.prototype, "open");
-__decorateClass4([
+__decorateClass5([
   n4({ attribute: false })
 ], OkLightbox.prototype, "labels");
-__decorateClass4([
+__decorateClass5([
   r5()
 ], OkLightbox.prototype, "shown");
-__decorateClass4([
+__decorateClass5([
   r5()
 ], OkLightbox.prototype, "fullscreenOn");
 define("ok-lightbox", OkLightbox);
@@ -5087,6 +5304,7 @@ var ErpWhatsappInboxInbox = class extends i3 {
     this.detail = null;
     this.messages = [];
     this.detailError = "";
+    this.assignError = "";
     this.detailBusy = false;
     this.media = {};
     this.unplayable = /* @__PURE__ */ new Set();
@@ -5219,6 +5437,7 @@ var ErpWhatsappInboxInbox = class extends i3 {
   // ── The thread ────────────────────────────────────────────────────────────
   async loadDetail(conversationId) {
     this.detailError = "";
+    if (this.detail?.id !== conversationId) this.assignError = "";
     try {
       const rows = await erplora().query("whatsapp_inbox.conversations.get", {
         conversation_id: conversationId
@@ -5251,6 +5470,7 @@ var ErpWhatsappInboxInbox = class extends i3 {
     this.detail = null;
     this.messages = [];
     this.detailError = "";
+    this.assignError = "";
     this.assignTo = "";
   }
   // ── Attachments (whatsapp_inbox#192) ───────────────────────────────────────
@@ -5292,7 +5512,7 @@ var ErpWhatsappInboxInbox = class extends i3 {
   async assign() {
     if (!this.detail) return;
     this.detailBusy = true;
-    this.detailError = "";
+    this.assignError = "";
     try {
       await erplora().command("whatsapp_inbox.conversations.assign", {
         conversation_id: this.detail.id,
@@ -5301,10 +5521,22 @@ var ErpWhatsappInboxInbox = class extends i3 {
       await this.ctrl.load();
       await this.loadDetail(this.detail.id);
     } catch (e5) {
-      this.detailError = domainErrorText2(e5, "ui.errAssign");
+      this.assignError = domainErrorText2(e5, "ui.errAssign");
     } finally {
       this.detailBusy = false;
     }
+  }
+  /** pm#513: the refusal appears under «Assign», below a thread that scrolls on its own. Bring it
+   *  into view when it appears, not again on every keystroke. */
+  updated(changed) {
+    super.updated(changed);
+    if (changed.has("assignError") && this.assignError) void this.revealRefusal('[data-testid="whatsapp-inbox-assign-error"]');
+  }
+  /** ok-inline-feedback lays itself out in its own update: scrolled to before it, the box is empty. */
+  async revealRefusal(selector) {
+    const banner = this.renderRoot.querySelector(selector);
+    await banner?.updateComplete;
+    banner?.scrollIntoView?.({ block: "center" });
   }
   onRowAction(ev) {
     if (ev.detail.actionId === "open") void this.loadDetail(String(ev.detail.row.id));
@@ -5415,7 +5647,8 @@ var ErpWhatsappInboxInbox = class extends i3 {
             <ion-button data-testid="whatsapp-inbox-assign-submit" size="small" ?disabled=${this.detailBusy} @click=${() => this.assign()}>
               ${this.assignTo.trim() ? t5("ui.assign") : t5("ui.unassign")}
             </ion-button>
-          </div>` : A}
+          </div>
+          ${this.assignError ? b2`<ok-inline-feedback data-testid="whatsapp-inbox-assign-error" tone="danger" icon="alert-circle-outline">${this.assignError}</ok-inline-feedback>` : A}` : A}
       <p class="note">${t5("ui.threadRepliesElsewhere")}</p>
     </section>`;
   }
@@ -5445,6 +5678,9 @@ __decorateClass([
 ], ErpWhatsappInboxInbox.prototype, "detailError", 2);
 __decorateClass([
   r5()
+], ErpWhatsappInboxInbox.prototype, "assignError", 2);
+__decorateClass([
+  r5()
 ], ErpWhatsappInboxInbox.prototype, "detailBusy", 2);
 __decorateClass([
   r5()
@@ -5459,223 +5695,6 @@ __decorateClass([
   r5()
 ], ErpWhatsappInboxInbox.prototype, "assignTo", 2);
 define("erp-whatsapp-inbox-inbox", ErpWhatsappInboxInbox);
-
-// @erplora/outfitkit/dist/ok-inline-feedback.js
-var __defProp5 = Object.defineProperty;
-var __decorateClass5 = (decorators, target, key, kind) => {
-  var result = void 0;
-  for (var i7 = decorators.length - 1, decorator; i7 >= 0; i7--)
-    if (decorator = decorators[i7])
-      result = decorator(target, key, result) || result;
-  if (result) __defProp5(target, key, result);
-  return result;
-};
-var DEFAULT_LABELS3 = {
-  dismiss: "Dismiss"
-};
-var OkInlineFeedback = class extends i3 {
-  constructor() {
-    super(...arguments);
-    this.tone = "info";
-    this.dismissible = false;
-    this.hidden = false;
-    this.labels = {};
-    this.hasActions = false;
-    this.onActionsSlotChange = (e5) => {
-      const slot = e5.target;
-      this.hasActions = slot.assignedNodes({ flatten: true }).length > 0;
-    };
-  }
-  static {
-    this.styles = i`
-    :host {
-      /* Vars overridable (estilo Ionic), default = cadena --ok-* → --ion-* → hex.
-         --tone-color y --tone-icon se reasignan por tone abajo. */
-      --tone-color: var(--ok-primary, var(--ion-color-primary, #3880ff));
-      --background-opacity: 0.1;
-      --color: var(--ok-text, var(--ion-text-color, #1c1b17));
-      --border-radius: var(--ok-radius, var(--ion-border-radius, 8px));
-      --padding: var(--ok-spacing, var(--ion-padding, 16px));
-      --accent-width: 4px;
-      --font: var(--ok-font, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif);
-
-      /* Responsive: el banner ocupa el ancho del contenedor. */
-      display: block;
-      width: 100%;
-      font-family: var(--font);
-      box-sizing: border-box;
-    }
-    :host([hidden]) { display: none; }
-
-    /* Mapa de tonos → color Ionic + icono por defecto. */
-    :host([tone='success']) { --tone-color: var(--ok-success, var(--ion-color-success, #2dd55b)); }
-    :host([tone='warning']) { --tone-color: var(--ok-warning, var(--ion-color-warning, #ffc409)); }
-    :host([tone='danger'])  { --tone-color: var(--ok-danger, var(--ion-color-danger, #c5000f)); }
-    :host([tone='neutral']) { --tone-color: var(--ok-medium, var(--ion-color-medium, #5f5f5f)); }
-    /* info / sin tono → primary (default ya aplicado en :host). */
-
-    .box {
-      position: relative;
-      display: flex;
-      align-items: flex-start;
-      gap: 0.75rem;
-      padding: var(--padding);
-      border-radius: var(--border-radius);
-      border-inline-start: var(--accent-width) solid var(--tone-color);
-      /* Fondo tonal: el color del tono con baja opacidad (color-mix con fallback al borde fino). */
-      background: color-mix(in srgb, var(--tone-color) calc(var(--background-opacity) * 100%), transparent);
-      color: var(--color);
-    }
-
-    .icon {
-      flex: 0 0 auto;
-      font-size: 1.4rem;
-      line-height: 1;
-      color: var(--tone-color);
-      margin-top: 0.05rem;
-    }
-
-    .content {
-      flex: 1 1 auto;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-    }
-    .row {
-      display: flex;
-      align-items: flex-start;
-      gap: 1rem;
-    }
-    .text {
-      flex: 1 1 auto;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 0.2rem;
-    }
-    .heading {
-      font-weight: 700;
-      font-size: 0.98rem;
-      line-height: 1.3;
-    }
-    .body {
-      font-size: 0.92rem;
-      line-height: 1.45;
-    }
-    .actions {
-      flex: 0 0 auto;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-    /* Si no hay actions, el slot queda vacío y no ocupa espacio. */
-    .actions.empty { display: none; }
-
-    .close {
-      flex: 0 0 auto;
-      background: none;
-      border: 0;
-      cursor: pointer;
-      padding: 0.15rem;
-      margin: -0.15rem -0.15rem 0 0;
-      color: inherit;
-      opacity: 0.6;
-      font-size: 1.2rem;
-      line-height: 1;
-      border-radius: 4px;
-      transition: background-color var(--ok-transition, 150ms ease), color var(--ok-transition, 150ms ease),
-        border-color var(--ok-transition, 150ms ease), box-shadow var(--ok-transition, 150ms ease),
-        opacity 0.15s ease, transform 120ms ease;
-    }
-    @media (hover: hover) {
-      .close:hover { opacity: 1; background: rgba(var(--ion-text-color-rgb, 24, 24, 27), 0.07); }
-    }
-    .close:active { transform: scale(var(--ok-press-scale, 0.97)); }
-
-    /* Móvil: las actions bajan bajo el texto (apiladas a ancho completo). */
-    @media (max-width: 640px) {
-      .row { flex-direction: column; align-items: stretch; }
-      .actions { width: 100%; }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .close:hover,
-      .close:active { transform: none; }
-    }
-  `;
-  }
-  // Textos efectivos: defaults en inglés + overrides del consumidor.
-  get t() {
-    return { ...DEFAULT_LABELS3, ...this.labels };
-  }
-  // Icono por defecto según el tono (overridable por la prop `icon`).
-  defaultIcon() {
-    switch (this.tone) {
-      case "success":
-        return iconCheckmarkCircle;
-      case "warning":
-        return iconWarning;
-      case "danger":
-        return iconAlertCircle;
-      case "neutral":
-        return iconInformationCircle;
-      case "info":
-      default:
-        return iconInformationCircle;
-    }
-  }
-  // Oculta el banner y avisa al consumidor; éste puede revertir restaurando `hidden=false`.
-  dismiss() {
-    this.hidden = true;
-    this.dispatchEvent(new CustomEvent("ok-dismiss", { bubbles: true, composed: true }));
-  }
-  render() {
-    const iconName = this.icon ?? this.defaultIcon();
-    return b2`
-      <div class="box" role="status">
-        <ion-icon class="icon" .icon=${okIcon(iconName)} aria-hidden="true"></ion-icon>
-        <div class="content">
-          <div class="row">
-            <div class="text">
-              ${this.heading ? b2`<div class="heading">${this.heading}</div>` : null}
-              <div class="body"><slot></slot></div>
-            </div>
-            <div class="actions ${this.hasActions ? "" : "empty"}">
-              <slot name="actions" @slotchange=${this.onActionsSlotChange}></slot>
-            </div>
-          </div>
-        </div>
-        ${this.dismissible ? b2`
-              <button class="close" aria-label=${this.t.dismiss} @click=${this.dismiss}>
-                <ion-icon .icon=${iconClose} aria-hidden="true"></ion-icon>
-              </button>
-            ` : null}
-      </div>
-    `;
-  }
-};
-__decorateClass5([
-  n4({ type: String, reflect: true })
-], OkInlineFeedback.prototype, "tone");
-__decorateClass5([
-  n4({ type: String })
-], OkInlineFeedback.prototype, "heading");
-__decorateClass5([
-  n4({ type: String })
-], OkInlineFeedback.prototype, "icon");
-__decorateClass5([
-  n4({ type: Boolean, reflect: true })
-], OkInlineFeedback.prototype, "dismissible");
-__decorateClass5([
-  n4({ type: Boolean, reflect: true })
-], OkInlineFeedback.prototype, "hidden");
-__decorateClass5([
-  n4({ attribute: false })
-], OkInlineFeedback.prototype, "labels");
-__decorateClass5([
-  r5()
-], OkInlineFeedback.prototype, "hasActions");
-define("ok-inline-feedback", OkInlineFeedback);
 
 // ui/lib/whatsapp-uses.ts
 var MODULE_ID = "whatsapp_inbox";
@@ -6530,6 +6549,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     this.newBody = "";
     this.saving = false;
     this.formError = "";
+    this.pageError = "";
     this.tick = 0;
     this.editingId = "";
     this.pendingDelete = null;
@@ -6873,13 +6893,13 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
       verdict = await erplora3().forModule("whatsapp_inbox").whatsappTemplates.register(headerExample ? { ...reviewed, header_example: headerExample } : { ...reviewed });
     } catch (e5) {
       this.formError = doorRefusalText(CATALOG3, erplora3().locale, e5);
-      return;
+      return false;
     }
     const text3 = (value) => typeof value === "string" ? value : "";
     const status = text3(verdict?.status).trim();
     if (!status || !templateId) {
       this.formError = doorRefusalText(CATALOG3, erplora3().locale, null);
-      return;
+      return false;
     }
     try {
       await erplora3().command("whatsapp_inbox.templates.record_meta_answer", {
@@ -6891,7 +6911,9 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
       });
     } catch (e5) {
       this.formError = domainErrorText3(e5, "ui.errUpdateTemplate");
+      return false;
     }
+    return true;
   }
   /** The id of the row a declarative create just inserted: the runtime answers `new_ids`, whose
    *  first entry is the main entity by convention (`hub: crates/runtime/src/commands.rs`). */
@@ -6909,12 +6931,17 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     }
     this.saving = true;
     this.formError = "";
+    this.pageError = "";
     const reviewed = this.reviewedFields();
     try {
       const created = await erplora3().command("whatsapp_inbox.templates.create", reviewed);
-      await this.registerWithMeta(_ErpWhatsappInboxTemplates.newId(created), reviewed);
-      this.resetForm();
-      this.dataTable()?.close();
+      const createdId = _ErpWhatsappInboxTemplates.newId(created);
+      if (await this.registerWithMeta(createdId, reviewed)) {
+        this.resetForm();
+        this.dataTable()?.close();
+      } else if (createdId) {
+        this.editingId = createdId;
+      }
       await this.ctrl.load();
     } catch (e5) {
       this.formError = e5 instanceof Error ? e5.message : erplora3().t(CATALOG3, "ui.errCreateTemplate");
@@ -6967,6 +6994,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     this.newLanguage = "es";
     this.newCategory = "UTILITY";
     this.editingRest = { header: "", footer: "", variables: "[]", is_active: 1, header_example: "" };
+    this.editingHeaderFormat = "TEXT";
     this.editingButtons = [];
     this.editingDynamicLink = false;
     this.bodyExamples = {};
@@ -6984,6 +7012,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
   async updateTemplate() {
     this.saving = true;
     this.formError = "";
+    this.pageError = "";
     const reviewed = this.reviewedFields();
     const templateId = this.editingId;
     try {
@@ -6992,9 +7021,10 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
         ...reviewed,
         is_active: this.editingRest.is_active
       });
-      await this.registerWithMeta(templateId, reviewed);
-      this.resetForm();
-      this.dataTable()?.close();
+      if (await this.registerWithMeta(templateId, reviewed)) {
+        this.resetForm();
+        this.dataTable()?.close();
+      }
       await this.ctrl.load();
     } catch (e5) {
       this.formError = domainErrorText3(e5, "ui.errUpdateTemplate");
@@ -7008,14 +7038,17 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     const row = this.pendingDelete;
     if (!row) return;
     this.saving = true;
-    this.formError = "";
+    this.pageError = "";
     try {
       await erplora3().command("whatsapp_inbox.templates.delete", { template_id: row.id });
-      if (this.editingId === row.id) this.resetForm();
+      if (this.editingId === row.id) {
+        this.resetForm();
+        this.formError = "";
+      }
       this.pendingDelete = null;
       await this.ctrl.load();
     } catch (e5) {
-      this.formError = domainErrorText3(e5, "ui.errDeleteTemplate");
+      this.pageError = domainErrorText3(e5, "ui.errDeleteTemplate");
     } finally {
       this.saving = false;
     }
@@ -7025,8 +7058,20 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     if (ev.detail.actionId === "edit") this.startEdit(row);
     if (ev.detail.actionId === "delete") {
       this.pendingDelete = row;
-      this.formError = "";
+      this.pageError = "";
     }
+  }
+  /** pm#513: the refusal appears above «Save» — on a phone that can leave it off the sheet. Bring
+   *  it into view when it appears, not again on every keystroke. */
+  updated(changed) {
+    super.updated(changed);
+    if (changed.has("formError") && this.formError) void this.revealRefusal('[data-testid="whatsapp-templates-form-error"]');
+  }
+  /** ok-inline-feedback lays itself out in its own update: scrolled to before it, the box is empty. */
+  async revealRefusal(selector) {
+    const banner = this.renderRoot.querySelector(selector);
+    await banner?.updateComplete;
+    banner?.scrollIntoView?.({ block: "center" });
   }
   /** What Meta says about this template and what the owner has to do about it.
    *
@@ -7128,7 +7173,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     const t5 = (k2) => erplora3().t(CATALOG3, k2);
     const locked = this.managedInMeta;
     return b2`<div class="page">
-        ${this.formError ? b2`<p class="err" data-testid="whatsapp-templates-form-error">${this.formError}</p>` : A}
+        ${this.pageError ? b2`<p class="err" data-testid="whatsapp-templates-error">${this.pageError}</p>` : A}
         ${this.ctrl?.error ? b2`<p class="err" data-testid="whatsapp-templates-load-error">${this.ctrl.error}</p>` : A}
         ${this.metaSyncNotice ? b2`<section class="panel"><p data-testid="whatsapp-templates-meta-sync-notice">${this.metaSyncNotice}</p></section>` : A}
         ${this.metaOnly.length ? b2`<section class="panel"><p data-testid="whatsapp-templates-meta-only">${erplora3().t(CATALOG3, "ui.metaOnlyTemplates", { names: this.metaOnly.join(", ") })}</p></section>` : A}
@@ -7149,6 +7194,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
             <ion-textarea data-testid="whatsapp-templates-body" .disabled=${locked} mode="md" fill="outline" label-placement="floating" label=${t5("ui.colBody")} placeholder=${t5("ui.placeholderBody")} .value=${this.newBody} @ionInput=${(e5) => this.newBody = e5.target.value}></ion-textarea>
             ${this.renderExamples(locked)}
             ${this.renderButtonsEditor()}
+            ${this.formError ? b2`<ok-inline-feedback data-testid="whatsapp-templates-form-error" tone="danger" icon="alert-circle-outline">${this.formError}</ok-inline-feedback>` : A}
             ${locked ? A : b2`<ion-button data-testid="whatsapp-templates-submit" type="submit" ?disabled=${this.saving || !this.newName || this.buttonsIncomplete || this.examplesIncomplete}>${this.saving ? t5("ui.saving") : this.editingId ? t5("ui.save") : t5("ui.add")}</ion-button>`}
             ${this.editingId ? b2`<ion-button data-testid="whatsapp-templates-cancel" fill="clear" size="small" ?disabled=${this.saving}
                   @click=${() => this.cancelEdit()}>${t5("ui.cancel")}</ion-button>` : A}
@@ -7175,6 +7221,9 @@ __decorateClass([
 __decorateClass([
   r5()
 ], _ErpWhatsappInboxTemplates.prototype, "formError", 2);
+__decorateClass([
+  r5()
+], _ErpWhatsappInboxTemplates.prototype, "pageError", 2);
 __decorateClass([
   r5()
 ], _ErpWhatsappInboxTemplates.prototype, "tick", 2);
