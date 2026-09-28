@@ -59,7 +59,18 @@ LIST = "whatsapp_inbox.conversations.list"
 GET = "whatsapp_inbox.conversations.get"
 INGEST = "whatsapp_inbox._ingest_inbound_message"
 MIGRATION = "migrations/postgres/015_needs_attention.sql"
-DOWN = "ALTER TABLE whatsapp_inbox_conversation DROP COLUMN needs_attention_at"
+
+
+def header_down():
+    """The `DOWN` the migration's own header declares, so this file cannot drift from it."""
+    lines = (MODULE_DIR / MIGRATION).read_text().splitlines()
+    for i, line in enumerate(lines):
+        if line.startswith("-- DOWN"):
+            return lines[i + 1].lstrip("-").strip() if i + 1 < len(lines) else None
+    return None
+
+
+DOWN = header_down()
 
 HUB = "hub-238"
 OTHER_HUB = "hub-238-other"
@@ -369,12 +380,34 @@ def check_behaviour(db):
     return problems
 
 
-def check_the_way_back(db):
-    """The migration's `down` runs once, and the `up` applies again on top of it."""
+def conversation_columns(db):
+    return scalar(
+        db,
+        "SELECT string_agg(column_name, ',' ORDER BY column_name COLLATE \"C\")"
+        " FROM information_schema.columns"
+        " WHERE table_schema = current_schema() AND table_name = 'whatsapp_inbox_conversation';",
+    )
+
+
+def check_the_way_back(db, columns_before):
+    """The migration's `down` runs once and leaves the table as it was before the `up`, and the
+    `up` applies again on top of it.
+
+    Comparing the columns with the ones the table had BEFORE this migration is what makes the down
+    honest: an `up` that one day adds a second column the header's down does not drop would still
+    «run once» and «apply again», and leave that column behind on every rollback."""
+    if not DOWN:
+        return [f"`{MIGRATION}` declares no `-- DOWN` statement in its header"]
     problems = []
     r = psql(db, DOWN + ";\n")
     if r.returncode != 0:
         return [f"the down of `{MIGRATION}` failed: {r.stderr.strip()}"]
+    after = conversation_columns(db)
+    if after != columns_before:
+        problems.append(
+            f"the down of `{MIGRATION}` does not leave the table as it was: columns before the up "
+            f"{columns_before!r}, after the down {after!r}"
+        )
     up = dict(declared_migrations()).get(MIGRATION)
     if up is None:
         return [f"`{MIGRATION}` is not declared in module.json"]
@@ -399,15 +432,18 @@ def main():
     elif not problems:
         db = "wa_attention_" + uuid.uuid4().hex[:8]
         psql("postgres", f'CREATE DATABASE "{db}";')
+        columns_before = None
         try:
             for rel, migration in declared_migrations():
+                if rel == MIGRATION:
+                    columns_before = conversation_columns(db)
                 r = psql(db, migration)
                 if r.returncode != 0:
                     problems.append(f"migration `{rel}` failed: {r.stderr.strip()}")
                     break
             else:
                 problems += check_behaviour(db)
-                problems += check_the_way_back(db)
+                problems += check_the_way_back(db, columns_before)
         finally:
             psql("postgres", f'DROP DATABASE IF EXISTS "{db}" WITH (FORCE);')
 
