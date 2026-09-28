@@ -61,6 +61,7 @@ import uuid
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from module_migrations import declared_migrations  # noqa: E402
+
 MODULE_DIR = pathlib.Path(__file__).resolve().parent.parent
 MANIFEST = json.loads((MODULE_DIR / "module.json").read_text())
 CONTAINER = os.environ.get("ERPLORA_TEST_PG_CONTAINER", "erplora-test-pg-5433")
@@ -370,6 +371,15 @@ def check_a_save_with_no_changes_keeps_metas_verdict(db, base):
             update_binds(
                 "t-meta", SEEDED_TEMPLATE["name"], body=SEEDED_BODY, is_active=0
             ),
+        ),
+        (
+            # `header_format` = '' is the schema's «keep the stored kind» (whatsapp_inbox#218): a
+            # caller that does not deal in files saving the same text is not an edit to Meta.
+            "a save that sent no header kind (the schema's default '')",
+            {
+                **update_binds("t-meta", SEEDED_TEMPLATE["name"], body=SEEDED_BODY),
+                "header_format": "",
+            },
         ),
     ):
         problems = run_command(db, UPDATE_COMMAND, binds)
@@ -794,6 +804,7 @@ def check_buttons_are_stored_on_update(db, base):
             f"`commands/template_update.sql` must SET `buttons = :buttons`."
         ]
     return []
+
 
 def check_media_header_is_stored(db, base):
     """(10) the kind of file a header carries is written by the panel (whatsapp_inbox#218).

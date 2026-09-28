@@ -2226,6 +2226,27 @@ describe('una imagen, un vídeo o un documento en la cabecera desde el panel (wh
     expect(q(el, 'whatsapp-templates-header-file-error')?.textContent).toContain(key);
   });
 
+  it('cambiar el tipo de cabecera suelta el archivo que no es de ese tipo y el aviso del anterior', async () => {
+    const el = await panel();
+    el.newName = 'con_archivo';
+    el.newBody = 'Hola';
+    el.setHeaderFormat('IMAGE');
+    el.pickHeaderSample(foto(3, 'application/pdf', 'carta.pdf'));
+    await el.updateComplete;
+    expect(q(el, 'whatsapp-templates-header-file-error')).toBeTruthy();
+
+    el.setHeaderFormat('DOCUMENT');
+    await el.updateComplete;
+    expect(q(el, 'whatsapp-templates-header-file-error'), 'el aviso del PDF como imagen sigue bajo «Documento»').toBeNull();
+
+    el.pickHeaderSample(foto(3, 'application/pdf', 'carta.pdf'));
+    el.setHeaderFormat('IMAGE');
+    await el.updateComplete;
+    expect(el.headerSample, 'el PDF elegido como documento viajaría como imagen').toBeNull();
+    expect(q(el, 'whatsapp-templates-header-file-name')).toBeNull();
+    expect(q(el, 'whatsapp-templates-submit')?.hasAttribute('disabled')).toBe(true);
+  });
+
   it('si el archivo resulta ser de otro tipo, no se registra y se dice', async () => {
     respondeSubida = async (f) => ({ header_handle: HANDLE, format: 'DOCUMENT', mime_type: 'application/pdf', size: f.size });
     const el = await panel();
