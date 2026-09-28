@@ -254,6 +254,21 @@ describe('templates: a refused save is told inside the panel, next to «Save» (
     expect(q(el, 'whatsapp-templates-form-error')).toBeNull();
   });
 
+  it('Meta refusing an add or an edit the hub DID save still reloads the list behind the panel', async () => {
+    door = async () => { throw refusal('invalid_name'); };
+    const el = await mountTemplates();
+    let listed = reads.length;
+    await save(el);
+    expect(closes).toBe(0);
+    expect(reads.length, 'the template the hub saved is missing from the list: Meta refused, the hub did not').toBeGreaterThan(listed);
+
+    listed = reads.length;
+    el.startEdit(TEMPLATE);
+    await save(el, { newBody: 'Te esperamos mañana a las 10.' });
+    expect(closes).toBe(0);
+    expect(reads.length, 'the edit the hub saved still shows the old row in the list').toBeGreaterThan(listed);
+  });
+
   it('the refusal is brought into view once it has laid itself out, and NOT again on every keystroke', async () => {
     refused.add('whatsapp_inbox.templates.create');
     const el = await mountTemplates();
