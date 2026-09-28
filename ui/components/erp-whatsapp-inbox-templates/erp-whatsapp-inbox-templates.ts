@@ -853,6 +853,11 @@ export class ErpWhatsappInboxTemplates extends LitElement {
         // not create it a second time.
         this.editingId = createdId;
       }
+      // Newest first: the new template heads page 1 (also when Meta turned it down: the hub kept
+      // it), so reloading the page the person was on would hide it (whatsapp_inbox#250). Search,
+      // filters and sort stay as the person left them. `setPage` does not return the load, hence
+      // the state + awaited load.
+      this.ctrl.state.page = 0;
       await this.ctrl.load();
     } catch (e) {
       this.formError = e instanceof Error ? e.message : erplora().t(CATALOG, 'ui.errCreateTemplate');
