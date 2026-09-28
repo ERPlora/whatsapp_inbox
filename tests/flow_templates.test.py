@@ -7464,6 +7464,17 @@ STEP_PIN_CASES = [
         1,
     ),
     (
+        "every step is read, not the first one: the recipes flag and remember deep in the run, "
+        "after the reads that agree with their grants",
+        _fixture_doc(
+            _fixed_step("query", _RECALL_QUERY, dict(_FROM), "recall"),
+            _fixed_step("command", _FLAG_CMD, {"wa_contact_id": "input.to"}),
+        ),
+        {_FLAG_CMD: dict(_FROM)},
+        {_RECALL_QUERY: dict(_FROM)},
+        1,
+    ),
+    (
         "a literal pin is matched by the same literal",
         _fixture_doc(_fixed_step("command", CANCEL_COMMAND, {"channel": "customer", "id": "input.id"})),
         {CANCEL_COMMAND: {"channel": "customer"}},
