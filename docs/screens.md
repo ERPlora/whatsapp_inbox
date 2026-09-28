@@ -117,9 +117,22 @@ never blanks a header somebody set. **Delete** asks for confirmation in the page
 > links and one call — each with a label of up to 25 characters; quick replies are kept together
 > because Meta refuses them interleaved with links and calls, and «Guardar» stays off while a button
 > lacks its label, link or number. They are stored in `buttons` and registered at Meta with the rest,
-> so a template brought with plain buttons is edited here too. A media header (#218) or a link with a
-> variable (`…/{{1}}`) still keeps the template read-only, listing its parts, with no «Guardar»,
-> because saving would register it at Meta without them. Those with parts this module
+> so a template brought with plain buttons is edited here too. A link with a variable (`…/{{1}}`)
+> still keeps the template read-only, listing its parts, with no «Guardar», because saving would
+> register it at Meta without it.
+>
+> **Image, video or document header (#218).** Under the category a **Header** select offers Text,
+> Image, Video and Document (PDF), as WhatsApp Manager does. A file kind asks for an **example file**
+> (JPEG/PNG up to 5 MB, MP4 up to 16 MB, PDF up to 100 MB — a wrong kind or size is said when it is
+> chosen) and «Guardar» stays off until there is one. Saving stores the text and the kind
+> (`header_format`; a file header has no header text), uploads the example through the hub's door
+> (`uploadHeaderSample`), and registers the template at Meta with the handle it answers
+> (`header_format` + `header_handle`). Meta asks for the example on EVERY save, so editing a template
+> with a file header asks for it again. If the file turns out to be another kind than the one chosen,
+> or the upload is refused, nothing is registered, the reason is said next to «Guardar» and the saved
+> text is kept. Authentication templates cannot carry a file header. On a hub whose door cannot
+> upload an example (before hub#2232) the file kinds are offered disabled with a line saying an
+> update brings them, and a template with a file header stays read-only as before. Those with parts this module
 > has no field for (a carousel, a limited-time offer, a copy-code or Flow button, a location header,
 > more than one header variable) are not imported without them: they are named in a notice above the
 > table, `name (language)`. Since #230 a text header with ONE variable (`{{1}}` or `{{name}}`, never
