@@ -37,7 +37,7 @@ tonight» and «nobody receives it».
    every field, so «open it, read it, press Guardar» arrives as a full update whose values are the
    ones already stored — and until now that dropped the id Meta gave the template. Asserted in both
    directions and field by field: nothing changed (and `is_active` alone changed) keeps the id;
-   each of the eight fields Meta reviews, changed on its own, drops it.
+   each of the nine fields Meta reviews, changed on its own, drops it.
 5. **An EDIT does not claim a review Meta is not doing, and walks in through the `hub_id`
    gate** (whatsapp_inbox#87). Nothing in this
    module sends a template to Meta — the runtime door landed with ERPlora/hub#1610 (v1.1.18)
@@ -278,7 +278,7 @@ def check_tenancy(db, base):
 # What the seed leaves on `t-meta`: Meta looked at this text and said yes.
 META_ID = "1122334455"
 
-# The eight fields Meta re-reviews (the buttons since whatsapp_inbox#185), each with a value that differs from the seed. `is_active` is
+# The nine fields Meta re-reviews (the buttons since whatsapp_inbox#185, the header kind since #218), each with a value that differs from the seed. `is_active` is
 # NOT here on purpose: it is this hub's own switch (whether the module uses the template) and Meta
 # has never seen it, so flipping it must not cost the approval.
 REVIEWED_FIELDS = {
@@ -351,7 +351,7 @@ def check_a_save_with_no_changes_keeps_metas_verdict(db, base):
     both halves are asserted here:
 
       · nothing changed, and `is_active` alone changed  → the id and the verdict SURVIVE;
-      · each of the eight fields Meta reviews, changed ON ITS OWN → the id is dropped.
+      · each of the nine fields Meta reviews, changed ON ITS OWN → the id is dropped.
 
     The per-field half is what stops the comparison from quietly losing a field: dropping `footer`
     from it would leave a save that rewrites the footer looking, to Meta, like a template that was
@@ -908,7 +908,7 @@ def main():
             "Meta never received arrives as `not_sent`, Meta's own UPPERCASE arrives lowercased, "
             "both are filterable server-side, an edit goes back to `not_sent` instead of claiming a "
             "review Meta is not doing, a save that changed nothing keeps Meta's approval (each of "
-            "the eight reviewed fields drops it on its own), and no hub sees or edits another "
+            "the nine reviewed fields drops it on its own), and no hub sees or edits another "
             "hub's templates — and what the door brings back from Meta LANDS on the row, reason "
             "included and projected, unless the row has moved on to a text Meta never reviewed"
         )

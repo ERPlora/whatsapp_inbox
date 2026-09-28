@@ -1314,12 +1314,14 @@ describe('plantillas con botones o imagen en la cabecera (whatsapp_inbox#180)', 
   });
 
   // Each part locks the panel ON ITS OWN (rv-188). Since whatsapp_inbox#185 plain buttons are
-  // written from the panel, so what still locks it is a media header (#218) or a LINK WITH A
-  // VARIABLE (`…/{{1}}`), which needs an example and a value on every send that the panel has no
-  // field for: saving would register it without them.
+  // written from the panel, so what still locks it is a LINK WITH A VARIABLE (`…/{{1}}`), which
+  // needs an example and a value on every send that the panel has no field for, or — only on a hub
+  // whose door cannot upload a header's example (before hub#2232; this suite's default door has no
+  // `uploadHeaderSample`) — a file header: saving would register it without them. Where the door
+  // uploads, whatsapp_inbox#218 writes the file header from the panel.
   it.each([
     ['un enlace con variable, cabecera de texto', { header_format: 'TEXT', buttons: JSON.stringify(BOTONES) }],
-    ['solo imagen en la cabecera, sin botones', { header_format: 'IMAGE', buttons: '[]' }],
+    ['solo imagen en la cabecera, sin botones, en un hub sin la puerta de la muestra', { header_format: 'IMAGE', buttons: '[]' }],
   ])('con %s el panel también queda en solo lectura', async (_caso, partes) => {
     const el = await abrir({ ...RICA, id: 't10', name: 'solo_una_parte', ...partes });
 
@@ -1837,7 +1839,7 @@ describe('botones de respuesta rápida, enlace y llamada desde el panel (whatsap
     expect(qa(el, 'whatsapp-templates-button-row')).toHaveLength(0);
   });
 
-  it('una con imagen en la cabecera sigue en solo lectura (#218) y no pinta el editor', async () => {
+  it('una con imagen en la cabecera, en un hub sin la puerta de la muestra, sigue en solo lectura (#218) y no pinta el editor', async () => {
     const el = await panel();
     el.startEdit({ ...CON_BOTONES, header_format: 'IMAGE' });
     await pintar(el);
@@ -2036,7 +2038,7 @@ describe('un ejemplo por variable, debajo del cuerpo (whatsapp_inbox#208)', () =
     expect(ejemplos(el).map((c) => c.value ?? '')).toEqual(['']);
   });
 
-  it('en una plantilla de solo lectura (cabecera con imagen) los ejemplos se ven pero no se editan', async () => {
+  it('en una plantilla de solo lectura (cabecera con imagen en un hub sin la puerta de la muestra) los ejemplos se ven pero no se editan', async () => {
     const el = await panel();
     el.startEdit({ ...NUMERADA, header_format: 'IMAGE' });
     await el.updateComplete;
@@ -2292,6 +2294,28 @@ describe('una imagen, un vídeo o un documento en la cabecera desde el panel (wh
     expect(update.payload, 'Meta rechaza una cabecera de archivo con texto (`invalid_header_format`)').toMatchObject({
       header_format: 'IMAGE', header: '',
     });
+  });
+
+  it('una con variable en la cabecera de texto pasa a imagen: el ejemplo de esa variable no viaja a Meta', async () => {
+    const el = await panel();
+    el.startEdit({ ...CON_IMAGEN, header_format: 'TEXT', header: 'Hola {{1}}', header_example: 'Ana' });
+    el.setHeaderFormat('IMAGE');
+    el.pickHeaderSample(foto());
+    await el.updateTemplate();
+
+    expect(puerta[0], 'Meta rechaza un ejemplo de variable en una cabecera sin texto').not.toHaveProperty('header_example');
+    expect(puerta[0]).toMatchObject({ header_format: 'IMAGE', header_handle: HANDLE, header: '' });
+  });
+
+  it('una subida que vuelve sin justificante no se registra, se dice y lo guardado no se pierde', async () => {
+    respondeSubida = async (f) => ({ format: 'IMAGE', mime_type: 'image/jpeg', size: f.size });
+    const el = await panel();
+    await altaConImagen(el);
+    await el.createTemplate(new Event('submit'));
+
+    expect(puerta, 'se registró en Meta sin la imagen').toHaveLength(0);
+    expect(el.formError, 'el fallo no se dice').toBeTruthy();
+    expect(el.editingId, 'guardar otra vez crearía la plantilla dos veces').toBe(ID_NUEVO);
   });
 
   it('una de AUTENTICACIÓN no lleva cabecera de archivo: no deja guardar y dice por qué', async () => {
