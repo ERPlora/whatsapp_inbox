@@ -1,7 +1,9 @@
 import { LitElement, html, css, nothing } from 'lit';
+import type { PropertyValues } from 'lit';
 import { state } from 'lit/decorators.js';
 import { define } from '@erplora/outfitkit/define';
 import '@erplora/outfitkit/ok-data-table';
+import '@erplora/outfitkit/ok-inline-feedback';
 import '@erplora/outfitkit/ok-status-pill';
 import '@erplora/outfitkit/ok-lightbox';
 import type { DataTableColumn, OkLightboxItem, OkLightboxLabels } from '@erplora/outfitkit';
@@ -207,6 +209,10 @@ export class ErpWhatsappInboxInbox extends LitElement {
 
   @state() detailError = '';
 
+  /** What «Assign» was refused. Painted under the field, where it was pressed: the thread sits
+   *  between it and the top of the conversation, which scrolls on its own (pm#513). */
+  @state() assignError = '';
+
   @state() detailBusy = false;
 
   /** Downloads of the open thread's attachments, by asset id. Released when the thread closes. */
@@ -313,6 +319,9 @@ export class ErpWhatsappInboxInbox extends LitElement {
 
   private async loadDetail(conversationId: string) {
     this.detailError = '';
+    // A refused assign belongs to ITS conversation: it must not travel to another one, and a
+    // message arriving in this one must not wipe it before it is read.
+    if (this.detail?.id !== conversationId) this.assignError = '';
     try {
       // The literals travel IN the SDK call: the contract extractor (ADR-0127) follows nothing else.
       const rows = await erplora().query<Conversation[]>('whatsapp_inbox.conversations.get', {
@@ -355,6 +364,7 @@ export class ErpWhatsappInboxInbox extends LitElement {
     this.detail = null;
     this.messages = [];
     this.detailError = '';
+    this.assignError = '';
     this.assignTo = '';
   }
 
@@ -403,7 +413,7 @@ export class ErpWhatsappInboxInbox extends LitElement {
   private async assign() {
     if (!this.detail) return;
     this.detailBusy = true;
-    this.detailError = '';
+    this.assignError = '';
     try {
       await erplora().command('whatsapp_inbox.conversations.assign', {
         conversation_id: this.detail.id,
@@ -412,10 +422,24 @@ export class ErpWhatsappInboxInbox extends LitElement {
       await this.ctrl.load();
       await this.loadDetail(this.detail.id);
     } catch (e) {
-      this.detailError = domainErrorText(e, 'ui.errAssign');
+      this.assignError = domainErrorText(e, 'ui.errAssign');
     } finally {
       this.detailBusy = false;
     }
+  }
+
+  /** pm#513: the refusal appears under «Assign», below a thread that scrolls on its own. Bring it
+   *  into view when it appears, not again on every keystroke. */
+  updated(changed: PropertyValues): void {
+    super.updated(changed);
+    if (changed.has('assignError') && this.assignError) void this.revealRefusal('[data-testid="whatsapp-inbox-assign-error"]');
+  }
+
+  /** ok-inline-feedback lays itself out in its own update: scrolled to before it, the box is empty. */
+  private async revealRefusal(selector: string): Promise<void> {
+    const banner = this.renderRoot.querySelector(selector) as (HTMLElement & { updateComplete?: Promise<unknown> }) | null;
+    await banner?.updateComplete;
+    banner?.scrollIntoView?.({ block: 'center' });
   }
 
   private onRowAction(ev: CustomEvent<{ actionId: string; row: Record<string, unknown> }>) {
@@ -549,7 +573,10 @@ export class ErpWhatsappInboxInbox extends LitElement {
             <ion-button data-testid="whatsapp-inbox-assign-submit" size="small" ?disabled=${this.detailBusy} @click=${() => this.assign()}>
               ${this.assignTo.trim() ? t('ui.assign') : t('ui.unassign')}
             </ion-button>
-          </div>`
+          </div>
+          ${this.assignError
+            ? html`<ok-inline-feedback data-testid="whatsapp-inbox-assign-error" tone="danger" icon="alert-circle-outline">${this.assignError}</ok-inline-feedback>`
+            : nothing}`
         : nothing}
       <p class="note">${t('ui.threadRepliesElsewhere')}</p>
     </section>`;

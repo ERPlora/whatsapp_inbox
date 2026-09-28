@@ -1,7 +1,9 @@
 import { LitElement, html, css, nothing } from 'lit';
+import type { PropertyValues } from 'lit';
 import { state } from 'lit/decorators.js';
 import { define } from '@erplora/outfitkit/define';
 import '@erplora/outfitkit/ok-data-table';
+import '@erplora/outfitkit/ok-inline-feedback';
 import type { DataTableColumn } from '@erplora/outfitkit';
 import { createListController } from '@erplora/module-sdk';
 import type { ListController, ListClient, ListParams, ListPage } from '@erplora/module-sdk';
@@ -245,7 +247,13 @@ export class ErpWhatsappInboxTemplates extends LitElement {
 
   @state() saving = false;
 
+  /** What «Save» in the panel was refused — by the hub, or by Meta right after the hub saved it.
+   *  Painted inside the form, next to «Save»: under 834 px the panel is a full-screen sheet and the
+   *  page underneath it is never seen (pm#513). */
   @state() formError = '';
+
+  /** What a delete from a row was refused: no panel is open then, so it goes on the page. */
+  @state() pageError = '';
 
   @state() tick = 0;
 
@@ -649,7 +657,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
    * A refusal is SPOKEN, never echoed: the door answers a code (ADR-0055) and this module owns the
    * sentence. And a refusal never writes a verdict — the row stays `not_sent`, which is the truth.
    */
-  private async registerWithMeta(templateId: string, reviewed: ReviewedFields): Promise<void> {
+  private async registerWithMeta(templateId: string, reviewed: ReviewedFields): Promise<boolean> {
     let verdict: { status?: unknown; meta_id?: unknown; rejected_reason?: unknown };
     try {
       // The header variable's example (whatsapp_inbox#230) goes to the registry only: Meta needs it,
@@ -663,7 +671,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
         .whatsappTemplates.register(headerExample ? { ...reviewed, header_example: headerExample } : { ...reviewed });
     } catch (e) {
       this.formError = doorRefusalText(CATALOG, erplora().locale, e);
-      return;
+      return false;
     }
     const text = (value: unknown): string => (typeof value === 'string' ? value : '');
     const status = text(verdict?.status).trim();
@@ -672,7 +680,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
       // the command's schema anyway, and staying quiet would leave the owner believing the
       // template is under review — the exact lie whatsapp_inbox#65 removed.
       this.formError = doorRefusalText(CATALOG, erplora().locale, null);
-      return;
+      return false;
     }
     try {
       await erplora().command('whatsapp_inbox.templates.record_meta_answer', {
@@ -686,7 +694,9 @@ export class ErpWhatsappInboxTemplates extends LitElement {
       // Meta DID answer; it is this hub that could not store it. Said with the module's own
       // refusal reader, not with a Meta sentence that would blame the wrong half.
       this.formError = domainErrorText(e, 'ui.errUpdateTemplate');
+      return false;
     }
+    return true;
   }
 
   /** The id of the row a declarative create just inserted: the runtime answers `new_ids`, whose
@@ -706,12 +716,20 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     }
     this.saving = true;
     this.formError = '';
+    this.pageError = ''; // a save is the next thing the person did: an older row refusal is stale (staff#75)
     const reviewed = this.reviewedFields();
     try {
       const created = await erplora().command('whatsapp_inbox.templates.create', reviewed);
-      await this.registerWithMeta(ErpWhatsappInboxTemplates.newId(created), reviewed);
-      this.resetForm();
-      this.dataTable()?.close(); // cierra el panel lateral tras crear
+      const createdId = ErpWhatsappInboxTemplates.newId(created);
+      if (await this.registerWithMeta(createdId, reviewed)) {
+        this.resetForm();
+        this.dataTable()?.close(); // closes the side panel after creating
+      } else if (createdId) {
+        // The hub kept the template and Meta turned it down (pm#513): the panel stays open with the
+        // reason next to «Save», now as an EDIT of the saved row — fixing it and saving again must
+        // not create it a second time.
+        this.editingId = createdId;
+      }
       await this.ctrl.load();
     } catch (e) {
       this.formError = e instanceof Error ? e.message : erplora().t(CATALOG, 'ui.errCreateTemplate');
@@ -767,6 +785,9 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     this.newLanguage = 'es';
     this.newCategory = 'UTILITY';
     this.editingRest = { header: '', footer: '', variables: '[]', is_active: 1, header_example: '' };
+    // A template this panel writes is text-headed: a refused add turned into an edit (pm#513) must
+    // not inherit the media header of the template opened before it and lock itself.
+    this.editingHeaderFormat = 'TEXT';
     this.editingButtons = [];
     this.editingDynamicLink = false;
     this.bodyExamples = {};
@@ -786,6 +807,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
   private async updateTemplate() {
     this.saving = true;
     this.formError = '';
+    this.pageError = ''; // staff#75, as in createTemplate
     const reviewed = this.reviewedFields();
     const templateId = this.editingId;
     try {
@@ -796,9 +818,11 @@ export class ErpWhatsappInboxTemplates extends LitElement {
       });
       // Every edit goes back through Meta's review — that is Meta's rule, not ours, and it is why
       // `templates.update` resets the verdict to `pending` (whatsapp_inbox#87, piece 2).
-      await this.registerWithMeta(templateId, reviewed);
-      this.resetForm();
-      this.dataTable()?.close();
+      // Meta turning it down keeps the panel open on it, with the reason next to «Save» (pm#513).
+      if (await this.registerWithMeta(templateId, reviewed)) {
+        this.resetForm();
+        this.dataTable()?.close();
+      }
       await this.ctrl.load();
     } catch (e) {
       this.formError = domainErrorText(e, 'ui.errUpdateTemplate');
@@ -813,14 +837,18 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     const row = this.pendingDelete;
     if (!row) return;
     this.saving = true;
-    this.formError = '';
+    this.pageError = '';
     try {
       await erplora().command('whatsapp_inbox.templates.delete', { template_id: row.id });
-      if (this.editingId === row.id) this.resetForm();
+      if (this.editingId === row.id) {
+        // The panel's refusal was about this template, which no longer exists.
+        this.resetForm();
+        this.formError = '';
+      }
       this.pendingDelete = null;
       await this.ctrl.load();
     } catch (e) {
-      this.formError = domainErrorText(e, 'ui.errDeleteTemplate');
+      this.pageError = domainErrorText(e, 'ui.errDeleteTemplate');
     } finally {
       this.saving = false;
     }
@@ -831,8 +859,22 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     if (ev.detail.actionId === 'edit') this.startEdit(row);
     if (ev.detail.actionId === 'delete') {
       this.pendingDelete = row;
-      this.formError = '';
+      this.pageError = '';
     }
+  }
+
+  /** pm#513: the refusal appears above «Save» — on a phone that can leave it off the sheet. Bring
+   *  it into view when it appears, not again on every keystroke. */
+  updated(changed: PropertyValues): void {
+    super.updated(changed);
+    if (changed.has('formError') && this.formError) void this.revealRefusal('[data-testid="whatsapp-templates-form-error"]');
+  }
+
+  /** ok-inline-feedback lays itself out in its own update: scrolled to before it, the box is empty. */
+  private async revealRefusal(selector: string): Promise<void> {
+    const banner = this.renderRoot.querySelector(selector) as (HTMLElement & { updateComplete?: Promise<unknown> }) | null;
+    await banner?.updateComplete;
+    banner?.scrollIntoView?.({ block: 'center' });
   }
 
   /** What Meta says about this template and what the owner has to do about it.
@@ -950,8 +992,8 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     const t = (k: string): string => erplora().t(CATALOG, k);
     const locked = this.managedInMeta;
     return html`<div class="page">
-        ${this.formError
-          ? html`<p class="err" data-testid="whatsapp-templates-form-error">${this.formError}</p>`
+        ${this.pageError
+          ? html`<p class="err" data-testid="whatsapp-templates-error">${this.pageError}</p>`
           : nothing}
         ${this.ctrl?.error
           ? html`<p class="err" data-testid="whatsapp-templates-load-error">${this.ctrl.error}</p>`
@@ -979,6 +1021,9 @@ export class ErpWhatsappInboxTemplates extends LitElement {
             <ion-textarea data-testid="whatsapp-templates-body" .disabled=${locked} mode="md" fill="outline" label-placement="floating" label=${t('ui.colBody')} placeholder=${t('ui.placeholderBody')} .value=${this.newBody} @ionInput=${(e: any) => (this.newBody = e.target.value)}></ion-textarea>
             ${this.renderExamples(locked)}
             ${this.renderButtonsEditor()}
+            ${this.formError
+              ? html`<ok-inline-feedback data-testid="whatsapp-templates-form-error" tone="danger" icon="alert-circle-outline">${this.formError}</ok-inline-feedback>`
+              : nothing}
             ${locked
               ? nothing
               : html`<ion-button data-testid="whatsapp-templates-submit" type="submit" ?disabled=${this.saving || !this.newName || this.buttonsIncomplete || this.examplesIncomplete}>${this.saving ? t('ui.saving') : this.editingId ? t('ui.save') : t('ui.add')}</ion-button>`}

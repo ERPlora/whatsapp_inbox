@@ -57,11 +57,12 @@ const COVERED: Record<
 > = {
   // The inbox itself (`/m/whatsapp_inbox/inbox`): the conversation list and the thread that opens
   // over it. Reading a thread is the whole screen, so what a spec needs is the way OUT of it, the
-  // one thing it can write there — who the conversation belongs to — and the two banners that say
-  // the read failed. Replying is NOT here on purpose: the answer goes out through WhatsApp.
+  // one thing it can write there — who the conversation belongs to, with the banner that says it was
+  // refused (pm#513) — and the two banners that say the read failed. Replying is NOT here on purpose: the answer goes out through WhatsApp.
   'components/erp-whatsapp-inbox-inbox/erp-whatsapp-inbox-inbox.ts': {
     prefix: 'whatsapp-inbox-',
     contract: [
+      'whatsapp-inbox-assign-error',
       'whatsapp-inbox-assign-submit',
       'whatsapp-inbox-assign-to',
       'whatsapp-inbox-detail-close',
@@ -136,6 +137,7 @@ const COVERED: Record<
       'whatsapp-templates-category',
       'whatsapp-templates-delete-cancel',
       'whatsapp-templates-delete-confirm',
+      'whatsapp-templates-error',
       'whatsapp-templates-example',
       'whatsapp-templates-examples',
       'whatsapp-templates-form',
