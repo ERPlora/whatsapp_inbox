@@ -5387,9 +5387,12 @@ var ErpWhatsappInboxInbox = class extends i3 {
         sortable: true,
         filterable: true,
         filterType: "text",
-        // A customer the automation could not answer carries the mark next to her name
-        // (whatsapp_inbox#238), so the list says WHO is waiting and not only that she is on top.
-        render: (r6) => b2`${String(r6.contact_name || r6.contact_phone || "\u2014")}${r6.needs_attention_at ? b2` ${this.renderNeedsAttention()}` : A}`
+        // A customer the automation could not answer carries the mark under her name
+        // (whatsapp_inbox#238), so the list says WHO is waiting and not only that she is on top. On
+        // its own line (a block `div`, the cell lives in the table's shadow root where this
+        // component's styles do not reach): next to a long name or a phone it overflowed into the
+        // next column.
+        render: (r6) => b2`${String(r6.contact_name || r6.contact_phone || "\u2014")}${r6.needs_attention_at ? b2`<div>${this.renderNeedsAttention()}</div>` : A}`
       },
       { key: "contact_phone", header: t5("ui.colPhone"), sortable: true, filterable: true, filterType: "text" },
       {

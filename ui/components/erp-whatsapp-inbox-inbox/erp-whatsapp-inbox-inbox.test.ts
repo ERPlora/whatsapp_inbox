@@ -323,6 +323,10 @@ describe('a customer the automation could not answer is marked «needs attention
     expect(pill!.getAttribute('tone')).toBe('warning');
     expect(pill!.textContent?.trim()).toBe('ui.needsAttention');
     expect(cell.textContent).toContain('Ana');
+    // On its own line: inline next to a long name or a phone it overflowed into the phone column
+    // on the bench (tablet and desktop widths).
+    expect(pill!.parentElement, 'the mark sits inline and overflows the column').not.toBe(cell);
+    expect(pill!.parentElement?.tagName).toBe('DIV');
   });
 
   it('a conversation nobody is waiting on carries no mark, only the name', async () => {
