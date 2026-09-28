@@ -277,17 +277,85 @@ describe('el hilo distingue QUIÉN habló (whatsapp_inbox#66)', () => {
   });
 });
 
-describe('the inbox lists the latest activity first (whatsapp_inbox#92)', () => {
-  it('asks `conversations.list` sorted by `last_message_at` descending, like any inbox', async () => {
+// whatsapp_inbox#238 moved the order one step on: the customers the automation could not answer come
+// FIRST, and within each group the latest activity still leads (#92). `attention_first` is the one
+// column the list answers that orders both ways at once (`queries/conversations_list.sql`), because
+// the runtime sorts by a single column; `tests/needs_attention.pg.test.py` proves the order on a
+// real Postgres.
+describe('the inbox lists who is waiting first, then the latest activity (whatsapp_inbox#92, #238)', () => {
+  it('asks `conversations.list` sorted by `attention_first` descending', async () => {
     await montar();
     const lista = consultas.find((c) => c.name === 'whatsapp_inbox.conversations.list');
-    expect(lista?.params).toMatchObject({ sort: 'last_message_at', dir: 'desc' });
+    expect(lista?.params).toMatchObject({ sort: 'attention_first', dir: 'desc' });
   });
 
   it('the manifest default agrees, so any other caller of the list gets the same order', async () => {
     const manifest = (await import('../../../module.json')).default;
     const list = manifest.queries['whatsapp_inbox.conversations.list'].list;
-    expect([list.default_sort, list.default_dir]).toEqual(['last_message_at', 'desc']);
+    expect([list.default_sort, list.default_dir]).toEqual(['attention_first', 'desc']);
+  });
+});
+
+// whatsapp_inbox#238 — when the automation could not answer a customer it tells her «someone from
+// the team will answer you here soon», and until now her thread looked like any other unread one.
+// The recipe flags it (`needs_attention_at`); the screen has to SAY so, in the list and in the
+// thread, and stop saying it when the team answered (the flag comes back null).
+describe('a customer the automation could not answer is marked «needs attention» (whatsapp_inbox#238)', () => {
+  const WAITING = { ...CONVERSATION, needs_attention_at: '2026-08-20T09:06:00+00:00' };
+
+  const contactCell = async (row: Record<string, unknown>) => {
+    const el = await montar();
+    const cols = (tabla(el) as unknown as {
+      columns: { key: string; render?: (r: Record<string, unknown>) => unknown }[];
+    }).columns;
+    const col = cols.find((c) => c.key === 'contact_name');
+    expect(col?.render, 'the contact cell cannot show the mark').toBeTypeOf('function');
+    const { render } = await import('lit');
+    const host = document.createElement('div');
+    render(col!.render!(row), host);
+    return host;
+  };
+
+  it('the list shows the mark next to her name', async () => {
+    const cell = await contactCell(WAITING);
+    const pill = cell.querySelector('ok-status-pill[data-testid="whatsapp-inbox-needs-attention"]');
+    expect(pill, 'no mark next to a customer who is waiting').not.toBeNull();
+    expect(pill!.getAttribute('tone')).toBe('warning');
+    expect(pill!.textContent?.trim()).toBe('ui.needsAttention');
+    expect(cell.textContent).toContain('Ana');
+  });
+
+  it('a conversation nobody is waiting on carries no mark, only the name', async () => {
+    const cell = await contactCell({ ...CONVERSATION, needs_attention_at: null });
+    expect(cell.querySelector('ok-status-pill')).toBeNull();
+    expect(cell.textContent?.trim()).toBe('Ana');
+  });
+
+  it('a contact with no name is shown by her phone, mark included', async () => {
+    const cell = await contactCell({ ...WAITING, contact_name: '' });
+    expect(cell.textContent).toContain('+34600111222');
+    expect(cell.querySelector('ok-status-pill')).not.toBeNull();
+  });
+
+  it('the opened thread says she is waiting and how the mark goes away', async () => {
+    const api = (globalThis as { erplora: Record<string, unknown> }).erplora;
+    const query = api.query as (n: string, p?: Record<string, unknown>) => Promise<unknown>;
+    api.query = async (name: string, params: Record<string, unknown> = {}) =>
+      name === 'whatsapp_inbox.conversations.get' ? (consultas.push({ name, params }), [WAITING]) : query(name, params);
+    const el = await montar();
+    await abrirConversacion(el);
+    const head = el.shadowRoot.querySelector('.detail-head ok-status-pill[data-testid="whatsapp-inbox-needs-attention"]');
+    expect(head, 'the thread does not say she is waiting').not.toBeNull();
+    expect(head!.textContent?.trim()).toBe('ui.needsAttention');
+    const hint = el.shadowRoot.querySelector('[data-testid="whatsapp-inbox-needs-attention-hint"]');
+    expect(hint?.textContent?.trim()).toBe('ui.needsAttentionHint');
+  });
+
+  it('the opened thread of a conversation nobody is waiting on says nothing of the kind', async () => {
+    const el = await montar();
+    await abrirConversacion(el);
+    expect(el.shadowRoot.querySelector('[data-testid="whatsapp-inbox-needs-attention"]')).toBeNull();
+    expect(el.shadowRoot.querySelector('[data-testid="whatsapp-inbox-needs-attention-hint"]')).toBeNull();
   });
 });
 
