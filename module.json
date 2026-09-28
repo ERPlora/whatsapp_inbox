@@ -63,6 +63,15 @@
       "permission": "whatsapp_inbox.manage_settings"
     }
   ],
+  "bell": {
+    "whatsapp_inbox.needs_attention": {
+      "label": "WhatsApp customers waiting for an answer",
+      "icon": "chatbubbles-outline",
+      "query": "whatsapp_inbox.conversations.count_needs_attention",
+      "nav": "inbox",
+      "permission": "whatsapp_inbox.view_conversation"
+    }
+  },
   "migrations": {
     "postgres": [
       "migrations/postgres/001_init.sql",
@@ -292,6 +301,14 @@
       "permission": "whatsapp_inbox.manage_connections",
       "sql": "queries/conversations_unlinked.sql",
       "schema": "schemas/conversations_unlinked.json"
+    },
+    "whatsapp_inbox.conversations.count_needs_attention": {
+      "permission": "whatsapp_inbox.view_conversation",
+      "sql": "queries/conversations_count_needs_attention.sql",
+      "schema": "schemas/conversations_count_needs_attention.json",
+      "ai": {
+        "description": "Counts the WhatsApp conversations waiting for the team: the automation could not answer the customer and told her someone from the team would, and nobody has answered her yet. Feeds the «WhatsApp customers waiting for an answer» bell counter."
+      }
     }
   },
   "commands": {

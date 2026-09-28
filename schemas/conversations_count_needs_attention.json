@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "whatsapp_inbox.conversations.count_needs_attention params",
+  "description": "Params of queries/conversations_count_needs_attention.sql. `hub_id` is injected by the runtime, never sent. It takes no params. Closed contract.",
+  "type": "object",
+  "properties": {},
+  "additionalProperties": false
+}

@@ -25,7 +25,7 @@ The doors that are NOT a screen are recognised as what they are, not waved throu
   * a command named by `events.listen` — the relay calls it,
   * a command a WASM handler returns as an intention — the runtime calls it,
   * a query the manifest hands to the SHELL to call — `billing.usage.query`, `widgets.*.query`,
-    `protects[].settings_query` / `.guard_query`. These have no Web Component of ours because the
+    `bell.*.query`, `protects[].settings_query` / `.guard_query`. These have no Web Component of ours because the
     screen belongs to the Hub, not to us: the module DECLARES the name and the shell resolves it
     (whatsapp_inbox#131). Declaring it IS the door, and getting the name wrong is caught by the
     manifest's own schema, not here.
@@ -128,6 +128,11 @@ def shell_doors():
     for widget in MANIFEST.get("widgets", {}).values():
         if widget.get("query"):
             doors.add(widget["query"])
+
+    # The bell's counters (hub#1678): the shell polls them from every screen (whatsapp_inbox#244).
+    for counter in MANIFEST.get("bell", {}).values():
+        if counter.get("query"):
+            doors.add(counter["query"])
 
     for guard in MANIFEST.get("protects", []):
         for field in ("settings_query", "guard_query"):
