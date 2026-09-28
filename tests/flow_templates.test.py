@@ -1105,6 +1105,96 @@ def unanswered_ending_problems(name, doc):
     return problems
 
 
+def assistant_failure_problems(name, doc):
+    """When the ASSISTANT fails, the customer still hears from us — whatsapp_inbox#122.
+
+    The customer writes, is told «let me check the diary, I will come straight back to you», and
+    the `ai` step that was going to answer her FAILS: the SaaS proxy is down, the assistant quota
+    is spent, the model's answer came back broken (`crates/server/src/agent_runner.rs` turns every
+    one of those into `IoResult::Failed`). Without a policy the kernel ends the run as `failed`
+    right there, and she never hears another word — the promise of the first message is the last
+    thing she is told.
+
+    A document can answer that since hub#2066 (`run_if`, first published in v1.1.30), and the shape
+    is the one the hub proves in `flow_step_run_if.rs`
+    (`when_the_assistant_fails_the_customer_gets_the_fallback_and_nothing_else`). For EVERY `ai`
+    step a WhatsApp `notify` already spoke before — i.e. every step she is waiting on — three
+    things, in this order and adjacent:
+
+    * the step declares `"on_error": "continue"`: the failure is recorded on the step (the owner
+      still reads it in the run history) and the run reaches the next step instead of dying;
+    * the NEXT step is a WhatsApp `notify` to the same number the acknowledgement went to, guarded
+      by `run_if: {"steps.<ai>.status": {"eq": "failed"}}`, whose words are FIXED. Fixed because
+      the one step that could have written them is the one that failed: quoting any `{{…}}` there
+      sends her an empty message or a placeholder;
+    * the step after it is a `condition` on `{"steps.<ai>.status": {"neq": "failed"}}`: it ends
+      the run when the assistant failed, so nothing written for a successful turn — a confirmation
+      quoting the empty `text`, a second assistant turn billed against the quota that just ran
+      out — goes out after the apology. When the assistant answered, the guarded `notify` is
+      skipped and this condition lets the run carry on exactly as before.
+
+    Adjacent on purpose: any step in between is one more thing that can fail or stop the run
+    before she is told.
+    """
+    steps = doc.get("steps", [])
+    problems = []
+    acknowledged = None
+    for i, step in enumerate(steps):
+        if step.get("kind") == "notify" and step.get("channel") == "whatsapp":
+            if acknowledged is None:
+                acknowledged = step
+            continue
+        if step.get("kind") != "ai" or acknowledged is None:
+            continue
+        sid = step.get("id")
+        status = f"steps.{sid}.status"
+        if step.get("on_error") != "continue":
+            problems.append(
+                f"{name} step `{sid}` is an assistant turn the customer is waiting on and does not "
+                f'declare `"on_error": "continue"`: when the assistant fails (proxy down, quota '
+                f"spent, a broken answer) the run ends as `failed` there and she never hears "
+                f"another word after «{(acknowledged.get('vars') or {}).get('text', '')}»"
+            )
+        fallback = steps[i + 1] if i + 1 < len(steps) else {}
+        if not (
+            fallback.get("kind") == "notify"
+            and fallback.get("channel") == "whatsapp"
+            and fallback.get("run_if") == {status: {"eq": "failed"}}
+        ):
+            problems.append(
+                f"{name} step `{sid}` is not followed by a WhatsApp `notify` guarded by "
+                f'`"run_if": {{"{status}": {{"eq": "failed"}}}}`: nothing tells the customer that '
+                f"the automation could not answer her and that the business will"
+            )
+        else:
+            text = str((fallback.get("vars") or {}).get("text") or "")
+            if not text.strip() or "{{" in text:
+                problems.append(
+                    f"{name} step `{fallback.get('id')}` is the message she gets when `{sid}` "
+                    f"failed, and its words are not FIXED ({text!r}): the step that could have "
+                    f"written them is the one that failed, so she gets an empty message or a "
+                    f"placeholder"
+                )
+            if fallback.get("to") != acknowledged.get("to"):
+                problems.append(
+                    f"{name} step `{fallback.get('id')}` does not write to the number the "
+                    f"acknowledgement `{acknowledged.get('id')}` went to: the apology reaches "
+                    f"somebody else, or nobody"
+                )
+        stop = steps[i + 2] if i + 2 < len(steps) else {}
+        if not (
+            stop.get("kind") == "condition"
+            and (stop.get("when") or {}).get(status) == {"neq": "failed"}
+        ):
+            problems.append(
+                f"{name} step `{sid}` fails without a `condition` on "
+                f'`{{"{status}": {{"neq": "failed"}}}}` right after the apology: the run carries '
+                f"on after a failed assistant turn and sends her what was written for a turn that "
+                f"never happened"
+            )
+    return problems
+
+
 # The rules `main()` has to apply to EVERY real document. `self_check()` proves each of them against
 # synthetic documents — which is exactly why deleting the one line that applied a rule to the REAL
 # templates used to leave the battery green (whatsapp_inbox#69, mutant N5): the cases still passed,
@@ -3853,21 +3943,21 @@ def parking_producer_problems(name, doc, commands_def, read_perms):
 # shipped with `payload` (the GRANT's word) where a `command` step takes `params`, and neither
 # WhatsApp recipe could be switched on.
 KERNEL_STEP_KEYS = {
-    "command": {"id", "kind", "command", "params", "on_error"},
-    "query": {"id", "kind", "query", "params", "result", "limit", "options", "on_error"},
+    "command": {"id", "kind", "command", "params", "on_error", "run_if"},
+    "query": {"id", "kind", "query", "params", "result", "limit", "options", "on_error", "run_if"},
     "condition": {"id", "kind", "when"},
     "delay": {
         "id", "kind", "seconds", "until", "offset_seconds", "max_wait", "past_due_policy",
-        "cancel_on", "reschedule_on", "on_error",
+        "cancel_on", "reschedule_on", "on_error", "run_if",
     },
-    "http": {"id", "kind", "method", "url", "headers", "body", "timeout", "on_error"},
+    "http": {"id", "kind", "method", "url", "headers", "body", "timeout", "on_error", "run_if"},
     "ai": {
         "id", "kind", "prompt", "tools", "policy", "max_iters", "on_expire", "on_reject",
-        "on_error", "output",
+        "on_error", "output", "run_if",
     },
-    "notify": {"id", "kind", "channel", "to", "template", "vars", "interactive", "on_error"},
+    "notify": {"id", "kind", "channel", "to", "template", "vars", "interactive", "on_error", "run_if"},
     "approval": {
-        "id", "kind", "title", "summary", "assignee", "expires_in", "on_expire", "on_reject",
+        "id", "kind", "title", "summary", "assignee", "expires_in", "on_expire", "on_reject", "run_if",
     },
 }
 
@@ -3910,6 +4000,7 @@ DOCUMENT_RULES = (
     silence_problems,
     mute_refusal_problems,
     unanswered_ending_problems,
+    assistant_failure_problems,
     undeclared_tool_problems,
     unordered_tool_problems,
     budget_problems,
@@ -3951,6 +4042,7 @@ SELF_CHECKED_RULES = (
     silence_problems,
     mute_refusal_problems,
     unanswered_ending_problems,
+    assistant_failure_problems,
     undeclared_tool_problems,
     unordered_tool_problems,
     budget_problems,
@@ -5396,6 +5488,19 @@ STEP_KEY_CASES = [
         1,
     ),
     (
+        "a step guarded by `run_if` (hub#2066): the kernel takes it on every kind that DOES "
+        "something",
+        {"steps": [{"id": "sorry", "kind": "notify", "channel": "whatsapp", "template": "",
+                    "vars": {"text": "x"}, "run_if": {"steps.a.status": {"eq": "failed"}}}]},
+        0,
+    ),
+    (
+        "…but not on a `condition`, which IS a guard: the kernel refuses `run_if` there",
+        {"steps": [{"id": "c", "kind": "condition", "when": {},
+                    "run_if": {"steps.a.status": {"eq": "failed"}}}]},
+        1,
+    ),
+    (
         "a kind the kernel does not know is refused before any key is read",
         {"steps": [{"id": "s", "kind": "webhook"}]},
         1,
@@ -5996,6 +6101,121 @@ REFUSAL_CASES = [
     ),
 ]
 
+
+
+def _assistant(step_id="book", on_error="continue"):
+    step = _ai_step(step_id, "auto", ["appointments.appointments.create"])
+    if on_error is not None:
+        step["on_error"] = on_error
+    return step
+
+
+def _apology(writer="book", text="Sorry, someone from the team will answer you here soon.", op="eq"):
+    step = _notify_step("sorry", text)
+    step["run_if"] = {f"steps.{writer}.status": {op: "failed"}}
+    return step
+
+
+def _stop_if_failed(writer="book", op="neq"):
+    return {"id": "answered", "kind": "condition", "when": {f"steps.{writer}.status": {op: "failed"}}}
+
+
+# `(label, document, problems expected)` for `assistant_failure_problems` (whatsapp_inbox#122).
+ASSISTANT_FAILURE_CASES = [
+    (
+        "the shape the fix ships: the turn may fail and carry on, the apology runs only if it did, "
+        "the run ends there if it did, the confirmation follows",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _assistant(), _apology(), _stop_if_failed(),
+            _notify_step("confirm", "{{steps.book.text}}"),
+        ),
+        0,
+    ),
+    (
+        "an assistant turn nobody was told to wait for is not this rule's business",
+        _fixture_doc(_assistant(on_error=None), _notify_step("confirm", "{{steps.book.text}}")),
+        0,
+    ),
+    (
+        "\U0001f534 the bug, as it shipped: «one moment», then a turn that dies with the run",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _assistant(on_error=None),
+            _notify_step("confirm", "{{steps.book.text}}"),
+        ),
+        3,
+    ),
+    (
+        "`on_error` alone: the run survives and sends her the EMPTY text of a failed turn",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _assistant(),
+            _notify_step("confirm", "{{steps.book.text}}"),
+        ),
+        2,
+    ),
+    (
+        "the apology without `on_error`: the kernel ends the run before it is ever reached",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _assistant(on_error=None), _apology(),
+            _stop_if_failed(),
+        ),
+        1,
+    ),
+    (
+        "an apology guarded the wrong way round goes out every time the assistant ANSWERED",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _assistant(), _apology(op="neq"), _stop_if_failed(),
+        ),
+        1,
+    ),
+    (
+        "an apology that quotes the step that failed sends her an empty message",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _assistant(), _apology(text="{{steps.book.text}}"),
+            _stop_if_failed(),
+        ),
+        1,
+    ),
+    (
+        "an apology with no words at all",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _assistant(), _apology(text="  "), _stop_if_failed(),
+        ),
+        1,
+    ),
+    (
+        "without the condition the confirmation still goes out after the apology",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _assistant(), _apology(),
+            _notify_step("confirm", "{{steps.book.text}}"),
+        ),
+        1,
+    ),
+    (
+        "a condition that stops the run when the assistant ANSWERED",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _assistant(), _apology(), _stop_if_failed(op="eq"),
+        ),
+        1,
+    ),
+    (
+        "the apology addressed to somebody other than the customer who was acknowledged",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _assistant(),
+            {**_apology(), "to": {"query": "staff.members.list", "field": "phone"}},
+            _stop_if_failed(),
+        ),
+        1,
+    ),
+    (
+        "EVERY turn she waits on is judged, not only the first: the second one fails unanswered",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _assistant("know"), _apology("know"),
+            _stop_if_failed("know"), _assistant("book", on_error=None),
+            _notify_step("confirm", "{{steps.book.text}}"),
+        ),
+        3,
+    ),
+]
 
 
 ENDING_CASES = [
@@ -8370,6 +8590,13 @@ def self_check():
                 f"the battery's own «nobody decided, or the write broke» rule is wrong — {label}: "
                 f"expected {expected} problem(s), got {len(got)}: {got}"
             )
+    for label, doc, expected in ASSISTANT_FAILURE_CASES:
+        got = assistant_failure_problems("(self-check)", doc)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «the assistant failed, tell her anyway» rule is wrong — "
+                f"{label}: expected {expected} problem(s), got {len(got)}: {got}"
+            )
     for label, doc, expected in TOOL_CASES:
         got = undeclared_tool_problems("(self-check)", doc, _KNOWN_OPS)
         if len(got) != expected:
@@ -8679,6 +8906,8 @@ def main():
         problems += applied(ledger, mute_refusal_problems, path.name, doc)
         # …and the two nobody could write until hub#1634/hub#1635: the silence and the breakage.
         problems += applied(ledger, unanswered_ending_problems, path.name, doc)
+        # …and the ending nobody writes down: the ASSISTANT itself fails (whatsapp_inbox#122).
+        problems += applied(ledger, assistant_failure_problems, path.name, doc)
 
         # 3a-bis-ii) …and a family that CALLS itself unattended really is (whatsapp_inbox#58): the
         # other half of the exception `policy_problems` grants it. Needs no manifest either.

@@ -89,7 +89,38 @@
         ]
       },
       "policy": "auto",
-      "max_iters": 4
+      "max_iters": 4,
+      "on_error": "continue"
+    },
+    {
+      "id": "sorry_know_the_customer_failed",
+      "kind": "notify",
+      "channel": "whatsapp",
+      "to": {
+        "query": "whatsapp_inbox.conversations.list",
+        "params": {
+          "f_wa_contact_id": "input.from"
+        },
+        "field": "contact_phone"
+      },
+      "template": "",
+      "vars": {
+        "text": "Sorry, I can't check the diary right now. Someone from the team will answer you here as soon as they can."
+      },
+      "run_if": {
+        "steps.know_the_customer.status": {
+          "eq": "failed"
+        }
+      }
+    },
+    {
+      "id": "know_the_customer_answered",
+      "kind": "condition",
+      "when": {
+        "steps.know_the_customer.status": {
+          "neq": "failed"
+        }
+      }
     },
     {
       "id": "resolve_customer",
@@ -154,6 +185,37 @@
         "slots": {
           "type": "options",
           "describe": "The free slots you are offering her to TAP, 10 at the most. Each `id` is the real slot — start, professional and service, like this: `2026-09-08T10:30|staff:12|service:3` — because it is the only thing that comes back when she taps it; the `title` is what she reads, 24 characters at most. Empty (`[]`) when you are offering her nothing to choose from: when you booked, when you cancelled, or when you answered something else."
+        }
+      },
+      "on_error": "continue"
+    },
+    {
+      "id": "sorry_book_appointment_failed",
+      "kind": "notify",
+      "channel": "whatsapp",
+      "to": {
+        "query": "whatsapp_inbox.conversations.list",
+        "params": {
+          "f_wa_contact_id": "input.from"
+        },
+        "field": "contact_phone"
+      },
+      "template": "",
+      "vars": {
+        "text": "Sorry, I can't check the diary right now. Someone from the team will answer you here as soon as they can."
+      },
+      "run_if": {
+        "steps.book_appointment.status": {
+          "eq": "failed"
+        }
+      }
+    },
+    {
+      "id": "book_appointment_answered",
+      "kind": "condition",
+      "when": {
+        "steps.book_appointment.status": {
+          "neq": "failed"
         }
       }
     },

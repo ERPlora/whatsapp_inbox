@@ -175,6 +175,19 @@ NEED_STEP_ERROR_POLICY = KernelNeed(
     "every kind and the parser refuses the WHOLE document with `flow.invalid_definition`",
 )
 
+NEED_STEP_GUARD = KernelNeed(
+    issue="hub#2066",
+    floor=(1, 1, 30),
+    path="crates/runtime/src/flows/def.rs",
+    marker="run_if",
+    last_without="v1.1.29",
+    why="a step may run only when it applies, and the run carries on when it does not — which is "
+    "how the recipe tells the customer «someone will answer you here» ONLY when the assistant "
+    "failed (whatsapp_inbox#122). Below it `run_if` is an unknown key on every kind and the parser "
+    "refuses the WHOLE document with `flow.invalid_definition`: the card would offer a recipe that "
+    "cannot be switched on",
+)
+
 NEED_PINNED_READ = KernelNeed(
     issue="hub#1662",
     floor=(1, 1, 17),
@@ -213,6 +226,7 @@ FEATURES = (
         lambda step: step.get("kind") == "ai" and "on_expire" in step,
     ),
     (NEED_STEP_ERROR_POLICY, "on_error", lambda step: "on_error" in step),
+    (NEED_STEP_GUARD, "run_if", lambda step: "run_if" in step),
 )
 # …and the same, one file over. A kernel need does not only come from the DOCUMENT: since hub#1654
 # the `<family>.grants.json` travels to the hub too, and what it declares there is refused by an
@@ -364,6 +378,17 @@ PREDICATE_CASES = (
         NEED_STEP_ERROR_POLICY,
         "a step that says nothing about failure",
         {"kind": "ai"},
+        False,
+    ),    (
+        NEED_STEP_GUARD,
+        "the apology that runs only when the assistant failed",
+        {"kind": "notify", "run_if": {"steps.book.status": {"eq": "failed"}}},
+        True,
+    ),
+    (
+        NEED_STEP_GUARD,
+        "a `condition` that reads the same status in its `when`, as the kernel always allowed",
+        {"kind": "condition", "when": {"steps.book.status": {"neq": "failed"}}},
         False,
     ),
 )

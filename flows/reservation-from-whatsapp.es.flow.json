@@ -129,6 +129,37 @@
           "type": "options",
           "describe": "Las franjas libres que les estás ofreciendo para que TOQUEN una, 10 como mucho. El `id` de cada una es la reserva de verdad —fecha, hora y comensales, así: `2026-09-08T21:00|party:4`—, porque es lo único que te vuelve cuando la tocan; el `title` es lo que ellos leen, 24 caracteres como mucho. Vacío (`[]`) cuando no les ofreces nada que elegir: cuando la mesa ya está reservada, cuando todavía tienes que preguntar cuántos vienen, o cuando contestas otra cosa."
         }
+      },
+      "on_error": "continue"
+    },
+    {
+      "id": "sorry_book_table_failed",
+      "kind": "notify",
+      "channel": "whatsapp",
+      "to": {
+        "query": "whatsapp_inbox.conversations.list",
+        "params": {
+          "f_wa_contact_id": "input.from"
+        },
+        "field": "contact_phone"
+      },
+      "template": "",
+      "vars": {
+        "text": "Perdona, ahora mismo no puedo mirar las reservas. Alguien del equipo te contestará por aquí en cuanto pueda."
+      },
+      "run_if": {
+        "steps.book_table.status": {
+          "eq": "failed"
+        }
+      }
+    },
+    {
+      "id": "book_table_answered",
+      "kind": "condition",
+      "when": {
+        "steps.book_table.status": {
+          "neq": "failed"
+        }
       }
     },
     {
