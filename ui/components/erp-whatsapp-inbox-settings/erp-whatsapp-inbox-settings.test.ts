@@ -96,6 +96,8 @@ interface Hub {
   noRestore?: boolean;
   /** What `restoreTemplate` refuses with: `flow.not_found`, `forbidden`, a dropped fetch. */
   restoreError?: { code: string; message: string };
+  /** Holds every `restoreTemplate` until it resolves: the update is still on its way. */
+  restoreHold?: Promise<void>;
 }
 
 /** The shape of hub#2123's `FlowTemplateDiscard`, the one a module reads. */
@@ -203,6 +205,7 @@ function mountWith(hub: Hub = {}) {
         // same id, and leaves it exactly as on or off as it was. A family never built is a 404.
         flows.restoreTemplate = async (family: string) => {
           kernel.push({ call: 'restore', family, scopedTo: id });
+          if (hub.restoreHold) await hub.restoreHold;
           if (hub.restoreError) throw Object.assign(new Error(hub.restoreError.message), { code: hub.restoreError.code });
           const was = built[family];
           if (!was) throw Object.assign(new Error('flow not found'), { code: 'flow.not_found' });
@@ -533,6 +536,30 @@ describe('a recipe the module improved since she turned it on is offered here, n
     expect(kernel.filter((k) => k.call === 'restore').map((k) => k.family)).toEqual([companion]);
   });
 
+  it('a card whose reply AND companion were both improved hands the new version to both', async () => {
+    const companion = APPOINTMENTS.companions[0];
+    mountWith({ built: { [APPOINTMENTS.family]: running(true), [companion]: running(true, companion) } });
+    const el = await mount();
+    await tap(el, `whatsapp-settings-update-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-confirm-update-${APPOINTMENTS.family}`);
+    expect(kernel.filter((k) => k.call === 'restore').map((k) => k.family)).toEqual([APPOINTMENTS.family, companion]);
+    expect(pick(el, `whatsapp-settings-outdated-${APPOINTMENTS.family}`), 'a companion was left on the old recipe').toBeNull();
+  });
+
+  it('a second tap while the update is on its way restores nothing twice', async () => {
+    let release!: () => void;
+    const restoreHold = new Promise<void>((r) => { release = r; });
+    mountWith({ built: { [APPOINTMENTS.family]: running(true) }, restoreHold });
+    const el = await mount();
+    await tap(el, `whatsapp-settings-update-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-confirm-update-${APPOINTMENTS.family}`);
+    const confirm = pick(el, `whatsapp-settings-confirm-update-${APPOINTMENTS.family}`);
+    expect(confirm?.hasAttribute('disabled'), '«Actualizar» stays tappable while it is updating').toBe(true);
+    release();
+    await settle(el);
+    expect(kernel.filter((k) => k.call === 'restore')).toHaveLength(1);
+  });
+
   it('after the update the notice is gone, it says it is done, and it is still running', async () => {
     mountWith({ built: { [APPOINTMENTS.family]: running(true) } });
     const el = await mount();
@@ -572,13 +599,16 @@ describe('a recipe the module improved since she turned it on is offered here, n
     expect(pick(el, `whatsapp-settings-card-error-${APPOINTMENTS.family}`)?.textContent).toContain(sentence('ui.errRecipeUpdateGone'));
   });
 
-  it('a session that is not an admin is told who can do it', async () => {
-    mountWith({ built: { [APPOINTMENTS.family]: running(true) }, restoreError: { code: 'forbidden', message: 'x' } });
-    const el = await mount();
-    await tap(el, `whatsapp-settings-update-${APPOINTMENTS.family}`);
-    await tap(el, `whatsapp-settings-confirm-update-${APPOINTMENTS.family}`);
-    expect(pick(el, `whatsapp-settings-card-error-${APPOINTMENTS.family}`)?.textContent).toContain(sentence('ui.recipeUpdateForbidden'));
-  });
+  it.each(['forbidden', 'unauthorized', 'flow.template_not_yours'])(
+    'a session the hub refuses with `%s` is told who can do it',
+    async (code) => {
+      mountWith({ built: { [APPOINTMENTS.family]: running(true) }, restoreError: { code, message: 'x' } });
+      const el = await mount();
+      await tap(el, `whatsapp-settings-update-${APPOINTMENTS.family}`);
+      await tap(el, `whatsapp-settings-confirm-update-${APPOINTMENTS.family}`);
+      expect(pick(el, `whatsapp-settings-card-error-${APPOINTMENTS.family}`)?.textContent).toContain(sentence('ui.recipeUpdateForbidden'));
+    },
+  );
 
   it('a shell with no restore door offers no «Actualizar» that could not be honoured', async () => {
     mountWith({ built: { [APPOINTMENTS.family]: running(true) }, noRestore: true });
