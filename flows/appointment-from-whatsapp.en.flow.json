@@ -220,6 +220,33 @@
       }
     },
     {
+      "id": "sorry_book_appointment_said_nothing",
+      "kind": "notify",
+      "channel": "whatsapp",
+      "to": {
+        "query": "whatsapp_inbox.conversations.list",
+        "params": {
+          "f_wa_contact_id": "input.from"
+        },
+        "field": "contact_phone"
+      },
+      "template": "",
+      "vars": {
+        "text": "Sorry, I can't check the diary right now. Someone from the team will answer you here as soon as they can."
+      },
+      "run_if": {
+        "steps.book_appointment.text": {
+          "in": [
+            "",
+            null
+          ]
+        },
+        "steps.book_appointment.slots": {
+          "eq": []
+        }
+      }
+    },
+    {
       "id": "confirm_to_customer",
       "kind": "notify",
       "channel": "whatsapp",
@@ -233,6 +260,12 @@
       "template": "",
       "vars": {
         "text": "{{steps.book_appointment.text}}"
+      },
+      "run_if": {
+        "steps.book_appointment.text": {
+          "exists": true,
+          "neq": ""
+        }
       }
     },
     {

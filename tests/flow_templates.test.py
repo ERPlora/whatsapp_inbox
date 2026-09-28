@@ -1195,6 +1195,100 @@ def assistant_failure_problems(name, doc):
     return problems
 
 
+def assistant_silence_problems(name, doc):
+    """When the assistant ANSWERS but says nothing, the customer is told as if it had failed —
+    whatsapp_inbox#239.
+
+    The turn ends `done`: nothing broke, so the failure guard of whatsapp_inbox#122 lets the run
+    through. But the model may have ended it without a word — typically when it called its answer
+    tool with no text beside the call (`crates/server/src/agent_runner.rs` publishes that turn's
+    text, which is then `""`). The `notify` that quotes `{{steps.<ai>.text}}` then queues an EMPTY
+    message to her phone (the kernel sends an empty string as written), or — when the key is not
+    there at all — refuses and ends the run as `failed`. Either way the last thing she hears is
+    «let me check, I will come straight back to you».
+
+    The kernel's conditions are AND only, so «failed OR said nothing» is two guards, not one. For
+    EVERY `ai` step a WhatsApp `notify` spoke before and whose `text` a WhatsApp `notify` quotes:
+
+    * right after the `condition` that ends the run when the turn FAILED (#122) — so a failed turn
+      is never apologised for twice — a WhatsApp `notify` to the acknowledged number, with FIXED
+      words, guarded by `run_if: {"steps.<ai>.text": {"in": ["", null]}}` AND, for every `options`
+      output the step declares, `{"steps.<ai>.<field>": {"eq": []}}`: no words and nothing to tap
+      is silence; no words but slots to tap is an answer, and she gets the list, not an apology;
+    * every WhatsApp `notify` that quotes the text is guarded by
+      `run_if: {"steps.<ai>.text": {"exists": true, "neq": ""}}`: `neq ""` alone lets a missing
+      key through (`null` is not `""`), and the kernel then refuses the message and ends the run.
+    """
+    steps = doc.get("steps", [])
+    problems = []
+    acknowledged = None
+    for i, step in enumerate(steps):
+        if step.get("kind") == "notify" and step.get("channel") == "whatsapp":
+            if acknowledged is None:
+                acknowledged = step
+            continue
+        if step.get("kind") != "ai" or acknowledged is None:
+            continue
+        sid = step.get("id")
+        text_path = f"steps.{sid}.text"
+        failed_stop = next(
+            (
+                j for j in range(i + 1, len(steps))
+                if steps[j].get("kind") == "condition"
+                and (steps[j].get("when") or {}).get(f"steps.{sid}.status") == {"neq": "failed"}
+            ),
+            None,
+        )
+        at = (failed_stop if failed_stop is not None else i + 2) + 1
+        replies = [
+            s for s in steps[i + 1:]
+            if s.get("kind") == "notify"
+            and s.get("channel") == "whatsapp"
+            and "{{" + text_path + "}}" in json.dumps(s.get("vars") or {})
+        ]
+        if not replies:
+            continue
+        for reply in replies:
+            if reply.get("run_if") != {text_path: {"exists": True, "neq": ""}}:
+                problems.append(
+                    f"{name} step `{reply.get('id')}` sends her the words of `{sid}` without "
+                    f'`"run_if": {{"{text_path}": {{"exists": true, "neq": ""}}}}`: when the '
+                    f"assistant said nothing, an EMPTY message reaches her phone — or, with no "
+                    f"text at all, the kernel refuses it and the run dies unanswered"
+                )
+        guard = {text_path: {"in": ["", None]}}
+        for field, spec in (step.get("output") or {}).items():
+            if isinstance(spec, dict) and spec.get("type") == "options":
+                guard[f"steps.{sid}.{field}"] = {"eq": []}
+        silence = steps[at] if at < len(steps) else {}
+        if not (
+            silence.get("kind") == "notify"
+            and silence.get("channel") == "whatsapp"
+            and silence.get("run_if") == guard
+        ):
+            problems.append(
+                f"{name} step `{sid}` is not followed, right after the condition that stops a "
+                f"FAILED turn, by a WhatsApp `notify` guarded by `\"run_if\": "
+                f"{json.dumps(guard)}`: when the assistant answers with no words and nothing to "
+                f"tap, nothing tells her that the business will answer"
+            )
+            continue
+        text = str((silence.get("vars") or {}).get("text") or "")
+        if not text.strip() or "{{" in text:
+            problems.append(
+                f"{name} step `{silence.get('id')}` is the message she gets when `{sid}` said "
+                f"nothing, and its words are not FIXED ({text!r}): the step that should have "
+                f"written them wrote nothing"
+            )
+        if silence.get("to") != acknowledged.get("to"):
+            problems.append(
+                f"{name} step `{silence.get('id')}` does not write to the number the "
+                f"acknowledgement `{acknowledged.get('id')}` went to: the apology reaches "
+                f"somebody else, or nobody"
+            )
+    return problems
+
+
 # The rules `main()` has to apply to EVERY real document. `self_check()` proves each of them against
 # synthetic documents — which is exactly why deleting the one line that applied a rule to the REAL
 # templates used to leave the battery green (whatsapp_inbox#69, mutant N5): the cases still passed,
@@ -4001,6 +4095,7 @@ DOCUMENT_RULES = (
     mute_refusal_problems,
     unanswered_ending_problems,
     assistant_failure_problems,
+    assistant_silence_problems,
     undeclared_tool_problems,
     unordered_tool_problems,
     budget_problems,
@@ -4043,6 +4138,7 @@ SELF_CHECKED_RULES = (
     mute_refusal_problems,
     unanswered_ending_problems,
     assistant_failure_problems,
+    assistant_silence_problems,
     undeclared_tool_problems,
     unordered_tool_problems,
     budget_problems,
@@ -6214,6 +6310,138 @@ ASSISTANT_FAILURE_CASES = [
             _notify_step("confirm", "{{steps.book.text}}"),
         ),
         3,
+    ),
+]
+
+
+def _slot_assistant(step_id="book"):
+    step = _assistant(step_id)
+    step["output"] = {"slots": {"type": "options", "describe": "the slots she can tap"}}
+    return step
+
+
+def _silence_apology(writer="book", text="Sorry, someone from the team will answer you here soon.",
+                     guard=None):
+    step = _notify_step("sorry_silent", text)
+    step["run_if"] = guard if guard is not None else {
+        f"steps.{writer}.text": {"in": ["", None]}, f"steps.{writer}.slots": {"eq": []},
+    }
+    return step
+
+
+def _reply(writer="book", guard=None):
+    step = _notify_step("confirm", "{{steps.%s.text}}" % writer)
+    step["run_if"] = guard if guard is not None else {
+        f"steps.{writer}.text": {"exists": True, "neq": ""},
+    }
+    return step
+
+
+# `(label, document, problems expected)` for `assistant_silence_problems` (whatsapp_inbox#239).
+ASSISTANT_SILENCE_CASES = [
+    (
+        "the shape the fix ships: a failed turn is apologised for and stops; a turn with no words "
+        "and nothing to tap is apologised for; the reply only goes out when it has words",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _slot_assistant(), _apology(), _stop_if_failed(),
+            _silence_apology(), _reply(),
+        ),
+        0,
+    ),
+    (
+        "a turn that declares nothing to tap is silent on its text alone",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _assistant(), _apology(), _stop_if_failed(),
+            _silence_apology(guard={"steps.book.text": {"in": ["", None]}}), _reply(),
+        ),
+        0,
+    ),
+    (
+        "a turn whose words never reach her (it only makes sure the card exists) is not judged",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _assistant("know"), _apology("know"),
+            _stop_if_failed("know"),
+        ),
+        0,
+    ),
+    (
+        "\U0001f534 the bug, as #122 shipped it: a `done` turn with no words sends her an EMPTY "
+        "message, and nothing else",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _slot_assistant(), _apology(), _stop_if_failed(),
+            _notify_step("confirm", "{{steps.book.text}}"),
+        ),
+        2,
+    ),
+    (
+        "the reply guarded but no apology: she is not sent an empty message — she is sent nothing",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _slot_assistant(), _apology(), _stop_if_failed(),
+            _reply(),
+        ),
+        1,
+    ),
+    (
+        "the apology but an unguarded reply: she gets the apology AND an empty message",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _slot_assistant(), _apology(), _stop_if_failed(),
+            _silence_apology(), _notify_step("confirm", "{{steps.book.text}}"),
+        ),
+        1,
+    ),
+    (
+        "a reply guarded with `neq \"\"` alone lets a MISSING text through, which the kernel "
+        "refuses and the run dies",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _slot_assistant(), _apology(), _stop_if_failed(),
+            _silence_apology(), _reply(guard={"steps.book.text": {"neq": ""}}),
+        ),
+        1,
+    ),
+    (
+        "an apology on the text alone when the turn declares slots: no words but slots to tap is "
+        "an ANSWER, and she would be told nobody can help while being offered the list",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _slot_assistant(), _apology(), _stop_if_failed(),
+            _silence_apology(guard={"steps.book.text": {"in": ["", None]}}), _reply(),
+        ),
+        1,
+    ),
+    (
+        "an apology on `eq \"\"` only: a turn with no text key at all is not caught",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _slot_assistant(), _apology(), _stop_if_failed(),
+            _silence_apology(guard={"steps.book.text": {"eq": ""}, "steps.book.slots": {"eq": []}}),
+            _reply(),
+        ),
+        1,
+    ),
+    (
+        "the silence apology BEFORE the failure stop: a failed turn with no words is apologised "
+        "for twice",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _slot_assistant(), _apology(), _silence_apology(),
+            _stop_if_failed(), _reply(),
+        ),
+        1,
+    ),
+    (
+        "an apology that quotes the words that were never written: not fixed words, and one more "
+        "message sending her the empty text",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _slot_assistant(), _apology(), _stop_if_failed(),
+            _silence_apology(text="{{steps.book.text}}"), _reply(),
+        ),
+        2,
+    ),
+    (
+        "the apology addressed to somebody other than the customer who was acknowledged",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _slot_assistant(), _apology(), _stop_if_failed(),
+            {**_silence_apology(), "to": {"query": "staff.members.list", "field": "phone"}},
+            _reply(),
+        ),
+        1,
     ),
 ]
 
@@ -8597,6 +8825,13 @@ def self_check():
                 f"the battery's own «the assistant failed, tell her anyway» rule is wrong — "
                 f"{label}: expected {expected} problem(s), got {len(got)}: {got}"
             )
+    for label, doc, expected in ASSISTANT_SILENCE_CASES:
+        got = assistant_silence_problems("(self-check)", doc)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «the assistant said nothing, tell her anyway» rule is wrong — "
+                f"{label}: expected {expected} problem(s), got {len(got)}: {got}"
+            )
     for label, doc, expected in TOOL_CASES:
         got = undeclared_tool_problems("(self-check)", doc, _KNOWN_OPS)
         if len(got) != expected:
@@ -8908,6 +9143,7 @@ def main():
         problems += applied(ledger, unanswered_ending_problems, path.name, doc)
         # …and the ending nobody writes down: the ASSISTANT itself fails (whatsapp_inbox#122).
         problems += applied(ledger, assistant_failure_problems, path.name, doc)
+        problems += applied(ledger, assistant_silence_problems, path.name, doc)
 
         # 3a-bis-ii) …and a family that CALLS itself unattended really is (whatsapp_inbox#58): the
         # other half of the exception `policy_problems` grants it. Needs no manifest either.
