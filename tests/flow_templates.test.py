@@ -2995,6 +2995,51 @@ def unpinned_query_problems(name, doc, pins):
     return problems
 
 
+# ── «the step says what its permission fixes» — whatsapp_inbox#246 ───────────────────────────
+def pin_mismatch_problems(name, doc, command_pins, query_pins):
+    """A deterministic step SENDS what its grant FIXES, field by field — whatsapp_inbox#246.
+
+    The rules above hold that the pin is in the sidecar; none held that the step agrees with it.
+    That half needs no model to go wrong: the recipe flags the thread «needs attention» and
+    remembers the slots it offered with `kind: command` steps whose payload the DOCUMENT writes,
+    and the grant fixes `wa_contact_id` = `input.from`. The day one side is edited and the other is
+    not, `check_payload_pin` refuses every call with `flow.grant_payload_denied` — and because those
+    steps run under `on_error: continue` (a mark must never cost the customer her reply), the
+    refusal is swallowed: the thread is never flagged, the offer is never remembered, and every
+    other rule here stays green.
+
+    The comparison is on the WRITTEN form, both sides, because that is the one form equal in every
+    run: a bare path resolves to the same value whether the grant or the step names it (hub#1662),
+    and a literal equals itself. A `{{…}}` template does not qualify — it renders to text, so it
+    matches the pin only while the value happens to be a string.
+
+    Keyed by the pair `(kind, name)`, as the hub's `Authority.pins` is; fields the grant does not
+    fix are free. Silent on `ai` steps (the model writes that payload, and `unpinned_command_problems`
+    / `unpinned_query_problems` say what their grant owes) and on a missing grant (`main()` says it).
+    """
+    pins_of = {"command": command_pins, "query": query_pins}
+    problems = []
+    for step in doc.get("steps", []):
+        kind = step.get("kind")
+        if kind not in pins_of:
+            continue
+        operation = step.get(kind)
+        fixed = pins_of[kind].get(operation) or {}
+        sent = step.get("params") or {}
+        for field, value in sorted(fixed.items()):
+            if field in sent and sent[field] == value:
+                continue
+            says = f"sends `{field}` = `{sent[field]}`" if field in sent else f"omits `{field}`"
+            problems.append(
+                f"{name} {says} in its `{kind}` step `{step.get('id')}` (`{operation}`), and "
+                f"`{family_of(name)}.grants.json` fixes `{field}` = `{value}`: the hub refuses "
+                f"that call (`flow.grant_payload_denied`) and `on_error` swallows the refusal, so "
+                f"the step does nothing and nobody hears of it. Write the same value, in the same "
+                f"form, on both sides"
+            )
+    return problems
+
+
 # ── «una instrucción no se pierde en la traducción» — whatsapp_inbox#112 ──────────────────────
 #
 # The recipes are written in English and translated into Spanish, and until this rule nothing held
@@ -4189,6 +4234,7 @@ DOCUMENT_RULES = (
     own_customer_only_problems,
     unpinned_command_problems,
     unpinned_query_problems,
+    pin_mismatch_problems,
     missing_instruction_problems,
     only_the_customer_problems,
     tappable_option_problems,
@@ -4233,6 +4279,7 @@ SELF_CHECKED_RULES = (
     own_customer_only_problems,
     unpinned_command_problems,
     unpinned_query_problems,
+    pin_mismatch_problems,
     missing_instruction_problems,
     only_the_customer_problems,
     tappable_option_problems,
@@ -7354,6 +7401,155 @@ QUERY_PIN_CASES = [
 ]
 
 
+# `(label, document, command pins, query pins, problems expected)` — whatsapp_inbox#246.
+_FLAG_CMD = "whatsapp_inbox.conversations.needs_attention"
+_RECALL_QUERY = "whatsapp_inbox.conversations.last_offer"
+
+
+def _fixed_step(kind, operation, params, sid="flag"):
+    """A deterministic step: the DOCUMENT writes its payload, no model in between."""
+    step = {"id": sid, "kind": kind, kind: operation, "on_error": "continue"}
+    if params is not None:
+        step["params"] = params
+    return step
+
+
+_FROM = {"wa_contact_id": "input.from"}
+
+STEP_PIN_CASES = [
+    (
+        "what this module ships: the step flags the conversation of the phone that wrote, and "
+        "the grant fixes that very phone",
+        _fixture_doc(_fixed_step("command", _FLAG_CMD, dict(_FROM))),
+        {_FLAG_CMD: dict(_FROM)},
+        {},
+        0,
+    ),
+    (
+        "🔴 the red whatsapp_inbox#246 IS: the grant drifted (`*`), the step still sends the "
+        "path, the hub refuses it and `on_error: continue` swallows the refusal",
+        _fixture_doc(_fixed_step("command", _FLAG_CMD, dict(_FROM))),
+        {_FLAG_CMD: {"wa_contact_id": "*"}},
+        {},
+        1,
+    ),
+    (
+        "the step drifted instead: it sends ANOTHER place in the run than the one the grant fixes",
+        _fixture_doc(_fixed_step("command", _FLAG_CMD, {"wa_contact_id": "input.to"})),
+        {_FLAG_CMD: dict(_FROM)},
+        {},
+        1,
+    ),
+    (
+        "the step omits the pinned field: `check_payload_pin` refuses an absence exactly like a "
+        "contradiction",
+        _fixture_doc(_fixed_step("command", _FLAG_CMD, {"reason": "x"})),
+        {_FLAG_CMD: dict(_FROM)},
+        {},
+        1,
+    ),
+    (
+        "…and a step with no `params` at all omits it too",
+        _fixture_doc(_fixed_step("command", _FLAG_CMD, None)),
+        {_FLAG_CMD: dict(_FROM)},
+        {},
+        1,
+    ),
+    (
+        "a `{{…}}` template is not the path the grant names: it renders to TEXT, so it only "
+        "equals the pinned value while that value happens to be a string — write the pin's form",
+        _fixture_doc(_fixed_step("command", _FLAG_CMD, {"wa_contact_id": "{{input.from}}"})),
+        {_FLAG_CMD: dict(_FROM)},
+        {},
+        1,
+    ),
+    (
+        "every step is read, not the first one: the recipes flag and remember deep in the run, "
+        "after the reads that agree with their grants",
+        _fixture_doc(
+            _fixed_step("query", _RECALL_QUERY, dict(_FROM), "recall"),
+            _fixed_step("command", _FLAG_CMD, {"wa_contact_id": "input.to"}),
+        ),
+        {_FLAG_CMD: dict(_FROM)},
+        {_RECALL_QUERY: dict(_FROM)},
+        1,
+    ),
+    (
+        "a literal pin is matched by the same literal",
+        _fixture_doc(_fixed_step("command", CANCEL_COMMAND, {"channel": "customer", "id": "input.id"})),
+        {CANCEL_COMMAND: {"channel": "customer"}},
+        {},
+        0,
+    ),
+    (
+        "…and refused for another one",
+        _fixture_doc(_fixed_step("command", CANCEL_COMMAND, {"channel": "staff"})),
+        {CANCEL_COMMAND: {"channel": "customer"}},
+        {},
+        1,
+    ),
+    (
+        "one line per pinned field that disagrees, so the reader fixes both and not the first",
+        _fixture_doc(_fixed_step("command", _FLAG_CMD, {"wa_contact_id": "input.to"})),
+        {_FLAG_CMD: {"wa_contact_id": "input.from", "channel": "customer"}},
+        {},
+        2,
+    ),
+    (
+        "fields the grant does NOT fix are free: the pin narrows, it is not a schema",
+        _fixture_doc(_fixed_step("command", _FLAG_CMD, {**_FROM, "offered_slots": "steps.x.slots"})),
+        {_FLAG_CMD: dict(_FROM)},
+        {},
+        0,
+    ),
+    (
+        "a grant that fixes nothing has nothing to disagree with",
+        _fixture_doc(_fixed_step("command", _FLAG_CMD, {"wa_contact_id": "input.to"})),
+        {_FLAG_CMD: {}},
+        {},
+        0,
+    ),
+    (
+        "no grant at all is `main()`'s red, said once and in its own words",
+        _fixture_doc(_fixed_step("command", _FLAG_CMD, {"wa_contact_id": "input.to"})),
+        {},
+        {},
+        0,
+    ),
+    (
+        "a deterministic READ goes through the same pin (`check_query_grant`): recalling the "
+        "offer of another thread than the grant fixes is refused too",
+        _fixture_doc(_fixed_step("query", _RECALL_QUERY, {"wa_contact_id": "input.to"}, "recall")),
+        {},
+        {_RECALL_QUERY: dict(_FROM)},
+        1,
+    ),
+    (
+        "…and the read that sends what its grant fixes is green",
+        _fixture_doc(_fixed_step("query", _RECALL_QUERY, dict(_FROM), "recall")),
+        {},
+        {_RECALL_QUERY: dict(_FROM)},
+        0,
+    ),
+    (
+        "the pin is keyed by the PAIR (kind, name), as `Authority.pins` is: a command pin does "
+        "not bind a query step that shares its name",
+        _fixture_doc(_fixed_step("query", _FLAG_CMD, {"wa_contact_id": "input.to"}, "read")),
+        {_FLAG_CMD: dict(_FROM)},
+        {},
+        0,
+    ),
+    (
+        "an `ai` step is not this rule's: the model writes that payload, and "
+        "`unpinned_command_problems` owns what its grant must fix",
+        _fixture_doc(_ai_step("book", "auto", (_FLAG_CMD,))),
+        {_FLAG_CMD: {"wa_contact_id": "*"}},
+        {},
+        0,
+    ),
+]
+
+
 # `(label, file name, document, the families that really ship, problems expected)` — the unit
 # tests of `missing_instruction_problems`. The families are handed in for the same reason the pins
 # are in `PIN_CASES`: half of what the rule judges is not in the document, and a row has to be able
@@ -8925,6 +9121,13 @@ def self_check():
                 f"the battery's own «a diary is somebody's» rule is wrong — {label}: "
                 f"expected {expected} problem(s), got {len(got)}: {got}"
             )
+    for label, doc, cpins, qpins, expected in STEP_PIN_CASES:
+        got = pin_mismatch_problems("(self-check)", doc, cpins, qpins)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «the step says what its permission fixes» rule is wrong — "
+                f"{label}: expected {expected} problem(s), got {len(got)}: {got}"
+            )
     # The sidecar READERS are anchored on a fixture, because a blind reader is invisible to the
     # tables above: `unpinned_query_problems` is silent when handed no pin at all (that red belongs
     # to `main()`, by design), so a `declared_query_pins` that stopped seeing `query` grants — a
@@ -9395,6 +9598,16 @@ def main():
         )
         problems += applied(
             ledger, unpinned_query_problems, path.name, doc, declared_query_pins(gpath)
+        )
+        # …and every deterministic step SENDS what its grant fixes (whatsapp_inbox#246): those steps
+        # run under `on_error: continue`, so a pin they contradict is refused without a sound.
+        problems += applied(
+            ledger,
+            pin_mismatch_problems,
+            path.name,
+            doc,
+            declared_command_pins(gpath),
+            declared_query_pins(gpath),
         )
 
         # 3a-bis-vii) …and the instructions that may not be lost are in the document, IN ITS OWN
