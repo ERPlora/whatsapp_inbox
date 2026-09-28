@@ -4852,7 +4852,7 @@ var es_default = {
     buttonQuickReply: "Respuesta r\xE1pida",
     buttonUrl: "Abre un enlace",
     buttonPhone: "Llama al n\xFAmero",
-    templateManagedInMeta: "Esta plantilla lleva una imagen, v\xEDdeo o documento en la cabecera, o un bot\xF3n de enlace con variable, as\xED que su texto se cambia en WhatsApp Manager. Al volver a abrir esta pesta\xF1a ver\xE1s lo que diga Meta.",
+    templateManagedInMeta: "Esta plantilla lleva un bot\xF3n de enlace con variable, o un archivo en la cabecera que esta versi\xF3n de ERPlora a\xFAn no puede subir, as\xED que su texto se cambia en WhatsApp Manager. Al volver a abrir esta pesta\xF1a ver\xE1s lo que diga Meta.",
     metaOnlyTemplates: "Estas plantillas de WhatsApp Manager todav\xEDa no se pueden traer a esta lista (llevan un carrusel, una oferta por tiempo limitado, un bot\xF3n de copiar c\xF3digo o de WhatsApp Flow, una ubicaci\xF3n en la cabecera o m\xE1s de una variable en la cabecera). Gesti\xF3nalas en WhatsApp Manager: {names}",
     doorRefusal: {
       invalid_name: "Meta no ha aceptado el nombre. Usa solo min\xFAsculas, n\xFAmeros y guiones bajos \u2014sin espacios ni acentos\u2014 y vuelve a intentarlo.",
@@ -4882,7 +4882,13 @@ var es_default = {
       invalid_button_phone: "Meta no ha aceptado un bot\xF3n de llamada. Escribe el n\xFAmero con su prefijo de pa\xEDs, por ejemplo +34600111222.",
       too_many_buttons: "Meta no ha aceptado los botones: una plantilla lleva 10 como mucho, y no m\xE1s de 2 enlaces y 1 bot\xF3n de llamada.",
       buttons_not_grouped: "Meta no ha aceptado el orden de los botones: las respuestas r\xE1pidas van juntas, y los enlaces y llamadas, juntos.",
-      buttons_not_allowed_for_category: "Las plantillas de autenticaci\xF3n no pueden llevar botones desde aqu\xED. Quita los botones o elige otra categor\xEDa."
+      buttons_not_allowed_for_category: "Las plantillas de autenticaci\xF3n no pueden llevar botones desde aqu\xED. Quita los botones o elige otra categor\xEDa.",
+      missing_file: "No ha llegado el archivo de ejemplo de la cabecera. Vuelve a elegirlo y guarda.",
+      unsupported_header_sample: "Meta solo admite como ejemplo de cabecera una imagen JPEG o PNG, un v\xEDdeo MP4 o un documento PDF. Elige otro archivo.",
+      header_sample_too_large: "El archivo de ejemplo es demasiado grande para Meta: hasta 5 MB una imagen, 16 MB un v\xEDdeo y 100 MB un PDF. Elige uno m\xE1s peque\xF1o.",
+      whatsapp_not_configured: "WhatsApp no est\xE1 configurado ahora mismo en ERPlora, as\xED que el archivo de ejemplo no se ha podido enviar a Meta. La plantilla queda guardada aqu\xED: vuelve a intentarlo m\xE1s tarde.",
+      invalid_header_format: "Meta no ha aceptado la cabecera: una cabecera con imagen, v\xEDdeo o documento no lleva texto propio, y una plantilla de autenticaci\xF3n no lleva ninguna.",
+      missing_header_sample: "Meta pide el archivo de ejemplo de la cabecera en cada guardado. El\xEDgelo y vuelve a guardar."
     },
     mediaKind: {
       image: "Foto",
@@ -4916,7 +4922,20 @@ var es_default = {
     buttonUrlField: "Enlace (https://\u2026)",
     buttonPhoneField: "Tel\xE9fono con prefijo de pa\xEDs",
     addButton: "A\xF1adir bot\xF3n",
-    removeButton: "Quitar bot\xF3n"
+    removeButton: "Quitar bot\xF3n",
+    headerFormat: "Cabecera",
+    headerKindText: "Texto",
+    headerKindImage: "Imagen",
+    headerKindVideo: "V\xEDdeo",
+    headerKindDocument: "Documento (PDF)",
+    headerSamplePick: "Elegir archivo de ejemplo",
+    headerSampleChange: "Cambiar archivo",
+    headerSampleHint: "Meta revisa la plantilla con este ejemplo ({types}, hasta {max} MB) y lo vuelve a pedir cada vez que se guarda, tambi\xE9n al editarla. El archivo de verdad se elige al enviar el mensaje.",
+    headerSampleWrongType: "Ese archivo no es {types}. Elige otro.",
+    headerSampleTooLarge: "Ese archivo pasa de {max} MB, lo m\xE1ximo que admite Meta para esta cabecera. Elige uno m\xE1s peque\xF1o.",
+    headerSampleKindMismatch: "El archivo que has elegido no es del tipo de cabecera seleccionado. Elige el tipo que corresponde al archivo, u otro archivo, y vuelve a guardar.",
+    headerNotForAuthentication: "Las plantillas de autenticaci\xF3n no pueden llevar imagen, v\xEDdeo ni documento en la cabecera. Elige una cabecera de texto u otra categor\xEDa.",
+    headerMediaNeedsUpdate: "Poner una imagen, un v\xEDdeo o un documento en la cabecera necesita una versi\xF3n m\xE1s nueva de ERPlora en este hub. Llega con la pr\xF3xima actualizaci\xF3n."
   },
   errors: {
     "whatsapp_inbox.conversation_not_found": "Esa conversaci\xF3n no existe en este negocio.",
@@ -5083,7 +5102,7 @@ var en_default = {
     buttonQuickReply: "Quick reply",
     buttonUrl: "Opens a link",
     buttonPhone: "Calls the number",
-    templateManagedInMeta: "This template has an image, video or document header, or a link button with a variable, so its wording is changed in WhatsApp Manager. Open this tab again to see what Meta says.",
+    templateManagedInMeta: "This template has a link button with a variable, or a file header this version of ERPlora cannot upload yet, so its wording is changed in WhatsApp Manager. Open this tab again to see what Meta says.",
     metaOnlyTemplates: "These WhatsApp Manager templates cannot be brought into this list yet (they use a carousel, a limited-time offer, a copy-code or WhatsApp Flow button, a location header, or more than one variable in the header). Manage them in WhatsApp Manager: {names}",
     doorRefusal: {
       invalid_name: "Meta did not accept the name. Use lowercase letters, numbers and underscores only \u2014 no spaces or accents \u2014 and try again.",
@@ -5113,7 +5132,13 @@ var en_default = {
       invalid_button_phone: "Meta did not accept a call button. Write the number with its country code, for example +34600111222.",
       too_many_buttons: "Meta did not accept the buttons: a template takes at most 10, with no more than 2 links and 1 call button.",
       buttons_not_grouped: "Meta did not accept the order of the buttons: quick replies go together, and links and calls go together.",
-      buttons_not_allowed_for_category: "Authentication templates cannot carry buttons from here. Remove the buttons or choose another category."
+      buttons_not_allowed_for_category: "Authentication templates cannot carry buttons from here. Remove the buttons or choose another category.",
+      missing_file: "The example file of the header did not arrive. Choose it again and save.",
+      unsupported_header_sample: "Meta only accepts a JPEG or PNG image, an MP4 video or a PDF document as the header example. Choose another file.",
+      header_sample_too_large: "The example file is too large for Meta: up to 5 MB for an image, 16 MB for a video and 100 MB for a PDF. Choose a smaller one.",
+      whatsapp_not_configured: "WhatsApp is not set up on ERPlora\u2019s side right now, so the example file could not be sent to Meta. The template is saved here: try again later.",
+      invalid_header_format: "Meta did not accept the header: an image, video or document header has no text of its own, and an authentication template takes none.",
+      missing_header_sample: "Meta needs the example file of the header on every save. Choose it and save again."
     },
     mediaKind: {
       image: "Photo",
@@ -5147,7 +5172,20 @@ var en_default = {
     buttonUrlField: "Link (https://\u2026)",
     buttonPhoneField: "Phone number with country code",
     addButton: "Add button",
-    removeButton: "Remove button"
+    removeButton: "Remove button",
+    headerFormat: "Header",
+    headerKindText: "Text",
+    headerKindImage: "Image",
+    headerKindVideo: "Video",
+    headerKindDocument: "Document (PDF)",
+    headerSamplePick: "Choose example file",
+    headerSampleChange: "Change file",
+    headerSampleHint: "Meta reviews the template with this example ({types}, up to {max} MB) and asks for it again every time the template is saved, also when you edit it. The real file is chosen when the message is sent.",
+    headerSampleWrongType: "That file is not {types}. Choose another one.",
+    headerSampleTooLarge: "That file is larger than {max} MB, the most Meta accepts for this header. Choose a smaller one.",
+    headerSampleKindMismatch: "The file you chose is not the kind of header selected. Choose the kind that matches the file, or another file, and save again.",
+    headerNotForAuthentication: "Authentication templates cannot have an image, video or document header. Choose a text header or another category.",
+    headerMediaNeedsUpdate: "An image, video or document in the header needs a newer version of ERPlora on this hub. It arrives with the next update."
   },
   errors: {
     "whatsapp_inbox.conversation_not_found": "That conversation does not exist in this business.",
@@ -6643,6 +6681,17 @@ var HEADER_MEDIA_LABEL = {
   VIDEO: "ui.headerMediaVideo",
   DOCUMENT: "ui.headerMediaDocument"
 };
+var HEADER_SAMPLE_RULES = {
+  IMAGE: { types: ["image/jpeg", "image/png"], label: "JPEG, PNG", maxMb: 5 },
+  VIDEO: { types: ["video/mp4"], label: "MP4", maxMb: 16 },
+  DOCUMENT: { types: ["application/pdf"], label: "PDF", maxMb: 100 }
+};
+var HEADER_KINDS = [
+  ["TEXT", "ui.headerKindText"],
+  ["IMAGE", "ui.headerKindImage"],
+  ["VIDEO", "ui.headerKindVideo"],
+  ["DOCUMENT", "ui.headerKindDocument"]
+];
 var BUTTON_LABEL = {
   QUICK_REPLY: "ui.buttonQuickReply",
   URL: "ui.buttonUrl",
@@ -6702,6 +6751,9 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     this.editingMetaCode = "";
     this.editingMetaReason = "";
     this.editingHeaderFormat = "TEXT";
+    this.storedHeaderFormat = "TEXT";
+    this.headerSample = null;
+    this.headerSampleError = "";
     this.editingButtons = [];
     this.editingDynamicLink = false;
     this.bodyExamples = {};
@@ -6764,14 +6816,55 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
   }
   /** Some parts of a template are still read-only here (whatsapp_inbox#180): «Guardar» registers
    *  the template again at Meta from what this panel holds, and this panel cannot write those parts
-   *  yet — saving would strip them at Meta. A media header (whatsapp_inbox#218) and a link button
-   *  with a variable, which needs an example and a value on every send, lock the panel; plain quick
-   *  reply, link and call buttons do not since whatsapp_inbox#185, nor named body variables
-   *  (`{{nombre}}`), which the SaaS registers as `parameter_format: NAMED` (saas#2281,
+   *  yet — saving would strip them at Meta. A link button with a variable, which needs an example
+   *  and a value on every send, locks the panel; so does a file header on a hub whose door cannot
+   *  upload its example (before hub#2232) — since whatsapp_inbox#218 the panel writes it everywhere
+   *  else. Plain quick reply, link and call buttons do not since whatsapp_inbox#185, nor named body
+   *  variables (`{{nombre}}`), which the SaaS registers as `parameter_format: NAMED` (saas#2281,
    *  whatsapp_inbox#196). It is edited in WhatsApp Manager and the tab brings Meta's verdict back
    *  on the next open. */
   get managedInMeta() {
-    return !!this.editingId && (this.editingHeaderFormat !== "TEXT" || this.editingDynamicLink);
+    return !!this.editingId && (this.editingDynamicLink || this.storedHeaderFormat !== "TEXT" && !this.canUploadHeaderSample);
+  }
+  /** Whether this hub's door can upload a header's example file (hub#2232). */
+  get canUploadHeaderSample() {
+    try {
+      return typeof erplora3().forModule("whatsapp_inbox").whatsappTemplates.uploadHeaderSample === "function";
+    } catch {
+      return false;
+    }
+  }
+  /** A file header that Meta would refuse as it stands: no example file (`missing_header_sample`),
+   *  an authentication template (`invalid_header_format`), or a door that cannot upload one. */
+  get headerIncomplete() {
+    if (this.editingHeaderFormat === "TEXT") return false;
+    return !this.headerSample || this.newCategory === "AUTHENTICATION" || !this.canUploadHeaderSample;
+  }
+  /** Changes the header kind. A file chosen for another kind does not travel as this one's. */
+  setHeaderFormat(kind) {
+    this.editingHeaderFormat = HEADER_SAMPLE_RULES[kind] ? kind : "TEXT";
+    this.headerSampleError = "";
+    const rules = HEADER_SAMPLE_RULES[this.editingHeaderFormat];
+    if (this.headerSample && (!rules || !rules.types.includes(this.headerSample.type))) this.headerSample = null;
+  }
+  /** Takes the example file of the header, or says why not — the kind and the size Meta accepts. */
+  pickHeaderSample(file) {
+    this.headerSampleError = "";
+    const rules = HEADER_SAMPLE_RULES[this.editingHeaderFormat];
+    if (!file || !rules) {
+      this.headerSample = null;
+      return;
+    }
+    const t5 = (k2, params) => erplora3().t(CATALOG3, k2, params);
+    if (!rules.types.includes(file.type)) {
+      this.headerSample = null;
+      this.headerSampleError = t5("ui.headerSampleWrongType", { types: rules.label });
+    } else if (file.size > rules.maxMb * 1024 * 1024) {
+      this.headerSample = null;
+      this.headerSampleError = t5("ui.headerSampleTooLarge", { max: rules.maxMb });
+    } else {
+      this.headerSample = file;
+    }
   }
   /** A button still missing its label, its link or its number: Meta would refuse the template. */
   get buttonsIncomplete() {
@@ -6996,7 +7089,9 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
       name: this.newName.trim(),
       language: this.newLanguage.trim() || "es",
       category: this.newCategory,
-      header: this.editingRest.header,
+      // A file header has no text: Meta refuses one with both (`invalid_header_format`). The stored
+      // text stays in `editingRest`, so switching back to «Text» brings it back untouched.
+      header: this.editingHeaderFormat === "TEXT" ? this.editingRest.header : "",
       body: this.newBody,
       footer: this.editingRest.footer,
       variables: this.variablesFor(this.newBody),
@@ -7031,9 +7126,35 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
    */
   async registerWithMeta(templateId, reviewed) {
     let verdict;
+    const door2 = erplora3().forModule("whatsapp_inbox").whatsappTemplates;
+    const kind = this.editingHeaderFormat;
+    let fileHeader = null;
+    if (kind !== "TEXT") {
+      let sample;
+      try {
+        sample = await door2.uploadHeaderSample(this.headerSample);
+      } catch (e5) {
+        this.formError = doorRefusalText(CATALOG3, erplora3().locale, e5);
+        return false;
+      }
+      const handle = typeof sample?.header_handle === "string" ? sample.header_handle : "";
+      if (!handle) {
+        this.formError = doorRefusalText(CATALOG3, erplora3().locale, null);
+        return false;
+      }
+      if (sample.format !== kind) {
+        this.formError = erplora3().t(CATALOG3, "ui.headerSampleKindMismatch");
+        return false;
+      }
+      fileHeader = { header_format: kind, header_handle: handle };
+    }
     try {
-      const headerExample = this.editingRest.header_example;
-      verdict = await erplora3().forModule("whatsapp_inbox").whatsappTemplates.register(headerExample ? { ...reviewed, header_example: headerExample } : { ...reviewed });
+      const headerExample = kind === "TEXT" ? this.editingRest.header_example : "";
+      verdict = await door2.register({
+        ...reviewed,
+        ...headerExample ? { header_example: headerExample } : {},
+        ...fileHeader ?? {}
+      });
     } catch (e5) {
       this.formError = doorRefusalText(CATALOG3, erplora3().locale, e5);
       return false;
@@ -7067,7 +7188,9 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
   }
   async createTemplate(ev) {
     ev.preventDefault();
-    if (!this.newName.trim() || this.managedInMeta || this.buttonsIncomplete || this.examplesIncomplete) return;
+    if (!this.newName.trim() || this.managedInMeta || this.buttonsIncomplete || this.examplesIncomplete || this.headerIncomplete) {
+      return;
+    }
     if (this.editingId) {
       await this.updateTemplate();
       return;
@@ -7077,7 +7200,10 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     this.pageError = "";
     const reviewed = this.reviewedFields();
     try {
-      const created = await erplora3().command("whatsapp_inbox.templates.create", reviewed);
+      const created = await erplora3().command("whatsapp_inbox.templates.create", {
+        ...reviewed,
+        header_format: this.editingHeaderFormat
+      });
       const createdId = _ErpWhatsappInboxTemplates.newId(created);
       if (await this.registerWithMeta(createdId, reviewed)) {
         this.resetForm();
@@ -7107,6 +7233,9 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
       header_example: String(row.header_example ?? "")
     };
     this.editingHeaderFormat = String(row.header_format ?? "").trim().toUpperCase() || "TEXT";
+    this.storedHeaderFormat = this.editingHeaderFormat;
+    this.headerSample = null;
+    this.headerSampleError = "";
     this.editingButtons = storedButtons(row.buttons).map(cleanButton);
     this.editingDynamicLink = this.editingButtons.some((b3) => "url" in b3 && b3.url.includes("{{"));
     this.bodyExamples = bodyExamplesOf(this.newBody, this.editingRest.variables);
@@ -7138,6 +7267,9 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     this.newCategory = "UTILITY";
     this.editingRest = { header: "", footer: "", variables: "[]", is_active: 1, header_example: "" };
     this.editingHeaderFormat = "TEXT";
+    this.storedHeaderFormat = "TEXT";
+    this.headerSample = null;
+    this.headerSampleError = "";
     this.editingButtons = [];
     this.editingDynamicLink = false;
     this.bodyExamples = {};
@@ -7162,6 +7294,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
       await erplora3().command("whatsapp_inbox.templates.update", {
         template_id: templateId,
         ...reviewed,
+        header_format: this.editingHeaderFormat,
         is_active: this.editingRest.is_active
       });
       if (await this.registerWithMeta(templateId, reviewed)) {
@@ -7285,6 +7418,39 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
         ?disabled=${this.editingButtons.length >= MAX_BUTTONS} @click=${() => this.addButton()}>${t5("ui.addButton")}</ion-button>
     </div>`;
   }
+  /** The header kind and, for a file header, its example file (whatsapp_inbox#218) — the same
+   *  «Header: None · Text · Media» choice WhatsApp Manager offers. The file is picked with the
+   *  platform's own picker (a hidden `<input type="file">` behind a button: an `ion-input` has no
+   *  file type), filtered to what Meta accepts for that kind. */
+  renderHeaderEditor(locked) {
+    const t5 = (k2, params) => erplora3().t(CATALOG3, k2, params);
+    const canUpload = this.canUploadHeaderSample;
+    const kind = this.editingHeaderFormat;
+    const rules = HEADER_SAMPLE_RULES[kind];
+    const fileInput = () => this.renderRoot.querySelector('[data-testid="whatsapp-templates-header-file"]');
+    return b2`<div class="rich" data-testid="whatsapp-templates-header">
+      <ion-select data-testid="whatsapp-templates-header-format" .disabled=${locked} mode="md" fill="outline"
+        label-placement="floating" label=${t5("ui.headerFormat")} .value=${kind}
+        @ionChange=${(e5) => this.setHeaderFormat(e5.target.value)}>
+        ${HEADER_KINDS.map(
+      ([value, key]) => b2`<ion-select-option value=${value} .disabled=${value !== "TEXT" && !canUpload}>${t5(key)}</ion-select-option>`
+    )}
+      </ion-select>
+      ${canUpload ? A : b2`<p data-testid="whatsapp-templates-header-needs-update">${t5("ui.headerMediaNeedsUpdate")}</p>`}
+      ${rules && !locked ? b2`${this.newCategory === "AUTHENTICATION" ? b2`<p class="err" data-testid="whatsapp-templates-header-not-for-auth">${t5("ui.headerNotForAuthentication")}</p>` : A}
+            <input type="file" hidden data-testid="whatsapp-templates-header-file" accept=${rules.types.join(",")}
+              @change=${(e5) => {
+      const input = e5.target;
+      this.pickHeaderSample(input.files?.[0] ?? null);
+      input.value = "";
+    }} />
+            <ion-button data-testid="whatsapp-templates-header-file-pick" fill="outline" size="small"
+              @click=${() => fileInput()?.click()}>${t5(this.headerSample ? "ui.headerSampleChange" : "ui.headerSamplePick")}</ion-button>
+            ${this.headerSample ? b2`<span data-testid="whatsapp-templates-header-file-name">${this.headerSample.name}</span>` : A}
+            <p data-testid="whatsapp-templates-header-file-hint">${t5("ui.headerSampleHint", { types: rules.label, max: rules.maxMb })}</p>
+            ${this.headerSampleError ? b2`<ok-inline-feedback data-testid="whatsapp-templates-header-file-error" tone="danger" icon="alert-circle-outline">${this.headerSampleError}</ok-inline-feedback>` : A}` : A}
+    </div>`;
+  }
   /** One example field per variable of the body, under it, as WhatsApp Manager asks for them
    *  (whatsapp_inbox#208): Meta reviews the template with them and refuses it without. Shown but
    *  not editable while the panel is read-only. */
@@ -7334,11 +7500,12 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
               <ion-select-option value="MARKETING">${t5("ui.categoryMarketing")}</ion-select-option>
               <ion-select-option value="AUTHENTICATION">${t5("ui.categoryAuthentication")}</ion-select-option>
             </ion-select>
+            ${this.renderHeaderEditor(locked)}
             <ion-textarea data-testid="whatsapp-templates-body" .disabled=${locked} mode="md" fill="outline" label-placement="floating" label=${t5("ui.colBody")} placeholder=${t5("ui.placeholderBody")} .value=${this.newBody} @ionInput=${(e5) => this.newBody = e5.target.value}></ion-textarea>
             ${this.renderExamples(locked)}
             ${this.renderButtonsEditor()}
             ${this.formError ? b2`<ok-inline-feedback data-testid="whatsapp-templates-form-error" tone="danger" icon="alert-circle-outline">${this.formError}</ok-inline-feedback>` : A}
-            ${locked ? A : b2`<ion-button data-testid="whatsapp-templates-submit" type="submit" ?disabled=${this.saving || !this.newName || this.buttonsIncomplete || this.examplesIncomplete}>${this.saving ? t5("ui.saving") : this.editingId ? t5("ui.save") : t5("ui.add")}</ion-button>`}
+            ${locked ? A : b2`<ion-button data-testid="whatsapp-templates-submit" type="submit" ?disabled=${this.saving || !this.newName || this.buttonsIncomplete || this.examplesIncomplete || this.headerIncomplete}>${this.saving ? t5("ui.saving") : this.editingId ? t5("ui.save") : t5("ui.add")}</ion-button>`}
             ${this.editingId ? b2`<ion-button data-testid="whatsapp-templates-cancel" fill="clear" size="small" ?disabled=${this.saving}
                   @click=${() => this.cancelEdit()}>${t5("ui.cancel")}</ion-button>` : A}
           </form>
@@ -7394,6 +7561,15 @@ __decorateClass([
 __decorateClass([
   r5()
 ], _ErpWhatsappInboxTemplates.prototype, "editingHeaderFormat", 2);
+__decorateClass([
+  r5()
+], _ErpWhatsappInboxTemplates.prototype, "storedHeaderFormat", 2);
+__decorateClass([
+  r5()
+], _ErpWhatsappInboxTemplates.prototype, "headerSample", 2);
+__decorateClass([
+  r5()
+], _ErpWhatsappInboxTemplates.prototype, "headerSampleError", 2);
 __decorateClass([
   r5()
 ], _ErpWhatsappInboxTemplates.prototype, "editingButtons", 2);
