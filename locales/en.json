@@ -36,6 +36,8 @@
     "colActive": "Active",
     "colBody": "Body",
     "statusActive": "Active",
+    "needsAttention": "Needs attention",
+    "needsAttentionHint": "The automation could not answer this customer and told her someone from the team would. Answer her from the WhatsApp Business app on your phone: the mark goes away when you do.",
     "statusClosed": "Closed",
     "categoryUtility": "Utility",
     "categoryMarketing": "Marketing",

@@ -114,6 +114,20 @@
       }
     },
     {
+      "id": "flag_know_the_customer_failed",
+      "kind": "command",
+      "command": "whatsapp_inbox.conversations.needs_attention",
+      "params": {
+        "wa_contact_id": "input.from"
+      },
+      "run_if": {
+        "steps.know_the_customer.status": {
+          "eq": "failed"
+        }
+      },
+      "on_error": "continue"
+    },
+    {
       "id": "know_the_customer_answered",
       "kind": "condition",
       "when": {
@@ -211,6 +225,20 @@
       }
     },
     {
+      "id": "flag_book_appointment_failed",
+      "kind": "command",
+      "command": "whatsapp_inbox.conversations.needs_attention",
+      "params": {
+        "wa_contact_id": "input.from"
+      },
+      "run_if": {
+        "steps.book_appointment.status": {
+          "eq": "failed"
+        }
+      },
+      "on_error": "continue"
+    },
+    {
       "id": "book_appointment_answered",
       "kind": "condition",
       "when": {
@@ -245,6 +273,26 @@
           "eq": []
         }
       }
+    },
+    {
+      "id": "flag_book_appointment_said_nothing",
+      "kind": "command",
+      "command": "whatsapp_inbox.conversations.needs_attention",
+      "params": {
+        "wa_contact_id": "input.from"
+      },
+      "run_if": {
+        "steps.book_appointment.text": {
+          "in": [
+            "",
+            null
+          ]
+        },
+        "steps.book_appointment.slots": {
+          "eq": []
+        }
+      },
+      "on_error": "continue"
     },
     {
       "id": "confirm_to_customer",

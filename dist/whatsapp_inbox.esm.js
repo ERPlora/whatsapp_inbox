@@ -4733,6 +4733,8 @@ var es_default = {
     colActive: "Activa",
     colBody: "Cuerpo",
     statusActive: "Activa",
+    needsAttention: "Necesita atenci\xF3n",
+    needsAttentionHint: "La automatizaci\xF3n no pudo contestar a esta clienta y le dijo que alguien del equipo lo har\xEDa. Cont\xE9stale desde la app de WhatsApp Business del m\xF3vil: la marca se quita al hacerlo.",
     statusClosed: "Cerrada",
     categoryUtility: "Utility",
     categoryMarketing: "Marketing",
@@ -4957,6 +4959,8 @@ var en_default = {
     colActive: "Active",
     colBody: "Body",
     statusActive: "Active",
+    needsAttention: "Needs attention",
+    needsAttentionHint: "The automation could not answer this customer and told her someone from the team would. Answer her from the WhatsApp Business app on your phone: the mark goes away when you do.",
     statusClosed: "Closed",
     categoryUtility: "Utility",
     categoryMarketing: "Marketing",
@@ -5377,7 +5381,19 @@ var ErpWhatsappInboxInbox = class extends i3 {
   get columns() {
     const t5 = (k2) => erplora().t(CATALOG, k2);
     return [
-      { key: "contact_name", header: t5("ui.colContact"), sortable: true, filterable: true, filterType: "text" },
+      {
+        key: "contact_name",
+        header: t5("ui.colContact"),
+        sortable: true,
+        filterable: true,
+        filterType: "text",
+        // A customer the automation could not answer carries the mark under her name
+        // (whatsapp_inbox#238), so the list says WHO is waiting and not only that she is on top. The
+        // table lays a cell out as a flex ROW and this component's styles do not reach its shadow
+        // root, so name and mark share ONE block and the mark gets a line of its own: side by side,
+        // next to a long name or a phone, it overflowed into the phone column on the bench.
+        render: (r6) => b2`<div>${String(r6.contact_name || r6.contact_phone || "\u2014")}${r6.needs_attention_at ? b2`<div>${this.renderNeedsAttention()}</div>` : A}</div>`
+      },
       { key: "contact_phone", header: t5("ui.colPhone"), sortable: true, filterable: true, filterType: "text" },
       {
         key: "status",
@@ -5421,9 +5437,10 @@ var ErpWhatsappInboxInbox = class extends i3 {
     window.addEventListener("erplora:locale-changed", this.onLocaleChange);
     this.ctrl = createListController(erplora(), "whatsapp_inbox.conversations.list", () => this.requestUpdate(), {
       pageSize: 50,
-      // Latest activity first, like every inbox (whatsapp_inbox#92): sorting by `id` put a random
-      // uuid in charge of who the operator sees first.
-      sort: "last_message_at",
+      // Who is waiting first (whatsapp_inbox#238), then the latest activity, like every inbox
+      // (whatsapp_inbox#92). `attention_first` orders both ways at once because the list sorts by
+      // ONE column (`queries/conversations_list.sql`).
+      sort: "attention_first",
       dir: "desc"
     });
     await this.ctrl.load();
@@ -5635,6 +5652,9 @@ var ErpWhatsappInboxInbox = class extends i3 {
       <span class="when">${whenText(m4.created_at, true)}</span>
     </div>`;
   }
+  renderNeedsAttention() {
+    return b2`<ok-status-pill data-testid="whatsapp-inbox-needs-attention" tone="warning" size="sm">${erplora().t(CATALOG, "ui.needsAttention")}</ok-status-pill>`;
+  }
   renderDetail() {
     const c5 = this.detail;
     if (!c5) return A;
@@ -5646,9 +5666,11 @@ var ErpWhatsappInboxInbox = class extends i3 {
         <ok-status-pill tone=${c5.status === "closed" ? "neutral" : "success"} size="sm">
           ${c5.status === "closed" ? t5("ui.statusClosed") : t5("ui.statusActive")}
         </ok-status-pill>
+        ${c5.needs_attention_at ? this.renderNeedsAttention() : A}
         <span class="spacer"></span>
         <ion-button data-testid="whatsapp-inbox-detail-close" size="small" fill="clear" @click=${() => this.closeDetail()}>${t5("ui.closeView")}</ion-button>
       </div>
+      ${c5.needs_attention_at ? b2`<ok-inline-feedback data-testid="whatsapp-inbox-needs-attention-hint" tone="warning" icon="alert-circle-outline">${t5("ui.needsAttentionHint")}</ok-inline-feedback>` : A}
       ${this.detailError ? b2`<p class="err" data-testid="whatsapp-inbox-detail-error">${this.detailError}</p>` : A}
       <div class="thread">
         ${this.messages.length ? this.messages.map((m4) => this.renderMessage(m4)) : b2`<p class="empty">${t5("ui.emptyThread")}</p>`}

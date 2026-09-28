@@ -86,7 +86,8 @@
         "kind": "contract",
         "since": "2.1.83"
       },
-      "migrations/postgres/014_template_header_example.sql"
+      "migrations/postgres/014_template_header_example.sql",
+      "migrations/postgres/015_needs_attention.sql"
     ]
   },
   "queries": {
@@ -110,9 +111,11 @@
           "contact_phone",
           "status",
           "last_message_at",
-          "unread_count"
+          "unread_count",
+          "needs_attention_at",
+          "attention_first"
         ],
-        "default_sort": "last_message_at",
+        "default_sort": "attention_first",
         "default_dir": "desc",
         "filters": {
           "customer_id": {
@@ -344,6 +347,23 @@
       },
       "ai": {
         "description": "Remembers the list of slots an automation just offered a WhatsApp customer, so her next message (\"the 2nd\", \"12:30\") can be resolved against it. An empty list clears it. Identified by the WhatsApp contact the messages come from"
+      }
+    },
+    "whatsapp_inbox.conversations.needs_attention": {
+      "permission": "whatsapp_inbox.manage_settings",
+      "transaction": true,
+      "sql": [
+        "commands/conversation_needs_attention.sql"
+      ],
+      "schema": "schemas/conversation_needs_attention.json",
+      "expect_rows": {
+        "op": "min",
+        "n": 1,
+        "error": "whatsapp_inbox.conversation_not_found",
+        "message": "That conversation does not exist in this business."
+      },
+      "ai": {
+        "description": "Marks a WhatsApp conversation as needing attention because the automation could not answer the customer and promised that someone from the team would. The inbox shows it first with a label until somebody of the business answers her. Identified by the WhatsApp contact the messages come from"
       }
     },
     "whatsapp_inbox.templates.create": {

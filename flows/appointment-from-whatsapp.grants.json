@@ -161,6 +161,17 @@
         "en": "Remember the slots it just offered the customer who is writing, and only in her conversation.",
         "es": "Recordar los huecos que acaba de ofrecer a la clienta que escribe, y solo en su conversación."
       }
+    },
+    {
+      "kind": "command",
+      "value": "whatsapp_inbox.conversations.needs_attention",
+      "payload": {
+        "wa_contact_id": "input.from"
+      },
+      "reason": {
+        "en": "Mark the conversation of the customer who is writing as needing attention when it could not answer her, and only her conversation.",
+        "es": "Marcar como «necesita atención» la conversación de la clienta que escribe cuando no ha podido contestarle, y solo la suya."
+      }
     }
   ]
 }

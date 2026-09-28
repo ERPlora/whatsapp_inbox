@@ -154,6 +154,20 @@
       }
     },
     {
+      "id": "flag_book_table_failed",
+      "kind": "command",
+      "command": "whatsapp_inbox.conversations.needs_attention",
+      "params": {
+        "wa_contact_id": "input.from"
+      },
+      "run_if": {
+        "steps.book_table.status": {
+          "eq": "failed"
+        }
+      },
+      "on_error": "continue"
+    },
+    {
       "id": "book_table_answered",
       "kind": "condition",
       "when": {
@@ -188,6 +202,26 @@
           "eq": []
         }
       }
+    },
+    {
+      "id": "flag_book_table_said_nothing",
+      "kind": "command",
+      "command": "whatsapp_inbox.conversations.needs_attention",
+      "params": {
+        "wa_contact_id": "input.from"
+      },
+      "run_if": {
+        "steps.book_table.text": {
+          "in": [
+            "",
+            null
+          ]
+        },
+        "steps.book_table.slots": {
+          "eq": []
+        }
+      },
+      "on_error": "continue"
     },
     {
       "id": "confirm_to_customer",

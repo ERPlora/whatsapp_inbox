@@ -1181,7 +1181,13 @@ def assistant_failure_problems(name, doc):
                     f"acknowledgement `{acknowledged.get('id')}` went to: the apology reaches "
                     f"somebody else, or nobody"
                 )
-        stop = steps[i + 2] if i + 2 < len(steps) else {}
+        stop_at = i + 2
+        # The ONE step allowed between the apology and the stop: the mark that puts her thread on
+        # top of the inbox (whatsapp_inbox#238). It is guarded like the apology and cannot end the
+        # run (`handoff_mark_problems` demands both), so it cannot come between her and the answer.
+        if _is_handoff_mark(steps[stop_at] if stop_at < len(steps) else {}, fallback.get("run_if")):
+            stop_at += 1
+        stop = steps[stop_at] if stop_at < len(steps) else {}
         if not (
             stop.get("kind") == "condition"
             and (stop.get("when") or {}).get(status) == {"neq": "failed"}
@@ -1285,6 +1291,77 @@ def assistant_silence_problems(name, doc):
                 f"{name} step `{silence.get('id')}` does not write to the number the "
                 f"acknowledgement `{acknowledged.get('id')}` went to: the apology reaches "
                 f"somebody else, or nobody"
+            )
+    return problems
+
+
+NEEDS_ATTENTION = "whatsapp_inbox.conversations.needs_attention"
+
+
+def _is_handoff_mark(step, guard):
+    """The step that flags her thread «needs attention», guarded exactly like its apology."""
+    return (
+        step.get("kind") == "command"
+        and step.get("command") == NEEDS_ATTENTION
+        and guard is not None
+        and step.get("run_if") == guard
+    )
+
+
+def handoff_mark_problems(name, doc):
+    """Every apology leaves her thread flagged «needs attention» — whatsapp_inbox#238.
+
+    The apologies of #122 (the assistant FAILED) and #239 (it answered with NOTHING) tell her
+    «someone from the team will answer you here soon». That is a promise made on the business's
+    behalf, and the inbox has to keep it in view: until #238 her thread looked like any other unread
+    one, including those the automation had already answered, so nobody knew she was waiting.
+
+    For every WhatsApp `notify` that is one of those apologies — guarded by
+    `{"steps.<ai>.status": {"eq": "failed"}}` or by `{"steps.<ai>.text": {"in": ["", null]}, …}` —
+    the NEXT step is a `command` on `whatsapp_inbox.conversations.needs_attention`:
+
+    * guarded by the SAME `run_if` as the apology: without it every conversation the automation
+      answered would be flagged, and a flag on everything is a flag on nothing;
+    * with `"wa_contact_id": "input.from"`: her thread, not somebody else's;
+    * with `"on_error": "continue"`: a failed mark must not end a run that still has something to
+      do — the apology already went out, and the run was about to stop or carry on on its own terms.
+
+    Right AFTER the apology, not before it: she is told first, and a mark that fails cannot delay
+    the one message she is owed.
+    """
+    steps = doc.get("steps", [])
+    problems = []
+    ai_ids = {s.get("id") for s in steps if s.get("kind") == "ai"}
+    for i, step in enumerate(steps):
+        if not (step.get("kind") == "notify" and step.get("channel") == "whatsapp"):
+            continue
+        guard = step.get("run_if") or {}
+        apology_for = [
+            sid
+            for sid in ai_ids
+            if guard.get(f"steps.{sid}.status") == {"eq": "failed"}
+            or guard.get(f"steps.{sid}.text") == {"in": ["", None]}
+        ]
+        if not apology_for:
+            continue
+        mark = steps[i + 1] if i + 1 < len(steps) else {}
+        if not _is_handoff_mark(mark, guard):
+            problems.append(
+                f"{name} step `{step.get('id')}` tells her «someone from the team will answer you» "
+                f"and is not followed by a `command` on `{NEEDS_ATTENTION}` guarded by the same "
+                f"`run_if` ({json.dumps(guard)}): the inbox shows her as one more unread thread "
+                f"and nobody knows she is waiting"
+            )
+            continue
+        if (mark.get("params") or {}).get("wa_contact_id") != "input.from":
+            problems.append(
+                f"{name} step `{mark.get('id')}` flags {mark.get('params')!r}, not the thread of "
+                f"the phone this message came from"
+            )
+        if mark.get("on_error") != "continue":
+            problems.append(
+                f"{name} step `{mark.get('id')}` flags her thread with "
+                f"on_error={mark.get('on_error')!r}: a failure there would end the run as `failed`"
             )
     return problems
 
@@ -4096,6 +4173,7 @@ DOCUMENT_RULES = (
     unanswered_ending_problems,
     assistant_failure_problems,
     assistant_silence_problems,
+    handoff_mark_problems,
     undeclared_tool_problems,
     unordered_tool_problems,
     budget_problems,
@@ -4139,6 +4217,7 @@ SELF_CHECKED_RULES = (
     unanswered_ending_problems,
     assistant_failure_problems,
     assistant_silence_problems,
+    handoff_mark_problems,
     undeclared_tool_problems,
     unordered_tool_problems,
     budget_problems,
@@ -6216,6 +6295,26 @@ def _stop_if_failed(writer="book", op="neq"):
     return {"id": "answered", "kind": "condition", "when": {f"steps.{writer}.status": {op: "failed"}}}
 
 
+def _handoff_mark(writer="book", guard=None, contact="input.from", on_error="continue"):
+    step = {
+        "id": "flag",
+        "kind": "command",
+        "command": "whatsapp_inbox.conversations.needs_attention",
+        "params": {"wa_contact_id": contact},
+        "run_if": guard if guard is not None else {f"steps.{writer}.status": {"eq": "failed"}},
+    }
+    if on_error is not None:
+        step["on_error"] = on_error
+    return step
+
+
+def _silence_mark(writer="book"):
+    return _handoff_mark(guard={
+        f"steps.{writer}.text": {"in": ["", None]}, f"steps.{writer}.slots": {"eq": []},
+    })
+
+
+
 # `(label, document, problems expected)` for `assistant_failure_problems` (whatsapp_inbox#122).
 ASSISTANT_FAILURE_CASES = [
     (
@@ -6275,6 +6374,23 @@ ASSISTANT_FAILURE_CASES = [
         "an apology with no words at all",
         _fixture_doc(
             _notify_step("ack", "one moment"), _assistant(), _apology(text="  "), _stop_if_failed(),
+        ),
+        1,
+    ),
+    (
+        "the mark that flags her thread (whatsapp_inbox#238) is the one step allowed between the "
+        "apology and the stop",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _assistant(), _apology(), _handoff_mark(),
+            _stop_if_failed(), _notify_step("confirm", "{{steps.book.text}}"),
+        ),
+        0,
+    ),
+    (
+        "any OTHER step between the apology and the stop still breaks the rule",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _assistant(), _apology(),
+            _notify_step("extra", "and another thing"), _stop_if_failed(),
         ),
         1,
     ),
@@ -6442,6 +6558,80 @@ ASSISTANT_SILENCE_CASES = [
             _reply(),
         ),
         1,
+    ),
+]
+
+
+# `(label, document, problems expected)` for `handoff_mark_problems` (whatsapp_inbox#238).
+HANDOFF_MARK_CASES = [
+    (
+        "the shape the fix ships: each apology is followed by the mark, guarded the same way",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _slot_assistant(), _apology(), _handoff_mark(),
+            _stop_if_failed(), _silence_apology(), _silence_mark(), _reply(),
+        ),
+        0,
+    ),
+    (
+        "\U0001f534 the bug, as it shipped: two apologies and nothing left in the inbox",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _slot_assistant(), _apology(), _stop_if_failed(),
+            _silence_apology(), _reply(),
+        ),
+        2,
+    ),
+    (
+        "a mark with no guard flags every conversation the automation answered",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _assistant(), _apology(),
+            {k: v for k, v in _handoff_mark().items() if k != "run_if"}, _stop_if_failed(),
+        ),
+        1,
+    ),
+    (
+        "a mark guarded the wrong way round flags her only when the assistant ANSWERED",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _assistant(), _apology(),
+            _handoff_mark(guard={"steps.book.status": {"neq": "failed"}}), _stop_if_failed(),
+        ),
+        1,
+    ),
+    (
+        "a mark BEFORE the apology: she is told after a step that may fail",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _assistant(), _handoff_mark(), _apology(),
+            _stop_if_failed(),
+        ),
+        1,
+    ),
+    (
+        "a mark on somebody else's thread",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _assistant(), _apology(),
+            _handoff_mark(contact="steps.find_customer.phone"), _stop_if_failed(),
+        ),
+        1,
+    ),
+    (
+        "a mark that ends the run when it fails",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _assistant(), _apology(), _handoff_mark(on_error=None),
+            _stop_if_failed(),
+        ),
+        1,
+    ),
+    (
+        "the silence apology is judged too, not only the failure one",
+        _fixture_doc(
+            _notify_step("ack", "one moment"), _slot_assistant(), _apology(), _handoff_mark(),
+            _stop_if_failed(), _silence_apology(), _reply(),
+        ),
+        1,
+    ),
+    (
+        "a message guarded on the assistant's success is no apology, and owes no mark",
+        _fixture_doc(_notify_step("ack", "one moment"), _assistant(), _reply()),
+        0,
     ),
 ]
 
@@ -8832,6 +9022,13 @@ def self_check():
                 f"the battery's own «the assistant said nothing, tell her anyway» rule is wrong — "
                 f"{label}: expected {expected} problem(s), got {len(got)}: {got}"
             )
+    for label, doc, expected in HANDOFF_MARK_CASES:
+        got = handoff_mark_problems("(self-check)", doc)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «she was promised an answer, flag her thread» rule is wrong — "
+                f"{label}: expected {expected} problem(s), got {len(got)}: {got}"
+            )
     for label, doc, expected in TOOL_CASES:
         got = undeclared_tool_problems("(self-check)", doc, _KNOWN_OPS)
         if len(got) != expected:
@@ -9144,6 +9341,7 @@ def main():
         # …and the ending nobody writes down: the ASSISTANT itself fails (whatsapp_inbox#122).
         problems += applied(ledger, assistant_failure_problems, path.name, doc)
         problems += applied(ledger, assistant_silence_problems, path.name, doc)
+        problems += applied(ledger, handoff_mark_problems, path.name, doc)
 
         # 3a-bis-ii) …and a family that CALLS itself unattended really is (whatsapp_inbox#58): the
         # other half of the exception `policy_problems` grants it. Needs no manifest either.

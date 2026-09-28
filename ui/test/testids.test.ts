@@ -76,6 +76,10 @@ const COVERED: Record<
       'whatsapp-inbox-media-open',
       'whatsapp-inbox-media-retry',
       'whatsapp-inbox-media-unavailable',
+      // A customer the automation could not answer (whatsapp_inbox#238): the mark next to her
+      // name in the list and in the opened thread, and the hint that says how it goes away.
+      'whatsapp-inbox-needs-attention',
+      'whatsapp-inbox-needs-attention-hint',
     ],
     tables: ['whatsapp-inbox-table'],
   },
