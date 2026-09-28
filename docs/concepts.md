@@ -34,6 +34,15 @@ and the inbox lists it first with a «Needs attention» mark. The mark is cleare
 a reply the business sends from the WhatsApp Business app (the only outbound message that reaches
 the hub; what the automation itself sends never comes back as an echo), and by nothing else.
 
+**And the business hears about it on every screen** (whatsapp_inbox#244). The module declares a
+counter on the hub's notification bell, `whatsapp_inbox.needs_attention`, fed by the query
+`whatsapp_inbox.conversations.count_needs_attention`: the number of conversations of this hub with
+`needs_attention_at` set. The bell (in the top bar, whatever screen the owner is on) shows
+«WhatsApp customers waiting for an answer» with that number while it is above zero, and tapping it
+opens the inbox, where those conversations are listed first. It is derived state, not a message: it
+goes away by itself exactly when the inbox mark does, and only people who can open the inbox
+(`view_conversation`) see it.
+
 The `send_message` permission was **retired in whatsapp_inbox#29**. It named nothing, and a
 permission that gates nothing is not a restriction: it is a label on an empty box that answers *yes*
 to an audit of "can this employee reply?".

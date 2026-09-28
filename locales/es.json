@@ -9,6 +9,11 @@
       "label": "Ajustes"
     }
   },
+  "bell": {
+    "whatsapp_inbox.needs_attention": {
+      "label": "Clientes de WhatsApp esperando respuesta"
+    }
+  },
   "billing": {
     "quota": {
       "billable_messages_per_month": "mensajes al mes"

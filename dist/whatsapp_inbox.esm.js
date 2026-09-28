@@ -4705,6 +4705,11 @@ var es_default = {
       label: "Ajustes"
     }
   },
+  bell: {
+    "whatsapp_inbox.needs_attention": {
+      label: "Clientes de WhatsApp esperando respuesta"
+    }
+  },
   billing: {
     quota: {
       billable_messages_per_month: "mensajes al mes"
@@ -4929,6 +4934,11 @@ var en_default = {
     },
     settings: {
       label: "Settings"
+    }
+  },
+  bell: {
+    "whatsapp_inbox.needs_attention": {
+      label: "WhatsApp customers waiting for an answer"
     }
   },
   billing: {

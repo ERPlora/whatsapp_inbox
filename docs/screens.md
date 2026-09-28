@@ -17,7 +17,9 @@ team would write — is marked **«Needs attention»** next to the contact and g
 list. The opened conversation shows the same mark and a note explaining how it goes away: answer the
 customer from the WhatsApp Business app on the phone, and the mark is removed as soon as that reply
 reaches the hub. Her own next message does not remove it, and neither do the old messages of the
-history. When the number is connected, WhatsApp also delivers the conversations of the last months;
+history. While at least one customer is waiting, the hub's notification bell — in the top bar of
+every screen, not only this one — shows «WhatsApp customers waiting for an answer» with how many;
+tapping it opens this inbox, with them on top. When the number is connected, WhatsApp also delivers the conversations of the last months;
 each of those messages keeps the time it was **actually sent** (Meta's own timestamp), so an old
 conversation stays down the list where it belongs and its thread reads in the order things were
 said. A history message that arrives without a usable time is dated when it reached the hub.
