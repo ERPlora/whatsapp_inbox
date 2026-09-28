@@ -126,19 +126,14 @@ async fn a_customer_writes(rt: &Runtime, wa_message_id: &str, text: &str) -> boo
     .unwrap()
 }
 
-/// The template with the `ai` steps removed (two since whatsapp_inbox#55 folded the reads back
-/// into the step that acts on them): everything a runtime with no model can execute. The filter is
-/// by `kind`, so it does not care how many there are.
+/// The template cut down to its FIRST step, the acknowledgement: everything after it reads
+/// neighbours this test does not install (`appointments.settings.get`, since whatsapp_inbox#137) or
+/// hands a turn to a model a runtime test does not have.
 fn acknowledge_only() -> Value {
     let mut def = template("appointment-from-whatsapp.es.flow.json");
-    let steps: Vec<Value> = def["steps"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|s| s["kind"] != json!("ai"))
-        .cloned()
-        .collect();
-    def["steps"] = json!(steps);
+    let first = def["steps"][0].clone();
+    assert_eq!(first["id"], json!("acknowledge"), "the recipe opens with the acknowledgement");
+    def["steps"] = json!([first]);
     def
 }
 
@@ -271,7 +266,11 @@ async fn the_customer_who_writes_at_3am_gets_an_answer_addressed_by_the_grant() 
             "from": WA_ID,
             "text": "buenas, quiero cita mañana para mechas",
             "wa_message_id": "wamid.NIGHT",
-            "received_at": "2026-08-11T03:04:05+00:00"
+            "received_at": "2026-08-11T03:04:05+00:00",
+            // A typed message is not a tap on a list (whatsapp_inbox#76): the two keys the
+            // trigger maps for a tap arrive empty.
+            "reply_id": null,
+            "reply_title": null
         }),
         "the trigger's input_map shaped the event into the run's input"
     );
@@ -291,12 +290,10 @@ async fn the_customer_who_writes_at_3am_gets_an_answer_addressed_by_the_grant() 
         json!(E164),
         "the recipient came out of the granted read, in the only shape the hub can dial"
     );
-    assert!(
-        payload["vars"]["text"]
-            .as_str()
-            .unwrap()
-            .contains("en cuanto abramos"),
-        "the customer is told they will be confirmed when the salon opens: {payload}"
+    assert_eq!(
+        payload["vars"]["text"],
+        template("appointment-from-whatsapp.es.flow.json")["steps"][0]["vars"]["text"],
+        "the customer gets the recipe's own acknowledgement: {payload}"
     );
     assert!(
         payload["resolved_via"]
@@ -345,8 +342,10 @@ async fn with_the_ai_steps_the_run_reaches_them_and_hands_over_to_the_server() {
     );
     assert_eq!(steps[0].status, "done");
     assert!(
-        steps.len() >= 2 && steps[1].step_id == "know_the_customer",
-        "the run reached the first agent step: {steps:?}"
+        steps
+            .iter()
+            .any(|s| s.step_id == "know_the_customer" && s.status == "running"),
+        "the run reached the first agent step and left it with the server: {steps:?}"
     );
     assert_eq!(
         run.status,
@@ -499,17 +498,35 @@ async fn drive(
     answer: impl Fn(&str) -> Value,
     seen: &mut Vec<store::FlowRunStep>,
 ) -> Vec<store::FlowRunStep> {
+    drive_io(
+        rt,
+        flow_id,
+        ai_step,
+        run_index,
+        |id| erplora_runtime::flows::executor::IoResult::Done(answer(id)),
+        seen,
+    )
+    .await
+}
+
+/// [`drive`], with the whole outcome of each agent turn in the caller's hands — `Failed` included,
+/// which is what the server hands back when the SaaS proxy is down, the assistant quota is spent or
+/// the model's answer is broken (`crates/server/src/agent_runner.rs`).
+async fn drive_io(
+    rt: &Runtime,
+    flow_id: &str,
+    ai_step: &str,
+    run_index: usize,
+    answer: impl Fn(&str) -> erplora_runtime::flows::executor::IoResult,
+    seen: &mut Vec<store::FlowRunStep>,
+) -> Vec<store::FlowRunStep> {
     for _ in 0..30 {
         let report = rt.process_flows().await.unwrap();
         for io in report.pending_io {
             if io.step_id() == ai_step {
                 *seen = rt.get_flow_run(io.run_id()).await.unwrap().1;
             }
-            rt.complete_flow_io(
-                io.run_id(),
-                io.step_id(),
-                erplora_runtime::flows::executor::IoResult::Done(answer(io.step_id())),
-            )
+            rt.complete_flow_io(io.run_id(), io.step_id(), answer(io.step_id()))
             .await
             .unwrap();
         }
@@ -821,4 +838,246 @@ async fn when_her_card_cannot_be_created_she_is_still_answered() {
             .any(|p| p["to"] == json!(E164) && p["vars"]["text"] == json!(SORRY)),
         "after «let me check the diary», what the booking step wrote reaches HER: {answers:?}"
     );
+}
+
+// ── 7. whatsapp_inbox#122: the ASSISTANT fails — she is still told, and the salon still sees her ──
+
+/// What the proxy hands back when the assistant cannot answer at all. The reason is the one the
+/// server writes for a spent quota; any other `Failed` (proxy down, a broken answer) takes the
+/// same road through the document.
+fn assistant_down() -> erplora_runtime::flows::executor::IoResult {
+    erplora_runtime::flows::executor::IoResult::Failed(
+        "assistant.quota_exceeded: the assistant quota of this hub is spent".into(),
+    )
+}
+
+/// Every WhatsApp message the run queued, as `(to, text)`, in a fixed order (by text): two rows
+/// queued in the same tick can share a `created_at`, so the order they were written in is not
+/// something the table can answer.
+async fn sent(rt: &Runtime) -> Vec<(Value, Value)> {
+    let out = rows(
+        rt,
+        "SELECT payload FROM _event_outbox WHERE event_name = 'flow.reminder.due'",
+    )
+    .await
+    .iter()
+    .map(|r| {
+        let p: Value = serde_json::from_str(r["payload"].as_str().unwrap()).unwrap();
+        (p["to"].clone(), p["vars"]["text"].clone())
+    })
+    .collect();
+    in_order(out)
+}
+
+fn in_order(mut messages: Vec<(Value, Value)>) -> Vec<(Value, Value)> {
+    messages.sort_by_key(|(to, text)| format!("{to}{text}"));
+    messages
+}
+
+/// The words the SHIPPED template sends when `failed` failed: the `notify` guarded on its status.
+/// Read from the document, not copied into the test, so the test cannot pass on words the recipe
+/// does not carry — and it fails if the recipe has no such step at all.
+fn apology_of(definition: &Value, failed: &str) -> Value {
+    let guard = json!({ format!("steps.{failed}.status"): { "eq": "failed" } });
+    definition["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["kind"] == json!("notify") && s["run_if"] == guard)
+        .unwrap_or_else(|| panic!("the recipe has no `notify` that runs when `{failed}` failed"))["vars"]
+        ["text"]
+        .clone()
+}
+
+fn acknowledgement_of(definition: &Value) -> Value {
+    definition["steps"][0]["vars"]["text"].clone()
+}
+
+async fn unread(rt: &Runtime) -> Value {
+    rows(
+        rt,
+        &format!("SELECT unread_count FROM whatsapp_inbox_conversation WHERE wa_contact_id = '{WA_ID}'"),
+    )
+    .await[0]["unread_count"]
+        .clone()
+}
+
+async fn the_salon_with(recipe: &str, grants: &str, ids: &[&str]) -> (Runtime, String, Value) {
+    let rt = runtime(ids).await;
+    // Only the TYPED trigger, as in the tests above (hub#2061).
+    let mut definition = template(recipe);
+    let typed = definition["triggers"][0].clone();
+    assert_eq!(typed["filter"]["event.text"], json!({ "neq": "" }), "triggers[0] is the typed one");
+    definition["triggers"] = json!([typed]);
+    let flow_id = create(&rt, definition.clone()).await;
+    rt.replace_flow_grants(&flow_id, &grants_of(grants), "hub_user:owner")
+        .await
+        .unwrap();
+    (rt, flow_id, definition)
+}
+
+const SALON: &[&str] = &[
+    "customers",
+    "taxes",
+    "services",
+    "staff",
+    "schedules",
+    "appointments",
+    "whatsapp_inbox",
+];
+
+/// **The case the issue is written about.** Ana writes, is told «let me check the diary», and the
+/// assistant that books cannot answer. Before #122 the run died on that step as `failed` and she
+/// never heard another word. Now she gets the recipe's fixed apology — and ONLY that: no empty
+/// «confirmation» quoting a turn that never happened, no list of slots — and the thread is still
+/// unread in the inbox, so the salon sees there is somebody to answer.
+#[tokio::test]
+async fn when_the_assistant_fails_she_is_told_someone_will_answer_and_the_salon_still_sees_her() {
+    let (rt, flow_id, definition) = the_salon_with(
+        "appointment-from-whatsapp.es.flow.json",
+        "appointment-from-whatsapp.grants.json",
+        SALON,
+    )
+    .await;
+
+    let mut seen = Vec::new();
+    ana_writes(&rt, "wamid.DOWN", "hola, ¿tenéis hueco mañana por la tarde?").await;
+    let steps = drive_io(
+        &rt,
+        &flow_id,
+        "book_appointment",
+        0,
+        |id| match id {
+            "know_the_customer" => erplora_runtime::flows::executor::IoResult::Done(
+                json!({ "text": "she is new; card created" }),
+            ),
+            "book_appointment" => assistant_down(),
+            other => panic!("no other step is an agent turn: {other}"),
+        },
+        &mut seen,
+    )
+    .await;
+
+    assert_eq!(
+        sent(&rt).await,
+        in_order(vec![
+            (json!(E164), acknowledgement_of(&definition)),
+            (json!(E164), apology_of(&definition, "book_appointment")),
+        ]),
+        "after «let me check the diary» she is told someone will answer — and nothing else: {steps:?}"
+    );
+    let runs = rt.list_flow_runs(&flow_id, 10, None).await.unwrap();
+    assert_eq!(runs[0].status, store::STATUS_DONE, "the document said what to do: {steps:?}");
+    assert_eq!(
+        step(&steps, "book_appointment").status,
+        "failed",
+        "the failed turn is still in the run history, for the owner to read why"
+    );
+    assert!(
+        !steps.iter().any(|s| s.step_id == "confirm_to_customer" || s.step_id == "offer_slots"),
+        "nothing written for a successful turn ran after the apology: {steps:?}"
+    );
+    assert_eq!(unread(&rt).await, json!(1), "the thread waits unread in the inbox for the salon");
+}
+
+/// The FIRST assistant turn fails — the quota is spent before she is even known. She is told
+/// once, and the second turn is never started: it would fail the same way, and bill.
+#[tokio::test]
+async fn when_the_first_assistant_turn_fails_she_is_told_once_and_nothing_else_is_tried() {
+    let (rt, flow_id, definition) = the_salon_with(
+        "appointment-from-whatsapp.es.flow.json",
+        "appointment-from-whatsapp.grants.json",
+        SALON,
+    )
+    .await;
+
+    let mut seen = Vec::new();
+    ana_writes(&rt, "wamid.DOWN1", "hola, quiero cita").await;
+    let steps = drive_io(
+        &rt,
+        &flow_id,
+        "book_appointment",
+        0,
+        |id| match id {
+            "know_the_customer" => assistant_down(),
+            other => panic!("the booking turn must not start after the first one failed: {other}"),
+        },
+        &mut seen,
+    )
+    .await;
+
+    assert_eq!(
+        sent(&rt).await,
+        in_order(vec![
+            (json!(E164), acknowledgement_of(&definition)),
+            (json!(E164), apology_of(&definition, "know_the_customer")),
+        ]),
+        "{steps:?}"
+    );
+    assert_eq!(step(&steps, "know_the_customer").status, "failed");
+    assert!(!steps.iter().any(|s| s.step_id == "book_appointment"), "{steps:?}");
+    assert_eq!(unread(&rt).await, json!(1));
+}
+
+/// And when the assistant ANSWERS, the apology is skipped and the run carries on exactly as it
+/// did before #122: the booking text reaches her, and no apology does.
+#[tokio::test]
+async fn when_the_assistant_answers_no_apology_goes_out() {
+    let (rt, flow_id, definition) = the_salon_with(
+        "appointment-from-whatsapp.es.flow.json",
+        "appointment-from-whatsapp.grants.json",
+        SALON,
+    )
+    .await;
+
+    const BOOKED: &str = "Te apunto mañana a las 17:00 con Laura.";
+    let mut seen = Vec::new();
+    ana_writes(&rt, "wamid.UP", "hola, ¿mañana a las 17?").await;
+    let steps = drive(
+        &rt,
+        &flow_id,
+        "book_appointment",
+        0,
+        |id| match id {
+            "know_the_customer" => json!({ "text": "she is new; card created" }),
+            "book_appointment" => json!({ "text": BOOKED, "slots": [] }),
+            other => panic!("no other step is an agent turn: {other}"),
+        },
+        &mut seen,
+    )
+    .await;
+
+    assert_eq!(
+        sent(&rt).await,
+        in_order(vec![(json!(E164), acknowledgement_of(&definition)), (json!(E164), json!(BOOKED))]),
+        "{steps:?}"
+    );
+    assert_eq!(step(&steps, "confirm_to_customer").status, "done", "{steps:?}");
+}
+
+/// The restaurant's recipe takes the same road: the table assistant fails, the guest is told.
+#[tokio::test]
+async fn when_the_table_assistant_fails_the_guest_is_told_someone_will_answer() {
+    let (rt, flow_id, definition) = the_salon_with(
+        "reservation-from-whatsapp.es.flow.json",
+        "reservation-from-whatsapp.grants.json",
+        &["customers", "tables", "reservations", "whatsapp_inbox"],
+    )
+    .await;
+
+    let mut seen = Vec::new();
+    ana_writes(&rt, "wamid.TDOWN", "¿tenéis mesa esta noche para 4?").await;
+    let steps = drive_io(&rt, &flow_id, "book_table", 0, |_| assistant_down(), &mut seen).await;
+
+    assert_eq!(
+        sent(&rt).await,
+        in_order(vec![
+            (json!(E164), acknowledgement_of(&definition)),
+            (json!(E164), apology_of(&definition, "book_table")),
+        ]),
+        "{steps:?}"
+    );
+    assert_eq!(step(&steps, "book_table").status, "failed");
+    assert!(!steps.iter().any(|s| s.step_id == "confirm_to_customer"), "{steps:?}");
+    assert_eq!(unread(&rt).await, json!(1));
 }

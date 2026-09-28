@@ -302,11 +302,37 @@ primer mensaje: el salón veía la cita en su agenda y la clienta seguía espera
 **detrás**, es un FAIL.
 
 🪦 **Lo que se fue con las recetas de bandeja** (whatsapp_inbox#124): `on_reject`, `on_expire` y
-`on_error: "continue"` (whatsapp_inbox#67/#70/#121) y el paso `reply_to_customer` que leía cómo
-había terminado la aprobación. No son guardas perdidas: los tres desenlaces solo existen cuando una
-escritura **se aparca** en una persona, y ninguna receta viva tiene esa forma —
+el `on_error: "continue"` de la aprobación (whatsapp_inbox#67/#70/#121) y el paso
+`reply_to_customer` que leía cómo había terminado. No son guardas perdidas: los tres desenlaces solo
+existen cuando una escritura **se aparca** en una persona, y ninguna receta viva tiene esa forma —
 `unanswered_ending_problems` gatea precisamente sobre que el último paso que escribe sea
-`policy: manual`. Si algún día vuelve una receta con bandeja, vuelven con ella.
+`policy: manual`. Si algún día vuelve una receta con bandeja, vuelven con ella. El
+`on_error: "continue"` que sí llevan hoy los pasos `ai` es otra cosa: el de la sección siguiente.
+
+### Si el asistente falla, ella se entera y el negocio la ve (whatsapp_inbox#122)
+
+El acuse de recibo le promete «lo miro ahora». Si el turno de IA que viene detrás **falla** —el
+proxy del SaaS no contesta, la cuota se acabó, la respuesta llega rota—, el run moría en ese paso y
+la clienta se quedaba con el «un momento» y nada más. Ahora cada paso `ai` de las dos recetas de
+entrada (`know_the_customer` y `book_appointment` en citas, `book_table` en mesas) lleva:
+
+1. **`on_error: "continue"`** — el fallo no mata el run: el paso queda `failed` y se sigue.
+2. **`sorry_<paso>_failed`** — un `notify` al mismo número que el acuse, con `run_if` sobre
+   `steps.<paso>.status eq failed` y un texto **fijo**: «Perdona, ahora mismo no puedo mirar la
+   agenda. Alguien del equipo te contestará por aquí en cuanto pueda.» No lo escribe el modelo,
+   porque el modelo es justo lo que ha fallado.
+3. **`<paso>_answered`** — una `condition` `neq failed` que corta el run ahí: nada de lo que viene
+   detrás (confirmar, ofrecer huecos) tiene sentido sin la respuesta del asistente, y una segunda
+   disculpa sería ruido.
+
+La conversación **no se toca**: su mensaje entró sin leer y sigue sin leer en la bandeja, que es
+donde el negocio ve que hay alguien a quien contestar. Cuando el asistente contesta, el aviso no
+sale y el run sigue igual que antes. Necesita `run_if` en el kernel de flujos (hub#2066, desde el
+hub 1.1.30): por eso `min_erplora_version` es 1.1.30 y `core_floor.contract.test.py` lo exige.
+`tests/flow_templates.test.py` (`assistant_failure_problems`) pone en rojo todo paso `ai` de una
+receta de WhatsApp que no tenga las tres piezas, y el e2e lo prueba contra el runtime real con un
+asistente que falla. Quedan fuera reintentar el turno (whatsapp_inbox#237), marcar la conversación y
+avisar al negocio (whatsapp_inbox#238) y la respuesta **vacía** sin fallo (whatsapp_inbox#239).
 
 ### Por qué preguntar y proponer caben en UN paso
 

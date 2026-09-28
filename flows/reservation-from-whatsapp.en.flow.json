@@ -129,6 +129,37 @@
           "type": "options",
           "describe": "The free windows you are offering them to TAP, 10 at the most. Each `id` is the real booking — date, time and party size, like this: `2026-09-08T21:00|party:4` — because it is the only thing that comes back when they tap it; the `title` is what they read, 24 characters at most. Empty (`[]`) when you are offering nothing to choose from: when the table is booked, when you still have to ask how many are coming, or when you answered something else."
         }
+      },
+      "on_error": "continue"
+    },
+    {
+      "id": "sorry_book_table_failed",
+      "kind": "notify",
+      "channel": "whatsapp",
+      "to": {
+        "query": "whatsapp_inbox.conversations.list",
+        "params": {
+          "f_wa_contact_id": "input.from"
+        },
+        "field": "contact_phone"
+      },
+      "template": "",
+      "vars": {
+        "text": "Sorry, I can't check the bookings right now. Someone from the team will answer you here as soon as they can."
+      },
+      "run_if": {
+        "steps.book_table.status": {
+          "eq": "failed"
+        }
+      }
+    },
+    {
+      "id": "book_table_answered",
+      "kind": "condition",
+      "when": {
+        "steps.book_table.status": {
+          "neq": "failed"
+        }
       }
     },
     {
