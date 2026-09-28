@@ -2205,7 +2205,7 @@ describe('una imagen, un vídeo o un documento en la cabecera desde el panel (wh
     el.setHeaderFormat('IMAGE');
     await el.updateComplete;
 
-    expect((q(el, 'whatsapp-templates-submit') as HTMLElement & { disabled?: boolean }).disabled).toBe(true);
+    expect(q(el, 'whatsapp-templates-submit')?.hasAttribute('disabled')).toBe(true);
     await el.createTemplate(new Event('submit'));
     expect(comandos, 'se guardó una plantilla con imagen sin imagen').toHaveLength(0);
     expect(subidas).toHaveLength(0);
@@ -2256,7 +2256,7 @@ describe('una imagen, un vídeo o un documento en la cabecera desde el panel (wh
     expect((q(el, 'whatsapp-templates-body') as HTMLElement & { disabled?: boolean }).disabled).toBeFalsy();
     expect((q(el, 'whatsapp-templates-header-format') as HTMLElement & { value?: string }).value).toBe('IMAGE');
     expect(q(el, 'whatsapp-templates-header-file-hint'), 'no se explica por qué pide el archivo otra vez').toBeTruthy();
-    expect((q(el, 'whatsapp-templates-submit') as HTMLElement & { disabled?: boolean }).disabled, 'sin archivo se guardaría sin imagen').toBe(true);
+    expect(q(el, 'whatsapp-templates-submit')?.hasAttribute('disabled'), 'sin archivo se guardaría sin imagen').toBe(true);
 
     el.pickHeaderSample(foto());
     await el.updateTemplate();
@@ -2300,7 +2300,7 @@ describe('una imagen, un vídeo o un documento en la cabecera desde el panel (wh
     el.newCategory = 'AUTHENTICATION';
     await el.updateComplete;
 
-    expect((q(el, 'whatsapp-templates-submit') as HTMLElement & { disabled?: boolean }).disabled).toBe(true);
+    expect(q(el, 'whatsapp-templates-submit')?.hasAttribute('disabled')).toBe(true);
     expect(q(el, 'whatsapp-templates-header-not-for-auth'), 'no se dice por qué no se puede guardar').toBeTruthy();
     await el.createTemplate(new Event('submit'));
     expect(comandos).toHaveLength(0);

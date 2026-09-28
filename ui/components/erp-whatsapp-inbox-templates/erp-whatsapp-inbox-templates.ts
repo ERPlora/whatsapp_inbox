@@ -700,7 +700,9 @@ export class ErpWhatsappInboxTemplates extends LitElement {
       name: this.newName.trim(),
       language: this.newLanguage.trim() || 'es',
       category: this.newCategory,
-      header: this.editingRest.header,
+      // A file header has no text: Meta refuses one with both (`invalid_header_format`). The stored
+      // text stays in `editingRest`, so switching back to «Text» brings it back untouched.
+      header: this.editingHeaderFormat === 'TEXT' ? this.editingRest.header : '',
       body: this.newBody,
       footer: this.editingRest.footer,
       variables: this.variablesFor(this.newBody),
@@ -738,16 +740,47 @@ export class ErpWhatsappInboxTemplates extends LitElement {
    */
   private async registerWithMeta(templateId: string, reviewed: ReviewedFields): Promise<boolean> {
     let verdict: { status?: unknown; meta_id?: unknown; rejected_reason?: unknown };
+    const door = erplora().forModule('whatsapp_inbox').whatsappTemplates;
+    const kind = this.editingHeaderFormat;
+    let fileHeader: { header_format: string; header_handle: string } | null = null;
+    if (kind !== 'TEXT') {
+      // A file header (whatsapp_inbox#218): Meta takes it only with the handle of an example file
+      // uploaded right before, and asks for a fresh one on EVERY save (saas#2377) — so the upload
+      // happens here, after the hub kept the text and before the registry. Not reached without a
+      // door that uploads: `headerIncomplete` keeps «Save» off then.
+      let sample: { header_handle?: unknown; format?: unknown };
+      try {
+        sample = await door.uploadHeaderSample!(this.headerSample as File);
+      } catch (e) {
+        this.formError = doorRefusalText(CATALOG, erplora().locale, e);
+        return false;
+      }
+      const handle = typeof sample?.header_handle === 'string' ? sample.header_handle : '';
+      if (!handle) {
+        this.formError = doorRefusalText(CATALOG, erplora().locale, null);
+        return false;
+      }
+      // The SaaS reads the kind in the file's BYTES: a PDF renamed `.jpg` is a document, and Meta
+      // would refuse it as an image header after the review, not now.
+      if (sample.format !== kind) {
+        this.formError = erplora().t(CATALOG, 'ui.headerSampleKindMismatch');
+        return false;
+      }
+      fileHeader = { header_format: kind, header_handle: handle };
+    }
     try {
       // The header variable's example (whatsapp_inbox#230) goes to the registry only: Meta needs it,
       // but it is not one of the eight fields `templates.update` and `record_meta_answer` compare —
       // nothing in this hub can change it (only the import writes it, the panel never edits it), so
       // comparing it would guard no race. Sent only when there is one, so a registry that predates
-      // it (ERPlora/saas, whatsapp_inbox#226) never sees an unknown field.
-      const headerExample = this.editingRest.header_example;
-      verdict = await erplora()
-        .forModule('whatsapp_inbox')
-        .whatsappTemplates.register(headerExample ? { ...reviewed, header_example: headerExample } : { ...reviewed });
+      // it (ERPlora/saas, whatsapp_inbox#226) never sees an unknown field. The file header's kind
+      // and handle likewise travel only on a file header, and a file header has no text variable.
+      const headerExample = kind === 'TEXT' ? this.editingRest.header_example : '';
+      verdict = await door.register({
+        ...reviewed,
+        ...(headerExample ? { header_example: headerExample } : {}),
+        ...(fileHeader ?? {}),
+      });
     } catch (e) {
       this.formError = doorRefusalText(CATALOG, erplora().locale, e);
       return false;
@@ -788,7 +821,15 @@ export class ErpWhatsappInboxTemplates extends LitElement {
 
   private async createTemplate(ev: Event) {
     ev.preventDefault();
-    if (!this.newName.trim() || this.managedInMeta || this.buttonsIncomplete || this.examplesIncomplete) return;
+    if (
+      !this.newName.trim() ||
+      this.managedInMeta ||
+      this.buttonsIncomplete ||
+      this.examplesIncomplete ||
+      this.headerIncomplete
+    ) {
+      return;
+    }
     if (this.editingId) {
       await this.updateTemplate();
       return;
@@ -798,7 +839,10 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     this.pageError = ''; // a save is the next thing the person did: an older row refusal is stale (staff#75)
     const reviewed = this.reviewedFields();
     try {
-      const created = await erplora().command('whatsapp_inbox.templates.create', reviewed);
+      const created = await erplora().command('whatsapp_inbox.templates.create', {
+        ...reviewed,
+        header_format: this.editingHeaderFormat,
+      });
       const createdId = ErpWhatsappInboxTemplates.newId(created);
       if (await this.registerWithMeta(createdId, reviewed)) {
         this.resetForm();
@@ -832,6 +876,9 @@ export class ErpWhatsappInboxTemplates extends LitElement {
       header_example: String(row.header_example ?? ''),
     };
     this.editingHeaderFormat = String(row.header_format ?? '').trim().toUpperCase() || 'TEXT';
+    this.storedHeaderFormat = this.editingHeaderFormat;
+    this.headerSample = null;
+    this.headerSampleError = '';
     this.editingButtons = storedButtons(row.buttons).map(cleanButton);
     this.editingDynamicLink = this.editingButtons.some((b) => 'url' in b && b.url.includes('{{'));
     this.bodyExamples = bodyExamplesOf(this.newBody, this.editingRest.variables);
@@ -864,9 +911,12 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     this.newLanguage = 'es';
     this.newCategory = 'UTILITY';
     this.editingRest = { header: '', footer: '', variables: '[]', is_active: 1, header_example: '' };
-    // A template this panel writes is text-headed: a refused add turned into an edit (pm#513) must
-    // not inherit the media header of the template opened before it and lock itself.
+    // The «+» starts on a text header and without a file: the kind and the example of the template
+    // opened before must not ride along into the next add (whatsapp_inbox#218).
     this.editingHeaderFormat = 'TEXT';
+    this.storedHeaderFormat = 'TEXT';
+    this.headerSample = null;
+    this.headerSampleError = '';
     this.editingButtons = [];
     this.editingDynamicLink = false;
     this.bodyExamples = {};
@@ -893,6 +943,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
       await erplora().command('whatsapp_inbox.templates.update', {
         template_id: templateId,
         ...reviewed,
+        header_format: this.editingHeaderFormat,
         is_active: this.editingRest.is_active,
       });
       // Every edit goes back through Meta's review — that is Meta's rule, not ours, and it is why
@@ -1038,6 +1089,50 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     </div>`;
   }
 
+  /** The header kind and, for a file header, its example file (whatsapp_inbox#218) — the same
+   *  «Header: None · Text · Media» choice WhatsApp Manager offers. The file is picked with the
+   *  platform's own picker (a hidden `<input type="file">` behind a button: an `ion-input` has no
+   *  file type), filtered to what Meta accepts for that kind. */
+  private renderHeaderEditor(locked: boolean) {
+    const t = (k: string, params?: Record<string, unknown>): string => erplora().t(CATALOG, k, params);
+    const canUpload = this.canUploadHeaderSample;
+    const kind = this.editingHeaderFormat;
+    const rules = HEADER_SAMPLE_RULES[kind];
+    const fileInput = (): HTMLInputElement | null =>
+      this.renderRoot.querySelector('[data-testid="whatsapp-templates-header-file"]');
+    return html`<div class="rich" data-testid="whatsapp-templates-header">
+      <ion-select data-testid="whatsapp-templates-header-format" .disabled=${locked} mode="md" fill="outline"
+        label-placement="floating" label=${t('ui.headerFormat')} .value=${kind}
+        @ionChange=${(e: any) => this.setHeaderFormat(e.target.value)}>
+        ${HEADER_KINDS.map(
+          ([value, key]) => html`<ion-select-option value=${value} .disabled=${value !== 'TEXT' && !canUpload}>${t(key)}</ion-select-option>`,
+        )}
+      </ion-select>
+      ${canUpload ? nothing : html`<p data-testid="whatsapp-templates-header-needs-update">${t('ui.headerMediaNeedsUpdate')}</p>`}
+      ${rules && !locked
+        ? html`${this.newCategory === 'AUTHENTICATION'
+              ? html`<p class="err" data-testid="whatsapp-templates-header-not-for-auth">${t('ui.headerNotForAuthentication')}</p>`
+              : nothing}
+            <input type="file" hidden data-testid="whatsapp-templates-header-file" accept=${rules.types.join(',')}
+              @change=${(e: Event) => {
+                const input = e.target as HTMLInputElement;
+                this.pickHeaderSample(input.files?.[0] ?? null);
+                // Emptied so choosing the same file again after a refusal still fires `change`.
+                input.value = '';
+              }} />
+            <ion-button data-testid="whatsapp-templates-header-file-pick" fill="outline" size="small"
+              @click=${() => fileInput()?.click()}>${t(this.headerSample ? 'ui.headerSampleChange' : 'ui.headerSamplePick')}</ion-button>
+            ${this.headerSample
+              ? html`<span data-testid="whatsapp-templates-header-file-name">${this.headerSample.name}</span>`
+              : nothing}
+            <p data-testid="whatsapp-templates-header-file-hint">${t('ui.headerSampleHint', { types: rules.label, max: rules.maxMb })}</p>
+            ${this.headerSampleError
+              ? html`<ok-inline-feedback data-testid="whatsapp-templates-header-file-error" tone="danger" icon="alert-circle-outline">${this.headerSampleError}</ok-inline-feedback>`
+              : nothing}`
+        : nothing}
+    </div>`;
+  }
+
   /** One example field per variable of the body, under it, as WhatsApp Manager asks for them
    *  (whatsapp_inbox#208): Meta reviews the template with them and refuses it without. Shown but
    *  not editable while the panel is read-only. */
@@ -1097,6 +1192,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
               <ion-select-option value="MARKETING">${t('ui.categoryMarketing')}</ion-select-option>
               <ion-select-option value="AUTHENTICATION">${t('ui.categoryAuthentication')}</ion-select-option>
             </ion-select>
+            ${this.renderHeaderEditor(locked)}
             <ion-textarea data-testid="whatsapp-templates-body" .disabled=${locked} mode="md" fill="outline" label-placement="floating" label=${t('ui.colBody')} placeholder=${t('ui.placeholderBody')} .value=${this.newBody} @ionInput=${(e: any) => (this.newBody = e.target.value)}></ion-textarea>
             ${this.renderExamples(locked)}
             ${this.renderButtonsEditor()}
@@ -1105,7 +1201,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
               : nothing}
             ${locked
               ? nothing
-              : html`<ion-button data-testid="whatsapp-templates-submit" type="submit" ?disabled=${this.saving || !this.newName || this.buttonsIncomplete || this.examplesIncomplete}>${this.saving ? t('ui.saving') : this.editingId ? t('ui.save') : t('ui.add')}</ion-button>`}
+              : html`<ion-button data-testid="whatsapp-templates-submit" type="submit" ?disabled=${this.saving || !this.newName || this.buttonsIncomplete || this.examplesIncomplete || this.headerIncomplete}>${this.saving ? t('ui.saving') : this.editingId ? t('ui.save') : t('ui.add')}</ion-button>`}
             ${this.editingId
               ? html`<ion-button data-testid="whatsapp-templates-cancel" fill="clear" size="small" ?disabled=${this.saving}
                   @click=${() => this.cancelEdit()}>${t('ui.cancel')}</ion-button>`
