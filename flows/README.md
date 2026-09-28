@@ -331,8 +331,38 @@ sale y el run sigue igual que antes. Necesita `run_if` en el kernel de flujos (h
 hub 1.1.30): por eso `min_erplora_version` es 1.1.30 y `core_floor.contract.test.py` lo exige.
 `tests/flow_templates.test.py` (`assistant_failure_problems`) pone en rojo todo paso `ai` de una
 receta de WhatsApp que no tenga las tres piezas, y el e2e lo prueba contra el runtime real con un
-asistente que falla. Quedan fuera reintentar el turno (whatsapp_inbox#237), marcar la conversación y
-avisar al negocio (whatsapp_inbox#238) y la respuesta **vacía** sin fallo (whatsapp_inbox#239).
+asistente que falla. Quedan fuera reintentar el turno (whatsapp_inbox#237) y marcar la conversación
+y avisar al negocio (whatsapp_inbox#238).
+
+### Si el asistente contesta SIN palabras, es como si hubiera fallado (whatsapp_inbox#239)
+
+El turno puede terminar `done` —nada se rompió— sin una sola palabra: típicamente cuando el modelo
+llama a su herramienta de respuesta sin texto al lado (el runner publica el texto de ese último
+turno, que llega `""`). La guarda de #122 lo deja pasar y `confirm_to_customer` le mandaba a la
+clienta un WhatsApp **vacío** (el kernel manda tal cual un texto vacío); si la clave `text` ni
+siquiera venía, el `notify` se negaba y el run moría sin disculpa. Los pasos cuyo texto le llega
+(`book_appointment` en citas, `book_table` en mesas) llevan ahora, detrás de `<paso>_answered`:
+
+1. **`sorry_<paso>_said_nothing`** — la misma disculpa **fija**, con
+   `run_if: {"steps.<paso>.text": {"in": ["", null]}, "steps.<paso>.slots": {"eq": []}}`. Las
+   condiciones del kernel son solo AND, así que «falló O no dijo nada» son dos guardas, y esta va
+   **después** de la de fallo para que un turno fallido no se disculpe dos veces. Lo de `slots`
+   importa: sin palabras pero con huecos que tocar **es** una respuesta, y ella recibe la lista, no
+   la disculpa.
+2. **`confirm_to_customer`** con `run_if: {"steps.<paso>.text": {"exists": true, "neq": ""}}` —
+   `neq ""` solo dejaría pasar un texto ausente (`null` no es `""`), que el kernel rechaza.
+
+Detrás, `any_slot_to_offer` corta el run cuando no hay nada que ofrecer, como siempre.
+`know_the_customer` no lleva esta guarda: su texto no le llega a la clienta, solo al paso siguiente.
+`tests/flow_templates.test.py` (`assistant_silence_problems`) pone en rojo toda receta de WhatsApp
+cuyo texto de IA llegue a la clienta sin las dos piezas, y el e2e lo prueba contra el runtime real
+(texto vacío, sin clave `text`, y sin texto pero con huecos). Un texto de solo espacios no lo
+distingue el lenguaje de condiciones del kernel (no hay `trim`): que el hub publique el texto ya
+recortado es hub#2286.
+
+⚠️ **Un hub que ya tenía la receta activada NO la recibe al actualizar la app**: se guarda una copia
+al activarla y solo «restaurar» la sobrescribe (hub#2059). Comprobado en el runtime real; que la
+pantalla de WhatsApp lo avise y ofrezca actualizar es whatsapp_inbox#241.
 
 ### Por qué preguntar y proponer caben en UN paso
 
