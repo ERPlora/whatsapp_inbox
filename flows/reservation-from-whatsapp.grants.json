@@ -101,6 +101,17 @@
         "en": "Remember the times it just offered the guest who is writing, and only in their conversation.",
         "es": "Recordar las horas que acaba de ofrecer a quien escribe, y solo en su conversación."
       }
+    },
+    {
+      "kind": "command",
+      "value": "whatsapp_inbox.conversations.needs_attention",
+      "payload": {
+        "wa_contact_id": "input.from"
+      },
+      "reason": {
+        "en": "Mark the conversation of the guest who is writing as needing attention when it could not answer them, and only their conversation.",
+        "es": "Marcar como «necesita atención» la conversación de quien escribe cuando no ha podido contestarle, y solo la suya."
+      }
     }
   ]
 }

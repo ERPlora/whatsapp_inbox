@@ -63,6 +63,8 @@ interface Conversation {
   unread_count: number;
   assigned_to_id: string | null;
   last_message_at: string | null;
+  /** When the automation first could not answer her (whatsapp_inbox#238); null = nobody waiting. */
+  needs_attention_at?: string | null;
 }
 
 interface Message {
@@ -240,7 +242,18 @@ export class ErpWhatsappInboxInbox extends LitElement {
   private get columns(): DataTableColumn[] {
     const t = (k: string): string => erplora().t(CATALOG, k);
     return [
-    { key: 'contact_name', header: t('ui.colContact'), sortable: true, filterable: true, filterType: 'text' },
+    {
+      key: 'contact_name',
+      header: t('ui.colContact'),
+      sortable: true,
+      filterable: true,
+      filterType: 'text',
+      // A customer the automation could not answer carries the mark next to her name
+      // (whatsapp_inbox#238), so the list says WHO is waiting and not only that she is on top.
+      render: (r) => html`${String(r.contact_name || r.contact_phone || '—')}${r.needs_attention_at
+        ? html` ${this.renderNeedsAttention()}`
+        : nothing}`,
+    },
     { key: 'contact_phone', header: t('ui.colPhone'), sortable: true, filterable: true, filterType: 'text' },
     {
       key: 'status',
@@ -287,9 +300,10 @@ export class ErpWhatsappInboxInbox extends LitElement {
     window.addEventListener('erplora:locale-changed', this.onLocaleChange);
     this.ctrl = createListController<Conversation>(erplora(), 'whatsapp_inbox.conversations.list', () => this.requestUpdate(), {
       pageSize: 50,
-      // Latest activity first, like every inbox (whatsapp_inbox#92): sorting by `id` put a random
-      // uuid in charge of who the operator sees first.
-      sort: 'last_message_at',
+      // Who is waiting first (whatsapp_inbox#238), then the latest activity, like every inbox
+      // (whatsapp_inbox#92). `attention_first` orders both ways at once because the list sorts by
+      // ONE column (`queries/conversations_list.sql`).
+      sort: 'attention_first',
       dir: 'desc',
     });
     await this.ctrl.load();
@@ -542,6 +556,10 @@ export class ErpWhatsappInboxInbox extends LitElement {
     </div>`;
   }
 
+  private renderNeedsAttention() {
+    return html`<ok-status-pill data-testid="whatsapp-inbox-needs-attention" tone="warning" size="sm">${erplora().t(CATALOG, 'ui.needsAttention')}</ok-status-pill>`;
+  }
+
   private renderDetail() {
     const c = this.detail;
     if (!c) return nothing;
@@ -553,9 +571,13 @@ export class ErpWhatsappInboxInbox extends LitElement {
         <ok-status-pill tone=${c.status === 'closed' ? 'neutral' : 'success'} size="sm">
           ${c.status === 'closed' ? t('ui.statusClosed') : t('ui.statusActive')}
         </ok-status-pill>
+        ${c.needs_attention_at ? this.renderNeedsAttention() : nothing}
         <span class="spacer"></span>
         <ion-button data-testid="whatsapp-inbox-detail-close" size="small" fill="clear" @click=${() => this.closeDetail()}>${t('ui.closeView')}</ion-button>
       </div>
+      ${c.needs_attention_at
+        ? html`<ok-inline-feedback data-testid="whatsapp-inbox-needs-attention-hint" tone="warning" icon="alert-circle-outline">${t('ui.needsAttentionHint')}</ok-inline-feedback>`
+        : nothing}
       ${this.detailError
         ? html`<p class="err" data-testid="whatsapp-inbox-detail-error">${this.detailError}</p>`
         : nothing}

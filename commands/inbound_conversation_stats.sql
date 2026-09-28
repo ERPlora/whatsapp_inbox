@@ -38,6 +38,14 @@
 -- top of the inbox nor pull back a thread the customer wrote in this morning. Both sides are the
 -- same UTC text shape, so text order is time order.
 --
+-- **«Needs attention» goes away when the team answers her** (whatsapp_inbox#238). The flag the
+-- recipe raises when its automation could not answer (`conversation_needs_attention.sql`) is a
+-- promise that someone of the business will write; the LIVE echo of what the owner typed on the
+-- WhatsApp Business app is that promise kept, so it clears the flag. Nothing else does: not her own
+-- next message, not the backlog (an old reply of the owner is not an answer to today's question).
+-- The automation's own messages never come back through this door (the SaaS stores only the
+-- `smb_message_echoes` of the phone as outbound), so the automation cannot clear it by accident.
+--
 -- The lookup goes through the primary key. Runtime injects :new_id, :hub_id, :current_user_id, :now.
 UPDATE whatsapp_inbox_conversation
 SET last_message_at = GREATEST(
@@ -48,6 +56,11 @@ SET last_message_at = GREATEST(
       WHEN COALESCE(NULLIF((:direction)::text, ''), 'inbound') = 'outbound' THEN 0
       WHEN COALESCE(NULLIF((:source)::text, ''), 'live') <> 'live' THEN 0
       ELSE 1
+    END,
+    needs_attention_at = CASE
+      WHEN COALESCE(NULLIF((:direction)::text, ''), 'inbound') = 'outbound'
+       AND COALESCE(NULLIF((:source)::text, ''), 'live') = 'live' THEN NULL
+      ELSE needs_attention_at
     END,
     updated_at      = :now,
     updated_by      = :current_user_id

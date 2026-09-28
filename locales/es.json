@@ -37,6 +37,8 @@
     "colActive": "Activa",
     "colBody": "Cuerpo",
     "statusActive": "Activa",
+    "needsAttention": "Necesita atención",
+    "needsAttentionHint": "La automatización no pudo contestar a esta clienta y le dijo que alguien del equipo lo haría. Contéstale desde la app de WhatsApp Business del móvil: la marca se quita al hacerlo.",
     "statusClosed": "Cerrada",
     "categoryUtility": "Utility",
     "categoryMarketing": "Marketing",
