@@ -4817,6 +4817,13 @@ var es_default = {
     neighbourStaff: "Personal",
     activateForbidden: "Solo un due\xF1o o un administrador puede activarlo.",
     errActivate: "No se pudo activar. No se ha cambiado nada: int\xE9ntalo otra vez.",
+    recipeOutdated: "Hay una versi\xF3n mejorada de esta respuesta autom\xE1tica.",
+    recipeUpdate: "Actualizar",
+    recipeUpdateConfirm: "La versi\xF3n nueva sustituye a esta respuesta autom\xE1tica, tambi\xE9n los cambios que se le hayan hecho a mano en Automatizaciones. Seguir\xE1 encendida o apagada como est\xE9 ahora.",
+    recipeUpdated: "Hecho: esta respuesta autom\xE1tica ya funciona con la \xFAltima versi\xF3n.",
+    errRecipeUpdate: "No se pudo actualizar la respuesta autom\xE1tica. Int\xE9ntalo de nuevo en un momento.",
+    errRecipeUpdateGone: "Esta respuesta autom\xE1tica ya no existe aqu\xED, as\xED que no hay nada que actualizar. Vuelve a activarla desde esta pantalla.",
+    recipeUpdateForbidden: "Solo un due\xF1o o un administrador puede actualizarla.",
     errTemplates: "No hemos podido saber qu\xE9 hay activo ahora mismo. Vuelve a cargar la pantalla.",
     useAppointmentsConsent: "WhatsApp contestar\xE1 solo: lee tu agenda, ofrece los huecos libres, reserva, mueve o anula la cita de la clienta que escribe y le contesta; y le avisa cuando confirmas su cita. No puede tocar las citas de nadie m\xE1s. \xBFLo activas?",
     useAppointmentsDone: "Listo. Escr\xEDbete desde otro m\xF3vil: \u201Cquiero cita ma\xF1ana\u201D.",
@@ -5034,6 +5041,13 @@ var en_default = {
     neighbourStaff: "Staff",
     activateForbidden: "Only an owner or an administrator can turn this on.",
     errActivate: "It could not be turned on. Nothing was changed \u2014 try again.",
+    recipeOutdated: "There is an improved version of this automatic reply.",
+    recipeUpdate: "Update",
+    recipeUpdateConfirm: "The new version replaces this automatic reply, including any changes made to it by hand in Automations. It stays on or off exactly as it is now.",
+    recipeUpdated: "Done: this automatic reply now runs the latest version.",
+    errRecipeUpdate: "The automatic reply could not be updated. Try again in a moment.",
+    errRecipeUpdateGone: "This automatic reply no longer exists here, so there is nothing to update. Turn it on again from this screen.",
+    recipeUpdateForbidden: "Only an owner or an administrator can update this.",
     errTemplates: "We could not find out what is already turned on. Reload the screen.",
     useAppointmentsConsent: "WhatsApp will answer on its own: it reads your diary, offers free slots, books, moves or cancels the appointment of the customer who writes, and replies to them; and it tells them when you confirm their appointment. It cannot touch anyone else\u2019s appointments. Turn it on?",
     useAppointmentsDone: "Done. Text your number from another phone: \u201CI\u2019d like an appointment tomorrow\u201D.",
@@ -5842,6 +5856,8 @@ var ErpWhatsappInboxSettings = class extends i3 {
     this.busy = "";
     this.cardError = {};
     this.justActivated = "";
+    this.confirmingUpdate = "";
+    this.justUpdated = "";
     this.policy = {};
     this.policyFailed = {};
     this.hasAutomations = false;
@@ -6022,6 +6038,47 @@ var ErpWhatsappInboxSettings = class extends i3 {
       this.busy = "";
     }
   }
+  /**
+   * The families of this card the module has improved since they were built — the card's own recipe
+   * first, then its companions — or none when this hub cannot hand the new version over.
+   *
+   * Only `outdated === true` counts: `null` is the hub saying «I cannot tell» (a flow built before
+   * it kept the digest), and a guess painted as «there is a new version» would send the owner to
+   * overwrite an automation that may be perfectly current (hub#2059).
+   */
+  outdatedOf(use) {
+    if (typeof door()?.restoreTemplate !== "function") return [];
+    return [use.family, ...use.companions].filter((family) => this.built[family]?.outdated === true);
+  }
+  /**
+   * Hands the card the module's current recipe (whatsapp_inbox#241) through the kernel's restore
+   * door (`POST /api/hub/flows/templates/<module>/<family>/restore`, hub#2059) — the SAME door the
+   * Automations gallery offers as «restore the factory version», here scoped to this module.
+   *
+   * Only the families the hub reported as outdated are touched: an up-to-date companion keeps
+   * whatever the owner changed in it by hand. The kernel keeps each flow's id, history and on/off
+   * state, so this replaces WHAT the reply does, never WHETHER it runs — and it never runs on its
+   * own: updating the module leaves the old recipe in place on purpose (hub#1684).
+   */
+  async updateRecipe(use) {
+    const flows = door();
+    if (!flows?.restoreTemplate) return;
+    const families = this.outdatedOf(use);
+    this.busy = use.family;
+    this.cardError = { ...this.cardError, [use.family]: null };
+    this.justUpdated = "";
+    try {
+      for (const family of families) await flows.restoreTemplate(family);
+      this.confirmingUpdate = "";
+      this.justUpdated = use.family;
+    } catch (e5) {
+      this.confirmingUpdate = "";
+      this.cardError = { ...this.cardError, [use.family]: updateError(e5) };
+    } finally {
+      await this.refresh(flows);
+      this.busy = "";
+    }
+  }
   async refresh(flows) {
     try {
       const listed = await flows.templates();
@@ -6122,11 +6179,51 @@ var ErpWhatsappInboxSettings = class extends i3 {
     }}
             >${this.t("ui.activate")}</ion-button>`}
 
+        ${this.renderOutdated(use)}
         ${this.asking === use.family ? this.renderConsent(use) : A}
         ${error ? b2`<ok-inline-feedback data-testid=${`whatsapp-settings-card-error-${use.family}`} tone="danger">${errorText(error, (k2) => this.t(k2))}</ok-inline-feedback>` : A}
         ${on && this.justActivated === use.family ? b2`<p class="done" data-testid=${`whatsapp-settings-activated-${use.family}`}>${this.t(use.doneKey)}</p>` : A}
+        ${this.justUpdated === use.family ? b2`<ok-inline-feedback data-testid=${`whatsapp-settings-updated-${use.family}`} tone="success">${this.t("ui.recipeUpdated")}</ok-inline-feedback>` : A}
         ${on ? this.renderPolicy(use) : A}
       </section>
+    `;
+  }
+  /**
+   * «There is an improved version» and its «Actualizar» — only on a card whose recipes the module
+   * improved since they were built (whatsapp_inbox#241). The first tap only asks: what is replaced
+   * is the owner's automation, possibly with her own edits, so it is the same two-button question
+   * as the consent, naming the consequence, and nothing is restored until «yes».
+   */
+  renderOutdated(use) {
+    if (this.outdatedOf(use).length === 0) return A;
+    return b2`
+      <ok-inline-feedback data-testid=${`whatsapp-settings-outdated-${use.family}`} tone="warning">${this.t("ui.recipeOutdated")}</ok-inline-feedback>
+      ${this.confirmingUpdate === use.family ? b2`<div class="consent">
+            <p>${this.t("ui.recipeUpdateConfirm")}</p>
+            <ion-button
+              size="small"
+              data-testid=${`whatsapp-settings-confirm-update-${use.family}`}
+              ?disabled=${this.busy === use.family}
+              @click=${() => this.updateRecipe(use)}
+            >${this.t("ui.recipeUpdate")}</ion-button>
+            <ion-button
+              size="small"
+              fill="clear"
+              data-testid=${`whatsapp-settings-cancel-update-${use.family}`}
+              @click=${() => {
+      this.confirmingUpdate = "";
+    }}
+            >${this.t("ui.notNow")}</ion-button>
+          </div>` : b2`<ion-button
+            size="small"
+            data-testid=${`whatsapp-settings-update-${use.family}`}
+            ?disabled=${this.busy === use.family}
+            @click=${() => {
+      this.confirmingUpdate = use.family;
+      this.justUpdated = "";
+      this.cardError = { ...this.cardError, [use.family]: null };
+    }}
+          >${this.t("ui.recipeUpdate")}</ion-button>`}
     `;
   }
   /** The consent: ONE sentence naming the consequence, and two buttons. Nothing runs until «yes». */
@@ -6227,6 +6324,12 @@ __decorateClass([
 ], ErpWhatsappInboxSettings.prototype, "justActivated", 2);
 __decorateClass([
   r5()
+], ErpWhatsappInboxSettings.prototype, "confirmingUpdate", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxSettings.prototype, "justUpdated", 2);
+__decorateClass([
+  r5()
 ], ErpWhatsappInboxSettings.prototype, "policy", 2);
 __decorateClass([
   r5()
@@ -6247,6 +6350,14 @@ function activationError(e5) {
   }
   const detail = e5 instanceof Error ? e5.message : "";
   return detail ? { detail } : { key: "ui.errActivate" };
+}
+function updateError(e5) {
+  const code = e5?.code ?? "";
+  if (code === "flow.not_found") return { key: "ui.errRecipeUpdateGone" };
+  if (code === "forbidden" || code === "unauthorized" || code === "flow.template_not_yours") {
+    return { key: "ui.recipeUpdateForbidden" };
+  }
+  return { key: "ui.errRecipeUpdate" };
 }
 var errorText = (error, t5) => "key" in error ? t5(error.key) : error.detail;
 define("erp-whatsapp-inbox-settings", ErpWhatsappInboxSettings);

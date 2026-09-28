@@ -45,6 +45,25 @@ Control negativo medido: contra `whatsapp_inbox@main` sin el listener caen 2 de 
 queda con `customer_id` `Null`); el tercero —un número que nadie tiene en ficha— sigue verde, como
 debe.
 
+### `recipe_update_e2e.rs` (whatsapp_inbox#241)
+
+Lo que la pantalla de WhatsApp da por hecho al pintar «Hay una versión mejorada» y su «Actualizar»:
+activar la receta VIEJA (sintetizada desde la que se publica, sin la disculpa de silencio de #239) →
+actualizar el módulo → el hub la marca `outdated` sin tocarla → `restore_flow_template` (la puerta de
+`restoreTemplate`, la misma que «restaurar» de la galería) trae la receta nueva, mismo flujo, encendida
+o pausada como estaba. El último test es el daño de la issue: antes de actualizar, un asistente mudo
+le manda a la clienta un WhatsApp vacío; después, la disculpa. Instala `customers`, `taxes`,
+`services`, `staff`, `schedules`, `appointments` y este módulo; se corre en el hub del suelo
+(`git worktree add hub-rv-N v1.1.30`):
+
+```bash
+cp tests/e2e/recipe_update_e2e.rs "$HUB/crates/runtime/tests/"
+cd "$HUB" && DATABASE_URL=… ERPLORA_MODULES_DIR="$MODS" \
+  cargo test -p erplora-runtime --test recipe_update_e2e
+```
+
+Control positivo medido: con la receta «vieja» igual a la nueva caen los 4.
+
 ## Qué NO prueba, y por qué no puede
 
 - **El mensaje de WhatsApp real.** El evento se inserta como lo inserta `inbound_poll.rs`

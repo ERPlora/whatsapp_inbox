@@ -82,6 +82,8 @@ interface ScopedFlows {
   deactivateTemplate?(family: string): Promise<unknown>;
   /** Absent on a hub older than hub#2123 — the card then keeps its generic sentence. */
   templateDiscards?(): Promise<TemplateDiscard[]>;
+  /** Absent on a hub older than hub#2059 — the card then offers no «Actualizar» it cannot honour. */
+  restoreTemplate?(family: string): Promise<unknown>;
 }
 
 /** A family of this module the hub is NOT offering, and why (hub#2123). `detail` is never read. */
@@ -101,7 +103,8 @@ const DISCARD_SENTENCE: Readonly<Record<string, string>> = {
 interface ModuleFlowTemplate {
   module: string;
   family: string;
-  installed?: { flow_id: string; enabled: boolean } | null;
+  /** `outdated` since hub#2059: `true` only when the module now serves a different recipe. */
+  installed?: { flow_id: string; enabled: boolean; outdated?: boolean | null } | null;
 }
 
 interface ErploraClientLike extends WitnessAsker {
@@ -135,7 +138,7 @@ function door(): ScopedFlows | null {
 }
 
 /** What the kernel answered about one family, once. `undefined` = the question was never answered. */
-type Built = { flow_id: string; enabled: boolean } | null | undefined;
+type Built = { flow_id: string; enabled: boolean; outdated?: boolean | null } | null | undefined;
 
 /**
  * Why the hub left a use out, in the owner's words — or `null` when it cannot be said precisely.
@@ -211,6 +214,10 @@ class ErpWhatsappInboxSettings extends LitElement {
   @state() private cardError: Record<string, CardError> = {};
   /** The family that was just turned on in THIS visit — the «text your number» line. */
   @state() private justActivated = '';
+  /** The family whose «replace it with the new version?» question is open. One at a time. */
+  @state() private confirmingUpdate = '';
+  /** The family whose recipes were just updated in THIS visit — the «done» line. */
+  @state() private justUpdated = '';
   @state() private policy: Record<string, boolean> = {};
   @state() private policyFailed: Record<string, boolean> = {};
   @state() private hasAutomations = false;
@@ -382,6 +389,51 @@ class ErpWhatsappInboxSettings extends LitElement {
     }
   }
 
+  /**
+   * The families of this card the module has improved since they were built — the card's own recipe
+   * first, then its companions — or none when this hub cannot hand the new version over.
+   *
+   * Only `outdated === true` counts: `null` is the hub saying «I cannot tell» (a flow built before
+   * it kept the digest), and a guess painted as «there is a new version» would send the owner to
+   * overwrite an automation that may be perfectly current (hub#2059).
+   */
+  private outdatedOf(use: WhatsAppUse): string[] {
+    if (typeof door()?.restoreTemplate !== 'function') return [];
+    return [use.family, ...use.companions].filter((family) => this.built[family]?.outdated === true);
+  }
+
+  /**
+   * Hands the card the module's current recipe (whatsapp_inbox#241) through the kernel's restore
+   * door (`POST /api/hub/flows/templates/<module>/<family>/restore`, hub#2059) — the SAME door the
+   * Automations gallery offers as «restore the factory version», here scoped to this module.
+   *
+   * Only the families the hub reported as outdated are touched: an up-to-date companion keeps
+   * whatever the owner changed in it by hand. The kernel keeps each flow's id, history and on/off
+   * state, so this replaces WHAT the reply does, never WHETHER it runs — and it never runs on its
+   * own: updating the module leaves the old recipe in place on purpose (hub#1684).
+   */
+  private async updateRecipe(use: WhatsAppUse) {
+    const flows = door();
+    if (!flows?.restoreTemplate) return;
+    const families = this.outdatedOf(use);
+    this.busy = use.family;
+    this.cardError = { ...this.cardError, [use.family]: null };
+    this.justUpdated = '';
+    try {
+      for (const family of families) await flows.restoreTemplate(family);
+      this.confirmingUpdate = '';
+      this.justUpdated = use.family;
+    } catch (e) {
+      this.confirmingUpdate = '';
+      this.cardError = { ...this.cardError, [use.family]: updateError(e) };
+    } finally {
+      // Repainted from the hub either way: a family restored before a later one failed is current
+      // now, and the notice has to keep speaking only for what still is not.
+      await this.refresh(flows);
+      this.busy = '';
+    }
+  }
+
   private async refresh(flows: ScopedFlows) {
     try {
       const listed = await flows.templates();
@@ -514,11 +566,48 @@ class ErpWhatsappInboxSettings extends LitElement {
               @click=${() => { this.asking = use.family; this.cardError = { ...this.cardError, [use.family]: null }; }}
             >${this.t('ui.activate')}</ion-button>`}
 
+        ${this.renderOutdated(use)}
         ${this.asking === use.family ? this.renderConsent(use) : nothing}
         ${error ? html`<ok-inline-feedback data-testid=${`whatsapp-settings-card-error-${use.family}`} tone="danger">${errorText(error, (k) => this.t(k))}</ok-inline-feedback>` : nothing}
         ${on && this.justActivated === use.family ? html`<p class="done" data-testid=${`whatsapp-settings-activated-${use.family}`}>${this.t(use.doneKey)}</p>` : nothing}
+        ${this.justUpdated === use.family ? html`<ok-inline-feedback data-testid=${`whatsapp-settings-updated-${use.family}`} tone="success">${this.t('ui.recipeUpdated')}</ok-inline-feedback>` : nothing}
         ${on ? this.renderPolicy(use) : nothing}
       </section>
+    `;
+  }
+
+  /**
+   * «There is an improved version» and its «Actualizar» — only on a card whose recipes the module
+   * improved since they were built (whatsapp_inbox#241). The first tap only asks: what is replaced
+   * is the owner's automation, possibly with her own edits, so it is the same two-button question
+   * as the consent, naming the consequence, and nothing is restored until «yes».
+   */
+  private renderOutdated(use: WhatsAppUse) {
+    if (this.outdatedOf(use).length === 0) return nothing;
+    return html`
+      <ok-inline-feedback data-testid=${`whatsapp-settings-outdated-${use.family}`} tone="warning">${this.t('ui.recipeOutdated')}</ok-inline-feedback>
+      ${this.confirmingUpdate === use.family
+        ? html`<div class="consent">
+            <p>${this.t('ui.recipeUpdateConfirm')}</p>
+            <ion-button
+              size="small"
+              data-testid=${`whatsapp-settings-confirm-update-${use.family}`}
+              ?disabled=${this.busy === use.family}
+              @click=${() => this.updateRecipe(use)}
+            >${this.t('ui.recipeUpdate')}</ion-button>
+            <ion-button
+              size="small"
+              fill="clear"
+              data-testid=${`whatsapp-settings-cancel-update-${use.family}`}
+              @click=${() => { this.confirmingUpdate = ''; }}
+            >${this.t('ui.notNow')}</ion-button>
+          </div>`
+        : html`<ion-button
+            size="small"
+            data-testid=${`whatsapp-settings-update-${use.family}`}
+            ?disabled=${this.busy === use.family}
+            @click=${() => { this.confirmingUpdate = use.family; this.justUpdated = ''; this.cardError = { ...this.cardError, [use.family]: null }; }}
+          >${this.t('ui.recipeUpdate')}</ion-button>`}
     `;
   }
 
@@ -611,6 +700,20 @@ function activationError(e: unknown): CardError {
   }
   const detail = e instanceof Error ? e.message : '';
   return detail ? { detail } : { key: 'ui.errActivate' };
+}
+
+/**
+ * What the card reads after a refused update. `flow.not_found` is the one refusal with its own
+ * sentence — the automation is already gone and the fix is to turn it on again, not to retry; the
+ * rest never paints the hub's raw message, which is written for a repository, not for a salon.
+ */
+function updateError(e: unknown): NonNullable<CardError> {
+  const code = (e as { code?: string } | null)?.code ?? '';
+  if (code === 'flow.not_found') return { key: 'ui.errRecipeUpdateGone' };
+  if (code === 'forbidden' || code === 'unauthorized' || code === 'flow.template_not_yours') {
+    return { key: 'ui.recipeUpdateForbidden' };
+  }
+  return { key: 'ui.errRecipeUpdate' };
 }
 
 const errorText = (error: NonNullable<CardError>, t: (k: string) => string): string =>

@@ -175,6 +175,19 @@ event and the one command that identify the use, never `manage_flows`:
 is «Use», which would build the second automation the badge exists to prevent. The status answer
 carries no id on purpose, so the list is the closest the card can bring the owner to their flow.
 
+### When the module improves a reply you already turned on
+
+Turning an automatic reply on builds it once, from the recipe the module shipped that day, and
+updating the app never rewrites it on its own: the reply may carry changes made by hand in
+Automations, and nothing is overwritten without being asked
+([#241](https://github.com/ERPlora/whatsapp_inbox/issues/241)). When the module has since shipped an
+improved recipe for a card — its own reply or the confirmation that goes with it — the card says
+«There is an improved version of this automatic reply» with an **Update** button. The first tap only
+asks, naming the consequence: the new version replaces the reply, including any hand-made changes,
+and it stays on or off exactly as it is. Confirming hands over only the recipes the hub reported as
+outdated; a card whose reply is up to date, or whose hub cannot tell, shows nothing. It is the same
+restore that the Automations gallery offers as «Restore the factory version».
+
 ### What this screen does not store
 
 The old bot's settings — greeting, auto-reply, out-of-hours text, «require confirmation», the prompt,

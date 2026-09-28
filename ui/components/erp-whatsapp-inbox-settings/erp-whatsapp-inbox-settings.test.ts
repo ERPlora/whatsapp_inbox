@@ -45,7 +45,7 @@ const commands: { name: string; payload: Record<string, unknown> }[] = [];
 const kernel: { call: string; family?: string; scopedTo?: string }[] = [];
 
 /** What `installed` looks like once a family has been built here. */
-type Installed = { flow_id: string; enabled: boolean } | null;
+type Installed = { flow_id: string; enabled: boolean; outdated?: boolean | null } | null;
 
 interface Hub {
   /** Module ids this hub does NOT have. `queryOptional` answers `undefined` for exactly these. */
@@ -92,6 +92,10 @@ interface Hub {
   noDiscards?: boolean;
   /** The discard listing itself refuses: the screen must still paint, with its old sentence. */
   discardsError?: { code: string; message: string };
+  /** A shell whose SDK predates hub#2059: `restoreTemplate` is not there at all. */
+  noRestore?: boolean;
+  /** What `restoreTemplate` refuses with: `flow.not_found`, `forbidden`, a dropped fetch. */
+  restoreError?: { code: string; message: string };
 }
 
 /** The shape of hub#2123's `FlowTemplateDiscard`, the one a module reads. */
@@ -192,6 +196,18 @@ function mountWith(hub: Hub = {}) {
           kernel.push({ call: 'deactivate', family, scopedTo: id });
           built[family] = { flow_id: `flow-${family}`, enabled: false };
           return { id: built[family]!.flow_id };
+        };
+      }
+      if (!hub.oldHub && !hub.noRestore) {
+        // What the hub really does (hub#2059): rewrites the flow from the module's CURRENT recipe,
+        // same id, and leaves it exactly as on or off as it was. A family never built is a 404.
+        flows.restoreTemplate = async (family: string) => {
+          kernel.push({ call: 'restore', family, scopedTo: id });
+          if (hub.restoreError) throw Object.assign(new Error(hub.restoreError.message), { code: hub.restoreError.code });
+          const was = built[family];
+          if (!was) throw Object.assign(new Error('flow not found'), { code: 'flow.not_found' });
+          built[family] = { ...was, outdated: false };
+          return { id: was.flow_id };
         };
       }
       return { ...client, flows };
@@ -425,6 +441,159 @@ describe('step 2 · one tap turns the recipe on, through the kernel and under th
       { call: 'deactivate', family: APPOINTMENTS.family, scopedTo: MODULE_ID },
     ]);
     expect(pick(el, `whatsapp-settings-state-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.stateOff);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// A recipe the module improved AFTER she turned it on (whatsapp_inbox#241)
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+/**
+ * Turning a recipe on never touches its document again (hub#1684), and updating the module does not
+ * either (hub#2059: nothing is overwritten on its own). So a salon that switched the WhatsApp reply
+ * on before an improvement keeps the OLD one — measured in the probe of whatsapp_inbox#239: a
+ * silent assistant still texted her customer an EMPTY message after the update. The hub already
+ * says so (`installed.outdated`) and already has the door that hands the new recipe over
+ * (`restoreTemplate`, the same one the Automations gallery offers as «restore»). What was missing
+ * is this screen — the one where the owner turned it on — saying it and offering it.
+ */
+describe('a recipe the module improved since she turned it on is offered here, never swapped silently', () => {
+  const running = (outdated: boolean | null | undefined, family = APPOINTMENTS.family) => ({
+    flow_id: `f-${family}`,
+    enabled: true,
+    ...(outdated === undefined ? {} : { outdated }),
+  });
+
+  it('a running reply the module improved says so on its card, with «Actualizar»', async () => {
+    mountWith({ built: { [APPOINTMENTS.family]: running(true) } });
+    const el = await mount();
+    expect(pick(el, `whatsapp-settings-outdated-${APPOINTMENTS.family}`)?.textContent).toContain(sentence('ui.recipeOutdated'));
+    expect(pick(el, `whatsapp-settings-update-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(sentence('ui.recipeUpdate'));
+  });
+
+  it('an up-to-date reply says nothing, and neither does one the hub cannot tell about', async () => {
+    for (const outdated of [false, null, undefined]) {
+      mountWith({ built: { [APPOINTMENTS.family]: running(outdated) } });
+      const el = await mount();
+      expect(
+        pick(el, `whatsapp-settings-outdated-${APPOINTMENTS.family}`),
+        `painted «new version» for outdated=${String(outdated)}: a guess dressed up as news`,
+      ).toBeNull();
+      expect(pick(el, `whatsapp-settings-update-${APPOINTMENTS.family}`)).toBeNull();
+      document.body.innerHTML = '';
+    }
+  });
+
+  it('a companion the module improved speaks for the card too: the card is the whole promise', async () => {
+    const companion = APPOINTMENTS.companions[0];
+    mountWith({ built: { [APPOINTMENTS.family]: running(false), [companion]: running(true, companion) } });
+    const el = await mount();
+    expect(pick(el, `whatsapp-settings-outdated-${APPOINTMENTS.family}`)).not.toBeNull();
+  });
+
+  it('a paused reply is offered the update too: switching it back on would run the old one', async () => {
+    mountWith({ built: { [APPOINTMENTS.family]: { flow_id: 'f1', enabled: false, outdated: true } } });
+    const el = await mount();
+    expect(pick(el, `whatsapp-settings-update-${APPOINTMENTS.family}`)).not.toBeNull();
+  });
+
+  it('the first tap updates NOTHING: it says what is replaced, and that it stays on or off', async () => {
+    mountWith({ built: { [APPOINTMENTS.family]: running(true) } });
+    const el = await mount();
+    await tap(el, `whatsapp-settings-update-${APPOINTMENTS.family}`);
+    expect(kernel.filter((k) => k.call === 'restore'), 'replaced her automation on the first tap').toEqual([]);
+    expect(text(el)).toContain(sentence('ui.recipeUpdateConfirm'));
+    expect(pick(el, `whatsapp-settings-confirm-update-${APPOINTMENTS.family}`)).not.toBeNull();
+  });
+
+  it('confirming restores exactly the improved recipes of THIS card, under this module, and nothing else', async () => {
+    const companion = APPOINTMENTS.companions[0];
+    mountWith({
+      built: {
+        [APPOINTMENTS.family]: running(true),
+        [companion]: running(false, companion),
+        [RESERVATIONS.family]: running(true, RESERVATIONS.family),
+      },
+    });
+    const el = await mount();
+    await tap(el, `whatsapp-settings-update-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-confirm-update-${APPOINTMENTS.family}`);
+    expect(
+      kernel.filter((k) => ['restore', 'activate', 'deactivate'].includes(k.call)),
+      'only the outdated recipe of this card is handed the new version — an up-to-date companion ' +
+        'keeps whatever she changed in it, and the table card is another switch',
+    ).toEqual([{ call: 'restore', family: APPOINTMENTS.family, scopedTo: MODULE_ID }]);
+  });
+
+  it('and a card whose companion is the improved one restores the companion', async () => {
+    const companion = APPOINTMENTS.companions[0];
+    mountWith({ built: { [APPOINTMENTS.family]: running(false), [companion]: running(true, companion) } });
+    const el = await mount();
+    await tap(el, `whatsapp-settings-update-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-confirm-update-${APPOINTMENTS.family}`);
+    expect(kernel.filter((k) => k.call === 'restore').map((k) => k.family)).toEqual([companion]);
+  });
+
+  it('after the update the notice is gone, it says it is done, and it is still running', async () => {
+    mountWith({ built: { [APPOINTMENTS.family]: running(true) } });
+    const el = await mount();
+    await tap(el, `whatsapp-settings-update-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-confirm-update-${APPOINTMENTS.family}`);
+    expect(pick(el, `whatsapp-settings-outdated-${APPOINTMENTS.family}`), 'still says «new version» after updating').toBeNull();
+    expect(pick(el, `whatsapp-settings-updated-${APPOINTMENTS.family}`)?.textContent).toContain(sentence('ui.recipeUpdated'));
+    expect(pick(el, `whatsapp-settings-state-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.stateOn);
+  });
+
+  it('«Ahora no» closes the question and restores nothing', async () => {
+    mountWith({ built: { [APPOINTMENTS.family]: running(true) } });
+    const el = await mount();
+    await tap(el, `whatsapp-settings-update-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-cancel-update-${APPOINTMENTS.family}`);
+    expect(kernel.filter((k) => k.call === 'restore')).toEqual([]);
+    expect(pick(el, `whatsapp-settings-confirm-update-${APPOINTMENTS.family}`)).toBeNull();
+    expect(pick(el, `whatsapp-settings-outdated-${APPOINTMENTS.family}`), 'the notice went away with nothing updated').not.toBeNull();
+  });
+
+  it('a refused update is read on the card, and the notice stays so she can try again', async () => {
+    mountWith({ built: { [APPOINTMENTS.family]: running(true) }, restoreError: { code: '', message: 'boom' } });
+    const el = await mount();
+    await tap(el, `whatsapp-settings-update-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-confirm-update-${APPOINTMENTS.family}`);
+    expect(pick(el, `whatsapp-settings-card-error-${APPOINTMENTS.family}`)?.textContent).toContain(sentence('ui.errRecipeUpdate'));
+    expect(text(el), 'painted the hub\'s raw message').not.toContain('boom');
+    expect(pick(el, `whatsapp-settings-update-${APPOINTMENTS.family}`)).not.toBeNull();
+    expect(pick(el, `whatsapp-settings-updated-${APPOINTMENTS.family}`), 'celebrated an update that failed').toBeNull();
+  });
+
+  it('an automation already deleted says there is nothing to update, not «try again»', async () => {
+    mountWith({ built: { [APPOINTMENTS.family]: running(true) }, restoreError: { code: 'flow.not_found', message: 'x' } });
+    const el = await mount();
+    await tap(el, `whatsapp-settings-update-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-confirm-update-${APPOINTMENTS.family}`);
+    expect(pick(el, `whatsapp-settings-card-error-${APPOINTMENTS.family}`)?.textContent).toContain(sentence('ui.errRecipeUpdateGone'));
+  });
+
+  it('a session that is not an admin is told who can do it', async () => {
+    mountWith({ built: { [APPOINTMENTS.family]: running(true) }, restoreError: { code: 'forbidden', message: 'x' } });
+    const el = await mount();
+    await tap(el, `whatsapp-settings-update-${APPOINTMENTS.family}`);
+    await tap(el, `whatsapp-settings-confirm-update-${APPOINTMENTS.family}`);
+    expect(pick(el, `whatsapp-settings-card-error-${APPOINTMENTS.family}`)?.textContent).toContain(sentence('ui.recipeUpdateForbidden'));
+  });
+
+  it('a shell with no restore door offers no «Actualizar» that could not be honoured', async () => {
+    mountWith({ built: { [APPOINTMENTS.family]: running(true) }, noRestore: true });
+    const el = await mount();
+    expect(pick(el, `whatsapp-settings-update-${APPOINTMENTS.family}`)).toBeNull();
+    expect(pick(el, `whatsapp-settings-outdated-${APPOINTMENTS.family}`)).toBeNull();
+  });
+
+  it('the table card is its own: an improved table reply does not speak on the diary card', async () => {
+    mountWith({
+      built: { [APPOINTMENTS.family]: running(false), [RESERVATIONS.family]: running(true, RESERVATIONS.family) },
+    });
+    const el = await mount();
+    expect(pick(el, `whatsapp-settings-outdated-${APPOINTMENTS.family}`)).toBeNull();
+    expect(pick(el, `whatsapp-settings-outdated-${RESERVATIONS.family}`)).not.toBeNull();
   });
 });
 
@@ -1085,6 +1254,8 @@ describe('every sentence of this screen ships in both languages, translated', ()
     'usesNeedsNewerHub', 'usesNeedBookingModule', 'usesNeedNewerBookingModule', 'usesGoToApps',
     'activateForbidden', 'errActivate', 'errTemplates',
     'usesNeedMissingModule', 'usesNeedPausedModule', 'usesNeedUpdatedModule',
+    'recipeOutdated', 'recipeUpdate', 'recipeUpdateConfirm', 'recipeUpdated',
+    'errRecipeUpdate', 'errRecipeUpdateGone', 'recipeUpdateForbidden',
     // Derived, never listed: every sentence a card owns — its name, its summary, its consent, its
     // «text your number» line AND the four words of its switch — comes off the use itself, so a
     // card added later cannot ship half-translated by being forgotten in a list over here.
