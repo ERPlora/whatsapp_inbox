@@ -116,5 +116,6 @@ describe.each(TABLES)(`${TAG} $table — a list that could not load (pm#533)`, (
     const banner = el.shadowRoot.querySelector(`[data-testid="${s.banner}"]`);
     expect(banner, 'an older hub would show the failure nowhere').toBeTruthy();
     expect(banner!.textContent).toContain('The hub is not responding.');
+    expect(banner!.closest('[slot="create"]'), 'inside the closed panel nobody would see it').toBeNull();
   });
 });
