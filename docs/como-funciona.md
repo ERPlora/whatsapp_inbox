@@ -149,7 +149,8 @@ le haya concedido en su pantalla de permisos. Para el flujo de arriba hacen falt
   `staff.members.list`, `staff.schedules.list_for_member`;
 - `command` → los de **disponibilidad** de Citas, que son commands aunque solo lean
   (`appointments.availability.day_opening`, `.slots`, `.check`), y las escrituras:
-  `customers.create` y `appointments.appointments.create`;
+  `customers.create` (fijado a `source` = `whatsapp`, para que la ficha diga de dónde vino la
+  clienta) y `appointments.appointments.create`;
 - la **última lista de huecos** que se le ofreció (whatsapp_inbox#76): `query` →
   `whatsapp_inbox.conversations.last_offer` y `command` → `whatsapp_inbox.conversations.remember_offer`,
   los dos fijados al número de quien escribe. Es lo que permite contestar la lista **escribiendo**

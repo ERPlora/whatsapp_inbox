@@ -2227,6 +2227,7 @@ HOUR_RULE = {
 }
 BOOKING_COMMAND = "appointments.appointments.create"
 CANCEL_COMMAND = "appointments.appointments.cancel"
+CUSTOMER_CREATE_COMMAND = "customers.create"
 
 # The same bet, one module over — whatsapp_inbox#60. A restaurant's unattended automation writes
 # into `reservations` instead of `appointments`, and the harm is the same shape with one more
@@ -2778,6 +2779,14 @@ PINNED_COMMAND_PAYLOAD = {
     # stop making it accept bookings one by one. The switch would do nothing and nothing would say
     # so: the document parses, the grant covers the command, the appointment is created.
     BOOKING_COMMAND: {"booked_online": True},
+    # And the CARD, where the omitted default does not widen a permission either but writes a FALSE
+    # FACT (whatsapp_inbox#252, from customers#93). `customers`' `commands/create.sql` stores
+    # `COALESCE(:source, 'walk_in')`, and since customers#109 the card reads that code as «Walk-in»
+    # / «En el local». So every customer this channel created was on file as somebody who came in
+    # off the street, and the owner who counts where her customers come from — or filters the list
+    # by origin — counts WhatsApp as zero. `whatsapp` is a code of the closed list the card
+    # translates, so the pin names the truth and nothing the card cannot show.
+    CUSTOMER_CREATE_COMMAND: {"source": "whatsapp"},
 }
 
 # What the WIDE default actually costs, per command — the sentence `unpinned_command_problems`
@@ -2796,6 +2805,10 @@ PIN_HARM = {
         "omitting the field makes the appointment be born `pending` on every hub, whatever the "
         "salon set in «confirm automatically» — so the switch does nothing and the recipe tells "
         "the customer the opposite of what the diary holds"
+    ),
+    CUSTOMER_CREATE_COMMAND: (
+        "omitting the field files every customer this channel creates as a walk-in («En el "
+        "local»), so the owner who looks at where her customers come from counts WhatsApp as zero"
     ),
 }
 
@@ -3092,6 +3105,16 @@ PINNED_INSTRUCTIONS = {
             {
                 "en": "`booked_online` set to `true`",
                 "es": "`booked_online` puesto a `true`",
+            },
+        ),
+        # whatsapp_inbox#252, the same shape one step earlier: the grant pins `source` on
+        # `customers.create`, so a card created without it is refused and the customer is left
+        # without a card — and therefore without an appointment.
+        (
+            "the card says the customer came by WhatsApp",
+            {
+                "en": "`source` set to `whatsapp`",
+                "es": "`source` puesto a `whatsapp`",
             },
         ),
     ),
@@ -7170,13 +7193,37 @@ PIN_CASES = [
     ),
     (
         "a command the table does not name is not owed a pin: this is a list of the values that "
-        "must be narrowed, not a demand that every permission carry one. `customers.create` "
-        "carries no argument that widens anything — there is no `channel` on it and no diary it "
-        "can reach",
+        "must be narrowed, not a demand that every permission carry one. "
+        "`appointments.availability.check` only asks whether a slot is still free — nothing it "
+        "is sent can widen anything or write anything false",
         UNATTENDED,
-        _fixture_doc(_ai_step("know_the_customer", "auto", ("customers.create",))),
-        {"customers.create": {}},
+        _fixture_doc(_ai_step("book_appointment", "auto", ("appointments.availability.check",))),
+        {"appointments.availability.check": {}},
         0,
+    ),
+    (
+        "🔴 the CARD is in the table since whatsapp_inbox#252, with a grant that fixes nothing: "
+        "`source` left out is `walk_in`, so every customer this channel creates is on file as "
+        "«En el local» and the owner counts WhatsApp as zero",
+        UNATTENDED,
+        _fixture_doc(_ai_step("know_the_customer", "auto", (CUSTOMER_CREATE_COMMAND,))),
+        {CUSTOMER_CREATE_COMMAND: {}},
+        1,
+    ),
+    (
+        "…and the pin really in the grant is the green: the card says WhatsApp",
+        UNATTENDED,
+        _fixture_doc(_ai_step("know_the_customer", "auto", (CUSTOMER_CREATE_COMMAND,))),
+        {CUSTOMER_CREATE_COMMAND: {"source": "whatsapp"}},
+        0,
+    ),
+    (
+        "a pin that CONTRADICTS the table is the bug written down: pinning `walk_in` is pinning "
+        "the default this issue is about",
+        UNATTENDED,
+        _fixture_doc(_ai_step("know_the_customer", "auto", (CUSTOMER_CREATE_COMMAND,))),
+        {CUSTOMER_CREATE_COMMAND: {"source": "walk_in"}},
+        1,
     ),
     (
         "🔴 and BOOKING is in the table since whatsapp_inbox#124, with a grant that fixes nothing: "
@@ -7580,6 +7627,7 @@ def _saying(*sentences):
 _ES_CHANNEL = PINNED_INSTRUCTIONS["appointment-from-whatsapp"][0][1]["es"]
 _ES_MOVE_WHO = PINNED_INSTRUCTIONS["appointment-from-whatsapp"][1][1]["es"]
 _ES_BOOKED_ONLINE = PINNED_INSTRUCTIONS["appointment-from-whatsapp"][2][1]["es"]
+_ES_CARD_SOURCE = PINNED_INSTRUCTIONS["appointment-from-whatsapp"][3][1]["es"]
 _EN_BLOCKED = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][0][1]["en"]
 _EN_ADVANCE = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][1][1]["en"]
 _ES_BLOCKED = PINNED_INSTRUCTIONS["reservation-from-whatsapp"][0][1]["es"]
@@ -7662,7 +7710,7 @@ INSTRUCTION_CASES = [
         "is what makes the table itself tamper-evident: delete the row and this row stops naming "
         "anything",
         _APPOINTMENT_ES,
-        _saying(_ES_CHANNEL, _ES_MOVE_WHO, _ES_BOOKED_ONLINE),
+        _saying(_ES_CHANNEL, _ES_MOVE_WHO, _ES_BOOKED_ONLINE, _ES_CARD_SOURCE),
         _SHIPPED_FAMILIES,
         0,
     ),
@@ -7671,7 +7719,7 @@ INSTRUCTION_CASES = [
         "watching: a model with no sentence telling it why `channel` is `customer` decides on its "
         "own what it means",
         _APPOINTMENT_ES,
-        _saying("aquí no se dice nada del `channel`", _ES_BOOKED_ONLINE),
+        _saying("aquí no se dice nada del `channel`", _ES_BOOKED_ONLINE, _ES_CARD_SOURCE),
         _SHIPPED_FAMILIES,
         2,
     ),
@@ -7681,7 +7729,7 @@ INSTRUCTION_CASES = [
         "is exactly the shape whatsapp_inbox#108 had, a paragraph kept and the sentence at the "
         "end of it dropped, in the half nobody reads",
         _APPOINTMENT_ES,
-        _saying(_ES_CHANNEL, _ES_BOOKED_ONLINE),
+        _saying(_ES_CHANNEL, _ES_BOOKED_ONLINE, _ES_CARD_SOURCE),
         _SHIPPED_FAMILIES,
         1,
     ),
@@ -7693,7 +7741,17 @@ INSTRUCTION_CASES = [
         "refuses the call that omits it, and the Spanish half books nothing at all while the "
         "English half keeps working",
         _APPOINTMENT_ES,
-        _saying(_ES_CHANNEL, _ES_MOVE_WHO),
+        _saying(_ES_CHANNEL, _ES_MOVE_WHO, _ES_CARD_SOURCE),
+        _SHIPPED_FAMILIES,
+        1,
+    ),
+    (
+        "🔴 and the row whatsapp_inbox#252 adds, losable on its own: the Spanish document orders "
+        "everything else and never says the card came by WhatsApp — the grant pins `source`, so "
+        "the hub refuses the card, and the Spanish half never gets a new customer to the booking "
+        "step while the English half keeps working",
+        _APPOINTMENT_ES,
+        _saying(_ES_CHANNEL, _ES_MOVE_WHO, _ES_BOOKED_ONLINE),
         _SHIPPED_FAMILIES,
         1,
     ),
@@ -7832,8 +7890,29 @@ FLOOR_CASES = [
     (
         "a command handed over whose payload no table here fills: nothing is promised, so nothing "
         "is demanded of the floor",
+        {
+            "steps": [
+                {
+                    "id": "book_appointment",
+                    "kind": "ai",
+                    "tools": {"commands": ["appointments.availability.check"]},
+                }
+            ]
+        },
+        {"appointments.availability.check": set()},
+        0,
+    ),
+    (
+        "🔴 whatsapp_inbox#252: the card is pinned `source` = `whatsapp`, so a `customers` floor "
+        "whose create schema did not take `source` is a recipe whose every new customer is refused",
         _FLOOR_CUSTOMER,
-        {"customers.create": set()},
+        {"customers.create": {"name", "phone"}},
+        1,
+    ),
+    (
+        "…and the floor that takes it is the green",
+        _FLOOR_CUSTOMER,
+        {"customers.create": {"name", "phone", "source"}},
         0,
     ),
     (
