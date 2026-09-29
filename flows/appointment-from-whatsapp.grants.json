@@ -83,9 +83,12 @@
     {
       "kind": "command",
       "value": "customers.create",
+      "payload": {
+        "source": "whatsapp"
+      },
       "reason": {
-        "en": "Create the customer's card when it is somebody new.",
-        "es": "Crear la ficha de la clienta cuando es alguien nuevo."
+        "en": "Create the customer's card when it is somebody new, marked as having come by WhatsApp.",
+        "es": "Crear la ficha de la clienta cuando es alguien nuevo, marcada como llegada por WhatsApp."
       }
     },
     {

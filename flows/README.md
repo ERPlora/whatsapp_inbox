@@ -145,6 +145,17 @@ el campo fijado, así que el punto 9 tiene que ORDENARLO — y esa orden está p
 `PINNED_INSTRUCTIONS`, porque son cuatro palabras dentro de una instrucción numerada y es
 exactamente lo que se pierde en una traducción.
 
+🔴 **Y el grant de `customers.create` FIJA `source` = `whatsapp`** (whatsapp_inbox#252, sale de
+customers#93). Por la misma razón y con otro daño: `commands/create.sql` de Clientes guarda
+`COALESCE(:source, 'walk_in')`, y desde customers#109 la ficha lee ese código como «En el local».
+Sin el pin, toda clienta que entra por WhatsApp queda archivada como gente de paso y el dueño que
+mira de dónde vienen sus clientes cuenta WhatsApp como cero. `whatsapp` es un código de la lista
+cerrada que la ficha traduce. El punto 3 de `know_the_customer` lo ORDENA (pineado en
+`PINNED_INSTRUCTIONS`), porque el pin también rechaza la llamada que lo omite. Las fichas creadas
+antes con `walk_in` **no se migran**: este módulo no escribe en las tablas de Clientes, y no hay
+forma fiable de distinguir una ficha que creó la receta de la de una clienta de mostrador que
+después escribió por WhatsApp — el origen se corrige a mano en la ficha.
+
 ### 🔴 La hora NO la elige el modelo
 
 La regla que hace habitable lo de arriba, y está escrita en el prompt tres veces: **solo se reserva
