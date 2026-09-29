@@ -11,6 +11,7 @@
 // settled: the notice travels with the form, is brought into view ONCE when it appears, and what
 // happens OUTSIDE the save (a row delete, a list or a thread that does not load) stays on the page.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { dataTableShowsLoadError } from '@erplora/module-sdk';
 
 type El = HTMLElement & { shadowRoot: ShadowRoot; updateComplete: Promise<unknown> };
 
@@ -335,8 +336,16 @@ describe('templates: what happens OUTSIDE the save stays on the page (rv-appoint
     failingReads.add('whatsapp_inbox.templates.list');
     const el = await mountTemplates();
     const notice = q(el, 'whatsapp-templates-load-error');
-    expect(notice, 'the failed load is mute').toBeTruthy();
-    expect(templatesForm(el)?.contains(notice)).toBe(false);
+    if (dataTableShowsLoadError()) {
+      // The shell's table paints a failed load itself (pm#533): the reason is on the table, and a
+      // page notice as well would say it twice.
+      const table = el.shadowRoot.querySelector<HTMLElement & { error?: string }>('ok-data-table[testid="whatsapp-templates-table"]');
+      expect(table?.error, 'the failed load is mute').toBeTruthy();
+      expect(notice, 'said twice').toBeFalsy();
+    } else {
+      expect(notice, 'the failed load is mute').toBeTruthy();
+      expect(templatesForm(el)?.contains(notice)).toBe(false);
+    }
   });
 
   it('a delete that goes through reloads the list (rv-tasks-47)', async () => {

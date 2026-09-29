@@ -6,6 +6,7 @@
 // `slot="create"`. Y el estado de Meta (pending|approved|rejected, dominio cerrado de la migración)
 // se filtra con un `select`, no tecleando el texto a pelo.
 import { beforeEach, describe, expect, it } from 'vitest';
+import { dataTableShowsLoadError } from '@erplora/module-sdk';
 import { META_TEMPLATE_STATES } from '../../lib/meta-template-status';
 
 const PLANTILLA = {
@@ -363,7 +364,13 @@ describe('loading / empty / error are painted, not assumed', () => {
     wc.ctrl.error = 'boom';
     wc.requestUpdate();
     await wc.updateComplete;
-    expect([...el.shadowRoot.querySelectorAll('.err')].map((n) => n.textContent)).toContain('boom');
+    if (dataTableShowsLoadError()) {
+      // The shell's table paints a failed load itself (pm#533), so the reason travels to the table.
+      const table = el.shadowRoot.querySelector<HTMLElement & { error?: string }>('ok-data-table[testid="whatsapp-templates-table"]');
+      expect(table?.error).toBe('boom');
+    } else {
+      expect([...el.shadowRoot.querySelectorAll('.err')].map((n) => n.textContent)).toContain('boom');
+    }
   });
 });
 
