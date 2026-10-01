@@ -1403,6 +1403,12 @@ var o6 = e4(class extends i4 {
   }
 });
 
+// @erplora/outfitkit/dist/shared/anchor.js
+function shadowAnchorEvent(ev) {
+  const el = ev.currentTarget ?? ev.target;
+  return new CustomEvent("ok-popover-anchor", { detail: { ionShadowTarget: el } });
+}
+
 // @erplora/outfitkit/dist/shared/ion-tone.js
 var DEFAULT_HEX = {
   primary: "#0054e9",
@@ -1445,6 +1451,19 @@ function ionTone(tone, variant) {
       return `--background: ${value}; --color: ${contrast}; --background-hover: var(--ion-color-${tone}-tint, ${value}); --background-activated: var(--ion-color-${tone}-shade, ${value}); --background-focused: var(--ion-color-${tone}-shade, ${value});`;
     }
   }
+}
+
+// @erplora/outfitkit/dist/shared/searchbar-name.js
+function syncSearchbarInputName(root, name) {
+  const bar = root?.querySelector("ion-searchbar");
+  if (!bar) return;
+  void customElements.whenDefined("ion-searchbar").then(() => bar.getInputElement?.()).then((input) => {
+    const n6 = name();
+    if (input && input.getAttribute("aria-label") !== n6) {
+      input.setAttribute("aria-label", n6);
+    }
+  }).catch(() => {
+  });
 }
 
 // @erplora/outfitkit/dist/shared/icons.js
@@ -1689,6 +1708,7 @@ var DEFAULT_LABELS = {
   actions: "Actions",
   close: "Close",
   newRecord: "New",
+  editRecord: "Edit",
   form: "Form",
   filterPlaceholder: "Filter\u2026",
   from: "From",
@@ -1728,6 +1748,7 @@ var ES_LABELS = {
   actions: "Acciones",
   close: "Cerrar",
   newRecord: "Nuevo",
+  editRecord: "Editar",
   form: "Formulario",
   filterPlaceholder: "Filtrar\u2026",
   from: "Desde",
@@ -1788,6 +1809,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     this.filterDraft = {};
     this.serverFilters = {};
     this.panel = "none";
+    this.panelTitle = "";
     this.viewMode = "table";
     this.viewChosenByUser = false;
     this.isMobile = false;
@@ -1800,10 +1822,18 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     this.internalSelection = /* @__PURE__ */ new Set();
     this.menuOpen = false;
     this.onLocaleChanged = () => this.requestUpdate();
+    this.onKeydown = (e5) => {
+      if (e5.key !== "Escape" || e5.defaultPrevented || this.panel === "none") return;
+      e5.preventDefault();
+      e5.stopPropagation();
+      this.closePanel("escape");
+    };
     this.onWindowResize = () => {
       this.measureXOverflow();
       this.measureRowActionsFit();
+      this.syncSheetInsets();
     };
+    this.sheetContent = null;
     this.onSearch = (ev) => {
       const value = ev.target.value ?? "";
       if (this.serverSide) {
@@ -1881,7 +1911,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
        position:fixed dentro de ion-content se ancla al área de contenido (contain), que es justo el hueco
        bajo la cabecera de la app: el usuario conserva el título de la página. */
     @media (max-width: 833.98px) {
-      .drawer { position: fixed; inset: 0; top: var(--ok-sheet-top, 0px); width: 100%; max-width: none; height: auto; border-left: 0; z-index: 1000; }
+      .drawer { position: fixed; inset: 0; top: var(--ok-sheet-top, 0px); bottom: var(--ok-sheet-bottom, 0px); width: 100%; max-width: none; height: auto; border-left: 0; z-index: 1000; }
       .tk-scrim { display: none; }
     }
     .drawer .dh { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
@@ -2161,6 +2191,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
   }
   connectedCallback() {
     super.connectedCallback();
+    this.addEventListener("keydown", this.onKeydown);
     if (typeof window !== "undefined") {
       window.addEventListener("erplora:locale-changed", this.onLocaleChanged);
       window.addEventListener("resize", this.onWindowResize);
@@ -2241,17 +2272,26 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     }
     this.measureActionsTrack();
     this.measureRowActionsFit();
-    if (changed.has("panel")) this.syncSheetTop();
+    if (changed.has("panel")) this.syncSheetInsets();
+    syncSearchbarInputName(this.shadowRoot, () => this.effSearchPlaceholder);
   }
-  /** #75 — Where the mobile sheet starts. `position: fixed; inset: 0` painted it from y=0 and the
-   *  app's `ion-header` (its own stacking context, above the content) covered the sheet's title and
-   *  its only Close button — measured at 390×844 in the Appointments parity page. CSS inside a
-   *  shadow root cannot know where the content area begins, so on open the table measures the
-   *  closest `ion-content` (walking through shadow hosts) and hands the offset over as a custom
-   *  property; on close it is removed. Without an `ion-content` around, the sheet keeps y=0. */
-  syncSheetTop() {
+  /** #75/#197 — Where the mobile sheet starts and ends. `position: fixed; inset: 0` painted it from
+   *  y=0 to the screen edge: the app's `ion-header` (its own stacking context, above the content)
+   *  covered the sheet's title and its only Close button — measured at 390×844 in the Appointments
+   *  parity page — and the module tab bar (an `ion-footer` OUTSIDE `ion-content`) covered the last
+   *  66px (ios) / 72px (md) of the sheet, so its Save button could not be tapped (inventory#105).
+   *  CSS inside a shadow root cannot know where the content area begins or ends, so on open the
+   *  table measures the closest `ion-content` (walking through shadow hosts) and hands both offsets
+   *  over as custom properties, re-measuring them while the sheet stays open whenever the content
+   *  resizes (rotation, a tab bar mounted late) or the window resizes; on close both are removed and
+   *  the content stops being observed. Without an `ion-content` around, the sheet keeps the screen
+   *  edge on both ends. */
+  syncSheetInsets() {
     if (this.panel === "none") {
       this.style.removeProperty("--ok-sheet-top");
+      this.style.removeProperty("--ok-sheet-bottom");
+      this.sheetObserver?.disconnect();
+      this.sheetContent = null;
       return;
     }
     let node = this;
@@ -2262,15 +2302,31 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
       node = parent === node ? null : parent;
     }
     const top = content ? Math.max(0, Math.round(content.getBoundingClientRect().top)) : 0;
+    const bottom = content ? Math.max(0, Math.round(window.innerHeight - content.getBoundingClientRect().bottom)) : 0;
     this.style.setProperty("--ok-sheet-top", `${top}px`);
+    this.style.setProperty("--ok-sheet-bottom", `${bottom}px`);
+    if (typeof ResizeObserver !== "undefined") {
+      this.sheetObserver ??= new ResizeObserver(() => {
+        if (this.panel !== "none") this.syncSheetInsets();
+      });
+      if (content !== this.sheetContent) {
+        this.sheetObserver.disconnect();
+        if (content) this.sheetObserver.observe(content);
+        this.sheetContent = content;
+      }
+    }
   }
   disconnectedCallback() {
+    this.removeEventListener("keydown", this.onKeydown);
     if (typeof window !== "undefined") {
       window.removeEventListener("erplora:locale-changed", this.onLocaleChanged);
       window.removeEventListener("resize", this.onWindowResize);
     }
     this.xObserver?.disconnect();
     this.xObserver = void 0;
+    this.sheetObserver?.disconnect();
+    this.sheetObserver = void 0;
+    this.sheetContent = null;
     if (this.mq) {
       const handler = this._mqHandler;
       if (handler) this.mq.removeEventListener("change", handler);
@@ -2429,10 +2485,24 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     input.value = "";
   }
   toggle(p4) {
+    this.panelTitle = "";
     if (p4 === "filters" && this.panel !== "filters") {
       this.filterDraft = this.cloneFilters(this.clientFilters);
     }
-    this.panel = this.panel === p4 ? "none" : p4;
+    if (this.panel === p4) this.closePanel("toggle");
+    else this.panel = p4;
+  }
+  /** Closes the side panel and, if one was actually open, emits `panelClose` with the panel that
+   *  was open and the reason it closed. No-op (no event) when the panel is already `'none'`.
+   *
+   *  outfitkit#195 — modules that load the edit form after an `await` (read the full row, then
+   *  fill the form) listen to `panelClose` to discard that pending load if the person closes the
+   *  panel meanwhile (X, backdrop, Escape) before the reply arrives. */
+  closePanel(reason) {
+    if (this.panel === "none") return;
+    const panel = this.panel;
+    this.panel = "none";
+    this.emit("panelClose", { panel, reason });
   }
   // ── Filtros en memoria (modo cliente): borrador → aplicar. ───────────────────────────────────
   cloneFilters(src) {
@@ -2463,7 +2533,7 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     this.clientFilters = clean;
     this.clientPage = 0;
     this.mobileShown = 0;
-    this.panel = "none";
+    this.closePanel("apply");
     this.emit("filterChange", { filters: this.serializeFilters(clean) });
   }
   clearFilters() {
@@ -2488,13 +2558,16 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     }
     return out;
   }
-  /** Abre el panel lateral (API pública para el módulo, p.ej. "editar" abre el form pre-rellenado). */
-  open(panel = "create") {
+  /** Opens the side panel (public API for the module, e.g. "edit" opens the pre-filled form).
+   *  `mode` sets the default header («New» / «Edit»); `opts.title` replaces it (e.g. «Editing service — Brushing»). */
+  open(panel = "create", opts = {}) {
+    this.panelTitle = panel === "filters" ? "" : (opts.title ?? "").trim();
     this.panel = panel;
   }
-  /** Cierra el panel lateral. */
+  /** Closes the side panel (public API for the module). Emits `panelClose` with reason `'api'`
+   *  when a panel was actually open (outfitkit#195); no-op when it was already closed. */
   close() {
-    this.panel = "none";
+    this.closePanel("api");
   }
   emit(type, detail) {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
@@ -2700,16 +2773,19 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
     }
     this.setClientFilter(col.key, { [edge]: v3 || void 0 });
   }
-  // Menú overflow: ancla el popover al botón vía el evento de click (compatible con Shadow DOM).
+  // Overflow menu: anchor the popover to the tapped button via Ionic's `ionShadowTarget`
+  // (the retargeted `ev.target` after dispatch would be the whole table, since `trigger` does not
+  // resolve inside Shadow DOM).
   openMenu(ev) {
-    this.menuEv = ev;
+    this.menuEv = shadowAnchorEvent(ev);
     this.menuOpen = true;
   }
-  /** #122 — Abre el menú «⋮» de UNA fila. Un solo popover para toda la tabla (uno por fila serían
-   *  tantos como filas), anclado por evento porque `trigger` no resuelve dentro de Shadow DOM. */
+  /** #122 — Opens the «⋮» menu of ONE row. A single popover for the whole table (one per row would
+   *  be as many as there are rows), anchored to the tapped button via Ionic's `ionShadowTarget`
+   *  (the retargeted `ev.target` after dispatch would be the whole table). */
   openRowMenu(ev, row) {
     ev.stopPropagation();
-    this.rowMenuEv = ev;
+    this.rowMenuEv = shadowAnchorEvent(ev);
     this.rowMenuRow = row;
     this.rowMenuOpen = true;
   }
@@ -3216,12 +3292,13 @@ var _OkDataTable = class _OkDataTable2 extends i3 {
   renderDrawer() {
     const isFilters = this.panel === "filters";
     const clientFilters = isFilters && !this.serverSide;
+    const formTitle = this.panelTitle || (this.panel === "edit" ? this.t.editRecord : this.t.newRecord);
     return b2`
-      <div class="tk-scrim" @click=${() => this.close()}></div>
-      <aside class="drawer" role="dialog" aria-label=${isFilters ? this.t.filters : this.t.form}>
+      <div class="tk-scrim" @click=${() => this.closePanel("backdrop")}></div>
+      <aside class="drawer" role="dialog" aria-label=${isFilters ? this.t.filters : this.panelTitle || this.t.form}>
         <header class="dh">
-          <strong>${isFilters ? this.t.filters : this.t.newRecord}</strong>
-          <ion-button fill="clear" size="small" aria-label=${this.t.close} @click=${() => this.close()}><ion-icon slot="icon-only" .icon=${iconClose}></ion-icon></ion-button>
+          <strong>${isFilters ? this.t.filters : formTitle}</strong>
+          <ion-button fill="clear" size="small" aria-label=${this.t.close} @click=${() => this.closePanel("close-button")}><ion-icon slot="icon-only" .icon=${iconClose}></ion-icon></ion-button>
         </header>
         <div class="db">
           ${isFilters ? clientFilters ? this.filterColumns.map((c5) => this.renderClientFilter(c5)) : this.filterColumns.map((c5) => b2`<div class="fblock">${this.renderFilterControl(c5)}</div>`) : b2`<slot name="create"></slot>`}
@@ -3550,6 +3627,9 @@ __decorateClass2([
 __decorateClass2([
   r5()
 ], _OkDataTable.prototype, "panel");
+__decorateClass2([
+  r5()
+], _OkDataTable.prototype, "panelTitle");
 __decorateClass2([
   r5()
 ], _OkDataTable.prototype, "viewMode");

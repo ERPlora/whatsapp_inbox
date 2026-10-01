@@ -6,7 +6,7 @@
   "description": "Módulo whatsapp_inbox (manifest declarativo + Web Component Lit): inbox de conversaciones de WhatsApp Business, requests (pedidos/reservas/citas/presupuestos) extraídas por IA, y plantillas Meta. La lógica de bot/IA, parseo de esquema dinámico, numeración atómica y dispatch cross-módulo vive en WASM (ver WASM-TODO.md). Se compila con @erplora/module-cli.",
   "dependencies": {
     "@erplora/module-sdk": "workspace:*",
-    "@erplora/outfitkit": "workspace:*",
+    "@erplora/outfitkit": "0.1.98",
     "lit": "^3.2.0"
   }
 }

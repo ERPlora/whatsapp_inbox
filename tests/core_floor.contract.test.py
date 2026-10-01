@@ -102,10 +102,13 @@ HUB_CHECKOUT = MODULE_DIR.parent.parent.parent / "hub"
 # is written down right here. Rebake against a different OutfitKit and this line stops matching the
 # artifact, so the floor has to be derived again instead of being inherited by accident.
 OUTFITKIT_STAMP = MODULE_DIR / "dist" / "outfitkit.json"
-# 0.1.89 (whatsapp_inbox#225): since module-toolkit#346 `erplora validate` judges the stamp by the
-# API the module uses on the shell's `ok-*`, type-checked against the floor hub's OutfitKit; the
-# bundle passes at 1.1.22 (ok-lightbox, the reason for the rebake, is painted by the module itself).
-OUTFITKIT_BAKE_FLOOR = ("0.1.89", (1, 1, 22))
+# 0.1.98 (whatsapp_inbox#258): pinned in `package.json`, because 0.1.98 is what the 1.1.30 floor
+# hub carries and the first hub to carry it. The lists use `<ok-data-table .error @retry>`, which
+# only exists from OutfitKit 0.1.113 (no hub tag yet): the screens detect it with
+# `dataTableShowsLoadError()` and paint their own notice otherwise, but `erplora validate` cannot
+# see that guard (module-toolkit#447), so a bake above the floor's OutfitKit is refused. Lift the
+# pin once #447 lands or a hub tag ships ≥ 0.1.113.
+OUTFITKIT_BAKE_FLOOR = ("0.1.98", (1, 1, 30))
 
 
 class KernelNeed(NamedTuple):
