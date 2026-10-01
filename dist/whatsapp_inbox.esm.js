@@ -4698,7 +4698,7 @@ var ListController = class {
       this.rows = [];
       this.total = 0;
       const reason = e5 instanceof Error ? e5.message.trim() : "";
-      this.error = reason || listLoadFailedMessage(activeLocale());
+      this.error = tableReadReason(e5, activeLocale()) || reason || listLoadFailedMessage(activeLocale());
     } finally {
       if (mySeq === this.seq) {
         this.loading = false;
@@ -4847,6 +4847,13 @@ var ErploraError = class extends Error {
     this.name = "ErploraError";
   }
 };
+var SERVER_UNAVAILABLE = "server_unavailable";
+var READ_UNREACHABLE_UNDER_HEADING_EN = "The hub is not responding. Check the connection and try again.";
+var READ_UNREACHABLE_UNDER_HEADING_ES = "El hub no responde. Comprueba la conexi\xF3n e int\xE9ntalo de nuevo.";
+function tableReadReason(e5, locale) {
+  if (e5?.code !== SERVER_UNAVAILABLE || !dataTableShowsLoadError()) return "";
+  return locale.toLowerCase().startsWith("en") ? READ_UNREACHABLE_UNDER_HEADING_EN : READ_UNREACHABLE_UNDER_HEADING_ES;
+}
 function activeLocale() {
   try {
     return localStorage.getItem("erplora.locale") || "es";
