@@ -2,15 +2,11 @@
 
 Prefijo: WHATSAPP_INBOX
 
-> Las plantillas que Meta exige para escribir a alguien pasadas 24 h desde su último mensaje. Este
-> módulo las guarda, las trae de WhatsApp Manager y las manda a revisión; **enviarlas** lo hace el
-> paso «notificar» de Automatizaciones en el hub. Matriz completa elemento × traer / crear / editar
-> / enviar en [`../WORKFLOW.md`](../WORKFLOW.md) («Cobertura contra la referencia»).
-
 ## Flujos
 
 ### WHATSAPP_INBOX-F27 Ver las plantillas y lo que dice Meta de cada una
 Estado: hecho
+Vertical: comun
 Actor: administrador
 Pantalla: Plantillas de Meta
 Pasos:
@@ -20,14 +16,15 @@ Pasos:
 Entra: las plantillas guardadas aquí y lo que Meta dice hoy de cada una (por nombre e idioma).
 Sale: el veredicto nuevo guardado en cada plantilla que cambió; una que Meta tuvo y ya no lista queda como «Borrada en WhatsApp Manager» y no se elimina.
 Si falla: «No hemos podido comprobar con Meta si hay veredictos nuevos, así que lo que ves es lo último que sabemos…»; la lista sigue visible.
-Implicados: ninguno
+Implicados: pendiente
 Pendiente de enlazar: hub — puerta de plantillas de WhatsApp (listar, registrar, subir muestra)
 Pendiente de enlazar: saas — pasarela de WhatsApp: plantillas contra Meta
 QA: WA-04
 
 ### WHATSAPP_INBOX-F28 Traer las plantillas creadas en WhatsApp Manager
 Estado: parcial — no se traen las que llevan carrusel, oferta por tiempo limitado, botón de copiar código o de Flow, cabecera de ubicación o más de una variable en la cabecera
-Actor: sistema (al abrir Plantillas de Meta)
+Vertical: comun
+Actor: sistema
 Pantalla: Plantillas de Meta
 Pasos:
 1. Al abrir **Plantillas de Meta**, las que el negocio creó en WhatsApp Manager y no están aquí aparecen en la lista con su texto, cabecera, botones, ejemplos y estado.
@@ -36,12 +33,13 @@ Pasos:
 Entra: la lista de Meta con el contenido de cada plantilla.
 Sale: plantillas nuevas guardadas una sola vez por nombre e idioma; aviso público de plantilla creada.
 Si falla: si una no se puede guardar, se nombra en el aviso y se dice el motivo.
-Implicados: ninguno
+Implicados: pendiente
 Pendiente de enlazar: saas — pasarela de WhatsApp: plantillas contra Meta
 QA: ninguno
 
 ### WHATSAPP_INBOX-F29 Crear una plantilla y mandarla a revisión
 Estado: parcial — el panel no tiene campo para la cabecera de texto ni para el pie, no crea botones de enlace con variable (whatsapp_inbox#219) ni plantillas de autenticación con su código, y el idioma se escribe a mano
+Vertical: comun
 Actor: administrador
 Pantalla: Plantillas de Meta
 Pasos:
@@ -54,13 +52,14 @@ Pasos:
 Entra: lo que escribe el administrador.
 Sale: la plantilla guardada aquí y registrada en Meta con su veredicto; aviso público de plantilla creada.
 Si falla: la plantilla queda guardada aquí y el panel sigue abierto, ya como edición, con el motivo encima de **Guardar** (por ejemplo «Meta no ha aceptado el nombre…», «Meta necesita un ejemplo para cada hueco…», «Meta no ha contestado…»); guardarla otra vez no la duplica.
-Implicados: ninguno
+Implicados: pendiente
 Pendiente de enlazar: hub — puerta de plantillas de WhatsApp (listar, registrar, subir muestra)
 Pendiente de enlazar: saas — pasarela de WhatsApp: plantillas contra Meta
 QA: WA-04
 
 ### WHATSAPP_INBOX-F30 Editar una plantilla
 Estado: parcial — la cabecera de texto, su ejemplo y el pie no se pueden cambiar (viajan intactos); una plantilla con botón de enlace con variable, o con archivo en un hub sin la puerta de muestras, queda en solo lectura
+Vertical: comun
 Actor: administrador
 Pantalla: Plantillas de Meta
 Pasos:
@@ -71,12 +70,13 @@ Pasos:
 Entra: la plantilla y los cambios.
 Sale: la plantilla actualizada aquí y registrada otra vez en Meta; aviso público de plantilla actualizada.
 Si falla: como F29; un veredicto de Meta nunca se guarda sobre un texto que se cambió después.
-Implicados: ninguno
+Implicados: pendiente
 Pendiente de enlazar: saas — pasarela de WhatsApp: plantillas contra Meta
 QA: ninguno
 
 ### WHATSAPP_INBOX-F31 Borrar una plantilla
 Estado: parcial — borrar aquí no la borra en Meta (el hub ya tiene la puerta para hacerlo y el módulo no la usa)
+Vertical: comun
 Actor: administrador
 Pantalla: Plantillas de Meta
 Pasos:
@@ -86,6 +86,6 @@ Pasos:
 Entra: la plantilla elegida.
 Sale: plantilla borrada aquí (se conserva marcada como borrada); aviso público de plantilla borrada.
 Si falla: «No se pudo borrar la plantilla» (o el motivo) encima de la lista.
-Implicados: ninguno
+Implicados: pendiente
 Pendiente de enlazar: hub — puerta de plantillas de WhatsApp (borrar en Meta)
 QA: ninguno

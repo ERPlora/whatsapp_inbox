@@ -22,8 +22,8 @@ que solo usa su WhatsApp. El dueño sigue contestando desde la app WhatsApp Busi
 el número es el mismo (coexistencia).
 
 **Lo común y lo de cada negocio.** El mismo canal sirve a la peluquería (cita) y al restaurante
-(mesa). Si cambias una pieza de la columna «común», afecta a los dos; si cambias una de las otras
-dos, solo a ese negocio.
+(mesa). Cada flujo lo dice en su clave `Vertical:` (`comun`, `peluqueria`, `restaurante`). Si
+cambias una pieza `comun`, afecta a los dos; si cambias una de las otras, solo a ese negocio.
 
 | Parte del recorrido | Común (los dos negocios) | Solo peluquería (cita) | Solo restaurante (mesa) |
 |---|---|---|---|
@@ -100,7 +100,8 @@ bloques: **Tu número** (bloque del hub: «Conectar WhatsApp», «Conectado», �
 conectar WhatsApp»); **¿Para qué lo usas?** (una tarjeta por uso con **Activar**/**Desactivar**,
 estado «Activo»/«Desactivada», la frase de consentimiento con **Activar**/**Ahora no**, el
 interruptor de confirmación y, si toca, «Hay una versión mejorada…» con **Actualizar**); y al pie
-**Ajustes avanzados en Automatizaciones** y el desplegable **Plantillas de Meta**. Cargando:
+**Ajustes avanzados en Automatizaciones** y el desplegable **Plantillas de Meta**. El consumo del mes no está aquí: lo pinta la pestaña «Plan» del hub
+(F13). Cargando:
 indicador giratorio; hub viejo: «Este hub es demasiado antiguo…»; error: «No hemos podido saber qué
 hay activo ahora mismo…»; sin módulo de reservas: «Instala Citas o Reservas…» + **Ver
 aplicaciones**.
@@ -114,55 +115,48 @@ de las variables**, **Botones**, el veredicto de Meta con «qué hacer», y **A�
 Avisos encima de la tabla: Meta no se pudo consultar; plantillas de WhatsApp Manager que no se
 pueden traer (con sus nombres). Vacía: «Sin plantillas.»
 
-### Plan
-Pestaña del hub dentro del módulo (la pinta el hub, no este módulo): mensajes gastados este mes
-frente al tope del plan. Solo la ve quien puede ver Ajustes.
-
-### Campana de avisos
-Campana de la barra superior del hub, en cualquier pantalla: «Clientes de WhatsApp esperando
-respuesta» con el número; al tocarla abre la Bandeja.
-
-### Chat de WhatsApp de la clienta
-No es del hub: es el WhatsApp del móvil de la clienta o el comensal. Ahí recibe el acuse, la lista
-de huecos para tocar («Ver huecos»), la confirmación, la disculpa o el aviso de cita confirmada.
+Pantallas de otros que usan estos flujos: **Hub: Plan** (pestaña que el hub añade al módulo con el
+consumo del mes), **Hub: Campana de avisos** (barra superior, «Clientes de WhatsApp esperando
+respuesta») y **WhatsApp: chat del cliente** (el móvil de la clienta o el comensal, donde recibe el
+acuse, la lista «Ver huecos», la confirmación, la disculpa o el aviso de cita confirmada).
 
 ## Flujos
 
 Índice. Cada flujo, con su gramática completa, está en el fichero que indica la tabla.
 
-| ID | Flujo | Estado | Ámbito | Fichero |
+| ID | Flujo | Estado | Vertical | Fichero |
 |---|---|---|---|---|
-| WHATSAPP_INBOX-F01 | Conectar el número de WhatsApp del negocio | parcial | común | canal-y-bandeja |
-| WHATSAPP_INBOX-F02 | Desconectar o volver a conectar el número | hecho | común | canal-y-bandeja |
-| WHATSAPP_INBOX-F03 | Recibir un mensaje en la bandeja | hecho | común | canal-y-bandeja |
-| WHATSAPP_INBOX-F04 | Reconocer a la clienta por su número | hecho | común | canal-y-bandeja |
-| WHATSAPP_INBOX-F05 | Leer una conversación | parcial | común | canal-y-bandeja |
-| WHATSAPP_INBOX-F06 | Ver una foto, una nota de voz o un documento | hecho | común | canal-y-bandeja |
-| WHATSAPP_INBOX-F07 | Asignar una conversación a alguien del equipo | parcial | común | canal-y-bandeja |
-| WHATSAPP_INBOX-F08 | Contestar desde la app de WhatsApp Business del móvil | hecho | común | canal-y-bandeja |
-| WHATSAPP_INBOX-F09 | Ver quién espera respuesta | hecho | común | canal-y-bandeja |
-| WHATSAPP_INBOX-F10 | Borrar los datos de un número sin ficha | parcial | común | canal-y-bandeja |
-| WHATSAPP_INBOX-F11 | Borrar los datos de una clienta desde su ficha | parcial | común | canal-y-bandeja |
-| WHATSAPP_INBOX-F12 | Unir dos fichas de la misma clienta | hecho | común | canal-y-bandeja |
-| WHATSAPP_INBOX-F13 | Ver el consumo del mes y llegar al tope | parcial | común | canal-y-bandeja |
-| WHATSAPP_INBOX-F14 | Activar «Reservar citas» | hecho | cita | respuestas-automaticas |
-| WHATSAPP_INBOX-F15 | Activar «Reservar mesa» | hecho | mesa | respuestas-automaticas |
-| WHATSAPP_INBOX-F16 | Decidir si las reservas por WhatsApp se confirman solas | hecho | común | respuestas-automaticas |
-| WHATSAPP_INBOX-F17 | Desactivar una respuesta automática | hecho | común | respuestas-automaticas |
-| WHATSAPP_INBOX-F18 | Actualizar una respuesta automática a su versión mejorada | hecho | común | respuestas-automaticas |
-| WHATSAPP_INBOX-F19 | Elegir el hueco escribiendo en vez de tocando | hecho | común | respuestas-automaticas |
-| WHATSAPP_INBOX-F20 | Cuando el asistente no puede contestar | hecho | común | respuestas-automaticas |
-| WHATSAPP_INBOX-F21 | La clienta pide cita por WhatsApp | hecho | cita | respuestas-automaticas |
-| WHATSAPP_INBOX-F22 | La clienta anula o mueve su cita por WhatsApp | hecho | cita | respuestas-automaticas |
-| WHATSAPP_INBOX-F23 | La clienta recibe el aviso cuando el salón confirma | parcial | cita | respuestas-automaticas |
-| WHATSAPP_INBOX-F24 | El cliente pide mesa por WhatsApp | hecho | mesa | respuestas-automaticas |
-| WHATSAPP_INBOX-F25 | El cliente anula o cambia su mesa por WhatsApp | no hecho | mesa | respuestas-automaticas |
-| WHATSAPP_INBOX-F26 | El cliente recibe el aviso cuando el restaurante confirma | no hecho | mesa | respuestas-automaticas |
-| WHATSAPP_INBOX-F27 | Ver las plantillas y lo que dice Meta de cada una | hecho | común | plantillas |
-| WHATSAPP_INBOX-F28 | Traer las plantillas creadas en WhatsApp Manager | parcial | común | plantillas |
-| WHATSAPP_INBOX-F29 | Crear una plantilla y mandarla a revisión | parcial | común | plantillas |
-| WHATSAPP_INBOX-F30 | Editar una plantilla | parcial | común | plantillas |
-| WHATSAPP_INBOX-F31 | Borrar una plantilla | parcial | común | plantillas |
+| WHATSAPP_INBOX-F01 | Conectar el número de WhatsApp del negocio | parcial | comun | canal-y-bandeja |
+| WHATSAPP_INBOX-F02 | Desconectar o volver a conectar el número | hecho | comun | canal-y-bandeja |
+| WHATSAPP_INBOX-F03 | Recibir un mensaje en la bandeja | hecho | comun | canal-y-bandeja |
+| WHATSAPP_INBOX-F04 | Reconocer a la clienta por su número | hecho | comun | canal-y-bandeja |
+| WHATSAPP_INBOX-F05 | Leer una conversación | parcial | comun | canal-y-bandeja |
+| WHATSAPP_INBOX-F06 | Ver una foto, una nota de voz o un documento | hecho | comun | canal-y-bandeja |
+| WHATSAPP_INBOX-F07 | Asignar una conversación a alguien del equipo | parcial | comun | canal-y-bandeja |
+| WHATSAPP_INBOX-F08 | Contestar desde la app de WhatsApp Business del móvil | hecho | comun | canal-y-bandeja |
+| WHATSAPP_INBOX-F09 | Ver quién espera respuesta | hecho | comun | canal-y-bandeja |
+| WHATSAPP_INBOX-F10 | Borrar los datos de un número sin ficha | parcial | comun | canal-y-bandeja |
+| WHATSAPP_INBOX-F11 | Borrar los datos de una clienta desde su ficha | parcial | comun | canal-y-bandeja |
+| WHATSAPP_INBOX-F12 | Unir dos fichas de la misma clienta | hecho | comun | canal-y-bandeja |
+| WHATSAPP_INBOX-F13 | Ver el consumo del mes y llegar al tope | parcial | comun | canal-y-bandeja |
+| WHATSAPP_INBOX-F14 | Activar «Reservar citas» | hecho | peluqueria | respuestas-automaticas |
+| WHATSAPP_INBOX-F15 | Activar «Reservar mesa» | hecho | restaurante | respuestas-automaticas |
+| WHATSAPP_INBOX-F16 | Decidir si las reservas por WhatsApp se confirman solas | hecho | comun | respuestas-automaticas |
+| WHATSAPP_INBOX-F17 | Desactivar una respuesta automática | hecho | comun | respuestas-automaticas |
+| WHATSAPP_INBOX-F18 | Actualizar una respuesta automática a su versión mejorada | hecho | comun | respuestas-automaticas |
+| WHATSAPP_INBOX-F19 | Elegir el hueco escribiendo en vez de tocando | hecho | comun | respuestas-automaticas |
+| WHATSAPP_INBOX-F20 | Cuando el asistente no puede contestar | hecho | comun | respuestas-automaticas |
+| WHATSAPP_INBOX-F21 | La clienta pide cita por WhatsApp | hecho | peluqueria | respuestas-automaticas |
+| WHATSAPP_INBOX-F22 | La clienta anula o mueve su cita por WhatsApp | hecho | peluqueria | respuestas-automaticas |
+| WHATSAPP_INBOX-F23 | La clienta recibe el aviso cuando el salón confirma | parcial | peluqueria | respuestas-automaticas |
+| WHATSAPP_INBOX-F24 | El cliente pide mesa por WhatsApp | hecho | restaurante | respuestas-automaticas |
+| WHATSAPP_INBOX-F25 | El cliente anula o cambia su mesa por WhatsApp | no hecho | restaurante | respuestas-automaticas |
+| WHATSAPP_INBOX-F26 | El cliente recibe el aviso cuando el restaurante confirma | no hecho | restaurante | respuestas-automaticas |
+| WHATSAPP_INBOX-F27 | Ver las plantillas y lo que dice Meta de cada una | hecho | comun | plantillas |
+| WHATSAPP_INBOX-F28 | Traer las plantillas creadas en WhatsApp Manager | parcial | comun | plantillas |
+| WHATSAPP_INBOX-F29 | Crear una plantilla y mandarla a revisión | parcial | comun | plantillas |
+| WHATSAPP_INBOX-F30 | Editar una plantilla | parcial | comun | plantillas |
+| WHATSAPP_INBOX-F31 | Borrar una plantilla | parcial | comun | plantillas |
 
 ## Cobertura contra la referencia
 
@@ -170,7 +164,7 @@ de huecos para tocar («Ver huecos»), la confirmación, la disculpa o el aviso 
 «notificar» de Automatizaciones en el hub, no este módulo; ninguna receta de este módulo envía hoy
 una plantilla (todas mandan texto libre dentro de las 24 h).
 
-| Elemento (Meta) | Traer | Crear | Editar | Enviar |
+| Elemento (Meta) | Traer (F28) | Crear (F29) | Editar (F30) | Enviar (hub: paso «notificar») |
 |---|---|---|---|---|
 | Nombre (minúsculas, `_`) | hecho | hecho (Meta valida) | parcial: el campo se deja cambiar; Meta identifica por nombre + idioma, efecto sin confirmar | — |
 | Idioma | hecho | parcial: texto libre, sin selector de códigos de Meta | parcial: igual | — |
@@ -202,29 +196,29 @@ una plantilla (todas mandan texto libre dentro de las 24 h).
 
 **2 · Teléfonos (E.164).**
 
-| Dónde entra un teléfono | Cómo se trata hoy | Estado |
+| Elemento | Estado | Flujo |
 |---|---|---|
-| Número de quien escribe | se guarda como `+` y dígitos (E.164) | hecho |
-| Destinatario de una respuesta | se lee de la conversación, nunca se teclea; el hub exige `+` | hecho |
-| Comparar con la ficha de cliente | regla propia: dígitos, sin `00` ni `0` troncal, prefijo del país del negocio, lista de países que conservan el 0 copiada de libphonenumber; tabla de prefijos duplicada aquí y en Clientes | parcial: no usa libphonenumber ni números ya normalizados |
-| Teléfono de la ficha | lo guarda Clientes tal como se teclea | no hecho (Pendiente: customers) |
-| Buscar en la bandeja por teléfono | compara texto: «600 111 222» no encuentra `+34600111222` | parcial |
-| Botón de llamada de una plantilla | texto libre; lo rechaza el SaaS si no lleva prefijo | parcial: no se valida en pantalla |
-| Número del negocio conectado | lo da Meta | hecho |
+| Número de quien escribe guardado en E.164 (`+` y dígitos) | hecho | F03 |
+| Destinatario de una respuesta: se lee de la conversación, nunca se teclea; el hub exige `+` | hecho | F21, F24 |
+| Comparar con la ficha de cliente como NÚMERO (sin `00` ni `0` troncal, prefijo del país del negocio) | parcial: regla propia, sin libphonenumber ni números ya normalizados; la tabla de prefijos está copiada aquí y en Clientes | F04 |
+| Teléfono de la ficha guardado en E.164 | no hecho: Clientes lo guarda como se teclea (Pendiente de enlazar: customers) | F04 |
+| Buscar en la bandeja por teléfono escrito de cualquier forma | parcial: compara texto, «600 111 222» no encuentra `+34600111222` | F05 |
+| Botón de llamada de una plantilla con prefijo de país | parcial: no se valida en pantalla; lo rechaza el SaaS | F29, F30 |
+| Número del negocio conectado | hecho (lo da Meta; bloque del hub) | F01 |
 
 **3 · Bandeja contra la bandeja tipo.**
 
-| Elemento | Estado |
-|---|---|
-| Lista por actividad, no leídos, buscar, filtrar | hecho |
-| Marcar como leída al abrir | no hecho: «Sin leer» no baja nunca (F05) |
-| Nombre de perfil de WhatsApp | no hecho: el aviso del hub no lo trae, la columna Contacto enseña el teléfono |
-| Contestar desde el hub | no hecho (ver «Dudas abiertas») |
-| Asignar con selector y filtro «mis conversaciones» | no hecho: se teclea el id (F07) |
-| Cerrar o reabrir una conversación a mano | no hecho: solo el borrado la cierra |
-| Adjuntos, visor de fotos | hecho |
-| Aviso de clientes esperando | hecho |
-| Consentimiento y baja («BAJA»/«STOP») | no hecho (L-11, WA-05) |
+| Elemento | Estado | Flujo |
+|---|---|---|
+| Lista por actividad, no leídos, buscar, filtrar | hecho | F03, F05 |
+| Marcar como leída al abrir | no hecho: «Sin leer» no baja nunca | F05 |
+| Nombre de perfil de WhatsApp | no hecho: el aviso del hub no lo trae; Contacto enseña el teléfono | F05 |
+| Contestar desde el hub | no hecho (ver «Dudas abiertas») | F08 |
+| Asignar con selector y filtro «mis conversaciones» | parcial: se teclea el id y no filtra | F07 |
+| Cerrar o reabrir una conversación a mano | no hecho: solo el borrado la cierra | — |
+| Adjuntos y visor de fotos | hecho | F06 |
+| Aviso de clientes esperando | hecho | F09 |
+| Consentimiento y baja («BAJA»/«STOP») | no hecho (L-11, WA-05) | — |
 
 ## Datos: de quién es cada dato
 
@@ -297,3 +291,29 @@ Se resuelven con `market-decision`; no las decide el worker.
    quién la crea?
 4. **Consentimiento y baja** (L-11): ¿lo lleva este módulo o Clientes?
 5. **Decir a la clienta que le contesta un asistente** (L-12): el acuse no lo dice.
+
+## Fuentes contrastadas
+
+Contra `origin/main` v2.1.107 del módulo y `origin/develop` del hub (04/10/2026). Manda el código;
+lo de abajo está desfasado o contradice al código.
+
+- `docs/como-funciona.md` §4: «abrirla marca los mensajes como leídos» — ninguna orden baja «Sin leer» salvo borrar (F05).
+- `docs/como-funciona.md` §6: lo que el dueño contesta desde el móvil «todavía no aparece» — sí aparece en el hilo desde whatsapp_inbox#66 (F08).
+- `docs/como-funciona.md` §3 y §10: el bloque se llama «Canal» — en pantalla es «Tu número» (F01).
+- `docs/screens.md`: dos pestañas «Inbox» y «Templates» — el menú tiene Bandeja de entrada y Ajustes; Plantillas es un desplegable de Ajustes.
+- `docs/screens.md`: Ajustes enseña el contador del mes — lo pinta la pestaña Plan del hub (F13).
+- `docs/screens.md`: tarjetas con «Active/Paused/Unfinished», «View it» y «Set it up» — las tarjetas tienen Activar/Desactivar y «Activo»/«Desactivada» (F14–F17).
+- `docs/limits.md`: «Sending a WhatsApp message: does not exist», «no webhook» — los mensajes llegan solos y las recetas contestan (F03, F21).
+- `docs/concepts.md`: las plantillas «no se sincronizan» y crear una «no la manda a Meta» — se registran al guardar y se ponen al día al abrir (F27, F29).
+- `flows/README.md`: un mensaje escrito no arranca la receta (hub#2061) — hub#2061 está cerrada y la receta tiene los dos disparadores.
+- `flows/README.md`: la lista numerada «no se hace todavía» — está hecha (whatsapp_inbox#76, F19).
+- `flows/README.md`: cambiar o anular una mesa espera a reservations#50 — reservations#50 está cerrada y la puerta existe; lo que falta es que la receta la use (F25).
+- `module.json`: la descripción de `usage.get` para el asistente dice «mensajes entrantes» — son los mensajes facturables que cuenta la plataforma (whatsapp_inbox#155).
+- `hand-book/modulos/whatsapp_inbox.md`: Solicitudes, modo de aprobación, aprobar/marcar atendida y «el estado de la plantilla no se sincroniza» — todo retirado o cambiado (whatsapp_inbox#193, #206, #134).
+- `architecture/modules/whatsapp_inbox.md`: versión 2.1.28 y filtros de lista (`conversation_id`, `name` eq) que no son los del manifest; «`source` no llega a columna» (la migración 006 lo guarda); cabecera multimedia «en solo lectura» y a la vez escrita desde #218 (lo segundo es lo cierto).
+- `qa-hub-beauty` W-01: «sin número → Conecta el número primero» — esa frase no existe y activar no comprueba el número (F14).
+- `qa-hub-beauty` W-04: fuera de plazo «avisa al salón» — la receta solo se lo dice a la clienta (F22).
+- `qa-hub-restaurant` WR-03: «cancelar por WhatsApp libera el hold» — la receta de mesa no anula hoy (F25, no hecho).
+- `qa-module` WA-06: «hoy solo borrado lógico → FAIL citando #262» — #262 está cerrada: se vacían los datos y se marca borrado (F10, F11).
+- `qa-module` WA-10: pestañas «Inbox / Settings / Templates» — son dos; Plantillas va dentro de Ajustes.
+- `qa-module` WA-04 y `qa-hub-beauty` W-03: piden avisar fuera de 24 h por plantilla — ninguna receta envía plantillas (F23).

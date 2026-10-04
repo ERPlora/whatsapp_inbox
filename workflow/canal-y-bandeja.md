@@ -2,14 +2,12 @@
 
 Prefijo: WHATSAPP_INBOX
 
-> Flujos comunes a todos los negocios: el número, los mensajes, la bandeja, los datos y el cupo.
-> Índice, pantallas y reglas en [`../WORKFLOW.md`](../WORKFLOW.md).
-
 ## Flujos
 
 ### WHATSAPP_INBOX-F01 Conectar el número de WhatsApp del negocio
 Estado: parcial — hoy Meta solo deja conectar números del portfolio de ERPlora (verificación del negocio y revisión de la app pendientes, pm#277)
-Actor: dueño o administrador
+Vertical: comun
+Actor: administrador
 Pantalla: Ajustes
 Pasos:
 1. Abrir **Bandeja de WhatsApp → Ajustes**; el bloque **Tu número** dice que no hay número.
@@ -19,14 +17,15 @@ Pasos:
 Entra: el código que devuelve Meta tras el QR.
 Sale: el número queda conectado en la plataforma (el hub solo sabe cuál es); empiezan a llegar los mensajes y el historial de los últimos meses.
 Si falla: el bloque dice el motivo («La conexión se canceló…», «No se pudo abrir la ventana de Facebook…», «Solo un dueño o un administrador…») y deja reintentar; un hub viejo ve «Este hub es demasiado antiguo para conectar el número desde aquí…».
-Implicados: ninguno
+Implicados: pendiente
 Pendiente de enlazar: hub — bloque «Tu número» del shell (abre la ventana de Meta y pasa el código a la plataforma)
 Pendiente de enlazar: saas — pasarela de WhatsApp: canjea el código, guarda el token y suscribe el número
 QA: WA-01, WA-07
 
 ### WHATSAPP_INBOX-F02 Desconectar o volver a conectar el número
 Estado: hecho
-Actor: dueño o administrador
+Vertical: comun
+Actor: administrador
 Pantalla: Ajustes
 Pasos:
 1. En **Tu número**, pulsar **Desconectar** y confirmar «¿Desconectar este número? Los mensajes dejarán de llegar aquí.».
@@ -35,14 +34,15 @@ Pasos:
 Entra: el número elegido.
 Sale: la plataforma deja de recoger (o vuelve a recoger) los mensajes de ese número. Las conversaciones guardadas no se tocan.
 Si falla: el bloque dice el motivo y ofrece **Reintentar**.
-Implicados: ninguno
+Implicados: pendiente
 Pendiente de enlazar: hub — bloque «Tu número» del shell (desconectar y reconectar)
 Pendiente de enlazar: saas — pasarela de WhatsApp: baja del número y renovación del token
 QA: WA-01, WA-09
 
 ### WHATSAPP_INBOX-F03 Recibir un mensaje en la bandeja
 Estado: hecho
-Actor: sistema (la clienta escribe desde su WhatsApp)
+Vertical: comun
+Actor: cliente, sistema
 Pantalla: Bandeja de entrada
 Pasos:
 1. La clienta escribe al número del negocio.
@@ -51,13 +51,14 @@ Pasos:
 Entra: cada mensaje que el hub recoge de la plataforma (número de la persona, texto, objeto de Meta, si es entrante o la respuesta del dueño, si es en vivo o historial).
 Sale: una conversación por número y el mensaje guardado; aviso público de mensaje recibido (`whatsapp_inbox.message.received`) que dispara F04; el aviso del hub con el mismo mensaje es el que arranca las recetas (F21, F24).
 Si falla: con el cupo del mes agotado el mensaje entrante en vivo no se guarda y nada lo dice en la bandeja (ver F13); si el hub está apagado los mensajes esperan en la plataforma.
-Implicados: ninguno
+Implicados: pendiente
 Pendiente de enlazar: hub — recogida periódica de mensajes de WhatsApp de la plataforma y su aviso al núcleo
 Pendiente de enlazar: saas — pasarela de WhatsApp: recibe de Meta y aparca por hub
 QA: WA-02, WA-08
 
 ### WHATSAPP_INBOX-F04 Reconocer a la clienta por su número
 Estado: hecho
+Vertical: comun
 Actor: sistema
 Pantalla: ninguna
 Pasos:
@@ -68,13 +69,14 @@ Pasos:
 Entra: el número de la conversación; las fichas con ese número (Clientes); el país del negocio.
 Sale: la conversación sabe de qué ficha es. Solo rellena un vínculo vacío: el que puso una persona o una receta se respeta.
 Si falla: si dos fichas tienen el mismo número, o la búsqueda no responde, no se une a nadie y el mensaje sigue guardado.
-Implicados: ninguno
+Implicados: pendiente
 Pendiente de enlazar: customers — buscar fichas por teléfono con el país del negocio, y avisos de ficha creada o actualizada
 QA: ninguno
 
 ### WHATSAPP_INBOX-F05 Leer una conversación
 Estado: parcial — abrir el hilo no baja «Sin leer» (nada lo baja salvo borrar), y la columna Contacto enseña el teléfono porque el nombre de perfil de WhatsApp no llega
-Actor: empleado, encargada o administrador
+Vertical: comun
+Actor: empleado, responsable, administrador
 Pantalla: Bandeja de entrada
 Pasos:
 1. Abrir **Bandeja de WhatsApp → Bandeja de entrada**; buscar por contacto o teléfono o filtrar por columna si hace falta.
@@ -85,11 +87,12 @@ Entra: la conversación y sus mensajes de este negocio.
 Sale: nada; solo lee.
 Si falla: «No se pudo cargar la conversación» dentro del panel; la lista sigue disponible.
 Implicados: ninguno
-QA: WA-10
+QA: WA-10 (discrepa)
 
 ### WHATSAPP_INBOX-F06 Ver una foto, una nota de voz o un documento
 Estado: hecho
-Actor: empleado, encargada o administrador
+Vertical: comun
+Actor: empleado, responsable, administrador
 Pantalla: Bandeja de entrada
 Pasos:
 1. Abrir una conversación (F05): las fotos y stickers aparecen en el hilo con su texto.
@@ -99,12 +102,13 @@ Pasos:
 Entra: el adjunto, pedido a la plataforma solo al abrir o al pulsar.
 Sale: nada; el archivo solo se guarda mientras el hilo está abierto.
 Si falla: «No se ha podido cargar el adjunto.» con **Reintentar**; en un hub sin esa puerta, «Este adjunto aún no se puede ver aquí…».
-Implicados: ninguno
+Implicados: pendiente
 Pendiente de enlazar: hub — puerta de adjuntos de WhatsApp
-QA: WA-10
+QA: WA-10 (discrepa)
 
 ### WHATSAPP_INBOX-F07 Asignar una conversación a alguien del equipo
 Estado: parcial — se teclea el identificador del empleado en vez de elegirlo de una lista, y asignar no cambia lo que ve cada persona
+Vertical: comun
 Actor: administrador
 Pantalla: Bandeja de entrada
 Pasos:
@@ -120,7 +124,8 @@ QA: ninguno
 
 ### WHATSAPP_INBOX-F08 Contestar desde la app de WhatsApp Business del móvil
 Estado: hecho
-Actor: dueño
+Vertical: comun
+Actor: administrador
 Pantalla: Bandeja de entrada
 Pasos:
 1. Contestar a la clienta como siempre, desde la app WhatsApp Business del móvil.
@@ -129,14 +134,15 @@ Pasos:
 Entra: el eco de lo que el dueño escribió en el móvil.
 Sale: el mensaje en el hilo correcto; la marca de atención quitada.
 Si falla: si el hub es antiguo y no distingue el eco, la respuesta podría no aparecer (sin confirmar en hubs actuales).
-Implicados: ninguno
+Implicados: pendiente
 Pendiente de enlazar: hub — recogida de los ecos del móvil y del historial
 QA: W-05, WA-02
 
 ### WHATSAPP_INBOX-F09 Ver quién espera respuesta
 Estado: hecho
-Actor: empleado, encargada o administrador
-Pantalla: Campana de avisos
+Vertical: comun
+Actor: empleado, responsable, administrador
+Pantalla: Hub: Campana de avisos
 Pasos:
 1. Cuando la respuesta automática no ha podido contestar a una clienta (F20), la campana del hub muestra «Clientes de WhatsApp esperando respuesta» con cuántos, en cualquier pantalla.
 2. Tocar la campana abre la **Bandeja de entrada**, con esas conversaciones arriba y la marca «Necesita atención».
@@ -145,12 +151,13 @@ Pasos:
 Entra: las conversaciones marcadas por la receta.
 Sale: nada nuevo; la marca solo la quita la respuesta del negocio (ni el siguiente mensaje de la clienta ni el historial).
 Si falla: si la campana no se puede leer, el hub no la pinta; la marca sigue en la bandeja.
-Implicados: ninguno
+Implicados: pendiente
 Pendiente de enlazar: hub — campana de avisos del shell
 QA: ninguno
 
 ### WHATSAPP_INBOX-F10 Borrar los datos de un número sin ficha
 Estado: parcial — el módulo borra lo suyo, pero el historial interno del hub conserva el texto 90 días (hub#2474) y la plataforma guarda los mensajes no recogidos (saas#1930)
+Vertical: comun
 Actor: administrador
 Pantalla: Bandeja de entrada
 Pasos:
@@ -161,13 +168,14 @@ Pasos:
 Entra: la conversación elegida.
 Sale: mensajes, nombre, número, huecos ofrecidos y solicitudes antiguas vaciados; conversación cerrada y borrada. Si vuelve a escribir, empieza una conversación nueva.
 Si falla: «No se pudieron borrar los datos de este número» (o el motivo) en el panel; el hilo sigue abierto.
-Implicados: ninguno
+Implicados: pendiente
 Pendiente de enlazar: hub — borrar del historial interno lo que nombra a la persona
-QA: WA-06, L-11
+QA: WA-06 (discrepa), L-11
 
 ### WHATSAPP_INBOX-F11 Borrar los datos de una clienta desde su ficha
 Estado: parcial — mismo resto en el hub que F10 (hub#2467, hub#2477); solo alcanza conversaciones unidas a la ficha
-Actor: sistema (lo provoca «Borrar datos» en la ficha de Clientes)
+Vertical: comun
+Actor: sistema
 Pantalla: ninguna
 Pasos:
 1. En Clientes, el administrador borra los datos de una ficha.
@@ -176,13 +184,14 @@ Pasos:
 Entra: el aviso de ficha anonimizada (Clientes).
 Sale: lo mismo que F10, para cada conversación de la ficha.
 Si falla: el aviso se reintenta; repetirlo no cambia nada.
-Implicados: ninguno
+Implicados: pendiente
 Pendiente de enlazar: customers — «Borrar datos» de la ficha (aviso de ficha anonimizada)
-QA: WA-06, L-11
+QA: WA-06 (discrepa), L-11
 
 ### WHATSAPP_INBOX-F12 Unir dos fichas de la misma clienta
 Estado: hecho
-Actor: sistema (lo provoca unir fichas en Clientes)
+Vertical: comun
+Actor: sistema
 Pantalla: ninguna
 Pasos:
 1. En Clientes se unen dos fichas duplicadas.
@@ -190,14 +199,15 @@ Pasos:
 Entra: el aviso de fichas unidas (Clientes).
 Sale: el vínculo de las conversaciones corregido.
 Si falla: el aviso se reintenta; repetirlo no cambia nada.
-Implicados: ninguno
+Implicados: pendiente
 Pendiente de enlazar: customers — unir fichas duplicadas (aviso de fichas unidas)
 QA: ninguno
 
 ### WHATSAPP_INBOX-F13 Ver el consumo del mes y llegar al tope
 Estado: parcial — al llegar al tope los mensajes entrantes en vivo dejan de guardarse en la bandeja y ninguna pantalla lo dice
-Actor: dueño o administrador
-Pantalla: Plan
+Vertical: comun
+Actor: administrador
+Pantalla: Hub: Plan
 Pasos:
 1. Abrir la pestaña **Plan** del módulo.
 2. Ver los mensajes gastados este mes frente al tope del plan; los dos números los pone la plataforma.
@@ -205,7 +215,7 @@ Pasos:
 Entra: el tope y el gasto del mes que manda la plataforma.
 Sale: nada; no se edita desde el hub.
 Si falla: si la pestaña no puede leerlo, dice que no está disponible; al agotar el cupo la plataforma rechaza los envíos (la receta lo deja anotado en su historial) y la bandeja deja de guardar lo que entra.
-Implicados: ninguno
+Implicados: pendiente
 Pendiente de enlazar: hub — pestaña «Plan» del shell
 Pendiente de enlazar: saas — cuenta de mensajes facturables y tope del plan
 QA: WA-03
