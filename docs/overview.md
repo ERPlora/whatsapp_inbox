@@ -66,6 +66,12 @@ whatsapp_inbox#263). It erases the same columns as the erasure from the sheet, i
 answers `whatsapp_inbox.conversation_not_found` for a thread id this hub does not have. It is not
 offered to the assistant: an irreversible erasure is pressed by a person.
 
+Both doors also erase what the retired «Requests» tray had extracted from those threads
+(whatsapp_inbox#264): the tray's table was set aside as `_deprecated_whatsapp_inbox_request`, not
+dropped, and its requests still held the name, the number, what was asked for and the staff's notes.
+They are blanked and soft-deleted in the same transaction. Writing a set-aside table needs a hub that
+carries hub#2461; an older hub refuses to install this version (whatsapp_inbox#267).
+
 ## The vocabulary
 
 | Concept | Values |

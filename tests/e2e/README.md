@@ -101,6 +101,14 @@ Control positivo medido: con el oyente desenchufado del manifest caen 2 de 3 (el
 simple, pasa igual por diseño). El aislamiento entre hubs, la idempotencia y cada columna los prueba
 `tests/customer_erasure.pg.test.py` (dos hubs en la misma BD, 20 mutantes ejecutados).
 
+**Desde whatsapp_inbox#264 necesita un hub con hub#2461** (`origin/develop` desde el 04/10; el primer
+release que lo lleve, no `v1.1.30`): el borrado vacía también lo que guardó la antigua bandeja de
+«Solicitudes» en su tabla apartada `_deprecated_whatsapp_inbox_request`, y un hub sin hub#2461 rechaza
+instalar el módulo (`… is outside the module's own prefix`). El test siembra una solicitud en crudo
+colgada del hilo de cada clienta y exige que la de Ana se vacíe y la de Eva no. Controles medidos el
+04/10: con el módulo de `origin/main` (sin el paso) cae `erasing_a_customer_…` («`600111222` is still
+stored»); con el hub en `88c8ea8f^` (sin hub#2461) caen los 3 al instalar.
+
 ### `number_erasure_e2e.rs` (whatsapp_inbox#263)
 
 El botón «Borrar datos de este número» para quien no tiene ficha: escribe alguien sin ficha → hilo
@@ -118,7 +126,9 @@ cd "$HUB" && DATABASE_URL=… ERPLORA_MODULES_DIR="$MODS" \
 ```
 
 Controles positivos medidos: sin el `minLength` del schema cae el de las puertas; con la sentencia de
-los mensajes sin efecto (`WHERE 1 = 0`) cae el del borrado. El aislamiento entre hubs, la
+los mensajes sin efecto (`WHERE 1 = 0`) cae el del borrado. Desde whatsapp_inbox#264 también vacía las
+solicitudes de la antigua bandeja colgadas de ese hilo, así que pide el mismo hub con hub#2461; con el
+módulo de `origin/main` cae `an_admin_erases_…` («`600333444` is still stored»). El aislamiento entre hubs, la
 idempotencia y cada columna los prueba `tests/number_erasure.pg.test.py` (dos hubs en la misma BD,
 23 mutantes ejecutados), que además compara el SET con el del borrado desde la ficha.
 

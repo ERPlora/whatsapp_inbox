@@ -387,6 +387,7 @@
       "permission": "whatsapp_inbox.manage_settings",
       "transaction": true,
       "sql": [
+        "commands/conversation_erase_requests.sql",
         "commands/conversation_erase_messages.sql",
         "commands/conversation_erase.sql"
       ],
@@ -578,6 +579,7 @@
       "internal": true,
       "transaction": true,
       "sql": [
+        "commands/_on_customer_anonymized_requests.sql",
         "commands/_on_customer_anonymized_messages.sql",
         "commands/_on_customer_anonymized.sql"
       ]

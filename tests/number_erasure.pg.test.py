@@ -21,6 +21,10 @@ WHAT IS PROVEN HERE, against a REAL Postgres:
   6. Pressing it twice is harmless: the messages are not stamped again and the first `deleted_at`
      is kept.
   7. The number is FREED: if she writes again, a NEW unlinked thread opens.
+  8. What the RETIRED «Requests» tray extracted from that thread (whatsapp_inbox#264) — kept in
+     `_deprecated_whatsapp_inbox_request` since migration 013 — loses the same columns as on the
+     sheet path and is soft-deleted; the tray's requests of other threads, of the neighbour hub, and
+     a hub-A request hanging from hub B's thread id are untouched. Needs a hub with hub#2461.
 
 Runs the SQL the way the runtime does (`:name` bound). Uses `erplora-test-pg-5433` (override:
 ERPLORA_TEST_PG_CONTAINER); scratch DB dropped at the end. Missing Docker = SKIPPED, never PASS.
@@ -48,6 +52,11 @@ OTHER_HUB = "hub-other"
 CREATED = "2026-08-01T00:00:00+00:00"
 NOW = "2026-10-04T10:00:00+00:00"
 LATER = "2026-10-04T11:00:00+00:00"
+# The retired «Requests» tray, as migration 013 left it on every hub (whatsapp_inbox#206, #264).
+REQUESTS = "_deprecated_whatsapp_inbox_request"
+REQUEST_PII_COLUMNS = ("data", "raw_summary", "notes", "failure_reason")
+# Those columns as an erasure leaves them (and as the table defaults them).
+REQUEST_BLANK = {"data": "{}", "raw_summary": "", "notes": "", "failure_reason": ""}
 # What must not survive anywhere in the erased thread: the number, the name, the words, the payload.
 PII = ("600333444", "Pepa Ruiz", "my new address is", "wamid.PEPA")
 
@@ -175,18 +184,44 @@ def message(db, mid, hub, conversation, contact, deleted=0):
     )
 
 
-def rows_text(db, where_conv, where_msg) -> str:
+def request(db, rid, hub, conversation, customer, deleted=0, only=None):
+    """A request the retired tray extracted from a WhatsApp thread, every free-text column full —
+    or, with `only`, just those columns (the rest as blank as an erasure leaves them)."""
+    full = {
+        "data": json.dumps({"name": "Pepa Ruiz", "phone": "+34600333444"}),
+        "raw_summary": "Pepa Ruiz asks for a table; my new address is Calle Luna 3",
+        "notes": "call her at 600333444",
+        "failure_reason": "no table left for Pepa Ruiz (wamid.PEPA-1)",
+    }
+    kept = {**REQUEST_BLANK, **({c: full[c] for c in only} if only is not None else full)}
+    psql(
+        db,
+        f"INSERT INTO {REQUESTS} (id, hub_id, conversation_id, customer_id, reference_number,"
+        " request_type, status, data, raw_summary, notes, failure_code, failure_reason,"
+        " is_deleted, deleted_at, created_at)"
+        f" VALUES ({literal(rid)}, {literal(hub)}, {literal(conversation)}, {literal(customer)},"
+        f" {literal('REQ-' + rid)}, 'appointment', 'rejected',"
+        f" {literal(kept['data'])}, {literal(kept['raw_summary'])}, {literal(kept['notes'])},"
+        f" 'reservations.full', {literal(kept['failure_reason'])},"
+        f" {deleted}, {literal(CREATED if deleted else None)}, '{CREATED}')",
+    )
+
+
+def rows_text(db, where_conv, where_msg, where_req="false") -> str:
     return psql(
         db,
         "SELECT COALESCE(string_agg(r, '|' ORDER BY r COLLATE \"C\"), '') FROM ("
         f" SELECT row_to_json(c)::text AS r FROM whatsapp_inbox_conversation c WHERE {where_conv}"
         f" UNION ALL SELECT row_to_json(m)::text FROM whatsapp_inbox_message m WHERE {where_msg}"
+        f" UNION ALL SELECT row_to_json(q)::text FROM {REQUESTS} q WHERE {where_req}"
         ") t;",
     ).strip()
 
 
 def fingerprint(db, hub) -> str:
-    return rows_text(db, f"c.hub_id = '{hub}'", f"m.hub_id = '{hub}'")
+    return rows_text(
+        db, f"c.hub_id = '{hub}'", f"m.hub_id = '{hub}'", f"q.hub_id = '{hub}'"
+    )
 
 
 def col(db, table, rid, column):
@@ -216,7 +251,11 @@ def manifest_half():
         cmd.get("permission"),
     )
     check("it is transactional", True, cmd.get("transaction"))
-    check("it carries SQL, two statements", 2, len(cmd.get("sql") or []))
+    check(
+        "it carries SQL, three statements (requests, messages, thread)",
+        3,
+        len(cmd.get("sql") or []),
+    )
     schema = (
         json.loads((MODULE_DIR / cmd.get("schema", "")).read_text(encoding="utf-8"))
         if cmd.get("schema")
@@ -300,16 +339,36 @@ def main() -> int:
         # And the mirror: a (corrupt) hub-A message pointing at hub B's thread. Sending hub B's
         # thread id from hub A must not reach it through the thread lookup.
         message(db, "m-cross", HUB, "n-pepa", "34600333444")
+        # What the retired «Requests» tray extracted (whatsapp_inbox#264). From Pepa's thread: one
+        # live, one already soft-deleted, one the tray linked to some sheet — all of that thread.
+        request(db, "r-pepa", HUB, "t-pepa", None)
+        request(db, "r-pepa-deleted", HUB, "t-pepa", None, deleted=1)
+        request(db, "r-pepa-linked", HUB, "t-pepa", "cust-old")
+        # Of that thread too, and each one reachable through ONE arm of the "anything left to
+        # erase" guard only: soft-deleted long ago with a single column still full, and a live one
+        # with every column already blank. A guard that forgets an arm would skip exactly these.
+        for column in REQUEST_PII_COLUMNS:
+            request(db, f"r-pepa-only-{column}", HUB, "t-pepa", None, deleted=1, only=(column,))
+        request(db, "r-pepa-blank-live", HUB, "t-pepa", None, only=())
+        # From other threads of this hub, from hub B (one corrupt, hanging from Pepa's hub-A
+        # thread), and the mirror: a hub-A request hanging from hub B's thread id.
+        request(db, "r-luis", HUB, "t-luis", "cust-luis")
+        request(db, "r-pepa-other", HUB, "t-pepa-other", None)
+        request(db, "n-req", OTHER_HUB, "n-pepa", None)
+        request(db, "n-req-cross", OTHER_HUB, "t-pepa", None)
+        request(db, "r-cross", HUB, "n-pepa", None)
 
         neighbour_before = fingerprint(db, OTHER_HUB)
-        others_before = rows_text(
-            db,
+        others = (
             f"c.hub_id = '{HUB}' AND c.id IN ('t-luis', 't-pepa-other')",
             f"m.hub_id = '{HUB}' AND m.id IN ('m-luis', 'm-pepa-other')",
+            f"q.hub_id = '{HUB}' AND q.id IN ('r-luis', 'r-pepa-other', 'r-cross')",
         )
+        others_before = rows_text(db, *others)
         pepa = (
             f"c.hub_id = '{HUB}' AND c.id = 't-pepa'",
             f"m.hub_id = '{HUB}' AND m.conversation_id = 't-pepa'",
+            f"q.hub_id = '{HUB}' AND q.conversation_id = 't-pepa'",
         )
         check(
             "control: before erasing, Pepa's rows DO carry her personal data",
@@ -406,14 +465,47 @@ def main() -> int:
             CREATED,
             col(db, "whatsapp_inbox_message", "m-pepa-2", "deleted_at"),
         )
+        for rid in ("r-pepa", "r-pepa-deleted", "r-pepa-linked"):
+            check(
+                f"{rid} keeps no extracted data, summary, notes or failure text",
+                ("{}", "", "", ""),
+                tuple(col(db, REQUESTS, rid, c) for c in REQUEST_PII_COLUMNS),
+            )
+            check(f"{rid} is soft-deleted", "1", col(db, REQUESTS, rid, "is_deleted"))
+            check(
+                f"{rid} stamps who erased and when",
+                ("user-admin", NOW),
+                (col(db, REQUESTS, rid, "updated_by"), col(db, REQUESTS, rid, "updated_at")),
+            )
         check(
-            "her other number, other people's threads are untouched",
-            others_before,
-            rows_text(
-                db,
-                f"c.hub_id = '{HUB}' AND c.id IN ('t-luis', 't-pepa-other')",
-                f"m.hub_id = '{HUB}' AND m.id IN ('m-luis', 'm-pepa-other')",
+            "a request soft-deleted BEFORE keeps its first deleted_at",
+            (CREATED, NOW),
+            (
+                col(db, REQUESTS, "r-pepa-deleted", "deleted_at"),
+                col(db, REQUESTS, "r-pepa", "deleted_at"),
             ),
+        )
+        for column in REQUEST_PII_COLUMNS:
+            check(
+                f"a request soft-deleted BEFORE that still kept only its {column} loses it",
+                (REQUEST_BLANK[column], "user-admin"),
+                (
+                    col(db, REQUESTS, f"r-pepa-only-{column}", column),
+                    col(db, REQUESTS, f"r-pepa-only-{column}", "updated_by"),
+                ),
+            )
+        check(
+            "a live request with nothing left to blank is still soft-deleted",
+            ("1", NOW, "user-admin"),
+            tuple(
+                col(db, REQUESTS, "r-pepa-blank-live", c)
+                for c in ("is_deleted", "deleted_at", "updated_by")
+            ),
+        )
+        check(
+            "her other number, other people's threads and requests are untouched",
+            others_before,
+            rows_text(db, *others),
         )
         check(
             "hub B (even its message pointing at the erased thread) is NOT erased",
@@ -422,9 +514,7 @@ def main() -> int:
         )
 
         print("\n== pressing it twice is harmless ==")
-        messages_first = rows_text(
-            db, "false", f"m.hub_id = '{HUB}' AND m.conversation_id = 't-pepa'"
-        )
+        messages_first = rows_text(db, "false", pepa[1], pepa[2])
         affected = erase(db, "t-pepa", now=LATER)
         check(
             "the second press still finds the thread (no false «not found»)",
@@ -432,11 +522,9 @@ def main() -> int:
             affected.get(thread_stmt),
         )
         check(
-            "the messages are not stamped again",
+            "the messages and requests are not stamped again",
             messages_first,
-            rows_text(
-                db, "false", f"m.hub_id = '{HUB}' AND m.conversation_id = 't-pepa'"
-            ),
+            rows_text(db, "false", pepa[1], pepa[2]),
         )
         check(
             "the first deleted_at is kept",
