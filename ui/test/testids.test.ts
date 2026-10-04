@@ -67,6 +67,14 @@ const COVERED: Record<
       'whatsapp-inbox-assign-to',
       'whatsapp-inbox-detail-close',
       'whatsapp-inbox-detail-error',
+      // Erasing the data of one number (whatsapp_inbox#263): the action, its in-page question,
+      // its two answers, the refusal and the notice that it is done.
+      'whatsapp-inbox-erase',
+      'whatsapp-inbox-erase-cancel',
+      'whatsapp-inbox-erase-confirm',
+      'whatsapp-inbox-erase-done',
+      'whatsapp-inbox-erase-error',
+      'whatsapp-inbox-erase-submit',
       'whatsapp-inbox-load-error',
       // An attachment in the thread (whatsapp_inbox#192): play/download it, retry a failed
       // download, the notice of a hub that cannot serve attachments yet, and the notice of a

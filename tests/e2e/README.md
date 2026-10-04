@@ -101,6 +101,27 @@ Control positivo medido: con el oyente desenchufado del manifest caen 2 de 3 (el
 simple, pasa igual por diseño). El aislamiento entre hubs, la idempotencia y cada columna los prueba
 `tests/customer_erasure.pg.test.py` (dos hubs en la misma BD, 20 mutantes ejecutados).
 
+### `number_erasure_e2e.rs` (whatsapp_inbox#263)
+
+El botón «Borrar datos de este número» para quien no tiene ficha: escribe alguien sin ficha → hilo
+sin vincular → un admin llama a `whatsapp_inbox.conversations.erase` con el id del hilo → ese hilo y
+sus mensajes quedan sin ningún dato personal y fuera de la bandeja, sin tocar el hilo de otra
+persona. Además fija las puertas que solo el runtime aplica: un empleado recibe `permission_denied`,
+un id vacío `invalid_payload` (antes de ejecutar SQL) y un hilo que no existe
+`whatsapp_inbox.conversation_not_found`, nunca un `200 ok`; y si vuelve a escribir, abre un hilo
+nuevo por la ingesta real. Solo instala `customers` y este módulo:
+
+```bash
+cp tests/e2e/number_erasure_e2e.rs "$HUB/crates/runtime/tests/"
+cd "$HUB" && DATABASE_URL=… ERPLORA_MODULES_DIR="$MODS" \
+  cargo test -p erplora-runtime --test number_erasure_e2e
+```
+
+Controles positivos medidos: sin el `minLength` del schema cae el de las puertas; con la sentencia de
+los mensajes sin efecto (`WHERE 1 = 0`) cae el del borrado. El aislamiento entre hubs, la
+idempotencia y cada columna los prueba `tests/number_erasure.pg.test.py` (dos hubs en la misma BD,
+23 mutantes ejecutados), que además compara el SET con el del borrado desde la ficha.
+
 ## Qué NO prueba, y por qué no puede
 
 - **El mensaje de WhatsApp real.** El evento se inserta como lo inserta `inbound_poll.rs`

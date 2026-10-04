@@ -15,6 +15,7 @@
     ],
     "commands": [
       "whatsapp_inbox.conversations.assign",
+      "whatsapp_inbox.conversations.erase",
       "whatsapp_inbox.templates.create",
       "whatsapp_inbox.templates.delete",
       "whatsapp_inbox.templates.import_from_meta",

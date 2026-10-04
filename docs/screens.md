@@ -57,6 +57,16 @@ actually wrote.
 From the open thread. Empty employee id = **unassign**, which is the SQL's own contract. Requires
 `whatsapp_inbox.manage_settings` — **admin only**, which means a manager cannot assign conversations.
 
+### Erase this number's data
+
+From the open thread, **admin only** (`whatsapp_inbox.manage_settings`), for a person who asks to
+have their data erased and has no customer sheet the erasure could start from (whatsapp_inbox#263).
+**Erase this number's data** asks first, naming the number, and says it cannot be undone; nothing is
+erased until **Erase data** is pressed, and **Cancel** or closing the thread drops the question.
+While it erases the button says so and cannot be pressed twice. When it is done the thread closes,
+the list reloads without it and a notice says the data has been erased. A refusal is shown in the
+panel and the thread stays open (`whatsapp_inbox.conversations.erase`).
+
 ### Reply to a customer
 
 **Not from this screen.** The module declares no send command and no `capabilities`, so the runtime

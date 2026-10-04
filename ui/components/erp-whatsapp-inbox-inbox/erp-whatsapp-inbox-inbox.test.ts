@@ -790,3 +790,180 @@ describe('the thread SHOWS what the customer sent (whatsapp_inbox#192)', () => {
     expect(v.index).toBe(1);
   });
 });
+
+// whatsapp_inbox#263 — somebody with NO customer sheet asks the business to erase their data. The
+// erasure from the sheet (whatsapp_inbox#262) cannot reach them, so the thread itself carries the
+// door: «Erase this number's data», admin only, confirmed in the page because it cannot be undone
+// (never `window.confirm`, which a POS webview swallows — same in-page panel as the templates).
+describe('erasing the data of one number from its thread (whatsapp_inbox#263)', () => {
+  type Wc = HTMLElement & { shadowRoot: ShadowRoot; updateComplete: Promise<unknown> };
+  const q = (el: Wc, id: string) => el.shadowRoot.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
+  const settle = async (el: Wc) => {
+    for (let i = 0; i < 3; i++) {
+      await new Promise((r) => setTimeout(r, 0));
+      await el.updateComplete;
+    }
+  };
+  const press = async (el: Wc, id: string) => {
+    q(el, id)!.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+    await settle(el);
+  };
+  const erasures = () => comandos.filter((c) => c.name === 'whatsapp_inbox.conversations.erase');
+
+  it('an admin finds the action in the opened thread', async () => {
+    const el = (await montar()) as Wc;
+    await abrirConversacion(el);
+    expect(q(el, 'whatsapp-inbox-erase'), 'the thread offers no way to erase this number').not.toBeNull();
+  });
+
+  it('somebody without the admin permission does not see it', async () => {
+    (globalThis as { erplora: { hasPermission: (p: string) => boolean } }).erplora.hasPermission = (p) =>
+      p !== 'whatsapp_inbox.manage_settings';
+    const el = (await montar()) as Wc;
+    await abrirConversacion(el);
+    expect(q(el, 'whatsapp-inbox-erase')).toBeNull();
+  });
+
+  it('pressing it erases NOTHING yet: it asks first, naming the number', async () => {
+    const el = (await montar()) as Wc;
+    await abrirConversacion(el);
+    await press(el, 'whatsapp-inbox-erase');
+    expect(erasures(), 'erased on the first click, without asking').toHaveLength(0);
+    const panel = q(el, 'whatsapp-inbox-erase-confirm');
+    expect(panel, 'no confirmation is asked').not.toBeNull();
+    expect(panel!.textContent).toContain('ui.eraseNumberConfirm');
+  });
+
+  it('cancelling closes the question and erases nothing', async () => {
+    const el = (await montar()) as Wc;
+    await abrirConversacion(el);
+    await press(el, 'whatsapp-inbox-erase');
+    await press(el, 'whatsapp-inbox-erase-cancel');
+    expect(q(el, 'whatsapp-inbox-erase-confirm')).toBeNull();
+    expect(erasures()).toHaveLength(0);
+    expect(el.shadowRoot.querySelector('.thread'), 'cancelling must leave the thread open').not.toBeNull();
+  });
+
+  it('confirming erases THIS thread, closes it, refreshes the list and says it is done', async () => {
+    const el = (await montar()) as Wc;
+    await abrirConversacion(el);
+    await press(el, 'whatsapp-inbox-erase');
+    const listsBefore = consultas.filter((c) => c.name === 'whatsapp_inbox.conversations.list').length;
+    await press(el, 'whatsapp-inbox-erase-submit');
+    expect(erasures().map((c) => c.payload)).toEqual([{ conversation_id: 'c1' }]);
+    expect(el.shadowRoot.querySelector('.thread'), 'the erased thread is still on screen').toBeNull();
+    expect(
+      consultas.filter((c) => c.name === 'whatsapp_inbox.conversations.list').length,
+      'the list still shows the erased conversation',
+    ).toBeGreaterThan(listsBefore);
+    expect(q(el, 'whatsapp-inbox-erase-done')?.textContent).toContain('ui.eraseNumberDone');
+  });
+
+  it('while it erases, the button says so and cannot be pressed twice', async () => {
+    let release!: () => void;
+    (globalThis as { erplora: { command: unknown } }).erplora.command = (name: string, payload: Record<string, unknown>) => {
+      comandos.push({ name, payload });
+      return new Promise<void>((r) => { release = r; });
+    };
+    const el = (await montar()) as Wc;
+    await abrirConversacion(el);
+    await press(el, 'whatsapp-inbox-erase');
+    await press(el, 'whatsapp-inbox-erase-submit');
+    const submit = q(el, 'whatsapp-inbox-erase-submit')!;
+    expect(submit.hasAttribute('disabled')).toBe(true);
+    expect(submit.textContent).toContain('ui.erasing');
+    release();
+    await settle(el);
+  });
+
+  it('a refusal is shown where it was pressed, and the thread stays open', async () => {
+    (globalThis as { erplora: { command: unknown } }).erplora.command = async (name: string, payload: Record<string, unknown>) => {
+      comandos.push({ name, payload });
+      throw Object.assign(new Error('That conversation does not exist in this business.'), {
+        code: 'whatsapp_inbox.conversation_not_found',
+      });
+    };
+    const el = (await montar()) as Wc;
+    await abrirConversacion(el);
+    await press(el, 'whatsapp-inbox-erase');
+    await press(el, 'whatsapp-inbox-erase-submit');
+    expect(q(el, 'whatsapp-inbox-erase-error'), 'the refusal is not shown').not.toBeNull();
+    expect(el.shadowRoot.querySelector('.thread')).not.toBeNull();
+    expect(q(el, 'whatsapp-inbox-erase-done')).toBeNull();
+  });
+
+  it('closing the thread drops the pending question: it never travels to another conversation', async () => {
+    const el = (await montar()) as Wc;
+    await abrirConversacion(el);
+    await press(el, 'whatsapp-inbox-erase');
+    await press(el, 'whatsapp-inbox-detail-close');
+    await abrirConversacion(el);
+    expect(q(el, 'whatsapp-inbox-erase-confirm')).toBeNull();
+  });
+
+  // The list stays clickable under the open thread. A question asked about ONE number must not
+  // become, one row click later, a question already open about somebody else's.
+  const OTHER = { ...CONVERSATION, id: 'c2', wa_contact_id: '34699999999', contact_phone: '+34699999999', contact_name: 'Luis' };
+  const answerByThread = () => {
+    const g = globalThis as { erplora: { query: (n: string, p?: Record<string, unknown>) => Promise<unknown> } };
+    const query = g.erplora.query;
+    g.erplora.query = async (name, params = {}) =>
+      name === 'whatsapp_inbox.conversations.get'
+        ? (consultas.push({ name, params }), [params.conversation_id === 'c2' ? OTHER : CONVERSATION])
+        : query(name, params);
+  };
+  const openOther = async (el: Wc) => {
+    el.shadowRoot.querySelector('ok-data-table')!.dispatchEvent(
+      new CustomEvent('rowAction', { detail: { actionId: 'open', row: { id: 'c2' } } }),
+    );
+    await settle(el);
+  };
+
+  it('opening ANOTHER conversation drops the pending question: the other number was never asked about', async () => {
+    answerByThread();
+    const el = (await montar()) as Wc;
+    await abrirConversacion(el);
+    await press(el, 'whatsapp-inbox-erase');
+    await openOther(el);
+    expect(el.shadowRoot.querySelector('.thread'), 'the other thread did not open').not.toBeNull();
+    expect(
+      q(el, 'whatsapp-inbox-erase-confirm'),
+      'the question asked about c1 is now open on c2: one more click erases somebody else',
+    ).toBeNull();
+    expect(q(el, 'whatsapp-inbox-erase'), 'the other thread must offer its own action again').not.toBeNull();
+    expect(erasures()).toHaveLength(0);
+  });
+
+  it('a message arriving in the SAME thread keeps the question: it is still about this number', async () => {
+    let onMessage: (() => void) | undefined;
+    (globalThis as { erplora: { on: unknown } }).erplora.on = (name: string, fn: () => void) => {
+      if (name === 'whatsapp_inbox.message.received') onMessage = fn;
+      return () => {};
+    };
+    const el = (await montar()) as Wc;
+    await abrirConversacion(el);
+    await press(el, 'whatsapp-inbox-erase');
+    onMessage!();
+    await settle(el);
+    expect(q(el, 'whatsapp-inbox-erase-confirm'), 'a new message wiped the question being read').not.toBeNull();
+  });
+
+  it('an erasure that finishes after ANOTHER thread was opened leaves that thread open', async () => {
+    answerByThread();
+    let release!: () => void;
+    (globalThis as { erplora: { command: unknown } }).erplora.command = (name: string, payload: Record<string, unknown>) => {
+      comandos.push({ name, payload });
+      return new Promise<void>((r) => { release = r; });
+    };
+    const el = (await montar()) as Wc;
+    await abrirConversacion(el);
+    await press(el, 'whatsapp-inbox-erase');
+    await press(el, 'whatsapp-inbox-erase-submit');
+    await openOther(el);
+    release();
+    await settle(el);
+    expect(erasures().map((c) => c.payload)).toEqual([{ conversation_id: 'c1' }]);
+    expect(el.shadowRoot.querySelector('.thread'), 'erasing c1 closed the thread of c2').not.toBeNull();
+    expect(q(el, 'whatsapp-inbox-erase-done')?.textContent).toContain('ui.eraseNumberDone');
+  });
+});

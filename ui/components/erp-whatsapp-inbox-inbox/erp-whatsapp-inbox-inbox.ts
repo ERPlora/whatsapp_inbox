@@ -200,6 +200,22 @@ export class ErpWhatsappInboxInbox extends LitElement {
     .note { font-size:.85rem; color:var(--ion-color-medium,#6f6a5e); margin:.5rem 0 0; }
     /* 44px minimum touch target: this screen is used one-handed, at a counter. */
     ion-button { --min-height: 44px; }
+    /* The tone of a button is declared HERE, never with \`color="…"\` (pm#392): Ionic resolves
+       \`color=\` through a GLOBAL rule that does not reach inside this shadow root. */
+    ion-button.tone-danger:not([fill]) {
+      --background: var(--ion-color-danger, #c5000f);
+      --background-activated: var(--ion-color-danger-shade, #ad000d);
+      --background-focused: var(--ion-color-danger-shade, #ad000d);
+      --background-hover: var(--ion-color-danger-tint, #cb1a27);
+      --color: var(--ion-color-danger-contrast, #fff);
+    }
+    ion-button.tone-danger[fill="clear"] { --color: var(--ion-color-danger, #c5000f); }
+    .erase-confirm { border:1px solid var(--ion-color-danger, #c5000f); border-radius:10px;
+      padding:.75rem; margin-top:.75rem; }
+    .erase-confirm h4 { margin:0 0 .35rem; font-size:1rem; }
+    .erase-confirm p { margin:0 0 .5rem; overflow-wrap:anywhere; }
+    .erase-confirm .actions { display:flex; gap:.5rem; flex-wrap:wrap; }
+    .page > ok-inline-feedback { margin-bottom:.75rem; }
   `;
 
   @state() tick = 0;
@@ -228,6 +244,17 @@ export class ErpWhatsappInboxInbox extends LitElement {
 
   /** Employee id typed into the assign box. `''` means "unassign" — the SQL's own contract. */
   @state() assignTo = '';
+
+  /** «Erase this number's data» was pressed and waits for its confirmation (whatsapp_inbox#263). */
+  @state() pendingErase = false;
+
+  @state() erasing = false;
+
+  /** What the erasure was refused, painted under the question where it was pressed. */
+  @state() eraseError = '';
+
+  /** The thread was erased: said on the page, since the thread itself is gone. */
+  @state() eraseDone = false;
 
   private ctrl!: ListController<Conversation>;
 
@@ -337,8 +364,13 @@ export class ErpWhatsappInboxInbox extends LitElement {
   private async loadDetail(conversationId: string) {
     this.detailError = '';
     // A refused assign belongs to ITS conversation: it must not travel to another one, and a
-    // message arriving in this one must not wipe it before it is read.
-    if (this.detail?.id !== conversationId) this.assignError = '';
+    // message arriving in this one must not wipe it before it is read. Same for the question of
+    // «Erase this number's data»: asked about one number, it never opens on another's thread.
+    if (this.detail?.id !== conversationId) {
+      this.assignError = '';
+      this.pendingErase = false;
+      this.eraseError = '';
+    }
     try {
       // The literals travel IN the SDK call: the contract extractor (ADR-0127) follows nothing else.
       const rows = await erplora().query<Conversation[]>('whatsapp_inbox.conversations.get', {
@@ -383,6 +415,8 @@ export class ErpWhatsappInboxInbox extends LitElement {
     this.detailError = '';
     this.assignError = '';
     this.assignTo = '';
+    this.pendingErase = false;
+    this.eraseError = '';
   }
 
   // ── Attachments (whatsapp_inbox#192) ───────────────────────────────────────
@@ -445,11 +479,34 @@ export class ErpWhatsappInboxInbox extends LitElement {
     }
   }
 
+  /** whatsapp_inbox#263 — erases the open thread: its messages, the name and the number. For the
+   *  person with no customer sheet, whom the erasure from the sheet (whatsapp_inbox#262) cannot
+   *  reach. Irreversible, so it only runs from the in-page question, never on the first click. */
+  private async confirmErase() {
+    if (!this.detail || this.erasing) return;
+    this.erasing = true;
+    this.eraseError = '';
+    try {
+      const erased = this.detail.id;
+      await erplora().command('whatsapp_inbox.conversations.erase', { conversation_id: erased });
+      // Another thread opened while this one was being erased stays open: it is not the erased one.
+      if (this.detail?.id === erased) this.closeDetail();
+      this.eraseDone = true;
+      await this.ctrl.load();
+    } catch (e) {
+      this.eraseError = domainErrorText(e, 'ui.errEraseNumber');
+    } finally {
+      this.erasing = false;
+    }
+  }
+
   /** pm#513: the refusal appears under «Assign», below a thread that scrolls on its own. Bring it
    *  into view when it appears, not again on every keystroke. */
   updated(changed: PropertyValues): void {
     super.updated(changed);
     if (changed.has('assignError') && this.assignError) void this.revealRefusal('[data-testid="whatsapp-inbox-assign-error"]');
+    if (changed.has('eraseError') && this.eraseError) void this.revealRefusal('[data-testid="whatsapp-inbox-erase-error"]');
+    if (changed.has('pendingErase') && this.pendingErase) void this.revealRefusal('[data-testid="whatsapp-inbox-erase-confirm"]');
   }
 
   /** ok-inline-feedback lays itself out in its own update: scrolled to before it, the box is empty. */
@@ -460,7 +517,9 @@ export class ErpWhatsappInboxInbox extends LitElement {
   }
 
   private onRowAction(ev: CustomEvent<{ actionId: string; row: Record<string, unknown> }>) {
-    if (ev.detail.actionId === 'open') void this.loadDetail(String(ev.detail.row.id));
+    if (ev.detail.actionId !== 'open') return;
+    this.eraseDone = false;
+    void this.loadDetail(String(ev.detail.row.id));
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -601,9 +660,34 @@ export class ErpWhatsappInboxInbox extends LitElement {
           </div>
           ${this.assignError
             ? html`<ok-inline-feedback data-testid="whatsapp-inbox-assign-error" tone="danger" icon="alert-circle-outline">${this.assignError}</ok-inline-feedback>`
-            : nothing}`
+            : nothing}
+          ${this.renderErase(c)}`
         : nothing}
       <p class="note">${t('ui.threadRepliesElsewhere')}</p>
+    </section>`;
+  }
+
+  /** The action, or its in-page question once pressed. Admin only — the caller already checked. */
+  private renderErase(c: Conversation) {
+    const t = (k: string, params?: Record<string, unknown>): string => erplora().t(CATALOG, k, params);
+    if (!this.pendingErase) {
+      return html`<div class="assign">
+        <ion-button data-testid="whatsapp-inbox-erase" size="small" fill="clear" class="tone-danger"
+          @click=${() => { this.pendingErase = true; this.eraseError = ''; }}>${t('ui.eraseNumber')}</ion-button>
+      </div>`;
+    }
+    return html`<section class="erase-confirm" data-testid="whatsapp-inbox-erase-confirm">
+      <h4>${t('ui.eraseNumberTitle')}</h4>
+      <p>${t('ui.eraseNumberConfirm', { phone: c.contact_phone || c.contact_name || '—' })}</p>
+      <div class="actions">
+        <ion-button data-testid="whatsapp-inbox-erase-submit" size="small" class="tone-danger" ?disabled=${this.erasing}
+          @click=${() => this.confirmErase()}>${this.erasing ? t('ui.erasing') : t('ui.eraseNumberSubmit')}</ion-button>
+        <ion-button data-testid="whatsapp-inbox-erase-cancel" size="small" fill="clear" ?disabled=${this.erasing}
+          @click=${() => { this.pendingErase = false; this.eraseError = ''; }}>${t('ui.cancel')}</ion-button>
+      </div>
+      ${this.eraseError
+        ? html`<ok-inline-feedback data-testid="whatsapp-inbox-erase-error" tone="danger" icon="alert-circle-outline">${this.eraseError}</ok-inline-feedback>`
+        : nothing}
     </section>`;
   }
 
@@ -615,6 +699,9 @@ export class ErpWhatsappInboxInbox extends LitElement {
         </header>
         ${this.ctrl?.error && !dataTableShowsLoadError()
           ? html`<p class="err" data-testid="whatsapp-inbox-load-error">${this.ctrl.error}</p>`
+          : nothing}
+        ${this.eraseDone
+          ? html`<ok-inline-feedback data-testid="whatsapp-inbox-erase-done" tone="success" icon="checkmark-circle-outline">${t('ui.eraseNumberDone')}</ok-inline-feedback>`
           : nothing}
         ${this.renderDetail()}
         <ok-data-table testid="whatsapp-inbox-table" .error=${this.ctrl?.error ?? ''} @retry=${() => this.ctrl?.load()} .serverSide=${true} .views=${true} .fill=${true} .actions=${this.rowActions} .rowClickable=${true} .cardTitle=${(row: Record<string, unknown>) => String(row.contact_name ?? row.contact_phone ?? '—')} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? 'asc'} .searchable=${true} .searchPlaceholder=${t('ui.searchInbox')} .emptyMessage=${this.ctrl?.loading ? t('ui.loading') : t('ui.emptyInbox')} @rowAction=${(e: CustomEvent<{ actionId: string; row: Record<string, unknown> }>) => this.onRowAction(e)} @rowClick=${(e: CustomEvent<{ row: Record<string, unknown> }>) => this.onRowAction({ detail: { actionId: 'open', row: e.detail.row } } as CustomEvent<{ actionId: string; row: Record<string, unknown> }>)} @pageChange=${(e: CustomEvent<number>) => this.ctrl.setPage(e.detail)} @pageSizeChange=${(e: CustomEvent<number>) => this.ctrl.setPageSize(e.detail)} @sortChange=${(e: CustomEvent<{ sort: string; dir: 'asc' | 'desc' }>) => this.ctrl.setSort(e.detail.sort, e.detail.dir)} @searchChange=${(e: CustomEvent<string>) => this.ctrl.setSearch(e.detail)} @filterChange=${(e: CustomEvent<{ col: string; value: unknown }>) => this.ctrl.setFilter(e.detail.col, e.detail.value)}></ok-data-table>
