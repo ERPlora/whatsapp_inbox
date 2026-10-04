@@ -17,7 +17,7 @@ Pasos:
 Entra: el código que devuelve Meta tras el QR.
 Sale: el número queda conectado en la plataforma (el hub solo sabe cuál es); empiezan a llegar los mensajes y el historial de los últimos meses.
 Si falla: el bloque dice el motivo («La conexión se canceló…», «No se pudo abrir la ventana de Facebook…», «Solo un dueño o un administrador…») y deja reintentar; un hub viejo ve «Este hub es demasiado antiguo para conectar el número desde aquí…».
-Implicados: pendiente
+Implicados: REC_WA_CITA-F01, REC_WA_MESA-F01
 Pendiente de enlazar: hub — bloque «Tu número» del shell (abre la ventana de Meta y pasa el código a la plataforma)
 Pendiente de enlazar: saas — pasarela de WhatsApp: canjea el código, guarda el token y suscribe el número
 QA: WA-01, WA-07
@@ -34,7 +34,7 @@ Pasos:
 Entra: el número elegido.
 Sale: la plataforma deja de recoger (o vuelve a recoger) los mensajes de ese número. Las conversaciones guardadas no se tocan.
 Si falla: el bloque dice el motivo y ofrece **Reintentar**.
-Implicados: pendiente
+Implicados: REC_WA_CITA-F01, REC_WA_MESA-F01
 Pendiente de enlazar: hub — bloque «Tu número» del shell (desconectar y reconectar)
 Pendiente de enlazar: saas — pasarela de WhatsApp: baja del número y renovación del token
 QA: WA-01, WA-09
@@ -51,7 +51,7 @@ Pasos:
 Entra: cada mensaje que el hub recoge de la plataforma (número de la persona, texto, objeto de Meta, si es entrante o la respuesta del dueño, si es en vivo o historial).
 Sale: una conversación por número y el mensaje guardado; aviso público de mensaje recibido (`whatsapp_inbox.message.received`) que dispara F04; el aviso del hub con el mismo mensaje es el que arranca las recetas (F21, F24).
 Si falla: con el cupo del mes agotado el mensaje entrante en vivo no se guarda y nada lo dice en la bandeja (ver F13); si el hub está apagado los mensajes esperan en la plataforma.
-Implicados: pendiente
+Implicados: REC_WA_CITA-F02, REC_WA_MESA-F02
 Pendiente de enlazar: hub — recogida periódica de mensajes de WhatsApp de la plataforma y su aviso al núcleo
 Pendiente de enlazar: saas — pasarela de WhatsApp: recibe de Meta y aparca por hub
 QA: WA-02, WA-08
@@ -69,7 +69,7 @@ Pasos:
 Entra: el número de la conversación; las fichas con ese número (Clientes); el país del negocio.
 Sale: la conversación sabe de qué ficha es. Solo rellena un vínculo vacío: el que puso una persona o una receta se respeta.
 Si falla: si dos fichas tienen el mismo número, o la búsqueda no responde, no se une a nadie y el mensaje sigue guardado.
-Implicados: pendiente
+Implicados: REC_WA_CITA-F03, REC_WA_MESA-F03
 Pendiente de enlazar: customers — buscar fichas por teléfono con el país del negocio, y avisos de ficha creada o actualizada
 QA: ninguno
 
@@ -134,7 +134,7 @@ Pasos:
 Entra: el eco de lo que el dueño escribió en el móvil.
 Sale: el mensaje en el hilo correcto; la marca de atención quitada.
 Si falla: si el hub es antiguo y no distingue el eco, la respuesta podría no aparecer (sin confirmar en hubs actuales).
-Implicados: pendiente
+Implicados: REC_WA_CITA-F09, REC_WA_MESA-F09
 Pendiente de enlazar: hub — recogida de los ecos del móvil y del historial
 QA: W-05, WA-02
 
@@ -151,7 +151,7 @@ Pasos:
 Entra: las conversaciones marcadas por la receta.
 Sale: nada nuevo; la marca solo la quita la respuesta del negocio (ni el siguiente mensaje de la clienta ni el historial).
 Si falla: si la campana no se puede leer, el hub no la pinta; la marca sigue en la bandeja.
-Implicados: pendiente
+Implicados: REC_WA_CITA-F09, REC_WA_MESA-F09
 Pendiente de enlazar: hub — campana de avisos del shell
 QA: ninguno
 
@@ -215,7 +215,7 @@ Pasos:
 Entra: el tope y el gasto del mes que manda la plataforma.
 Sale: nada; no se edita desde el hub.
 Si falla: si la pestaña no puede leerlo, dice que no está disponible; al agotar el cupo la plataforma rechaza los envíos (la receta lo deja anotado en su historial) y la bandeja deja de guardar lo que entra.
-Implicados: pendiente
+Implicados: REC_WA_CITA-F02, REC_WA_MESA-F02
 Pendiente de enlazar: hub — pestaña «Plan» del shell
 Pendiente de enlazar: saas — cuenta de mensajes facturables y tope del plan
 QA: WA-03

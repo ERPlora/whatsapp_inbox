@@ -42,6 +42,11 @@ la pantalla de Ajustes y su lista de usos son **un solo código** para las dos t
 filtro del disparador, el acuse, la disculpa o la lista escrita en una receta exige cambiarlo en la
 otra en la misma entrega (lo vigila la batería de recetas).
 
+El camino entero de punta a punta, con los flujos de Citas y Reservas que atraviesa, está en los
+recorridos `REC_WA_CITA` (`architecture/workflows/whatsapp-cita.md`) y `REC_WA_MESA`
+(`architecture/workflows/whatsapp-mesa.md`). Su apartado «Qué comparten la cita y la mesa» es la
+lista exacta de lo que hay que revisar en el otro negocio al tocar una pieza de este módulo.
+
 ## Referencia adoptada
 
 - **Meta, plantillas de mensaje** (componentes, límites, estados): cabecera, cuerpo, pie, botones —
@@ -317,3 +322,6 @@ lo de abajo está desfasado o contradice al código.
 - `qa-module` WA-06: «hoy solo borrado lógico → FAIL citando #262» — #262 está cerrada: se vacían los datos y se marca borrado (F10, F11).
 - `qa-module` WA-10: pestañas «Inbox / Settings / Templates» — son dos; Plantillas va dentro de Ajustes.
 - `qa-module` WA-04 y `qa-hub-beauty` W-03: piden avisar fuera de 24 h por plantilla — ninguna receta envía plantillas (F23).
+- `locales/es.json` (`ui.useAppointmentsPolicyReviewHelp`): «Cada cita nueva te espera en la Agenda» — solo las que reserva la clienta; las del mostrador nacen Pendiente con el interruptor como esté (F16). En Reservas, en cambio, el interruptor sí vale para toda reserva nueva.
+- `flows/README.md` («Por qué no se filtra a las citas que vinieron por WhatsApp») no dice que, con «Las citas se confirman solas», la cita recién reservada también dispara el aviso de cita confirmada: la clienta recibe la respuesta de la reserva y, detrás, «¡Confirmada!…» (F23).
+- `flows/appointment-from-whatsapp.*.flow.json`: el prompt explica el motivo `held` de `appointments.availability.check` («otra solicitud lo tiene apartado»); Citas retiró la retención de huecos (appointments#184) y ya no lo devuelve.
