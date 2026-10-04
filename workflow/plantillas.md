@@ -10,8 +10,8 @@ Vertical: comun
 Actor: administrador
 Pantalla: Plantillas de Meta
 Pasos:
-1. Abrir **Bandeja de WhatsApp → Ajustes** y desplegar **Plantillas de Meta**.
-2. Al abrirse, la lista se pone al día con Meta una vez: **Estado en Meta** dice «Sin enviar a Meta», «En revisión», «Aprobada», «Rechazada», «Pausada por Meta», «Desactivada por Meta» o «Borrada en WhatsApp Manager».
+1. Abrir **Bandeja de WhatsApp → Ajustes**: en ese momento, aunque no se despliegue nada, las plantillas se ponen al día con Meta una vez (nunca con un temporizador).
+2. Desplegar **Plantillas de Meta**: **Estado en Meta** dice «Sin enviar a Meta», «En revisión», «Aprobada», «Rechazada», «Pausada por Meta», «Desactivada por Meta» o «Borrada en WhatsApp Manager».
 3. Pulsar **Editar** (o tocar la fila) en una plantilla: el panel enseña su estado, qué hacer («Puedes enviarla cuando quieras…», «Meta la ha rechazado…») y, si la rechazó, «Motivo de Meta: …».
 Entra: las plantillas guardadas aquí y lo que Meta dice hoy de cada una (por nombre e idioma).
 Sale: el veredicto nuevo guardado en cada plantilla que cambió; una que Meta tuvo y ya no lista queda como «Borrada en WhatsApp Manager» y no se elimina.
@@ -27,7 +27,7 @@ Vertical: comun
 Actor: sistema
 Pantalla: Plantillas de Meta
 Pasos:
-1. Al abrir **Plantillas de Meta**, las que el negocio creó en WhatsApp Manager y no están aquí aparecen en la lista con su texto, cabecera, botones, ejemplos y estado.
+1. Al abrir **Ajustes** (no hace falta desplegar Plantillas de Meta), las que el negocio creó en WhatsApp Manager y no están aquí aparecen en la lista con su texto, cabecera, botones, ejemplos y estado.
 2. Las que no se pueden traer se nombran en un aviso encima de la tabla («Estas plantillas de WhatsApp Manager todavía no se pueden traer…: nombre (idioma)»).
 3. Una plantilla borrada aquí no vuelve a traerse.
 Entra: la lista de Meta con el contenido de cada plantilla.

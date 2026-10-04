@@ -5,7 +5,7 @@ Prefijo: WHATSAPP_INBOX
 ## Flujos
 
 ### WHATSAPP_INBOX-F14 Activar «Reservar citas»
-Estado: hecho
+Estado: parcial — la pantalla deja encender también «Reservar mesa» y no avisa: con las dos encendidas cada mensaje arranca las dos recetas y el cliente puede acabar con dos reservas, o con una cita y una mesa
 Vertical: peluqueria
 Actor: administrador
 Pantalla: Ajustes
@@ -16,13 +16,13 @@ Pasos:
 4. Aparece el interruptor de confirmación (F16).
 Entra: lo que el hub dice que hay construido; que Citas, Clientes, Servicios y Personal estén instalados y al día.
 Sale: la receta «WhatsApp → cita reservada» y su acompañante «Cita confirmada → WhatsApp» quedan creadas, encendidas y con exactamente los permisos que declaran.
-Si falla: la tarjeta dice el motivo y deshace lo que llegó a encender; «Solo un dueño o un administrador puede activarlo»; si falta o está en pausa o vieja una aplicación, la tarjeta se sustituye por «“Reservar citas” necesita la aplicación …» con **Ver aplicaciones**.
+Si falla: la tarjeta dice el motivo y deshace lo que llegó a encender; sin permiso, «Solo un dueño o un administrador puede activarlo.». Si el hub no ofrece la receta: con Citas instalada y otra aplicación que la receta pide ausente, en pausa o vieja (o Citas vieja), la tarjeta se sustituye por «“Reservar citas” necesita la aplicación …» con **Ver aplicaciones**; sin Citas ni Reservas activas, «Instala Citas o Reservas para que WhatsApp reserve solo»; si están pero el hub no ofrece ninguna receta y no dice por qué, «Actualiza Citas o Reservas para que WhatsApp reserve solo»; y con Citas ausente o en pausa pero Reservas activa, la tarjeta de citas no aparece, sin aviso.
 Implicados: APPOINTMENTS-F06, APPOINTMENTS-F18, REC_WA_CITA-F01
 Pendiente de enlazar: flows — encender una receta de fábrica de un módulo con sus permisos
 QA: W-01 (discrepa)
 
 ### WHATSAPP_INBOX-F15 Activar «Reservar mesa»
-Estado: hecho
+Estado: parcial — la pantalla deja encender también «Reservar citas» y no avisa: con las dos encendidas cada mensaje arranca las dos recetas y el cliente puede acabar con dos reservas, o con una cita y una mesa
 Vertical: restaurante
 Actor: administrador
 Pantalla: Ajustes
@@ -91,8 +91,8 @@ Vertical: comun
 Actor: cliente
 Pantalla: WhatsApp: chat del cliente
 Pasos:
-1. La respuesta automática le ofrece una lista de horas («Ver huecos» / horas de mesa).
-2. Ella puede tocar una opción, o escribir «el 2», «la segunda» o «12:30».
+1. La respuesta automática le ofrece una lista de horas (botón **Ver huecos** en la cita; horas en la mesa).
+2. Ella puede tocar una opción, o escribir `el 2`, `la segunda` o `12:30`.
 3. Si lo escrito señala una sola opción ofrecida en las últimas 24 h, se comprueba que sigue libre y se reserva como si la hubiera tocado; si no está claro, vuelve a ofrecer.
 Entra: la última lista ofrecida a ese número (solo 24 h).
 Sale: la reserva (F21 o F24); la lista se vacía en cuanto reserva, anula o mueve.
@@ -106,9 +106,10 @@ Vertical: comun
 Actor: sistema
 Pantalla: WhatsApp: chat del cliente
 Pasos:
-1. Si el asistente falla o no dice nada, la clienta recibe un texto fijo: «Perdona, ahora mismo no puedo mirar la agenda (las reservas). Alguien del equipo te contestará por aquí en cuanto pueda.».
+1. Si el asistente falla o no dice nada, el cliente recibe un texto fijo de la receta: en la cita «Perdona, ahora mismo no puedo mirar la agenda. Alguien del equipo te contestará por aquí en cuanto pueda.»; en la mesa, igual con «las reservas».
 2. Su conversación queda marcada «Necesita atención» y aparece en la campana (F09).
 3. Nada más se le manda en ese turno.
+4. La marca **solo** se pone en ese caso. Cuando es el propio asistente quien contesta que alguien del negocio le responderá (la pregunta no es de reservar, el número no identifica a una sola ficha, o en la mesa pide cambiar o anular, F25), la conversación **no** se marca ni sube a la campana, en los dos negocios.
 Entra: el resultado del paso del asistente.
 Sale: una disculpa y la marca de atención.
 Si falla: si la marca no se puede poner, la disculpa sale igual y el mensaje sigue sin leer en la bandeja.
@@ -122,11 +123,11 @@ Vertical: peluqueria
 Actor: cliente
 Pantalla: WhatsApp: chat del cliente
 Pasos:
-1. La clienta escribe, por ejemplo, «¿Tenéis hueco mañana por la tarde para un corte?».
-2. Recibe al momento «¡Gracias por escribirnos! Miro la agenda y te contesto ahora mismo.».
+1. La clienta escribe, por ejemplo, `¿Tenéis hueco mañana por la tarde para un corte?`.
+2. Recibe al momento el acuse fijo de la receta «¡Gracias por escribirnos! Miro la agenda y te contesto ahora mismo.».
 3. Si no tiene ficha, se le crea una con origen WhatsApp.
-4. Si su mensaje fija servicio, día y hora y está libre, se reserva con la profesional que trabaja a esa hora; si no, recibe los huecos libres de verdad para tocar o escribir (F19). La hora nunca la elige el asistente.
-5. Recibe «te he reservado …» (se confirma sola) o «te la he apuntado y el salón te la confirma» (lo revisa el salón), según F16; la cita está en la Agenda.
+4. Si su mensaje fija servicio, día y hora y está libre, se reserva con la profesional que trabaja a esa hora; si no, recibe los huecos libres de verdad para tocar o escribir (F19). La receta le ordena al asistente no elegir nunca la hora; lo vigila la batería de recetas sobre el texto del guion, no el código que reserva.
+5. Recibe una respuesta que redacta el asistente: que la cita está reservada (día, hora y profesional) si el salón confirma solo, o que se la ha apuntado y el salón se la confirma, según F16. La cita está en la Agenda.
 Entra: el mensaje escrito o la opción tocada (no el historial, ni las respuestas del dueño, ni fotos sin texto).
 Sale: ficha nueva si hacía falta (Clientes), conversación unida a la ficha, cita aceptada o pendiente (Citas), respuesta por WhatsApp.
 Si falla: F20; sin hueco, le dice el porqué y ofrece otros.
@@ -142,7 +143,7 @@ Vertical: peluqueria
 Actor: cliente
 Pantalla: WhatsApp: chat del cliente
 Pasos:
-1. La clienta escribe «no puedo ir» o «¿me la cambias al jueves?».
+1. La clienta escribe `no puedo ir` o `¿me la cambias al jueves?`.
 2. Se busca su cita por su número; con dos próximas, pregunta cuál.
 3. Anular: se anula con las reglas del salón (si se permite y con qué antelación); fuera de plazo se le dice y la cita sigue.
 4. Mover: se ofrecen huecos y se mueve la misma cita, conservando profesional y servicio.
@@ -154,15 +155,15 @@ Implicados: APPOINTMENTS-F02, APPOINTMENTS-F06, REC_WA_CITA-F08
 QA: W-04 (discrepa)
 
 ### WHATSAPP_INBOX-F23 La clienta recibe el aviso cuando el salón confirma
-Estado: parcial — el aviso es texto libre: si han pasado más de 24 h desde el último mensaje de la clienta, Meta lo rechaza y no hay plantilla de respaldo; y con «Las citas se confirman solas» la clienta recibe dos mensajes seguidos («te he reservado…» y «¡Confirmada!…»), sin confirmar en banco
+Estado: parcial — el aviso es texto libre: si han pasado más de 24 h desde el último mensaje de la clienta, Meta lo rechaza y no hay plantilla de respaldo; con «Las citas se confirman solas» la clienta recibe dos mensajes (la respuesta de la reserva y el aviso de confirmada), sin orden garantizado; y la conversación se busca con el teléfono de la cita como texto contenido en el de la conversación, así que un teléfono con espacios o guiones no la encuentra (no se avisa) y uno incompleto puede dar con la de otra persona
 Vertical: peluqueria
 Actor: responsable, cliente
 Pantalla: WhatsApp: chat del cliente
 Pasos:
 1. Con «Las reviso yo antes», la encargada pulsa **Confirmar** en la Agenda.
-2. Si la clienta tiene conversación de WhatsApp con el negocio, recibe «¡Confirmada! Te esperamos el martes, 15 de septiembre de 2026 a las 10:30 para tu Corte con Ana.».
-3. Si no tiene teléfono o conversación, no se manda nada y el motivo queda en el historial de la automatización.
-4. El aviso sale con **cualquier** confirmación de una cita cuyo teléfono tenga conversación: también la de una cita del mostrador, y también la de una cita que nace ya confirmada porque «Las citas se confirman solas» está encendido (F16); en ese caso llega justo después de la respuesta de F21.
+2. Si la clienta tiene conversación de WhatsApp con el negocio, recibe el texto fijo de la receta «¡Confirmada! Te esperamos el {día} a las {hora} para tu {servicio} con {profesional}.», con el día y la hora ya escritos en el idioma y la zona del negocio.
+3. La conversación se busca con el teléfono guardado en la cita, como texto contenido en el de la conversación: si en la cita está con espacios o guiones no se encuentra, y si está incompleto puede encontrar la de otra persona. Si no tiene teléfono o no hay conversación, no se manda nada y el motivo queda en el historial de la automatización.
+4. El aviso sale con **cualquier** confirmación de una cita cuyo teléfono tenga conversación: también la de una cita del mostrador, y también la de una cita que nace ya confirmada porque «Las citas se confirman solas» está encendido (F16); en ese caso la clienta recibe los dos mensajes, la respuesta de F21 y este aviso, en cualquier orden (salen de dos automatizaciones distintas).
 Entra: la cita confirmada (Citas) y la conversación de su teléfono.
 Sale: un WhatsApp a la clienta.
 Si falla: el motivo queda en el historial de la automatización; nada se ve en la Agenda.
@@ -175,11 +176,11 @@ Vertical: restaurante
 Actor: cliente
 Pantalla: WhatsApp: chat del cliente
 Pasos:
-1. El cliente escribe, por ejemplo, «Mesa para 4 el sábado a las 21».
-2. Recibe al momento «¡Gracias por escribirnos! Miro el libro de reservas y te contesto ahora mismo.».
-3. Se mira si ese día cierra, los turnos y las plazas libres; la hora y cuántos sois los dice el cliente, nunca el asistente.
+1. El cliente escribe, por ejemplo, `Mesa para 4 el sábado a las 21`.
+2. Recibe al momento el acuse fijo de la receta «¡Gracias por escribirnos! Miro el libro de reservas y te contesto ahora mismo.».
+3. Se mira si ese día cierra, los turnos y las plazas libres; la receta le ordena al asistente que la hora y cuántos sois los diga el cliente (lo vigila la batería sobre el guion).
 4. Si hay sitio, se reserva; si no, se le ofrecen horas para tocar o escribir (F19), o se le apunta en la lista de espera.
-5. Recibe «reservada» o «apuntada, te la confirman», según F16.
+5. Recibe una respuesta que redacta el asistente: que la mesa está reservada, o que se la ha apuntado y el restaurante se la confirma, según F16.
 Entra: el mensaje escrito o la opción tocada; su ficha si ya existe (no se crea).
 Sale: reserva aceptada o pendiente, o entrada en la lista de espera (Reservas), con nombre y teléfono; respuesta por WhatsApp.
 Si falla: F20; sin plazas o con demasiados comensales, se le explica.
@@ -193,7 +194,7 @@ Vertical: restaurante
 Actor: cliente
 Pantalla: WhatsApp: chat del cliente
 Pasos:
-1. El cliente escribe «no podemos ir» o «¿podemos pasarla a las 22?».
+1. El cliente escribe `no podemos ir` o `¿podemos pasarla a las 22?`.
 2. Hoy recibe que alguien del restaurante se ocupa; la reserva no se toca y la conversación no sube a la campana (F09): solo lo ve quien abra la bandeja o el móvil.
 3. Cuando exista: se busca su reserva por su número, se anula o cambia con las reglas del restaurante y se le contesta.
 Entra: el mensaje y las reservas de ese cliente.
@@ -203,7 +204,7 @@ Implicados: RESERVATIONS-F18, REC_WA_MESA-F08
 QA: WR-03
 
 ### WHATSAPP_INBOX-F26 El cliente recibe el aviso cuando el restaurante confirma
-Estado: no hecho — no hay receta acompañante para Reservas; un cliente al que se le dijo «te la confirman» no recibe nada al confirmarla
+Estado: no hecho — no hay receta acompañante para Reservas; un cliente al que se le dijo que se la confirmarían no recibe nada al confirmarla
 Vertical: restaurante
 Actor: responsable, cliente
 Pantalla: WhatsApp: chat del cliente

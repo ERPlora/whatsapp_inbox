@@ -16,31 +16,14 @@ Un negocio recibe por WhatsApp a clientes que piden hora o mesa, preguntan o can
 pone ese WhatsApp dentro del hub: guarda cada conversación y sus mensajes, reconoce a la persona por
 su número, deja que el negocio encienda con un toque la respuesta automática que reserva en su
 agenda, y gestiona las plantillas que Meta exige para escribir pasadas 24 horas. Lo usan el
-**dueño o administrador** (conecta el número, activa respuestas, plantillas, borra datos), la
-**encargada** y el **empleado** (leen la bandeja), y del otro lado la **clienta** o el **comensal**,
-que solo usa su WhatsApp. El dueño sigue contestando desde la app WhatsApp Business de su móvil:
+**administrador** (el dueño: conecta el número, activa respuestas, plantillas, borra datos), el
+**responsable** y el **empleado** (leen la bandeja), y del otro lado el **cliente** (la clienta del
+salón o el comensal), que solo usa su WhatsApp. El dueño sigue contestando desde la app WhatsApp Business de su móvil:
 el número es el mismo (coexistencia).
 
 **Lo común y lo de cada negocio.** El mismo canal sirve a la peluquería (cita) y al restaurante
-(mesa). Cada flujo lo dice en su clave `Vertical:` (`comun`, `peluqueria`, `restaurante`). Si
-cambias una pieza `comun`, afecta a los dos; si cambias una de las otras, solo a ese negocio.
-
-| Parte del recorrido | Común (los dos negocios) | Solo peluquería (cita) | Solo restaurante (mesa) |
-|---|---|---|---|
-| Conectar el número, recibir, guardar, bandeja | F01–F13 | — | — |
-| Reconocer a la persona por su número | F04 | la receta crea ficha si no existe (F21) | la receta NO crea ficha (F24) |
-| Pantalla «¿Para qué lo usas?» y su interruptor | F16, F17, F18 (misma pantalla y mismo código para las dos tarjetas) | tarjeta «Reservar citas» (F14) | tarjeta «Reservar mesa» (F15) |
-| Acuse inmediato, elegir hueco escribiendo, disculpa si el asistente falla | F19, F20 (mismas piezas en las dos recetas) | — | — |
-| Reservar | — | F21 | F24 |
-| Anular o mover | — | F22 | F25 (no hecho) |
-| Avisar cuando el negocio confirma | — | F23 | F26 (no hecho) |
-| Plantillas de Meta | F27–F31 | — | — |
-
-Regla de impacto: las dos recetas son **ficheros distintos** (`flows/appointment-…` y
-`flows/reservation-…`) pero comparten forma, disparador, filtro, destinatario y pasos de servicio;
-la pantalla de Ajustes y su lista de usos son **un solo código** para las dos tarjetas. Cambiar el
-filtro del disparador, el acuse, la disculpa o la lista escrita en una receta exige cambiarlo en la
-otra en la misma entrega (lo vigila la batería de recetas).
+(mesa). Cada flujo lo dice en su clave `Vertical:` (`comun`, `peluqueria`, `restaurante`), y lo que
+comparten está en «Qué comparten los verticales», debajo del índice de flujos.
 
 El camino entero de punta a punta, con los flujos de Citas y Reservas que atraviesa, está en los
 recorridos `REC_WA_CITA` (`architecture/workflows/whatsapp-cita.md`) y `REC_WA_MESA`
@@ -59,7 +42,7 @@ lista exacta de lo que hay que revisar en el otro negocio al tocar una pieza de 
   <https://business.whatsapp.com/policy>.
 - **E.164** (UIT-T) para guardar y comparar teléfonos, con las reglas de **libphonenumber** —
   <https://www.itu.int/rec/T-REC-E.164>, <https://github.com/google/libphonenumber>.
-- **Square Assistant / Fresha** para «el bot propone huecos reales y el cliente elige; nunca adivina
+- **Square Assistant / Fresha** para que el bot proponga huecos reales y el cliente elija, sin adivinar nunca
   la hora», y la confirmación por mensaje —
   <https://squareup.com/us/en/appointments/scheduling-features/square-assistant>.
 - **Bandeja tipo** (WhatsApp Web, Square Messages, Shopify Inbox, Front): lista por actividad, hilo
@@ -74,15 +57,16 @@ lista exacta de lo que hay que revisar en el otro negocio al tocar una pieza de 
 2. Para reservar por WhatsApp: **Citas**, **Servicios** y **Personal** en una peluquería, o
    **Reservas** en un restaurante, en las versiones que pide cada receta (si falta o está en pausa,
    la tarjeta lo dice y lleva a Aplicaciones). **Automatizaciones** es opcional: sin ella no hay
-   enlace a «Ajustes avanzados».
+   enlace a **Ajustes avanzados en Automatizaciones**.
 3. Tener a mano el móvil con **WhatsApp Business** del número del negocio. Hoy Meta solo deja
    conectar números del portfolio de ERPlora (verificación pendiente, pm#277).
-4. En el hub, como dueño o administrador: **Bandeja de WhatsApp → Ajustes → Tu número →
+4. En el hub, como administrador: **Bandeja de WhatsApp → Ajustes → Tu número →
    Conectar WhatsApp**, iniciar sesión en Facebook y escanear el QR (F01).
 5. En **¿Para qué lo usas?**, tocar **Activar** en la tarjeta del negocio y aceptar la frase (F14 o
-   F15). **Una sola tarjeta de reservar encendida**: las dos contestan al mismo mensaje.
+   F15). Encender **solo la del negocio**: la pantalla deja encender las dos, y entonces cada
+   mensaje arranca las dos recetas (F14, F15).
 6. Elegir **Las citas/reservas se confirman solas** o **Las reviso yo antes** (F16).
-7. Escribir al número desde otro móvil («quiero cita mañana» / «quiero mesa para dos mañana») y
+7. Escribir al número desde otro móvil (`quiero cita mañana` / `quiero mesa para dos mañana`) y
    comprobar que llega a la bandeja y que contesta.
 
 ## Pantallas
@@ -97,7 +81,8 @@ lista, del más antiguo al más reciente, con fotos y stickers en línea, notas 
 **Reproducir**, documentos con **Descargar**, y la frase «Desde esta pantalla no se contesta…». Solo
 el administrador ve, dentro del hilo, **Asignada a** + **Asignar/Desasignar** y **Borrar datos de
 este número**. Vacía: «Sin conversaciones.»; cargando: «Cargando…»; error de lista: mensaje con
-reintento; error del hilo: «No se pudo cargar la conversación».
+reintento; error del hilo: el motivo que devuelva el hub o, si no trae ninguno, «No se pudo cargar
+la conversación».
 
 ### Ajustes
 Menú **Bandeja de WhatsApp → Ajustes** (título «Ajustes del canal»), solo administrador. Tres
@@ -105,25 +90,27 @@ bloques: **Tu número** (bloque del hub: «Conectar WhatsApp», «Conectado», �
 conectar WhatsApp»); **¿Para qué lo usas?** (una tarjeta por uso con **Activar**/**Desactivar**,
 estado «Activo»/«Desactivada», la frase de consentimiento con **Activar**/**Ahora no**, el
 interruptor de confirmación y, si toca, «Hay una versión mejorada…» con **Actualizar**); y al pie
-**Ajustes avanzados en Automatizaciones** y el desplegable **Plantillas de Meta**. El consumo del mes no está aquí: lo pinta la pestaña «Plan» del hub
-(F13). Cargando:
-indicador giratorio; hub viejo: «Este hub es demasiado antiguo…»; error: «No hemos podido saber qué
+**Ajustes avanzados en Automatizaciones** y el desplegable **Plantillas de Meta** (abrir Ajustes ya
+consulta a Meta, aunque no se despliegue; F27). El consumo del mes no está aquí: lo pinta la
+pestaña Plan del hub (F13). Cargando: indicador giratorio; hub viejo: «Este hub es demasiado antiguo…»; error: «No hemos podido saber qué
 hay activo ahora mismo…»; sin módulo de reservas: «Instala Citas o Reservas…» + **Ver
 aplicaciones**.
 
 ### Plantillas de Meta
 Desplegable al pie de **Ajustes**, solo administrador. Tabla con **Nombre**, **Idioma**,
-**Categoría**, **Estado en Meta**, **Activa**, buscador «Buscar nombre o categoría…», **Añadir** en
+**Categoría**, **Estado en Meta**, **Activa**, buscador «Buscar nombre o categoría…» (solo busca
+por nombre), **Añadir** en
 la barra y acciones **Editar** y **Borrar** por fila. Panel lateral con nombre, idioma, categoría,
 **Cabecera** (Texto/Imagen/Vídeo/Documento (PDF)) y su archivo de ejemplo, **Cuerpo**, **Ejemplos
-de las variables**, **Botones**, el veredicto de Meta con «qué hacer», y **Añadir**/**Guardar**.
+de las variables**, **Botones**, el veredicto de Meta con lo que hay que hacer, y
+**Añadir**/**Guardar**. Las categorías salen como «Utility», «Marketing» y «Authentication».
 Avisos encima de la tabla: Meta no se pudo consultar; plantillas de WhatsApp Manager que no se
 pueden traer (con sus nombres). Vacía: «Sin plantillas.»
 
 Pantallas de otros que usan estos flujos: **Hub: Plan** (pestaña que el hub añade al módulo con el
 consumo del mes), **Hub: Campana de avisos** (barra superior, «Clientes de WhatsApp esperando
 respuesta») y **WhatsApp: chat del cliente** (el móvil de la clienta o el comensal, donde recibe el
-acuse, la lista «Ver huecos», la confirmación, la disculpa o el aviso de cita confirmada).
+acuse, la lista con el botón **Ver huecos**, la confirmación, la disculpa o el aviso de cita confirmada).
 
 ## Flujos
 
@@ -163,17 +150,41 @@ acuse, la lista «Ver huecos», la confirmación, la disculpa o el aviso de cita
 | WHATSAPP_INBOX-F30 | Editar una plantilla | parcial | comun | plantillas |
 | WHATSAPP_INBOX-F31 | Borrar una plantilla | parcial | comun | plantillas |
 
+## Qué comparten los verticales
+
+Tocar una pieza de esta tabla afecta a la cita **y** a la mesa: hay que revisar los flujos de las dos
+columnas en la misma entrega.
+
+| Pieza compartida | Flujos que la usan |
+|---|---|
+| Canal, recepción, bandeja, reconocimiento por número, borrado de datos, cupo | F01–F13 (los dos negocios) |
+| El mismo disparador: las dos recetas escuchan el mismo aviso de mensaje recibido, con el mismo filtro. Si las dos tarjetas están encendidas, cada mensaje arranca las dos y el cliente puede acabar con dos reservas, o con una cita y una mesa (la pantalla no lo impide) | F14, F15, F21, F24 |
+| Un solo código de pantalla para las dos tarjetas: activar, desactivar, actualizar y el interruptor de confirmación | F14, F15, F16, F17, F18 |
+| Las mismas órdenes y consultas de este módulo dentro de las dos recetas: recordar y releer la lista ofrecida, marcar «Necesita atención», unir la conversación a la ficha, y la lista de conversaciones como destinatario de cada respuesta. Cambiar una rompe las dos recetas | F19, F20, F21, F24 |
+| La lista de conversaciones buscada por teléfono: la usa la receta acompañante de la cita para encontrar a quién avisar | F23 (y cualquier cambio en cómo se filtra la lista, F05) |
+| Acuse inmediato, disculpa fija y lista escrita: mismas piezas en las dos recetas | F19, F20, F21, F24 |
+| Plantillas de Meta | F27–F31 |
+
+Lo que **no** se comparte: crear ficha si no existe (solo cita, F21), anular y mover (cita F22; mesa
+F25, no hecho), el aviso al confirmar (cita F23; mesa F26, no hecho) y la política por defecto
+(Citas confirma sola, Reservas revisa; F16).
+
+Las dos recetas son ficheros distintos (`flows/appointment-…` y `flows/reservation-…`). La batería
+de recetas exige a las dos las mismas reglas (disparador declarado, disculpa si el asistente falla,
+filtro que deja fuera el historial y las respuestas del dueño), pero **no** compara que los textos del
+acuse o de la disculpa sean iguales: igualarlos es trabajo de quien toca uno.
+
 ## Cobertura contra la referencia
 
-**1 · Plantillas de Meta: elemento × traer / crear / editar / enviar.** «Enviar» lo hace el paso
-«notificar» de Automatizaciones en el hub, no este módulo; ninguna receta de este módulo envía hoy
+**1 · Plantillas de Meta: elemento × traer / crear / editar / enviar.** Enviar lo hace el paso
+notificar de Automatizaciones en el hub, no este módulo; ninguna receta de este módulo envía hoy
 una plantilla (todas mandan texto libre dentro de las 24 h).
 
-| Elemento (Meta) | Traer (F28) | Crear (F29) | Editar (F30) | Enviar (hub: paso «notificar») |
+| Elemento (Meta) | Traer (F28) | Crear (F29) | Editar (F30) | Enviar (hub: paso notificar) |
 |---|---|---|---|---|
 | Nombre (minúsculas, `_`) | hecho | hecho (Meta valida) | parcial: el campo se deja cambiar; Meta identifica por nombre + idioma, efecto sin confirmar | — |
 | Idioma | hecho | parcial: texto libre, sin selector de códigos de Meta | parcial: igual | — |
-| Categoría Utilidad · Marketing · Autenticación | hecho | hecho | hecho | — |
+| Categoría Utilidad · Marketing · Autenticación | hecho | hecho (en pantalla salen en inglés: Utility, Marketing, Authentication) | hecho | — |
 | Autenticación (código, caducidad, botón copiar/OTP) | no hecho: se nombra en el aviso | no hecho: se elige la categoría pero sin su estructura | no hecho | no hecho |
 | Cabecera de texto (≤ 60) | hecho | no hecho: el panel no tiene campo | no hecho: se conserva sin tocar | hecho |
 | Cabecera de texto con 1 variable y su ejemplo | hecho | no hecho | no hecho: el ejemplo viaja intacto | hecho |
@@ -207,7 +218,8 @@ una plantilla (todas mandan texto libre dentro de las 24 h).
 | Destinatario de una respuesta: se lee de la conversación, nunca se teclea; el hub exige `+` | hecho | F21, F24 |
 | Comparar con la ficha de cliente como NÚMERO (sin `00` ni `0` troncal, prefijo del país del negocio) | parcial: regla propia, sin libphonenumber ni números ya normalizados; la tabla de prefijos está copiada aquí y en Clientes | F04 |
 | Teléfono de la ficha guardado en E.164 | no hecho: Clientes lo guarda como se teclea (Pendiente de enlazar: customers) | F04 |
-| Buscar en la bandeja por teléfono escrito de cualquier forma | parcial: compara texto, «600 111 222» no encuentra `+34600111222` | F05 |
+| Buscar en la bandeja por teléfono escrito de cualquier forma | parcial: compara texto; `600 111 222` no encuentra `+34600111222` | F05 |
+| Encontrar la conversación de la clienta a partir del teléfono de su cita, para avisarla | no hecho: busca el teléfono de la cita como texto contenido en el de la conversación; con espacios o guiones no la encuentra (no se avisa) y un número incompleto puede dar con la de otra persona | F23 |
 | Botón de llamada de una plantilla con prefijo de país | parcial: no se valida en pantalla; lo rechaza el SaaS | F29, F30 |
 | Número del negocio conectado | hecho (lo da Meta; bloque del hub) | F01 |
 
@@ -219,11 +231,11 @@ una plantilla (todas mandan texto libre dentro de las 24 h).
 | Marcar como leída al abrir | no hecho: «Sin leer» no baja nunca | F05 |
 | Nombre de perfil de WhatsApp | no hecho: el aviso del hub no lo trae; Contacto enseña el teléfono | F05 |
 | Contestar desde el hub | no hecho (ver «Dudas abiertas») | F08 |
-| Asignar con selector y filtro «mis conversaciones» | parcial: se teclea el id y no filtra | F07 |
+| Asignar con selector y filtro de mis conversaciones | parcial: se teclea el id y no filtra | F07 |
 | Cerrar o reabrir una conversación a mano | no hecho: solo el borrado la cierra | — |
 | Adjuntos y visor de fotos | hecho | F06 |
 | Aviso de clientes esperando | hecho | F09 |
-| Consentimiento y baja («BAJA»/«STOP») | no hecho (L-11, WA-05) | — |
+| Consentimiento y baja (`BAJA` / `STOP`) | no hecho (L-11, WA-05) | — |
 
 ## Datos: de quién es cada dato
 
@@ -235,7 +247,7 @@ una plantilla (todas mandan texto libre dentro de las 24 h).
 | Contexto del bot | conversación (nadie lo escribe hoy) | este módulo | F10/F11 |
 | Solicitudes de la bandeja retirada | tabla apartada de este módulo | este módulo | F10/F11 |
 | Ficha vinculada, persona asignada | referencia sin copia del dato | Clientes / núcleo | no se copian aquí |
-| Ficha de cliente (nombre, teléfono, origen «WhatsApp») | Clientes | Clientes | su «Borrar datos» (avisa a este módulo, F11) |
+| Ficha de cliente (nombre, teléfono, origen WhatsApp) | Clientes | Clientes | su «Borrar datos» (avisa a este módulo, F11) |
 | Cita o reserva creada (nombre, teléfono, notas internas) | Citas / Reservas | Citas / Reservas | Pendiente: appointments, reservations |
 | Texto de los mensajes en el historial de automatizaciones y la cola de salida | hub | hub | no se borra: 90 días (hub#2467, hub#2474, hub#2477) |
 | Mensajes aparcados, token de Meta, adjuntos en tránsito | SaaS | SaaS | mensajes sin recoger, sin caducidad (saas#1930) |
@@ -251,23 +263,28 @@ receta con los permisos que el dueño consintió.
 
 ## Reglas que no se rompen
 
+Solo lo que el código hace cumplir. Lo que depende de que el asistente obedezca su guion (que la
+hora la elija quien escribe, que la frase diga si la reserva quedó hecha o pendiente) está en F21 y F24,
+no aquí; y que solo haya una receta de reservar encendida no lo impide nada (hueco de F14 y F15).
+
 - **Aislamiento**: cada lectura y escritura va por negocio; una conversación de otro negocio no
-  existe («Esa conversación no existe en este negocio»).
+  existe («Esa conversación no existe en este negocio.»).
 - **Permisos**: leer la bandeja, cualquier rol; asignar, borrar datos, plantillas y ajustes, solo
-  administrador; conectar el número, dueño o administrador.
+  administrador; conectar el número, solo administrador (lo comprueba el bloque del hub).
 - **Ninguna credencial de Meta en el hub**: ni campo, ni pantalla, ni consola.
 - **El módulo no envía nada**: contesta la receta o el dueño desde el móvil.
-- **A quién se escribe se lee de la conversación**, nunca se teclea, y los permisos de la receta
-  quedan fijados al número que escribió: no puede leer ni tocar lo de otra persona.
-- **Una sola receta de reservar encendida** por negocio.
-- **La hora (y en mesa, cuántos sois) la elige quien escribe**, nunca el asistente.
-- **La respuesta dice lo que pasó**: «reservada» o «te la confirman», según la política del módulo
-  que lleva la agenda, leída antes de reservar.
+- **A quién se escribe se lee de la conversación**, nunca se teclea. Las órdenes de este módulo
+  que el asistente puede usar (releer y recordar la lista ofrecida, marcar «Necesita atención»)
+  quedan fijadas al número que escribió; las anulaciones y cambios de cita van por el canal del
+  cliente, donde Citas aplica sus propias reglas.
+- **La política de confirmación se lee antes de reservar**, en un paso fijo de la receta, no a
+  criterio del asistente.
 - **Cada mensaje, una vez**: un reintento no duplica mensaje, no leído ni cobro.
 - **El historial y las respuestas del dueño no cuentan como no leídos ni gastan cupo.**
 - **Un solo contador del mes**: el que escribe la plataforma; el hub no lo edita.
 - **Borrar datos es irreversible y pregunta antes**, nombrando el número.
-- **Meta se consulta al abrir Plantillas, nunca con un temporizador.**
+- **Meta se consulta una vez al abrir Ajustes** (aunque no se despliegue Plantillas de Meta),
+  nunca con un temporizador.
 
 ## Lo que NO hace, a propósito
 
@@ -289,9 +306,9 @@ Se resuelven con `market-decision`; no las decide el worker.
 1. **Contestar desde el hub.** Square Messages, Shopify Inbox o WhatsApp Web contestan desde la
    bandeja; aquí se contesta solo desde el móvil o por receta. ¿Se añade, dentro de la ventana de
    24 h y con plantilla fuera de ella?
-2. **Tope del plan.** Al llegar al tope, los mensajes que entran dejan de guardarse en la bandeja
-   sin ningún aviso, aunque lo que se vende son los mensajes que el negocio envía. ¿Se siguen
-   guardando y se avisa?
+2. **Tope del plan.** Al llegar al tope, la pestaña Plan dice «Has consumido todo lo que incluye tu
+   plan este mes.», pero nada dice que los mensajes que entran dejan de guardarse en la bandeja,
+   aunque lo que se vende son los mensajes que el negocio envía. ¿Se siguen guardando y se avisa?
 3. **Aviso de confirmación fuera de 24 h** (F23, F26): ¿qué plantilla de Utilidad aprobada se usa y
    quién la crea?
 4. **Consentimiento y baja** (L-11): ¿lo lleva este módulo o Clientes?
@@ -323,5 +340,8 @@ lo de abajo está desfasado o contradice al código.
 - `qa-module` WA-10: pestañas «Inbox / Settings / Templates» — son dos; Plantillas va dentro de Ajustes.
 - `qa-module` WA-04 y `qa-hub-beauty` W-03: piden avisar fuera de 24 h por plantilla — ninguna receta envía plantillas (F23).
 - `locales/es.json` (`ui.useAppointmentsPolicyReviewHelp`): «Cada cita nueva te espera en la Agenda» — solo las que reserva la clienta; las del mostrador nacen Pendiente con el interruptor como esté (F16). En Reservas, en cambio, el interruptor sí vale para toda reserva nueva.
-- `flows/README.md` («Por qué no se filtra a las citas que vinieron por WhatsApp») no dice que, con «Las citas se confirman solas», la cita recién reservada también dispara el aviso de cita confirmada: la clienta recibe la respuesta de la reserva y, detrás, «¡Confirmada!…» (F23).
+- `flows/README.md` («Por qué no se filtra a las citas que vinieron por WhatsApp») no dice que, con «Las citas se confirman solas», la cita recién reservada también dispara el aviso de cita confirmada: la clienta recibe la respuesta de la reserva y el aviso «¡Confirmada!…», sin orden garantizado entre los dos (F23; comprobado en Citas, que anuncia la confirmación al crear una cita que nace confirmada).
 - `flows/appointment-from-whatsapp.*.flow.json`: el prompt explica el motivo `held` de `appointments.availability.check` («otra solicitud lo tiene apartado»); Citas retiró la retención de huecos (appointments#184) y ya no lo devuelve.
+- `flows/README.md` («UNA sola instalada, y no es un consejo»): la pantalla no lo hace cumplir; deja encender las dos tarjetas y entonces cada mensaje arranca las dos recetas (F14, F15).
+- `locales/es.json` (`ui.searchTemplates`): «Buscar nombre o categoría…» — la lista de plantillas solo busca por nombre (Plantillas de Meta).
+- `locales/es.json` (`ui.categoryUtility`, `ui.categoryMarketing`, `ui.categoryAuthentication`): las categorías salen en inglés en la pantalla española («Utility», «Authentication»), mientras el aviso de error dice «Elige Utilidad, Marketing o Autenticación» (F29).

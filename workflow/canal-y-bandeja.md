@@ -64,8 +64,8 @@ Pantalla: ninguna
 Pasos:
 1. Cuando escribe alguien cuyo número está en una ficha de cliente, su conversación queda unida a esa ficha.
 2. Cuando se crea o corrige una ficha con el número de alguien que ya había escrito, su conversación se une a ella al guardar.
-3. Las conversaciones antiguas sin ficha se repasan solas cada 15 minutos, en tandas de 200.
-4. El número se compara como número: «600 111 222», «+34 600 111 222» y «0034600111222» son la misma persona en un negocio de España; los mismos dígitos con el prefijo de otro país son otra persona.
+3. Cada conversación sin ficha se repasa sola **una** vez, en tandas de 200 cada 15 minutos (primero las más antiguas); si en ese repaso no hay ficha, ya no se vuelve a mirar hasta que ella escriba o se guarde su ficha.
+4. El número se compara como número: `600 111 222`, `+34 600 111 222` y `0034600111222` son la misma persona en un negocio de España; los mismos dígitos con el prefijo de otro país son otra persona.
 Entra: el número de la conversación; las fichas con ese número (Clientes); el país del negocio.
 Sale: la conversación sabe de qué ficha es. Solo rellena un vínculo vacío: el que puso una persona o una receta se respeta.
 Si falla: si dos fichas tienen el mismo número, o la búsqueda no responde, no se une a nadie y el mensaje sigue guardado.
@@ -81,11 +81,11 @@ Pantalla: Bandeja de entrada
 Pasos:
 1. Abrir **Bandeja de WhatsApp → Bandeja de entrada**; buscar por contacto o teléfono o filtrar por columna si hace falta.
 2. Pulsar **Abrir** en la fila (o tocar la fila).
-3. El hilo aparece encima de la lista, del mensaje más antiguo al más reciente, con la hora de cada uno; un mensaje sin texto dice su tipo («Mensaje no reconocido» si no se sabe).
+3. El hilo aparece encima de la lista, del mensaje más antiguo al más reciente, con la hora de cada uno; un mensaje sin texto ni adjunto (una ubicación, un botón) enseña el tipo que da Meta tal cual, en inglés (`location`, `button`…); y un mensaje del que no se sabe quién lo envió lleva «Mensaje no reconocido».
 4. Pulsar **Cerrar** para volver a la lista.
 Entra: la conversación y sus mensajes de este negocio.
 Sale: nada; solo lee.
-Si falla: «No se pudo cargar la conversación» dentro del panel; la lista sigue disponible.
+Si falla: el motivo que devuelve el hub dentro del panel, o «No se pudo cargar la conversación» si no trae ninguno; la lista sigue disponible.
 Implicados: ninguno
 QA: WA-10 (discrepa)
 
@@ -144,10 +144,11 @@ Vertical: comun
 Actor: empleado, responsable, administrador
 Pantalla: Hub: Campana de avisos
 Pasos:
-1. Cuando la respuesta automática no ha podido contestar a una clienta (F20), la campana del hub muestra «Clientes de WhatsApp esperando respuesta» con cuántos, en cualquier pantalla.
+1. Cuando el asistente de la respuesta automática falla o no dice nada (F20), la campana del hub muestra «Clientes de WhatsApp esperando respuesta» con cuántos, en cualquier pantalla.
 2. Tocar la campana abre la **Bandeja de entrada**, con esas conversaciones arriba y la marca «Necesita atención».
 3. Al abrir una, el aviso explica que se quita contestando desde el móvil.
 4. Contestar desde la app del móvil (F08): la marca y el número de la campana desaparecen.
+5. No suben a la campana las conversaciones a las que el propio asistente contestó que alguien del negocio le responderá (otra pregunta, número que no identifica a una sola ficha, cambio o anulación de mesa), ni en la peluquería ni en el restaurante: esas solo se ven abriendo la bandeja.
 Entra: las conversaciones marcadas por la receta.
 Sale: nada nuevo; la marca solo la quita la respuesta del negocio (ni el siguiente mensaje de la clienta ni el historial).
 Si falla: si la campana no se puede leer, el hub no la pinta; la marca sigue en la bandeja.
@@ -204,18 +205,19 @@ Pendiente de enlazar: customers — unir fichas duplicadas (aviso de fichas unid
 QA: ninguno
 
 ### WHATSAPP_INBOX-F13 Ver el consumo del mes y llegar al tope
-Estado: parcial — al llegar al tope los mensajes entrantes en vivo dejan de guardarse en la bandeja y ninguna pantalla lo dice
+Estado: parcial — al llegar al tope la pestaña Plan lo dice, pero nada dice que los mensajes entrantes en vivo dejan de guardarse en la bandeja
 Vertical: comun
 Actor: administrador
 Pantalla: Hub: Plan
 Pasos:
 1. Abrir la pestaña **Plan** del módulo.
 2. Ver los mensajes gastados este mes frente al tope del plan; los dos números los pone la plataforma.
-3. Al cambiar de mes el gastado vuelve a cero aunque la plataforma aún no haya hablado.
+3. Al llegar al tope, la pestaña dice «Has consumido todo lo que incluye tu plan este mes.».
+4. Al cambiar de mes el gastado vuelve a cero aunque la plataforma aún no haya hablado.
 Entra: el tope y el gasto del mes que manda la plataforma.
 Sale: nada; no se edita desde el hub.
 Si falla: si la pestaña no puede leerlo, dice que no está disponible; al agotar el cupo la plataforma rechaza los envíos (la receta lo deja anotado en su historial) y la bandeja deja de guardar lo que entra.
 Implicados: REC_WA_CITA-F02, REC_WA_MESA-F02
-Pendiente de enlazar: hub — pestaña «Plan» del shell
+Pendiente de enlazar: hub — pestaña Plan del shell
 Pendiente de enlazar: saas — cuenta de mensajes facturables y tope del plan
 QA: WA-03
