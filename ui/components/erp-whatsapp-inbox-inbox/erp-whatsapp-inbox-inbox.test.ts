@@ -900,4 +900,70 @@ describe('erasing the data of one number from its thread (whatsapp_inbox#263)', 
     await abrirConversacion(el);
     expect(q(el, 'whatsapp-inbox-erase-confirm')).toBeNull();
   });
+
+  // The list stays clickable under the open thread. A question asked about ONE number must not
+  // become, one row click later, a question already open about somebody else's.
+  const OTHER = { ...CONVERSATION, id: 'c2', wa_contact_id: '34699999999', contact_phone: '+34699999999', contact_name: 'Luis' };
+  const answerByThread = () => {
+    const g = globalThis as { erplora: { query: (n: string, p?: Record<string, unknown>) => Promise<unknown> } };
+    const query = g.erplora.query;
+    g.erplora.query = async (name, params = {}) =>
+      name === 'whatsapp_inbox.conversations.get'
+        ? (consultas.push({ name, params }), [params.conversation_id === 'c2' ? OTHER : CONVERSATION])
+        : query(name, params);
+  };
+  const openOther = async (el: Wc) => {
+    el.shadowRoot.querySelector('ok-data-table')!.dispatchEvent(
+      new CustomEvent('rowAction', { detail: { actionId: 'open', row: { id: 'c2' } } }),
+    );
+    await settle(el);
+  };
+
+  it('opening ANOTHER conversation drops the pending question: the other number was never asked about', async () => {
+    answerByThread();
+    const el = (await montar()) as Wc;
+    await abrirConversacion(el);
+    await press(el, 'whatsapp-inbox-erase');
+    await openOther(el);
+    expect(el.shadowRoot.querySelector('.thread'), 'the other thread did not open').not.toBeNull();
+    expect(
+      q(el, 'whatsapp-inbox-erase-confirm'),
+      'the question asked about c1 is now open on c2: one more click erases somebody else',
+    ).toBeNull();
+    expect(q(el, 'whatsapp-inbox-erase'), 'the other thread must offer its own action again').not.toBeNull();
+    expect(erasures()).toHaveLength(0);
+  });
+
+  it('a message arriving in the SAME thread keeps the question: it is still about this number', async () => {
+    let onMessage: (() => void) | undefined;
+    (globalThis as { erplora: { on: unknown } }).erplora.on = (name: string, fn: () => void) => {
+      if (name === 'whatsapp_inbox.message.received') onMessage = fn;
+      return () => {};
+    };
+    const el = (await montar()) as Wc;
+    await abrirConversacion(el);
+    await press(el, 'whatsapp-inbox-erase');
+    onMessage!();
+    await settle(el);
+    expect(q(el, 'whatsapp-inbox-erase-confirm'), 'a new message wiped the question being read').not.toBeNull();
+  });
+
+  it('an erasure that finishes after ANOTHER thread was opened leaves that thread open', async () => {
+    answerByThread();
+    let release!: () => void;
+    (globalThis as { erplora: { command: unknown } }).erplora.command = (name: string, payload: Record<string, unknown>) => {
+      comandos.push({ name, payload });
+      return new Promise<void>((r) => { release = r; });
+    };
+    const el = (await montar()) as Wc;
+    await abrirConversacion(el);
+    await press(el, 'whatsapp-inbox-erase');
+    await press(el, 'whatsapp-inbox-erase-submit');
+    await openOther(el);
+    release();
+    await settle(el);
+    expect(erasures().map((c) => c.payload)).toEqual([{ conversation_id: 'c1' }]);
+    expect(el.shadowRoot.querySelector('.thread'), 'erasing c1 closed the thread of c2').not.toBeNull();
+    expect(q(el, 'whatsapp-inbox-erase-done')?.textContent).toContain('ui.eraseNumberDone');
+  });
 });

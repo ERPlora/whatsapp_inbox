@@ -5724,7 +5724,11 @@ var ErpWhatsappInboxInbox = class extends i3 {
   // ── The thread ────────────────────────────────────────────────────────────
   async loadDetail(conversationId) {
     this.detailError = "";
-    if (this.detail?.id !== conversationId) this.assignError = "";
+    if (this.detail?.id !== conversationId) {
+      this.assignError = "";
+      this.pendingErase = false;
+      this.eraseError = "";
+    }
     try {
       const rows = await erplora().query("whatsapp_inbox.conversations.get", {
         conversation_id: conversationId
@@ -5823,8 +5827,9 @@ var ErpWhatsappInboxInbox = class extends i3 {
     this.erasing = true;
     this.eraseError = "";
     try {
-      await erplora().command("whatsapp_inbox.conversations.erase", { conversation_id: this.detail.id });
-      this.closeDetail();
+      const erased = this.detail.id;
+      await erplora().command("whatsapp_inbox.conversations.erase", { conversation_id: erased });
+      if (this.detail?.id === erased) this.closeDetail();
       this.eraseDone = true;
       await this.ctrl.load();
     } catch (e5) {

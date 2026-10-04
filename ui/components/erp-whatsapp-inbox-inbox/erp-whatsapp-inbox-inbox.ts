@@ -364,8 +364,13 @@ export class ErpWhatsappInboxInbox extends LitElement {
   private async loadDetail(conversationId: string) {
     this.detailError = '';
     // A refused assign belongs to ITS conversation: it must not travel to another one, and a
-    // message arriving in this one must not wipe it before it is read.
-    if (this.detail?.id !== conversationId) this.assignError = '';
+    // message arriving in this one must not wipe it before it is read. Same for the question of
+    // «Erase this number's data»: asked about one number, it never opens on another's thread.
+    if (this.detail?.id !== conversationId) {
+      this.assignError = '';
+      this.pendingErase = false;
+      this.eraseError = '';
+    }
     try {
       // The literals travel IN the SDK call: the contract extractor (ADR-0127) follows nothing else.
       const rows = await erplora().query<Conversation[]>('whatsapp_inbox.conversations.get', {
@@ -482,8 +487,10 @@ export class ErpWhatsappInboxInbox extends LitElement {
     this.erasing = true;
     this.eraseError = '';
     try {
-      await erplora().command('whatsapp_inbox.conversations.erase', { conversation_id: this.detail.id });
-      this.closeDetail();
+      const erased = this.detail.id;
+      await erplora().command('whatsapp_inbox.conversations.erase', { conversation_id: erased });
+      // Another thread opened while this one was being erased stays open: it is not the erased one.
+      if (this.detail?.id === erased) this.closeDetail();
       this.eraseDone = true;
       await this.ctrl.load();
     } catch (e) {
