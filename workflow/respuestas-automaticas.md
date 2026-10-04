@@ -1,0 +1,225 @@
+# WORKFLOW — Bandeja de WhatsApp · Respuestas automáticas
+
+Prefijo: WHATSAPP_INBOX
+
+> Encender la respuesta que reserva, y lo que vive la clienta en su WhatsApp. F14–F20 son comunes
+> o tienen gemelo; F21–F23 son solo de la peluquería (cita); F24–F26, solo del restaurante (mesa).
+> Las recetas viajan en `flows/` de este módulo y las ejecuta Automatizaciones. Índice y reglas en
+> [`../WORKFLOW.md`](../WORKFLOW.md).
+
+## Flujos
+
+### WHATSAPP_INBOX-F14 Activar «Reservar citas»
+Estado: hecho
+Actor: dueño o administrador de una peluquería
+Pantalla: Ajustes
+Pasos:
+1. En **Ajustes → ¿Para qué lo usas?**, la tarjeta **Reservar citas** explica qué hace.
+2. Pulsar **Activar**: aparece la frase «WhatsApp contestará solo: lee tu agenda, ofrece los huecos libres, reserva, mueve o anula la cita de la clienta que escribe…» con **Activar** y **Ahora no**.
+3. Pulsar **Activar**: la tarjeta pasa a «Activo» con **Desactivar** y dice «Listo. Escríbete desde otro móvil: “quiero cita mañana”.».
+4. Aparece el interruptor de confirmación (F16).
+Entra: lo que el hub dice que hay construido; que Citas, Clientes, Servicios y Personal estén instalados y al día.
+Sale: la receta «WhatsApp → cita reservada» y su acompañante «Cita confirmada → WhatsApp» quedan creadas, encendidas y con exactamente los permisos que declaran.
+Si falla: la tarjeta dice el motivo y deshace lo que llegó a encender; «Solo un dueño o un administrador puede activarlo»; si falta o está en pausa o vieja una aplicación, la tarjeta se sustituye por «“Reservar citas” necesita la aplicación …» con **Ver aplicaciones**.
+Implicados: ninguno
+Pendiente de enlazar: flows — encender una receta de fábrica de un módulo con sus permisos
+Pendiente de enlazar: appointments — consultas de disponibilidad, alta, anulación y cambio de cita que la receta usa
+QA: W-01
+
+### WHATSAPP_INBOX-F15 Activar «Reservar mesa»
+Estado: hecho
+Actor: dueño o administrador de un restaurante
+Pantalla: Ajustes
+Pasos:
+1. En **Ajustes → ¿Para qué lo usas?**, la tarjeta **Reservar mesa** explica qué hace.
+2. Pulsar **Activar**: aparece «WhatsApp contestará solo: mira las mesas libres, reserva la mesa de quien escribe y le contesta. ¿Lo activas?» con **Activar** y **Ahora no**.
+3. Pulsar **Activar**: la tarjeta pasa a «Activo» con **Desactivar** y dice «Listo. Escríbete desde otro móvil: “quiero mesa para dos mañana”.».
+4. Aparece el interruptor de confirmación (F16).
+Entra: lo que el hub dice que hay construido; que Reservas y Clientes estén instalados y al día.
+Sale: la receta «WhatsApp → mesa reservada» creada, encendida y con exactamente sus permisos. No lleva acompañante.
+Si falla: igual que F14, nombrando Reservas o Clientes.
+Implicados: ninguno
+Pendiente de enlazar: flows — encender una receta de fábrica de un módulo con sus permisos
+Pendiente de enlazar: reservations — consultas de turnos, plazas, días cerrados, alta de reserva y lista de espera que la receta usa
+QA: WR-01
+
+### WHATSAPP_INBOX-F16 Decidir si las reservas por WhatsApp se confirman solas
+Estado: hecho
+Actor: dueño o administrador
+Pantalla: Ajustes
+Pasos:
+1. Con la tarjeta en «Activo», elegir en su interruptor **Las citas se confirman solas** (o **Las reservas se confirman solas**) o **Las reviso yo antes**.
+2. Con «Las reviso yo antes» aparece dónde esperan: «Cada cita nueva te espera en la Agenda con “Confirmar”…» o «Cada reserva nueva te espera en Reservas con “Confirmar”…».
+3. El cambio se guarda al momento en Citas o en Reservas, no en este módulo.
+Entra: la política actual del módulo que lleva la agenda. Sin ajuste guardado, Citas confirma sola y Reservas revisa (son opuestos a propósito).
+Sale: la política cambiada en Citas (peluquería) o en Reservas (restaurante); la receta la lee antes de cada reserva y elige la frase que manda.
+Si falla: «No se pudo guardar cómo se confirman las citas/reservas. Inténtalo otra vez.».
+Implicados: ninguno
+Pendiente de enlazar: appointments — confirmar automáticamente las citas reservadas por la clienta
+Pendiente de enlazar: reservations — confirmar automáticamente las reservas
+QA: W-03, WR-02
+
+### WHATSAPP_INBOX-F17 Desactivar una respuesta automática
+Estado: hecho
+Actor: dueño o administrador
+Pantalla: Ajustes
+Pasos:
+1. En la tarjeta «Activo», pulsar **Desactivar**.
+2. La tarjeta pasa a «Desactivada» con **Activar**; WhatsApp deja de contestar solo.
+Entra: la tarjeta elegida.
+Sale: se apagan primero los acompañantes y la receta de la tarjeta la última, para que nunca quede una respuesta encendida detrás de una tarjeta apagada.
+Si falla: la tarjeta dice el motivo y se repinta con lo que de verdad sigue encendido.
+Implicados: ninguno
+Pendiente de enlazar: flows — apagar una receta de fábrica de un módulo
+QA: ninguno
+
+### WHATSAPP_INBOX-F18 Actualizar una respuesta automática a su versión mejorada
+Estado: hecho
+Actor: dueño o administrador
+Pantalla: Ajustes
+Pasos:
+1. Si el módulo trae una receta mejor que la que se encendió, la tarjeta dice «Hay una versión mejorada de esta respuesta automática.» con **Actualizar**.
+2. Pulsar **Actualizar**: aparece que la nueva sustituye a la actual, también los cambios hechos a mano, y que seguirá encendida o apagada como esté.
+3. Confirmar con **Actualizar**: «Hecho: esta respuesta automática ya funciona con la última versión.».
+Entra: qué recetas de la tarjeta marca el hub como desfasadas.
+Sale: solo esas recetas sustituidas, conservando su encendido e historial.
+Si falla: «Esta respuesta automática ya no existe aquí…» (volver a activarla) o «No se pudo actualizar…»; el aviso sigue solo para lo que no se actualizó.
+Implicados: ninguno
+Pendiente de enlazar: flows — restaurar la versión de fábrica de una receta
+QA: ninguno
+
+### WHATSAPP_INBOX-F19 Elegir el hueco escribiendo en vez de tocando
+Estado: hecho
+Actor: clienta o comensal
+Pantalla: Chat de WhatsApp de la clienta
+Pasos:
+1. La respuesta automática le ofrece una lista de horas («Ver huecos» / horas de mesa).
+2. Ella puede tocar una opción, o escribir «el 2», «la segunda» o «12:30».
+3. Si lo escrito señala una sola opción ofrecida en las últimas 24 h, se comprueba que sigue libre y se reserva como si la hubiera tocado; si no está claro, vuelve a ofrecer.
+Entra: la última lista ofrecida a ese número (solo 24 h).
+Sale: la reserva (F21 o F24); la lista se vacía en cuanto reserva, anula o mueve.
+Si falla: si guardar la lista falla, ella recibe su respuesta igual y la próxima vez se le vuelve a ofrecer.
+Implicados: ninguno
+Pendiente de enlazar: REC_WA_CITA — elegir hueco dentro del recorrido de la cita
+Pendiente de enlazar: REC_WA_MESA — elegir hora dentro del recorrido de la mesa
+QA: W-02
+
+### WHATSAPP_INBOX-F20 Cuando el asistente no puede contestar
+Estado: hecho
+Actor: sistema
+Pantalla: Chat de WhatsApp de la clienta
+Pasos:
+1. Si el asistente falla o no dice nada, la clienta recibe un texto fijo: «Perdona, ahora mismo no puedo mirar la agenda (las reservas). Alguien del equipo te contestará por aquí en cuanto pueda.».
+2. Su conversación queda marcada «Necesita atención» y aparece en la campana (F09).
+3. Nada más se le manda en ese turno.
+Entra: el resultado del paso del asistente.
+Sale: una disculpa y la marca de atención.
+Si falla: si la marca no se puede poner, la disculpa sale igual y el mensaje sigue sin leer en la bandeja.
+Implicados: ninguno
+Pendiente de enlazar: flows — continuar tras un paso fallido y condiciones de paso
+QA: ninguno
+
+### WHATSAPP_INBOX-F21 La clienta pide cita por WhatsApp
+Estado: hecho
+Actor: clienta (peluquería)
+Pantalla: Chat de WhatsApp de la clienta
+Pasos:
+1. La clienta escribe, por ejemplo, «¿Tenéis hueco mañana por la tarde para un corte?».
+2. Recibe al momento «¡Gracias por escribirnos! Miro la agenda y te contesto ahora mismo.».
+3. Si no tiene ficha, se le crea una con origen WhatsApp.
+4. Si su mensaje fija servicio, día y hora y está libre, se reserva con la profesional que trabaja a esa hora; si no, recibe los huecos libres de verdad para tocar o escribir (F19). La hora nunca la elige el asistente.
+5. Recibe «te he reservado …» (se confirma sola) o «te la he apuntado y el salón te la confirma» (lo revisa el salón), según F16; la cita está en la Agenda.
+Entra: el mensaje escrito o la opción tocada (no el historial, ni las respuestas del dueño, ni fotos sin texto).
+Sale: ficha nueva si hacía falta (Clientes), conversación unida a la ficha, cita aceptada o pendiente (Citas), respuesta por WhatsApp.
+Si falla: F20; sin hueco, le dice el porqué y ofrece otros.
+Implicados: ninguno
+Pendiente de enlazar: appointments — reservar una cita con disponibilidad real, aceptada o pendiente según su ajuste
+Pendiente de enlazar: customers — crear ficha con origen WhatsApp y buscarla por teléfono
+Pendiente de enlazar: services — leer servicios y su duración
+Pendiente de enlazar: staff — leer profesionales y su horario
+Pendiente de enlazar: REC_WA_CITA — recorrido completo de la cita por WhatsApp
+QA: W-02, W-06, W-07, L-12
+
+### WHATSAPP_INBOX-F22 La clienta anula o mueve su cita por WhatsApp
+Estado: hecho
+Actor: clienta (peluquería)
+Pantalla: Chat de WhatsApp de la clienta
+Pasos:
+1. La clienta escribe «no puedo ir» o «¿me la cambias al jueves?».
+2. Se busca su cita por su número; con dos próximas, pregunta cuál.
+3. Anular: se anula con las reglas del salón (si se permite y con qué antelación); fuera de plazo se le dice y la cita sigue.
+4. Mover: se ofrecen huecos y se mueve la misma cita, conservando profesional y servicio.
+5. Recibe la respuesta con lo que ha pasado.
+Entra: el mensaje y las citas de esa clienta.
+Sale: cita anulada o movida en Citas; nunca la de otra persona.
+Si falla: F20; si Citas lo rechaza, se le explica.
+Implicados: ninguno
+Pendiente de enlazar: appointments — anular y mover una cita desde el canal de la clienta
+Pendiente de enlazar: REC_WA_CITA — recorrido completo de la cita por WhatsApp
+QA: W-04
+
+### WHATSAPP_INBOX-F23 La clienta recibe el aviso cuando el salón confirma
+Estado: parcial — el aviso es texto libre: si han pasado más de 24 h desde el último mensaje de la clienta, Meta lo rechaza y no hay plantilla de respaldo
+Actor: encargada (confirma) y clienta (recibe)
+Pantalla: Chat de WhatsApp de la clienta
+Pasos:
+1. Con «Las reviso yo antes», la encargada pulsa **Confirmar** en la Agenda.
+2. Si la clienta tiene conversación de WhatsApp con el negocio, recibe «¡Confirmada! Te esperamos el martes, 15 de septiembre de 2026 a las 10:30 para tu Corte con Ana.».
+3. Si no tiene teléfono o conversación, no se manda nada y el motivo queda en el historial de la automatización.
+Entra: la cita confirmada (Citas) y la conversación de su teléfono.
+Sale: un WhatsApp a la clienta.
+Si falla: el motivo queda en el historial de la automatización; nada se ve en la Agenda.
+Implicados: ninguno
+Pendiente de enlazar: appointments — confirmar una cita pendiente (aviso de cita confirmada)
+Pendiente de enlazar: REC_WA_CITA — recorrido completo de la cita por WhatsApp
+QA: W-03, BD-07, WA-04
+
+### WHATSAPP_INBOX-F24 El cliente pide mesa por WhatsApp
+Estado: hecho
+Actor: comensal (restaurante)
+Pantalla: Chat de WhatsApp de la clienta
+Pasos:
+1. El cliente escribe, por ejemplo, «Mesa para 4 el sábado a las 21».
+2. Recibe al momento «¡Gracias por escribirnos! Miro el libro de reservas y te contesto ahora mismo.».
+3. Se mira si ese día cierra, los turnos y las plazas libres; la hora y cuántos sois los dice el cliente, nunca el asistente.
+4. Si hay sitio, se reserva; si no, se le ofrecen horas para tocar o escribir (F19), o se le apunta en la lista de espera.
+5. Recibe «reservada» o «apuntada, te la confirman», según F16.
+Entra: el mensaje escrito o la opción tocada; su ficha si ya existe (no se crea).
+Sale: reserva aceptada o pendiente, o entrada en la lista de espera (Reservas), con nombre y teléfono; respuesta por WhatsApp.
+Si falla: F20; sin plazas o con demasiados comensales, se le explica.
+Implicados: ninguno
+Pendiente de enlazar: reservations — reservar mesa con plazas reales y lista de espera
+Pendiente de enlazar: customers — buscar ficha por teléfono
+Pendiente de enlazar: REC_WA_MESA — recorrido completo de la mesa por WhatsApp
+QA: WR-02, WR-03, WR-04
+
+### WHATSAPP_INBOX-F25 El cliente anula o cambia su mesa por WhatsApp
+Estado: no hecho — falta que Reservas sepa de quién es la reserva al anularla o cambiarla desde el canal del cliente (reservations#50); hoy se le contesta que alguien del restaurante se ocupa
+Actor: comensal (restaurante)
+Pantalla: Chat de WhatsApp de la clienta
+Pasos:
+1. El cliente escribe «no podemos ir» o «¿podemos pasarla a las 22?».
+2. Hoy recibe que alguien del restaurante se ocupa; la reserva no se toca.
+3. Cuando exista: se busca su reserva por su número, se anula o cambia con las reglas del restaurante y se le contesta.
+Entra: el mensaje y las reservas de ese cliente.
+Sale: hoy, nada; cuando exista, reserva anulada o cambiada.
+Si falla: sin confirmar (no existe todavía).
+Implicados: ninguno
+Pendiente de enlazar: reservations — anular y cambiar una reserva desde el canal del cliente
+Pendiente de enlazar: REC_WA_MESA — recorrido completo de la mesa por WhatsApp
+QA: WR-03
+
+### WHATSAPP_INBOX-F26 El cliente recibe el aviso cuando el restaurante confirma
+Estado: no hecho — no hay receta acompañante para Reservas; un cliente al que se le dijo «te la confirman» no recibe nada al confirmarla
+Actor: encargado (confirma) y comensal (recibe)
+Pantalla: Chat de WhatsApp de la clienta
+Pasos:
+1. Con «Las reviso yo antes», el encargado confirma la reserva en Reservas.
+2. Hoy el cliente no recibe nada; cuando exista, recibe la confirmación con día, hora y comensales.
+Entra: la reserva confirmada (Reservas).
+Sale: hoy, nada.
+Si falla: sin confirmar (no existe todavía).
+Implicados: ninguno
+Pendiente de enlazar: reservations — confirmar una reserva pendiente (aviso de reserva confirmada)
+Pendiente de enlazar: REC_WA_MESA — recorrido completo de la mesa por WhatsApp
+QA: ninguno
