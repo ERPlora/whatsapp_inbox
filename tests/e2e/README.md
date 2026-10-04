@@ -83,6 +83,24 @@ cd "$HUB" && DATABASE_URL=… ERPLORA_MODULES_DIR="$MODS" \
 Control negativo medido: con `whatsapp_inbox` en `origin/main` sin la marca caen los 3. El
 aislamiento entre hubs lo prueba `tests/needs_attention.pg.test.py` (dos hubs en la misma BD).
 
+### `customer_erasure_e2e.rs` (whatsapp_inbox#262)
+
+Borrar los datos de una clienta (RGPD art. 17) borra también sus conversaciones de WhatsApp:
+`customers.anonymize` → `customer.anonymized` → `_on_customer_anonymized` deja sus hilos y mensajes
+sin ningún dato personal y fuera de la bandeja, sin tocar los de otra clienta; si vuelve a escribir,
+abre un hilo nuevo sin vincular; un «Eliminar» simple de la ficha (`customers.delete`) **no** borra
+nada. Solo instala `customers` y este módulo, como `known_customer_link_e2e.rs`:
+
+```bash
+cp tests/e2e/customer_erasure_e2e.rs "$HUB/crates/runtime/tests/"
+cd "$HUB" && DATABASE_URL=… ERPLORA_MODULES_DIR="$MODS" \
+  cargo test -p erplora-runtime --test customer_erasure_e2e
+```
+
+Control positivo medido: con el oyente desenchufado del manifest caen 2 de 3 (el tercero, el borrado
+simple, pasa igual por diseño). El aislamiento entre hubs, la idempotencia y cada columna los prueba
+`tests/customer_erasure.pg.test.py` (dos hubs en la misma BD, 20 mutantes ejecutados).
+
 ## Qué NO prueba, y por qué no puede
 
 - **El mensaje de WhatsApp real.** El evento se inserta como lo inserta `inbound_poll.rs`

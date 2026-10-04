@@ -52,6 +52,13 @@ WhatsApp thread linked to the absorbed sheet (live or deleted, any status) moves
 in this hub only, through `whatsapp_inbox._on_customer_merged` (customers#86). Nothing else on the
 thread changes, and a redelivered event moves nothing.
 
+And it listens to `customer.anonymized` (the «Erase data» of a customer sheet, GDPR art. 17): every
+WhatsApp thread linked to that sheet (live, closed or deleted) and every message in it lose the
+number, the name, what was written, the media link and the raw WhatsApp payload, and leave the
+inbox — in this hub only, through `whatsapp_inbox._on_customer_anonymized` (whatsapp_inbox#262). If
+the person writes again, it opens a new thread that is not linked to anyone. A plain «Delete» of the
+sheet is not an erasure and leaves the conversations as they are.
+
 ## The vocabulary
 
 | Concept | Values |
