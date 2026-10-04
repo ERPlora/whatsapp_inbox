@@ -26,6 +26,13 @@ WHAT IS PROVEN HERE, against a REAL Postgres:
   7. A degenerate event (empty `customer_id`) erases nothing — above all not the blank-linked threads.
   8. TENANCY — the hub next door, whose threads carry the SAME opaque customer id, is not touched;
      not even a (corrupt) hub-B message pointing at a hub-A thread.
+  9. What the RETIRED «Requests» tray extracted from her messages (whatsapp_inbox#264) goes too. Its
+     table was set aside as `_deprecated_whatsapp_inbox_request` by migration 013 and still holds
+     her name, number, what she asked for and the staff's notes. Every request of hers — by her
+     customer id, or hanging from one of her threads — loses those columns and is soft-deleted;
+     other people's, blank-linked and the neighbour hub's requests are untouched, and every
+     fingerprint above (empty id, tenancy, idempotence) covers that table too. Writing there needs
+     a hub with hub#2461 (a module may UPDATE/DELETE its own set-aside tables).
 
 Runs the SQL the way the runtime does (`:name` bound). Uses `erplora-test-pg-5433` (override:
 ERPLORA_TEST_PG_CONTAINER); scratch DB dropped at the end. Missing Docker = SKIPPED, never PASS.
@@ -55,6 +62,10 @@ CREATED = "2026-08-01T00:00:00+00:00"
 NOW = "2026-10-04T10:00:00+00:00"
 LATER = "2026-10-04T11:00:00+00:00"
 DELETED = "2026-09-01T00:00:00+00:00"
+# The retired «Requests» tray, as migration 013 left it on every hub (whatsapp_inbox#206, #264).
+REQUESTS = "_deprecated_whatsapp_inbox_request"
+# The columns of a request that carry what the person said or what the staff wrote about her.
+REQUEST_PII_COLUMNS = ("data", "raw_summary", "notes", "failure_reason")
 # What must not survive anywhere in Ana's rows: her numbers, her name, her words, the Meta payload.
 PII = (
     "600333444",
@@ -181,6 +192,32 @@ def message(db, mid, hub, conversation, contact, deleted=0):
     )
 
 
+def request(db, rid, hub, conversation, customer, deleted=0):
+    """A request the retired tray extracted from a WhatsApp thread, every free-text column full."""
+    psql(
+        db,
+        f"INSERT INTO {REQUESTS} (id, hub_id, conversation_id, customer_id, reference_number,"
+        " request_type, status, data, raw_summary, notes, failure_code, failure_reason,"
+        " is_deleted, deleted_at, created_at)"
+        f" VALUES ({literal(rid)}, {literal(hub)}, {literal(conversation)}, {literal(customer)},"
+        f" {literal('REQ-' + rid)}, 'appointment', 'rejected',"
+        f" {literal(json.dumps({'name': 'Ana Vidal', 'phone': '+34600333444'}))},"
+        " 'Ana Vidal asks for a colour; my new address is Calle Mayor 1',"
+        " 'call her at 600555666', 'appointments.slot_taken',"
+        " 'no slot left for Ana Vidal (wamid.ANA-1)',"
+        f" {deleted}, {literal(DELETED if deleted else None)}, '{CREATED}')",
+    )
+
+
+def requests_text(db, where) -> str:
+    """Every column of the selected requests, as text, in a byte-stable order."""
+    return psql(
+        db,
+        "SELECT COALESCE(string_agg(row_to_json(r)::text, '|' ORDER BY r.id COLLATE \"C\"), '')"
+        f" FROM {REQUESTS} r WHERE {where};",
+    ).strip()
+
+
 def rows_text(db, where_conv, where_msg) -> str:
     """Every column of the selected threads and messages, as text — what a DB reader would see."""
     return psql(
@@ -193,14 +230,17 @@ def rows_text(db, where_conv, where_msg) -> str:
 
 
 def fingerprint(db, hub) -> str:
-    """Every thread and message of one hub, every column, in a byte-stable order (COLLATE "C")."""
+    """Every thread, message and set-aside request of one hub, every column, in a byte-stable order
+    (COLLATE "C")."""
     return psql(
         db,
         "SELECT COALESCE(string_agg(x, '|' ORDER BY x COLLATE \"C\"), '') FROM ("
         " SELECT row_to_json(c)::text AS x FROM whatsapp_inbox_conversation c"
         f"  WHERE c.hub_id = '{hub}'"
         " UNION ALL SELECT row_to_json(m)::text FROM whatsapp_inbox_message m"
-        f"  WHERE m.hub_id = '{hub}') t;",
+        f"  WHERE m.hub_id = '{hub}'"
+        f" UNION ALL SELECT row_to_json(r)::text FROM {REQUESTS} r"
+        f"  WHERE r.hub_id = '{hub}') t;",
     ).strip()
 
 
@@ -297,7 +337,25 @@ def main() -> int:
         # And the mirror: a hub-A message pointing at hub B's thread of the same id. It is not one
         # of Ana's threads in THIS hub, so it is not hers to erase here.
         message(db, "m-cross", HUB, "n-ana", "34600333444")
+        # What the retired «Requests» tray kept (whatsapp_inbox#264). Hers: one carrying her
+        # customer id in a thread nobody linked, one hanging from her live thread with no id at
+        # all, and one already soft-deleted in her closed thread.
+        request(db, "r-ana-own", HUB, "t-unlinked", ERASED)
+        request(db, "r-ana-thread", HUB, "t-ana-live", None)
+        request(db, "r-ana-deleted", HUB, "t-ana-closed", ERASED, deleted=1)
+        # Not hers: another customer's, and unlinked / blank-linked ones with no id.
+        request(db, "r-luis", HUB, "t-luis", "cust-luis")
+        request(db, "r-unlinked", HUB, "t-unlinked", None)
+        request(db, "r-blank", HUB, "t-blank", "")
+        # Hub B: the same opaque id names another person there, plus a corrupt one hanging from a
+        # hub-A thread of Ana. And the mirror: a hub-A request hanging from hub B's thread of that id.
+        request(db, "n-req", OTHER_HUB, "n-ana", ERASED)
+        request(db, "n-req-cross", OTHER_HUB, "t-ana-live", None)
+        request(db, "r-cross", HUB, "n-ana", None)
         neighbour_before = fingerprint(db, OTHER_HUB)
+        other_requests = "r.hub_id = 'hub-test' AND r.id IN ('r-luis', 'r-unlinked', 'r-blank', 'r-cross')"
+        other_requests_before = requests_text(db, other_requests)
+        ana_requests = "r.hub_id = 'hub-test' AND r.id LIKE 'r-ana-%'"
         others_before = rows_text(
             db,
             f"c.hub_id = '{HUB}' AND c.id IN ('t-luis', 't-unlinked', 't-blank')",
@@ -319,6 +377,14 @@ def main() -> int:
             "control: before the event, Ana's rows DO carry her personal data",
             True,
             all(p in ana_before for p in PII),
+        )
+        check(
+            "control: before the event, her set-aside requests DO carry her personal data",
+            True,
+            all(
+                p in requests_text(db, ana_requests)
+                for p in ("Ana Vidal", "600333444", "600555666", "my new address is", "wamid.ANA")
+            ),
         )
 
         print("\n== a degenerate event (empty customer_id) erases nothing ==")
@@ -392,6 +458,37 @@ def main() -> int:
             "a thread soft-deleted BEFORE keeps its first deleted_at",
             DELETED,
             col(db, "whatsapp_inbox_conversation", "t-ana-deleted", "deleted_at"),
+        )
+        print("\n== what the retired «Requests» tray kept of her is erased too ==")
+        ana_requests_after = requests_text(db, ana_requests)
+        for p in PII:
+            check(f"`{p}` is gone from every request of hers", False, p in ana_requests_after)
+        for rid in ("r-ana-own", "r-ana-thread", "r-ana-deleted"):
+            check(
+                f"{rid} keeps no extracted data, summary, notes or failure text",
+                ("{}", "", "", ""),
+                tuple(col(db, REQUESTS, rid, c) for c in REQUEST_PII_COLUMNS),
+            )
+            check(f"{rid} is soft-deleted", "1", col(db, REQUESTS, rid, "is_deleted"))
+            check(
+                f"{rid} stamps who erased and when",
+                ("user-eraser", NOW),
+                (col(db, REQUESTS, rid, "updated_by"), col(db, REQUESTS, rid, "updated_at")),
+            )
+        check(
+            "a request soft-deleted BEFORE keeps its first deleted_at",
+            DELETED,
+            col(db, REQUESTS, "r-ana-deleted", "deleted_at"),
+        )
+        check(
+            "a request erased now is stamped deleted now",
+            NOW,
+            col(db, REQUESTS, "r-ana-own", "deleted_at"),
+        )
+        check(
+            "other people's, unlinked, blank-linked and cross-hub requests are untouched",
+            other_requests_before,
+            requests_text(db, other_requests),
         )
         check(
             "nothing is shown for her in this hub's inbox any more",
