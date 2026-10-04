@@ -182,7 +182,7 @@ Pasos:
 4. Si hay sitio, se reserva; si no, se le ofrecen horas para tocar o escribir (F19), o se le apunta en la lista de espera.
 5. Recibe una respuesta que redacta el asistente: que la mesa está reservada, o que se la ha apuntado y el restaurante se la confirma, según F16.
 Entra: el mensaje escrito o la opción tocada; su ficha si ya existe (no se crea).
-Sale: reserva aceptada o pendiente, o entrada en la lista de espera (Reservas), con nombre y teléfono; respuesta por WhatsApp.
+Sale: reserva aceptada o pendiente, o entrada en la lista de espera (Reservas), con su teléfono y el nombre que dé en el mensaje (si no da ninguno, su teléfono hace de nombre; aunque tenga ficha, el nombre no se toma de ella, solo queda ligada); respuesta por WhatsApp.
 Si falla: F20; sin plazas o con demasiados comensales, se le explica.
 Implicados: RESERVATIONS-F01, RESERVATIONS-F02, RESERVATIONS-F05, RESERVATIONS-F14, RESERVATIONS-F17, REC_WA_MESA-F03, REC_WA_MESA-F04, REC_WA_MESA-F05, REC_WA_MESA-F07
 Pendiente de enlazar: customers — buscar ficha por teléfono
