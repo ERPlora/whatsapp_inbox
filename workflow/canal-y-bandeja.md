@@ -69,8 +69,7 @@ Pasos:
 Entra: el número de la conversación; las fichas con ese número (Clientes); el país del negocio.
 Sale: la conversación sabe de qué ficha es. Solo rellena un vínculo vacío: el que puso una persona o una receta se respeta.
 Si falla: si dos fichas tienen el mismo número, o la búsqueda no responde, no se une a nadie y el mensaje sigue guardado.
-Implicados: REC_WA_CITA-F03, REC_WA_MESA-F03
-Pendiente de enlazar: customers — buscar fichas por teléfono con el país del negocio, y avisos de ficha creada o actualizada
+Implicados: CUSTOMERS-F01, CUSTOMERS-F04, CUSTOMERS-F08, CUSTOMERS-F10, CUSTOMERS-F11, CUSTOMERS-F18, REC_WA_CITA-F03, REC_WA_MESA-F03
 QA: ninguno
 
 ### WHATSAPP_INBOX-F05 Leer una conversación
@@ -185,8 +184,7 @@ Pasos:
 Entra: el aviso de ficha anonimizada (Clientes).
 Sale: lo mismo que F10, para cada conversación de la ficha.
 Si falla: el aviso se reintenta; repetirlo no cambia nada.
-Implicados: pendiente
-Pendiente de enlazar: customers — «Borrar datos» de la ficha (aviso de ficha anonimizada)
+Implicados: CUSTOMERS-F16
 QA: WA-06 (discrepa), L-11
 
 ### WHATSAPP_INBOX-F12 Unir dos fichas de la misma clienta
@@ -200,8 +198,7 @@ Pasos:
 Entra: el aviso de fichas unidas (Clientes).
 Sale: el vínculo de las conversaciones corregido.
 Si falla: el aviso se reintenta; repetirlo no cambia nada.
-Implicados: pendiente
-Pendiente de enlazar: customers — unir fichas duplicadas (aviso de fichas unidas)
+Implicados: CUSTOMERS-F13
 QA: ninguno
 
 ### WHATSAPP_INBOX-F13 Ver el consumo del mes y llegar al tope

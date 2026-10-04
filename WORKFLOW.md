@@ -131,8 +131,8 @@ acuse, la lista con el botón **Ver huecos**, la confirmación, la disculpa o el
 | WHATSAPP_INBOX-F11 | Borrar los datos de una clienta desde su ficha | parcial | comun | canal-y-bandeja |
 | WHATSAPP_INBOX-F12 | Unir dos fichas de la misma clienta | hecho | comun | canal-y-bandeja |
 | WHATSAPP_INBOX-F13 | Ver el consumo del mes y llegar al tope | parcial | comun | canal-y-bandeja |
-| WHATSAPP_INBOX-F14 | Activar «Reservar citas» | hecho | peluqueria | respuestas-automaticas |
-| WHATSAPP_INBOX-F15 | Activar «Reservar mesa» | hecho | restaurante | respuestas-automaticas |
+| WHATSAPP_INBOX-F14 | Activar «Reservar citas» | parcial | peluqueria | respuestas-automaticas |
+| WHATSAPP_INBOX-F15 | Activar «Reservar mesa» | parcial | restaurante | respuestas-automaticas |
 | WHATSAPP_INBOX-F16 | Decidir si las reservas por WhatsApp se confirman solas | hecho | comun | respuestas-automaticas |
 | WHATSAPP_INBOX-F17 | Desactivar una respuesta automática | hecho | comun | respuestas-automaticas |
 | WHATSAPP_INBOX-F18 | Actualizar una respuesta automática a su versión mejorada | hecho | comun | respuestas-automaticas |
@@ -216,8 +216,8 @@ una plantilla (todas mandan texto libre dentro de las 24 h).
 |---|---|---|
 | Número de quien escribe guardado en E.164 (`+` y dígitos) | hecho | F03 |
 | Destinatario de una respuesta: se lee de la conversación, nunca se teclea; el hub exige `+` | hecho | F21, F24 |
-| Comparar con la ficha de cliente como NÚMERO (sin `00` ni `0` troncal, prefijo del país del negocio) | parcial: regla propia, sin libphonenumber ni números ya normalizados; la tabla de prefijos está copiada aquí y en Clientes | F04 |
-| Teléfono de la ficha guardado en E.164 | no hecho: Clientes lo guarda como se teclea (Pendiente de enlazar: customers) | F04 |
+| Comparar con la ficha de cliente como NÚMERO (sin `00` ni `0` troncal, prefijo del país del negocio) | parcial: regla propia, sin libphonenumber ni números ya normalizados; la tabla de prefijos está copiada aquí y en la búsqueda por teléfono de Clientes (CUSTOMERS-F10): un país nuevo se añade en los dos | F04 |
+| Teléfono de la ficha guardado en E.164 | no hecho: Clientes lo guarda como se teclea (CUSTOMERS-F11) | F04, F23 |
 | Buscar en la bandeja por teléfono escrito de cualquier forma | parcial: compara texto; `600 111 222` no encuentra `+34600111222` | F05 |
 | Encontrar la conversación de la clienta a partir del teléfono de su cita, para avisarla | no hecho: busca el teléfono de la cita como texto contenido en el de la conversación; con espacios o guiones no la encuentra (no se avisa) y un número incompleto puede dar con la de otra persona | F23 |
 | Botón de llamada de una plantilla con prefijo de país | parcial: no se valida en pantalla; lo rechaza el SaaS | F29, F30 |
@@ -248,7 +248,7 @@ una plantilla (todas mandan texto libre dentro de las 24 h).
 | Solicitudes de la bandeja retirada | tabla apartada de este módulo | este módulo | F10/F11 |
 | Ficha vinculada, persona asignada | referencia sin copia del dato | Clientes / núcleo | no se copian aquí |
 | Ficha de cliente (nombre, teléfono, origen WhatsApp) | Clientes | Clientes | su «Borrar datos» (avisa a este módulo, F11) |
-| Cita o reserva creada (nombre, teléfono, notas internas) | Citas / Reservas | Citas / Reservas | Pendiente: appointments, reservations |
+| Cita o reserva creada (nombre, teléfono, notas internas) | Citas / Reservas | Citas / Reservas | no se borran: ni Citas ni Reservas escuchan el borrado de datos de la ficha (`appointments/WORKFLOW.md` «Datos»; RESERVATIONS-F22, no hecho) |
 | Texto de los mensajes en el historial de automatizaciones y la cola de salida | hub | hub | no se borra: 90 días (hub#2467, hub#2474, hub#2477) |
 | Mensajes aparcados, token de Meta, adjuntos en tránsito | SaaS | SaaS | mensajes sin recoger, sin caducidad (saas#1930) |
 | Texto que lee el asistente al contestar | proveedor de IA por el SaaS | SaaS | fuera de este módulo (L-13) |
