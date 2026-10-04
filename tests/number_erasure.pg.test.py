@@ -55,6 +55,8 @@ LATER = "2026-10-04T11:00:00+00:00"
 # The retired «Requests» tray, as migration 013 left it on every hub (whatsapp_inbox#206, #264).
 REQUESTS = "_deprecated_whatsapp_inbox_request"
 REQUEST_PII_COLUMNS = ("data", "raw_summary", "notes", "failure_reason")
+# Those columns as an erasure leaves them (and as the table defaults them).
+REQUEST_BLANK = {"data": "{}", "raw_summary": "", "notes": "", "failure_reason": ""}
 # What must not survive anywhere in the erased thread: the number, the name, the words, the payload.
 PII = ("600333444", "Pepa Ruiz", "my new address is", "wamid.PEPA")
 
@@ -182,8 +184,16 @@ def message(db, mid, hub, conversation, contact, deleted=0):
     )
 
 
-def request(db, rid, hub, conversation, customer, deleted=0):
-    """A request the retired tray extracted from a WhatsApp thread, every free-text column full."""
+def request(db, rid, hub, conversation, customer, deleted=0, only=None):
+    """A request the retired tray extracted from a WhatsApp thread, every free-text column full —
+    or, with `only`, just those columns (the rest as blank as an erasure leaves them)."""
+    full = {
+        "data": json.dumps({"name": "Pepa Ruiz", "phone": "+34600333444"}),
+        "raw_summary": "Pepa Ruiz asks for a table; my new address is Calle Luna 3",
+        "notes": "call her at 600333444",
+        "failure_reason": "no table left for Pepa Ruiz (wamid.PEPA-1)",
+    }
+    kept = {**REQUEST_BLANK, **({c: full[c] for c in only} if only is not None else full)}
     psql(
         db,
         f"INSERT INTO {REQUESTS} (id, hub_id, conversation_id, customer_id, reference_number,"
@@ -191,10 +201,8 @@ def request(db, rid, hub, conversation, customer, deleted=0):
         " is_deleted, deleted_at, created_at)"
         f" VALUES ({literal(rid)}, {literal(hub)}, {literal(conversation)}, {literal(customer)},"
         f" {literal('REQ-' + rid)}, 'appointment', 'rejected',"
-        f" {literal(json.dumps({'name': 'Pepa Ruiz', 'phone': '+34600333444'}))},"
-        " 'Pepa Ruiz asks for a table; my new address is Calle Luna 3',"
-        " 'call her at 600333444', 'reservations.full',"
-        " 'no table left for Pepa Ruiz (wamid.PEPA-1)',"
+        f" {literal(kept['data'])}, {literal(kept['raw_summary'])}, {literal(kept['notes'])},"
+        f" 'reservations.full', {literal(kept['failure_reason'])},"
         f" {deleted}, {literal(CREATED if deleted else None)}, '{CREATED}')",
     )
 
@@ -336,6 +344,12 @@ def main() -> int:
         request(db, "r-pepa", HUB, "t-pepa", None)
         request(db, "r-pepa-deleted", HUB, "t-pepa", None, deleted=1)
         request(db, "r-pepa-linked", HUB, "t-pepa", "cust-old")
+        # Of that thread too, and each one reachable through ONE arm of the "anything left to
+        # erase" guard only: soft-deleted long ago with a single column still full, and a live one
+        # with every column already blank. A guard that forgets an arm would skip exactly these.
+        for column in REQUEST_PII_COLUMNS:
+            request(db, f"r-pepa-only-{column}", HUB, "t-pepa", None, deleted=1, only=(column,))
+        request(db, "r-pepa-blank-live", HUB, "t-pepa", None, only=())
         # From other threads of this hub, from hub B (one corrupt, hanging from Pepa's hub-A
         # thread), and the mirror: a hub-A request hanging from hub B's thread id.
         request(db, "r-luis", HUB, "t-luis", "cust-luis")
@@ -469,6 +483,23 @@ def main() -> int:
             (
                 col(db, REQUESTS, "r-pepa-deleted", "deleted_at"),
                 col(db, REQUESTS, "r-pepa", "deleted_at"),
+            ),
+        )
+        for column in REQUEST_PII_COLUMNS:
+            check(
+                f"a request soft-deleted BEFORE that still kept only its {column} loses it",
+                (REQUEST_BLANK[column], "user-admin"),
+                (
+                    col(db, REQUESTS, f"r-pepa-only-{column}", column),
+                    col(db, REQUESTS, f"r-pepa-only-{column}", "updated_by"),
+                ),
+            )
+        check(
+            "a live request with nothing left to blank is still soft-deleted",
+            ("1", NOW, "user-admin"),
+            tuple(
+                col(db, REQUESTS, "r-pepa-blank-live", c)
+                for c in ("is_deleted", "deleted_at", "updated_by")
             ),
         )
         check(

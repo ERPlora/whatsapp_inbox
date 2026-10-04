@@ -66,6 +66,8 @@ DELETED = "2026-09-01T00:00:00+00:00"
 REQUESTS = "_deprecated_whatsapp_inbox_request"
 # The columns of a request that carry what the person said or what the staff wrote about her.
 REQUEST_PII_COLUMNS = ("data", "raw_summary", "notes", "failure_reason")
+# Those columns as an erasure leaves them (and as the table defaults them).
+REQUEST_BLANK = {"data": "{}", "raw_summary": "", "notes": "", "failure_reason": ""}
 # What must not survive anywhere in Ana's rows: her numbers, her name, her words, the Meta payload.
 PII = (
     "600333444",
@@ -192,8 +194,16 @@ def message(db, mid, hub, conversation, contact, deleted=0):
     )
 
 
-def request(db, rid, hub, conversation, customer, deleted=0):
-    """A request the retired tray extracted from a WhatsApp thread, every free-text column full."""
+def request(db, rid, hub, conversation, customer, deleted=0, only=None):
+    """A request the retired tray extracted from a WhatsApp thread, every free-text column full —
+    or, with `only`, just those columns (the rest as blank as an erasure leaves them)."""
+    full = {
+        "data": json.dumps({"name": "Ana Vidal", "phone": "+34600333444"}),
+        "raw_summary": "Ana Vidal asks for a colour; my new address is Calle Mayor 1",
+        "notes": "call her at 600555666",
+        "failure_reason": "no slot left for Ana Vidal (wamid.ANA-1)",
+    }
+    kept = {**REQUEST_BLANK, **({c: full[c] for c in only} if only is not None else full)}
     psql(
         db,
         f"INSERT INTO {REQUESTS} (id, hub_id, conversation_id, customer_id, reference_number,"
@@ -201,10 +211,8 @@ def request(db, rid, hub, conversation, customer, deleted=0):
         " is_deleted, deleted_at, created_at)"
         f" VALUES ({literal(rid)}, {literal(hub)}, {literal(conversation)}, {literal(customer)},"
         f" {literal('REQ-' + rid)}, 'appointment', 'rejected',"
-        f" {literal(json.dumps({'name': 'Ana Vidal', 'phone': '+34600333444'}))},"
-        " 'Ana Vidal asks for a colour; my new address is Calle Mayor 1',"
-        " 'call her at 600555666', 'appointments.slot_taken',"
-        " 'no slot left for Ana Vidal (wamid.ANA-1)',"
+        f" {literal(kept['data'])}, {literal(kept['raw_summary'])}, {literal(kept['notes'])},"
+        f" 'appointments.slot_taken', {literal(kept['failure_reason'])},"
         f" {deleted}, {literal(DELETED if deleted else None)}, '{CREATED}')",
     )
 
@@ -343,6 +351,12 @@ def main() -> int:
         request(db, "r-ana-own", HUB, "t-unlinked", ERASED)
         request(db, "r-ana-thread", HUB, "t-ana-live", None)
         request(db, "r-ana-deleted", HUB, "t-ana-closed", ERASED, deleted=1)
+        # Hers too, and each one reachable through ONE arm of the "anything left to erase" guard
+        # only: soft-deleted long ago with a single column still full, and a live one with every
+        # column already blank. A guard that forgets an arm would skip exactly these.
+        for column in REQUEST_PII_COLUMNS:
+            request(db, f"r-ana-only-{column}", HUB, "t-unlinked", ERASED, deleted=1, only=(column,))
+        request(db, "r-ana-blank-live", HUB, "t-unlinked", ERASED, only=())
         # Not hers: another customer's, and unlinked / blank-linked ones with no id.
         request(db, "r-luis", HUB, "t-luis", "cust-luis")
         request(db, "r-unlinked", HUB, "t-unlinked", None)
@@ -484,6 +498,23 @@ def main() -> int:
             "a request erased now is stamped deleted now",
             NOW,
             col(db, REQUESTS, "r-ana-own", "deleted_at"),
+        )
+        for column in REQUEST_PII_COLUMNS:
+            check(
+                f"a request soft-deleted BEFORE that still kept only its {column} loses it",
+                (REQUEST_BLANK[column], "user-eraser"),
+                (
+                    col(db, REQUESTS, f"r-ana-only-{column}", column),
+                    col(db, REQUESTS, f"r-ana-only-{column}", "updated_by"),
+                ),
+            )
+        check(
+            "a live request with nothing left to blank is still soft-deleted",
+            ("1", NOW, "user-eraser"),
+            tuple(
+                col(db, REQUESTS, "r-ana-blank-live", c)
+                for c in ("is_deleted", "deleted_at", "updated_by")
+            ),
         )
         check(
             "other people's, unlinked, blank-linked and cross-hub requests are untouched",
