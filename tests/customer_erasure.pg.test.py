@@ -365,6 +365,18 @@ def main() -> int:
                 "",
                 col(db, "whatsapp_inbox_conversation", tid, "needs_attention_at"),
             )
+            # What the bot remembered of her is hers too: the slots it offered her and when, the
+            # state of her dialogue and the count of what she wrote and nobody read.
+            check(
+                f"{tid} keeps no offer, no bot context and no unread count",
+                ("", "", "{}", "0"),
+                (
+                    col(db, "whatsapp_inbox_conversation", tid, "offered_slots"),
+                    col(db, "whatsapp_inbox_conversation", tid, "offered_at"),
+                    col(db, "whatsapp_inbox_conversation", tid, "context"),
+                    col(db, "whatsapp_inbox_conversation", tid, "unread_count"),
+                ),
+            )
         for mid in ("m-ana-1", "m-ana-2", "m-ana-3", "m-ana-4"):
             check(
                 f"{mid} is soft-deleted",
