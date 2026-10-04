@@ -93,13 +93,32 @@ async fn everything_stored(rt: &Runtime) -> String {
     rows(
         rt,
         "SELECT row_to_json(c)::text AS r FROM whatsapp_inbox_conversation c \
-         UNION ALL SELECT row_to_json(m)::text FROM whatsapp_inbox_message m",
+         UNION ALL SELECT row_to_json(m)::text FROM whatsapp_inbox_message m \
+         UNION ALL SELECT row_to_json(q)::text FROM _deprecated_whatsapp_inbox_request q",
     )
     .await
     .iter()
     .map(|r| r["r"].as_str().unwrap().to_string())
     .collect::<Vec<_>>()
     .join("|")
+}
+
+/// A request the retired «Requests» tray extracted from `wa_id`'s thread, inserted raw: no command
+/// writes that table any more (whatsapp_inbox#206), migration 013 only set it aside — and what it
+/// kept is still that person's data (whatsapp_inbox#264).
+async fn the_retired_tray_kept(rt: &Runtime, wa_id: &str, said: &str) {
+    rt.db_for_test()
+        .execute_batch(&format!(
+            "INSERT INTO _deprecated_whatsapp_inbox_request (id, hub_id, conversation_id, \
+             reference_number, data, raw_summary, notes, created_at) \
+             SELECT 'req-' || c.id, c.hub_id, c.id, 'REQ-' || c.id, \
+                    '{{\"phone\": \"+{wa_id}\"}}', '{said}', 'call back on {wa_id}', \
+                    '2026-09-01T00:00:00+00:00' \
+               FROM whatsapp_inbox_conversation c \
+              WHERE c.hub_id = '{HUB}' AND c.wa_contact_id = '{wa_id}'"
+        ))
+        .await
+        .unwrap();
 }
 
 /// The `wa_contact_id`s the inbox screen lists.
@@ -135,8 +154,10 @@ async fn two_people_who_wrote(rt: &Runtime) -> String {
 async fn an_admin_erases_the_thread_of_somebody_with_no_sheet_and_nobody_elses() {
     let rt = runtime().await;
     let pepa = two_people_who_wrote(&rt).await;
+    the_retired_tray_kept(&rt, PEPA, "pepa asked the tray for a table").await;
+    the_retired_tray_kept(&rt, EVA, "eva asked the tray for a colour").await;
     let before = everything_stored(&rt).await;
-    for pii in ["600333444", "pepa writes her new address", "wamid.PEPA-1"] {
+    for pii in ["600333444", "pepa writes her new address", "wamid.PEPA-1", "pepa asked the tray"] {
         assert!(before.contains(pii), "control: `{pii}` must be stored before the erasure");
     }
 
@@ -145,10 +166,10 @@ async fn an_admin_erases_the_thread_of_somebody_with_no_sheet_and_nobody_elses()
         .unwrap();
 
     let after = everything_stored(&rt).await;
-    for pii in ["600333444", "pepa writes her new address", "wamid.PEPA-1"] {
+    for pii in ["600333444", "pepa writes her new address", "wamid.PEPA-1", "pepa asked the tray"] {
         assert!(!after.contains(pii), "`{pii}` is still stored after erasing her number: {after}");
     }
-    for kept in ["600999888", "eva asks for a booking", "wamid.EVA-1"] {
+    for kept in ["600999888", "eva asks for a booking", "wamid.EVA-1", "eva asked the tray"] {
         assert!(after.contains(kept), "Eva's `{kept}` went with Pepa's erasure: {after}");
     }
     assert_eq!(inbox(&rt).await, vec![EVA.to_string()], "the inbox still lists Pepa");

@@ -8,6 +8,10 @@
 //!                                                      personal datum and leave the inbox
 //! ```
 //!
+//! The retired «Requests» tray's set-aside table goes too (whatsapp_inbox#264): installing this
+//! module on a hub WITHOUT hub#2461 is refused (`foreign_table_write`), so this file also proves the
+//! hub accepts the module's row writes on its own `_deprecated_*` table.
+//!
 //! The SQL is pinned row by row, tenancy and idempotence included, on a real Postgres in
 //! `tests/customer_erasure.pg.test.py`. What only the runtime can prove: that the event reaches
 //! this module with the payload the SQL binds (`customer_id`), that the internal listener is allowed
@@ -94,13 +98,32 @@ async fn everything_stored(rt: &Runtime) -> String {
     rows(
         rt,
         "SELECT row_to_json(c)::text AS r FROM whatsapp_inbox_conversation c \
-         UNION ALL SELECT row_to_json(m)::text FROM whatsapp_inbox_message m",
+         UNION ALL SELECT row_to_json(m)::text FROM whatsapp_inbox_message m \
+         UNION ALL SELECT row_to_json(q)::text FROM _deprecated_whatsapp_inbox_request q",
     )
     .await
     .iter()
     .map(|r| r["r"].as_str().unwrap().to_string())
     .collect::<Vec<_>>()
     .join("|")
+}
+
+/// A request the retired «Requests» tray extracted from `wa_id`'s thread, inserted raw: no command
+/// writes that table any more (whatsapp_inbox#206), migration 013 only set it aside — and what it
+/// kept is still that person's data (whatsapp_inbox#264).
+async fn the_retired_tray_kept(rt: &Runtime, wa_id: &str, said: &str) {
+    rt.db_for_test()
+        .execute_batch(&format!(
+            "INSERT INTO _deprecated_whatsapp_inbox_request (id, hub_id, conversation_id, \
+             reference_number, data, raw_summary, notes, created_at) \
+             SELECT 'req-' || c.id, c.hub_id, c.id, 'REQ-' || c.id, \
+                    '{{\"phone\": \"+{wa_id}\"}}', '{said}', 'call back on {wa_id}', \
+                    '2026-09-01T00:00:00+00:00' \
+               FROM whatsapp_inbox_conversation c \
+              WHERE c.hub_id = '{HUB}' AND c.wa_contact_id = '{wa_id}'"
+        ))
+        .await
+        .unwrap();
 }
 
 /// The `wa_contact_id`s the inbox screen lists.
@@ -136,8 +159,10 @@ async fn two_customers_who_wrote(rt: &Runtime) -> (String, String) {
 async fn erasing_a_customer_erases_her_whatsapp_threads_and_nobody_elses() {
     let rt = runtime().await;
     let (ana, _eva) = two_customers_who_wrote(&rt).await;
+    the_retired_tray_kept(&rt, ANA, "ana asked the tray for a colour").await;
+    the_retired_tray_kept(&rt, EVA, "eva asked the tray for a table").await;
     let before = everything_stored(&rt).await;
-    for pii in ["600111222", "ana writes her new address", "wamid.ANA-1"] {
+    for pii in ["600111222", "ana writes her new address", "wamid.ANA-1", "ana asked the tray"] {
         assert!(before.contains(pii), "control: `{pii}` must be stored before the erasure");
     }
 
@@ -151,10 +176,10 @@ async fn erasing_a_customer_erases_her_whatsapp_threads_and_nobody_elses() {
     rt.drain_outbox().await.unwrap();
 
     let after = everything_stored(&rt).await;
-    for pii in ["600111222", "Ana Vidal", "ana writes her new address", "wamid.ANA-1"] {
+    for pii in ["600111222", "Ana Vidal", "ana writes her new address", "wamid.ANA-1", "ana asked the tray"] {
         assert!(!after.contains(pii), "`{pii}` is still stored after her erasure: {after}");
     }
-    for kept in ["600999888", "eva asks for a booking", "wamid.EVA-1"] {
+    for kept in ["600999888", "eva asks for a booking", "wamid.EVA-1", "eva asked the tray"] {
         assert!(after.contains(kept), "Eva's `{kept}` went with Ana's erasure: {after}");
     }
     assert_eq!(inbox(&rt).await, vec![EVA.to_string()], "the inbox still lists Ana");
