@@ -131,10 +131,8 @@ Pasos:
 Entra: el mensaje escrito o la opción tocada (no el historial, ni las respuestas del dueño, ni fotos sin texto).
 Sale: ficha nueva si hacía falta (Clientes), conversación unida a la ficha, cita aceptada o pendiente (Citas), respuesta por WhatsApp.
 Si falla: F20; sin hueco, le dice el porqué y ofrece otros.
-Implicados: APPOINTMENTS-F02, APPOINTMENTS-F18, REC_WA_CITA-F03, REC_WA_CITA-F04, REC_WA_CITA-F05, REC_WA_CITA-F07
-Pendiente de enlazar: customers — crear ficha con origen WhatsApp y buscarla por teléfono
+Implicados: APPOINTMENTS-F02, APPOINTMENTS-F18, CUSTOMERS-F10, CUSTOMERS-F12, CUSTOMERS-F26, STAFF-F09, REC_WA_CITA-F03, REC_WA_CITA-F04, REC_WA_CITA-F05, REC_WA_CITA-F07
 Pendiente de enlazar: services — leer servicios y su duración
-Pendiente de enlazar: staff — leer profesionales y su horario
 QA: W-02, W-06, W-07, L-12
 
 ### WHATSAPP_INBOX-F22 La clienta anula o mueve su cita por WhatsApp
@@ -167,7 +165,7 @@ Pasos:
 Entra: la cita confirmada (Citas) y la conversación de su teléfono.
 Sale: un WhatsApp a la clienta.
 Si falla: el motivo queda en el historial de la automatización; nada se ve en la Agenda.
-Implicados: APPOINTMENTS-F03, APPOINTMENTS-F18, REC_WA_CITA-F07
+Implicados: APPOINTMENTS-F03, APPOINTMENTS-F18, CUSTOMERS-F11, REC_WA_CITA-F07
 QA: W-03, BD-07, WA-04
 
 ### WHATSAPP_INBOX-F24 El cliente pide mesa por WhatsApp
@@ -184,8 +182,7 @@ Pasos:
 Entra: el mensaje escrito o la opción tocada; su ficha si ya existe (no se crea).
 Sale: reserva aceptada o pendiente, o entrada en la lista de espera (Reservas), con su teléfono y el nombre que dé en el mensaje (si no da ninguno, su teléfono hace de nombre; aunque tenga ficha, el nombre no se toma de ella, solo queda ligada); respuesta por WhatsApp.
 Si falla: F20; sin plazas o con demasiados comensales, se le explica.
-Implicados: RESERVATIONS-F01, RESERVATIONS-F02, RESERVATIONS-F05, RESERVATIONS-F14, RESERVATIONS-F17, REC_WA_MESA-F03, REC_WA_MESA-F04, REC_WA_MESA-F05, REC_WA_MESA-F07
-Pendiente de enlazar: customers — buscar ficha por teléfono
+Implicados: CUSTOMERS-F10, RESERVATIONS-F01, RESERVATIONS-F02, RESERVATIONS-F05, RESERVATIONS-F14, RESERVATIONS-F17, REC_WA_MESA-F03, REC_WA_MESA-F04, REC_WA_MESA-F05, REC_WA_MESA-F07
 QA: WR-02, WR-03, WR-04
 
 ### WHATSAPP_INBOX-F25 El cliente anula o cambia su mesa por WhatsApp
