@@ -557,6 +557,15 @@
         "commands/_on_customer_merged.sql"
       ]
     },
+    "whatsapp_inbox._on_customer_anonymized": {
+      "permission": "whatsapp_inbox.manage_connections",
+      "internal": true,
+      "transaction": true,
+      "sql": [
+        "commands/_on_customer_anonymized_messages.sql",
+        "commands/_on_customer_anonymized.sql"
+      ]
+    },
     "whatsapp_inbox._quota.set": {
       "permission": "whatsapp_inbox.manage_connections",
       "internal": true,
@@ -612,6 +621,9 @@
       },
       "customer.merged": {
         "command": "whatsapp_inbox._on_customer_merged"
+      },
+      "customer.anonymized": {
+        "command": "whatsapp_inbox._on_customer_anonymized"
       },
       "whatsapp_inbox.conversation.link_pending": {
         "command": "whatsapp_inbox._link_known_customer"

@@ -132,7 +132,13 @@ Worth internalising because it explains a lot of "I cannot see that":
 - **Ingesting messages is admin-only** (connections).
 - A **manager** and an **employee** can only read conversations and their threads.
 
-## Everything deletes softly
+## Everything deletes softly — except an erased customer
 
 Conversations, messages and templates are marked deleted, never erased. Deleting a conversation
 takes its messages with it.
+
+The one exception is the right to erasure (GDPR art. 17). When a customer's data is erased from her
+sheet in Customers («Erase data»), her WhatsApp threads and their messages are emptied of every
+personal datum — number, name, text, media link, raw WhatsApp payload, bot context — and marked
+deleted. Only threads **linked to that sheet** are erased: a conversation that was never linked to
+her is not touched. A plain «Delete» of the sheet keeps the conversations.
