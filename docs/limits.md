@@ -39,7 +39,7 @@
 | To do this | You need |
 |---|---|
 | See conversations and messages | `whatsapp_inbox.view_conversation` |
-| Assign a conversation; list, create, update or delete templates; read the monthly usage | `whatsapp_inbox.manage_settings` |
+| Assign a conversation; erase a number's data; list, create, update or delete templates; read the monthly usage | `whatsapp_inbox.manage_settings` |
 | Ingest a message | `whatsapp_inbox.manage_connections` |
 
 By role:

@@ -59,6 +59,13 @@ inbox — in this hub only, through `whatsapp_inbox._on_customer_anonymized` (wh
 the person writes again, it opens a new thread that is not linked to anyone. A plain «Delete» of the
 sheet is not an erasure and leaves the conversations as they are.
 
+When there is no sheet to erase from (somebody who never became a customer, or a thread never linked
+to one), an admin erases the thread itself with **«Erase this number's data»** in the inbox, through
+the public command `whatsapp_inbox.conversations.erase` (`whatsapp_inbox.manage_settings`,
+whatsapp_inbox#263). It erases the same columns as the erasure from the sheet, in this hub only, and
+answers `whatsapp_inbox.conversation_not_found` for a thread id this hub does not have. It is not
+offered to the assistant: an irreversible erasure is pressed by a person.
+
 ## The vocabulary
 
 | Concept | Values |

@@ -142,3 +142,11 @@ sheet in Customers («Erase data»), her WhatsApp threads and their messages are
 personal datum — number, name, text, media link, raw WhatsApp payload, bot context — and marked
 deleted. Only threads **linked to that sheet** are erased: a conversation that was never linked to
 her is not touched. A plain «Delete» of the sheet keeps the conversations.
+
+For somebody the sheet cannot reach — a person who wrote once and never had a customer sheet, or
+whose thread was never linked to hers — an admin opens the conversation and presses **«Erase this
+number's data»** (whatsapp_inbox#263). After a confirmation that names the number, that thread and
+every message in it are emptied of exactly the same data as the erasure from the sheet, closed and
+marked deleted. There is one thread per number in a hub, so the thread is the number. If the person
+writes again, a new thread opens that is not linked to anyone. If the same person also has a
+customer sheet, erase it there too: this button does not touch Customers.

@@ -4958,6 +4958,13 @@ var es_default = {
     unassign: "Desasignar",
     errLoadThread: "No se pudo cargar la conversaci\xF3n",
     errAssign: "No se pudo asignar la conversaci\xF3n",
+    eraseNumber: "Borrar datos de este n\xFAmero",
+    eraseNumberTitle: "\xBFBorrar los datos de este n\xFAmero?",
+    eraseNumberConfirm: "Se borrar\xE1 para siempre la conversaci\xF3n con {phone}: todos los mensajes, el nombre y el n\xFAmero. No se puede deshacer. Si esta persona tambi\xE9n tiene ficha de cliente, borra all\xED tambi\xE9n sus datos.",
+    eraseNumberSubmit: "Borrar datos",
+    erasing: "Borrando\u2026",
+    eraseNumberDone: "Se han borrado los datos de este n\xFAmero.",
+    errEraseNumber: "No se pudieron borrar los datos de este n\xFAmero",
     delete: "Borrar",
     edit: "Editar",
     save: "Guardar",
@@ -5208,6 +5215,13 @@ var en_default = {
     unassign: "Unassign",
     errLoadThread: "Could not load the conversation",
     errAssign: "Could not assign the conversation",
+    eraseNumber: "Erase this number's data",
+    eraseNumberTitle: "Erase this number's data?",
+    eraseNumberConfirm: "This permanently erases the conversation with {phone}: every message, the name and the number. It cannot be undone. If this person also has a customer record, erase their data there too.",
+    eraseNumberSubmit: "Erase data",
+    erasing: "Erasing\u2026",
+    eraseNumberDone: "The data of this number has been erased.",
+    errEraseNumber: "Could not erase the data of this number",
     delete: "Delete",
     edit: "Edit",
     save: "Save",
@@ -5550,6 +5564,10 @@ var ErpWhatsappInboxInbox = class extends i3 {
     this.unplayable = /* @__PURE__ */ new Set();
     this.viewing = null;
     this.assignTo = "";
+    this.pendingErase = false;
+    this.erasing = false;
+    this.eraseError = "";
+    this.eraseDone = false;
     this.onLocaleChange = () => this.requestUpdate();
   }
   static {
@@ -5593,6 +5611,22 @@ var ErpWhatsappInboxInbox = class extends i3 {
     .note { font-size:.85rem; color:var(--ion-color-medium,#6f6a5e); margin:.5rem 0 0; }
     /* 44px minimum touch target: this screen is used one-handed, at a counter. */
     ion-button { --min-height: 44px; }
+    /* The tone of a button is declared HERE, never with \`color="…"\` (pm#392): Ionic resolves
+       \`color=\` through a GLOBAL rule that does not reach inside this shadow root. */
+    ion-button.tone-danger:not([fill]) {
+      --background: var(--ion-color-danger, #c5000f);
+      --background-activated: var(--ion-color-danger-shade, #ad000d);
+      --background-focused: var(--ion-color-danger-shade, #ad000d);
+      --background-hover: var(--ion-color-danger-tint, #cb1a27);
+      --color: var(--ion-color-danger-contrast, #fff);
+    }
+    ion-button.tone-danger[fill="clear"] { --color: var(--ion-color-danger, #c5000f); }
+    .erase-confirm { border:1px solid var(--ion-color-danger, #c5000f); border-radius:10px;
+      padding:.75rem; margin-top:.75rem; }
+    .erase-confirm h4 { margin:0 0 .35rem; font-size:1rem; }
+    .erase-confirm p { margin:0 0 .5rem; overflow-wrap:anywhere; }
+    .erase-confirm .actions { display:flex; gap:.5rem; flex-wrap:wrap; }
+    .page > ok-inline-feedback { margin-bottom:.75rem; }
   `;
   }
   get rowActions() {
@@ -5725,6 +5759,8 @@ var ErpWhatsappInboxInbox = class extends i3 {
     this.detailError = "";
     this.assignError = "";
     this.assignTo = "";
+    this.pendingErase = false;
+    this.eraseError = "";
   }
   // ── Attachments (whatsapp_inbox#192) ───────────────────────────────────────
   /** Downloads one attachment once; `retry` starts again after a failure. A reload of the thread
@@ -5779,11 +5815,31 @@ var ErpWhatsappInboxInbox = class extends i3 {
       this.detailBusy = false;
     }
   }
+  /** whatsapp_inbox#263 — erases the open thread: its messages, the name and the number. For the
+   *  person with no customer sheet, whom the erasure from the sheet (whatsapp_inbox#262) cannot
+   *  reach. Irreversible, so it only runs from the in-page question, never on the first click. */
+  async confirmErase() {
+    if (!this.detail || this.erasing) return;
+    this.erasing = true;
+    this.eraseError = "";
+    try {
+      await erplora().command("whatsapp_inbox.conversations.erase", { conversation_id: this.detail.id });
+      this.closeDetail();
+      this.eraseDone = true;
+      await this.ctrl.load();
+    } catch (e5) {
+      this.eraseError = domainErrorText2(e5, "ui.errEraseNumber");
+    } finally {
+      this.erasing = false;
+    }
+  }
   /** pm#513: the refusal appears under «Assign», below a thread that scrolls on its own. Bring it
    *  into view when it appears, not again on every keystroke. */
   updated(changed) {
     super.updated(changed);
     if (changed.has("assignError") && this.assignError) void this.revealRefusal('[data-testid="whatsapp-inbox-assign-error"]');
+    if (changed.has("eraseError") && this.eraseError) void this.revealRefusal('[data-testid="whatsapp-inbox-erase-error"]');
+    if (changed.has("pendingErase") && this.pendingErase) void this.revealRefusal('[data-testid="whatsapp-inbox-erase-confirm"]');
   }
   /** ok-inline-feedback lays itself out in its own update: scrolled to before it, the box is empty. */
   async revealRefusal(selector) {
@@ -5792,7 +5848,9 @@ var ErpWhatsappInboxInbox = class extends i3 {
     banner?.scrollIntoView?.({ block: "center" });
   }
   onRowAction(ev) {
-    if (ev.detail.actionId === "open") void this.loadDetail(String(ev.detail.row.id));
+    if (ev.detail.actionId !== "open") return;
+    this.eraseDone = false;
+    void this.loadDetail(String(ev.detail.row.id));
   }
   // ── Render ────────────────────────────────────────────────────────────────
   renderMedia(media, body) {
@@ -5906,8 +5964,36 @@ var ErpWhatsappInboxInbox = class extends i3 {
               ${this.assignTo.trim() ? t5("ui.assign") : t5("ui.unassign")}
             </ion-button>
           </div>
-          ${this.assignError ? b2`<ok-inline-feedback data-testid="whatsapp-inbox-assign-error" tone="danger" icon="alert-circle-outline">${this.assignError}</ok-inline-feedback>` : A}` : A}
+          ${this.assignError ? b2`<ok-inline-feedback data-testid="whatsapp-inbox-assign-error" tone="danger" icon="alert-circle-outline">${this.assignError}</ok-inline-feedback>` : A}
+          ${this.renderErase(c5)}` : A}
       <p class="note">${t5("ui.threadRepliesElsewhere")}</p>
+    </section>`;
+  }
+  /** The action, or its in-page question once pressed. Admin only — the caller already checked. */
+  renderErase(c5) {
+    const t5 = (k2, params) => erplora().t(CATALOG, k2, params);
+    if (!this.pendingErase) {
+      return b2`<div class="assign">
+        <ion-button data-testid="whatsapp-inbox-erase" size="small" fill="clear" class="tone-danger"
+          @click=${() => {
+        this.pendingErase = true;
+        this.eraseError = "";
+      }}>${t5("ui.eraseNumber")}</ion-button>
+      </div>`;
+    }
+    return b2`<section class="erase-confirm" data-testid="whatsapp-inbox-erase-confirm">
+      <h4>${t5("ui.eraseNumberTitle")}</h4>
+      <p>${t5("ui.eraseNumberConfirm", { phone: c5.contact_phone || c5.contact_name || "\u2014" })}</p>
+      <div class="actions">
+        <ion-button data-testid="whatsapp-inbox-erase-submit" size="small" class="tone-danger" ?disabled=${this.erasing}
+          @click=${() => this.confirmErase()}>${this.erasing ? t5("ui.erasing") : t5("ui.eraseNumberSubmit")}</ion-button>
+        <ion-button data-testid="whatsapp-inbox-erase-cancel" size="small" fill="clear" ?disabled=${this.erasing}
+          @click=${() => {
+      this.pendingErase = false;
+      this.eraseError = "";
+    }}>${t5("ui.cancel")}</ion-button>
+      </div>
+      ${this.eraseError ? b2`<ok-inline-feedback data-testid="whatsapp-inbox-erase-error" tone="danger" icon="alert-circle-outline">${this.eraseError}</ok-inline-feedback>` : A}
     </section>`;
   }
   render() {
@@ -5917,6 +6003,7 @@ var ErpWhatsappInboxInbox = class extends i3 {
           <h2>${t5("ui.inboxTitle")}</h2>
         </header>
         ${this.ctrl?.error && !dataTableShowsLoadError() ? b2`<p class="err" data-testid="whatsapp-inbox-load-error">${this.ctrl.error}</p>` : A}
+        ${this.eraseDone ? b2`<ok-inline-feedback data-testid="whatsapp-inbox-erase-done" tone="success" icon="checkmark-circle-outline">${t5("ui.eraseNumberDone")}</ok-inline-feedback>` : A}
         ${this.renderDetail()}
         <ok-data-table testid="whatsapp-inbox-table" .error=${this.ctrl?.error ?? ""} @retry=${() => this.ctrl?.load()} .serverSide=${true} .views=${true} .fill=${true} .actions=${this.rowActions} .rowClickable=${true} .cardTitle=${(row) => String(row.contact_name ?? row.contact_phone ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "asc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchInbox")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyInbox")} @rowAction=${(e5) => this.onRowAction(e5)} @rowClick=${(e5) => this.onRowAction({ detail: { actionId: "open", row: e5.detail.row } })} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @pageSizeChange=${(e5) => this.ctrl.setPageSize(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}></ok-data-table>
       </div>`;
@@ -5952,6 +6039,18 @@ __decorateClass([
 __decorateClass([
   r5()
 ], ErpWhatsappInboxInbox.prototype, "assignTo", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxInbox.prototype, "pendingErase", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxInbox.prototype, "erasing", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxInbox.prototype, "eraseError", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxInbox.prototype, "eraseDone", 2);
 define("erp-whatsapp-inbox-inbox", ErpWhatsappInboxInbox);
 
 // ui/lib/whatsapp-uses.ts

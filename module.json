@@ -383,6 +383,22 @@
         "description": "Marks a WhatsApp conversation as needing attention because the automation could not answer the customer and promised that someone from the team would. The inbox shows it first with a label until somebody of the business answers her. Identified by the WhatsApp contact the messages come from"
       }
     },
+    "whatsapp_inbox.conversations.erase": {
+      "permission": "whatsapp_inbox.manage_settings",
+      "transaction": true,
+      "sql": [
+        "commands/conversation_erase_messages.sql",
+        "commands/conversation_erase.sql"
+      ],
+      "schema": "schemas/conversation_erase.json",
+      "expect_rows": {
+        "op": "min",
+        "n": 1,
+        "error": "whatsapp_inbox.conversation_not_found",
+        "message": "That conversation does not exist in this business.",
+        "statement": "commands/conversation_erase.sql"
+      }
+    },
     "whatsapp_inbox.templates.create": {
       "permission": "whatsapp_inbox.manage_settings",
       "transaction": true,
