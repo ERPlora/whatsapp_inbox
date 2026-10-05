@@ -16,8 +16,7 @@ Pasos:
 Entra: las plantillas guardadas aquí y lo que Meta dice hoy de cada una (por nombre e idioma).
 Sale: el veredicto nuevo guardado en cada plantilla que cambió; una que Meta tuvo y ya no lista queda como «Borrada en WhatsApp Manager» y no se elimina. Automatizaciones lee esta lista para ofrecer las plantillas aprobadas en un paso de mensaje (FLOWS-F15).
 Si falla: «No hemos podido comprobar con Meta si hay veredictos nuevos, así que lo que ves es lo último que sabemos…»; la lista sigue visible.
-Implicados: FLOWS-F15, HUB-F268
-Pendiente de enlazar: saas — pasarela de WhatsApp: plantillas contra Meta
+Implicados: FLOWS-F15, HUB-F268, SAAS_WHATSAPP_INBOX-F16
 QA: WA-04
 
 ### WHATSAPP_INBOX-F28 Traer las plantillas creadas en WhatsApp Manager
@@ -32,8 +31,7 @@ Pasos:
 Entra: la lista de Meta con el contenido de cada plantilla.
 Sale: plantillas nuevas guardadas una sola vez por nombre e idioma; aviso público de plantilla creada.
 Si falla: si una no se puede guardar, se nombra en el aviso y se dice el motivo.
-Implicados: HUB-F268
-Pendiente de enlazar: saas — pasarela de WhatsApp: plantillas contra Meta
+Implicados: HUB-F268, SAAS_WHATSAPP_INBOX-F16
 QA: ninguno
 
 ### WHATSAPP_INBOX-F29 Crear una plantilla y mandarla a revisión
@@ -51,8 +49,7 @@ Pasos:
 Entra: lo que escribe el administrador.
 Sale: la plantilla guardada aquí y registrada en Meta con su veredicto; aviso público de plantilla creada.
 Si falla: la plantilla queda guardada aquí y el panel sigue abierto, ya como edición, con el motivo encima de **Guardar** (por ejemplo «Meta no ha aceptado el nombre…», «Meta necesita un ejemplo para cada hueco…»); si Meta no contesta o rechaza la plantilla por su cuenta, el motivo no llega y sale el genérico «erplora.com no ha querido registrar la plantilla…»; guardarla otra vez no la duplica.
-Implicados: HUB-F269, HUB-F270
-Pendiente de enlazar: saas — pasarela de WhatsApp: plantillas contra Meta
+Implicados: HUB-F269, HUB-F270, SAAS_WHATSAPP_INBOX-F17, SAAS_WHATSAPP_INBOX-F18
 QA: WA-04
 
 ### WHATSAPP_INBOX-F30 Editar una plantilla
@@ -68,8 +65,7 @@ Pasos:
 Entra: la plantilla y los cambios.
 Sale: la plantilla actualizada aquí y registrada otra vez en Meta; aviso público de plantilla actualizada.
 Si falla: como F29; un veredicto de Meta nunca se guarda sobre un texto que se cambió después.
-Implicados: HUB-F269, HUB-F270
-Pendiente de enlazar: saas — pasarela de WhatsApp: plantillas contra Meta
+Implicados: HUB-F269, HUB-F270, SAAS_WHATSAPP_INBOX-F17, SAAS_WHATSAPP_INBOX-F18
 QA: ninguno
 
 ### WHATSAPP_INBOX-F31 Borrar una plantilla

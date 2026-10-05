@@ -17,8 +17,7 @@ Pasos:
 Entra: el código que devuelve Meta tras el QR.
 Sale: el número queda conectado en la plataforma (el hub solo sabe cuál es); empiezan a llegar los mensajes y el historial de los últimos meses. Por ese número salen también los WhatsApp que manda una automatización del negocio (FLOWS-F15).
 Si falla: el bloque dice el motivo («La conexión se canceló…», «No se pudo abrir la ventana de Facebook…», «Solo un dueño o un administrador…») y deja reintentar; si falla la plataforma o Meta (WhatsApp no configurado, Meta no contesta o rechaza, sin cuenta de WhatsApp Business o sin permiso de Facebook), el motivo no llega y sale el genérico «Algo ha fallado al conectar. Inténtalo de nuevo en un minuto.»; un hub viejo ve «Este hub es demasiado antiguo para conectar el número desde aquí…».
-Implicados: FLOWS-F15, REC_WA_CITA-F01, REC_WA_MESA-F01, HUB-F260, HUB-F261, HUB_SHELL-F170
-Pendiente de enlazar: saas — pasarela de WhatsApp: canjea el código, guarda el token y suscribe el número
+Implicados: FLOWS-F15, REC_WA_CITA-F01, REC_WA_MESA-F01, HUB-F260, HUB-F261, HUB_SHELL-F170, SAAS_WHATSAPP_INBOX-F02
 QA: WA-01, WA-07
 
 ### WHATSAPP_INBOX-F02 Desconectar o volver a conectar el número
@@ -31,10 +30,9 @@ Pasos:
 2. Si WhatsApp retiró el permiso, el número aparece con «Hay que reconectar» y la explicación; pulsar **Volver a conectar WhatsApp** y repetir F01.
 3. Se comprueba que el bloque vuelve a «Conectado» y que un mensaje nuevo llega.
 Entra: el número elegido.
-Sale: la plataforma deja de recoger (o vuelve a recoger) los mensajes de ese número. Las conversaciones guardadas no se tocan.
+Sale: Meta sigue mandando a erplora.com los mensajes de ese número, pero mientras está desconectado erplora.com los descarta y no se recuperan al reconectar; al volver a conectar, entran los nuevos. Las conversaciones guardadas no se tocan.
 Si falla: el bloque dice el motivo y ofrece **Reintentar**.
-Implicados: REC_WA_CITA-F01, REC_WA_MESA-F01, HUB-F261, HUB-F262, HUB_SHELL-F37, HUB_SHELL-F171, HUB_SHELL-F172
-Pendiente de enlazar: saas — pasarela de WhatsApp: baja del número y renovación del token
+Implicados: REC_WA_CITA-F01, REC_WA_MESA-F01, HUB-F261, HUB-F262, HUB_SHELL-F37, HUB_SHELL-F171, HUB_SHELL-F172, SAAS_WHATSAPP_INBOX-F04, SAAS_WHATSAPP_INBOX-F05
 QA: WA-01, WA-09
 
 ### WHATSAPP_INBOX-F03 Recibir un mensaje en la bandeja
@@ -49,8 +47,7 @@ Pasos:
 Entra: cada mensaje que el hub recoge de la plataforma (número de la persona, texto, objeto de Meta, si es entrante o la respuesta del dueño, si es en vivo o historial).
 Sale: una conversación por número y el mensaje guardado; aviso público de mensaje recibido (`whatsapp_inbox.message.received`) que dispara F04; el aviso del hub con el mismo mensaje es el que arranca las recetas (F21, F24). El aviso público también puede arrancar las automatizaciones que monta el negocio en Automatizaciones (la tarjeta de mensajes sin contestar, FLOWS-F04); Automatizaciones avisa de las que saltan también con los mensajes propios o el historial y las repara (FLOWS-F11).
 Si falla: con el cupo del mes agotado el mensaje entrante en vivo no se guarda y nada lo dice en la bandeja (ver F13), pero las respuestas automáticas corren igual: gastan un turno del asistente y pueden reservar; lo que no sale es su respuesta; si el hub está apagado los mensajes esperan en la plataforma.
-Implicados: FLOWS-F04, FLOWS-F11, REC_WA_CITA-F02, REC_WA_MESA-F02, HUB-F263, HUB-F264
-Pendiente de enlazar: saas — pasarela de WhatsApp: recibe de Meta y aparca por hub
+Implicados: FLOWS-F04, FLOWS-F11, REC_WA_CITA-F02, REC_WA_MESA-F02, HUB-F263, HUB-F264, SAAS_WHATSAPP_INBOX-F07
 QA: WA-02, WA-08
 
 ### WHATSAPP_INBOX-F04 Reconocer a la clienta por su número
@@ -177,7 +174,7 @@ Pasos:
 Entra: el aviso de ficha anonimizada (Clientes).
 Sale: lo mismo que F10, para cada conversación de la ficha.
 Si falla: el aviso se reintenta hasta 8 veces (unos 4 minutos) y, si sigue fallando, queda en «Eventos caídos» del hub con los datos dentro hasta que alguien lo reenvía o lo cierra; repetirlo no cambia nada.
-Implicados: CUSTOMERS-F16, HUB-F249, HUB-F250
+Implicados: CUSTOMERS-F16, HUB-F249, HUB-F250, SAAS_WHATSAPP_INBOX-F21
 QA: WA-06 (discrepa), L-11
 
 ### WHATSAPP_INBOX-F12 Unir dos fichas de la misma clienta
@@ -207,6 +204,5 @@ Pasos:
 Entra: el tope y el gasto del mes que manda la plataforma.
 Sale: nada; no se edita desde el hub.
 Si falla: si la pestaña no puede leerlo, dice que no está disponible; al agotar el cupo la plataforma rechaza los envíos: el envío cae al momento a «Eventos caídos» del hub, donde se reenvía a mano, y la bandeja deja de guardar lo que entra. Un freno de tasa de la plataforma se confunde con el cupo agotado y acaba igual.
-Implicados: REC_WA_CITA-F02, REC_WA_MESA-F02, HUB-F162, HUB-F263, HUB-F266, HUB-F272, HUB_SHELL-F46, HUB_SHELL-F47
-Pendiente de enlazar: saas — cuenta de mensajes facturables y tope del plan
+Implicados: REC_WA_CITA-F02, REC_WA_MESA-F02, HUB-F162, HUB-F263, HUB-F266, HUB-F272, HUB_SHELL-F46, HUB_SHELL-F47, SAAS_DASHBOARD-F108, SAAS_WHATSAPP_INBOX-F13, SAAS_WHATSAPP_INBOX-F14
 QA: WA-03
