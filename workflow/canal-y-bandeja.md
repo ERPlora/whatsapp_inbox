@@ -177,7 +177,7 @@ Pasos:
 Entra: el aviso de ficha anonimizada (Clientes).
 Sale: lo mismo que F10, para cada conversación de la ficha.
 Si falla: el aviso se reintenta hasta 8 veces (unos 4 minutos) y, si sigue fallando, queda en «Eventos caídos» del hub con los datos dentro hasta que alguien lo reenvía o lo cierra; repetirlo no cambia nada.
-Implicados: CUSTOMERS-F16
+Implicados: CUSTOMERS-F16, HUB-F249, HUB-F250
 QA: WA-06 (discrepa), L-11
 
 ### WHATSAPP_INBOX-F12 Unir dos fichas de la misma clienta
