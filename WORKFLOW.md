@@ -182,7 +182,7 @@ una plantilla (todas mandan texto libre dentro de las 24 h).
 
 | Elemento (Meta) | Traer (F28) | Crear (F29) | Editar (F30) | Enviar (hub: paso notificar) |
 |---|---|---|---|---|
-| Nombre (minúsculas, `_`) | hecho | hecho (Meta valida) | parcial: el campo se deja cambiar; Meta identifica por nombre + idioma, efecto sin confirmar | — |
+| Nombre (minúsculas, `_`) | hecho | hecho (lo valida erplora.com antes de llamar a Meta: `invalid_name`) | parcial: el campo se deja cambiar; Meta identifica por nombre + idioma, efecto sin confirmar | — |
 | Idioma | hecho | parcial: texto libre, sin selector de códigos de Meta | parcial: igual | — |
 | Categoría Utilidad · Marketing · Autenticación | hecho | hecho (en pantalla salen en inglés: Utility, Marketing, Authentication) | hecho | — |
 | Autenticación (código, caducidad, botón copiar/OTP) | no hecho: se nombra en el aviso | no hecho: se elige la categoría pero sin su estructura | no hecho | no hecho |
@@ -192,7 +192,7 @@ una plantilla (todas mandan texto libre dentro de las 24 h).
 | Cabecera vídeo (MP4 ≤ 16 MB) | hecho | hecho | hecho | hecho (por enlace) |
 | Cabecera documento (PDF ≤ 100 MB) | hecho | hecho | hecho | hecho, con nombre de archivo |
 | Cabecera ubicación | no hecho: se nombra | no hecho | no hecho | sin confirmar |
-| Cuerpo (≤ 1024) | hecho | hecho | hecho | hecho |
+| Cuerpo (≤ 1024) | hecho | parcial: ni el panel ni erplora.com comprueban los 1024; el rechazo lo da Meta y llega con la frase genérica de F29 | parcial: igual | hecho |
 | Variables numeradas `{{1}}` + ejemplos | hecho | hecho | hecho | hecho |
 | Variables con nombre `{{nombre}}` + ejemplos | hecho | hecho | hecho | sin confirmar |
 | Pie (≤ 60) | hecho | no hecho: sin campo | no hecho: se conserva | — (fijo) |

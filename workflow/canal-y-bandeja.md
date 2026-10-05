@@ -31,7 +31,7 @@ Pasos:
 2. Si WhatsApp retiró el permiso, el número aparece con «Hay que reconectar» y la explicación; pulsar **Volver a conectar WhatsApp** y repetir F01.
 3. Se comprueba que el bloque vuelve a «Conectado» y que un mensaje nuevo llega.
 Entra: el número elegido.
-Sale: la plataforma deja de recoger (o vuelve a recoger) los mensajes de ese número. Las conversaciones guardadas no se tocan.
+Sale: Meta sigue mandando a erplora.com los mensajes de ese número, pero mientras está desconectado erplora.com los descarta y no se recuperan al reconectar; al volver a conectar, entran los nuevos. Las conversaciones guardadas no se tocan.
 Si falla: el bloque dice el motivo y ofrece **Reintentar**.
 Implicados: REC_WA_CITA-F01, REC_WA_MESA-F01, HUB-F261, HUB-F262, HUB_SHELL-F37, HUB_SHELL-F171, HUB_SHELL-F172
 Pendiente de enlazar: saas — pasarela de WhatsApp: baja del número y renovación del token
