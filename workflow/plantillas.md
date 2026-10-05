@@ -14,9 +14,9 @@ Pasos:
 2. Desplegar **Plantillas de Meta**: **Estado en Meta** dice «Sin enviar a Meta», «En revisión», «Aprobada», «Rechazada», «Pausada por Meta», «Desactivada por Meta» o «Borrada en WhatsApp Manager».
 3. Pulsar **Editar** (o tocar la fila) en una plantilla: el panel enseña su estado, qué hacer («Puedes enviarla cuando quieras…», «Meta la ha rechazado…») y, si la rechazó, «Motivo de Meta: …».
 Entra: las plantillas guardadas aquí y lo que Meta dice hoy de cada una (por nombre e idioma).
-Sale: el veredicto nuevo guardado en cada plantilla que cambió; una que Meta tuvo y ya no lista queda como «Borrada en WhatsApp Manager» y no se elimina.
+Sale: el veredicto nuevo guardado en cada plantilla que cambió; una que Meta tuvo y ya no lista queda como «Borrada en WhatsApp Manager» y no se elimina. Automatizaciones lee esta lista para ofrecer las plantillas aprobadas en un paso de mensaje (FLOWS-F15).
 Si falla: «No hemos podido comprobar con Meta si hay veredictos nuevos, así que lo que ves es lo último que sabemos…»; la lista sigue visible.
-Implicados: pendiente
+Implicados: FLOWS-F15
 Pendiente de enlazar: hub — puerta de plantillas de WhatsApp (listar, registrar, subir muestra)
 Pendiente de enlazar: saas — pasarela de WhatsApp: plantillas contra Meta
 QA: WA-04
