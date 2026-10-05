@@ -51,7 +51,7 @@ Pasos:
 6. Pulsar **Añadir** (desactivado mientras falte el nombre, un ejemplo, el archivo o un dato de un botón). Se guarda aquí y se manda a Meta; el panel se cierra y la plantilla encabeza la lista «En revisión».
 Entra: lo que escribe el administrador.
 Sale: la plantilla guardada aquí y registrada en Meta con su veredicto; aviso público de plantilla creada.
-Si falla: la plantilla queda guardada aquí y el panel sigue abierto, ya como edición, con el motivo encima de **Guardar** (por ejemplo «Meta no ha aceptado el nombre…», «Meta necesita un ejemplo para cada hueco…», «Meta no ha contestado…»); guardarla otra vez no la duplica.
+Si falla: la plantilla queda guardada aquí y el panel sigue abierto, ya como edición, con el motivo encima de **Guardar** (por ejemplo «Meta no ha aceptado el nombre…», «Meta necesita un ejemplo para cada hueco…»); si Meta no contesta o rechaza la plantilla por su cuenta, el motivo no llega y sale el genérico «erplora.com no ha querido registrar la plantilla…»; guardarla otra vez no la duplica.
 Implicados: pendiente
 Pendiente de enlazar: hub — puerta de plantillas de WhatsApp (listar, registrar, subir muestra)
 Pendiente de enlazar: saas — pasarela de WhatsApp: plantillas contra Meta

@@ -120,7 +120,7 @@ acuse, la lista con el botón **Ver huecos**, la confirmación, la disculpa o el
 |---|---|---|---|---|
 | WHATSAPP_INBOX-F01 | Conectar el número de WhatsApp del negocio | parcial | comun | canal-y-bandeja |
 | WHATSAPP_INBOX-F02 | Desconectar o volver a conectar el número | hecho | comun | canal-y-bandeja |
-| WHATSAPP_INBOX-F03 | Recibir un mensaje en la bandeja | hecho | comun | canal-y-bandeja |
+| WHATSAPP_INBOX-F03 | Recibir un mensaje en la bandeja | parcial | comun | canal-y-bandeja |
 | WHATSAPP_INBOX-F04 | Reconocer a la clienta por su número | hecho | comun | canal-y-bandeja |
 | WHATSAPP_INBOX-F05 | Leer una conversación | parcial | comun | canal-y-bandeja |
 | WHATSAPP_INBOX-F06 | Ver una foto, una nota de voz o un documento | hecho | comun | canal-y-bandeja |
@@ -249,7 +249,7 @@ una plantilla (todas mandan texto libre dentro de las 24 h).
 | Ficha vinculada, persona asignada | referencia sin copia del dato | Clientes / núcleo | no se copian aquí |
 | Ficha de cliente (nombre, teléfono, origen WhatsApp) | Clientes | Clientes | su «Borrar datos» (avisa a este módulo, F11) |
 | Cita o reserva creada (nombre, teléfono, notas internas) | Citas / Reservas | Citas / Reservas | no se borran: ni Citas ni Reservas escuchan el borrado de datos de la ficha (`appointments/WORKFLOW.md` «Datos»; RESERVATIONS-F22, no hecho) |
-| Texto de los mensajes en el historial de automatizaciones y la cola de salida | hub | hub | no se borra: 90 días (hub#2467, hub#2474, hub#2477) |
+| Texto de los mensajes en el historial de automatizaciones y la cola de salida | hub | hub | el hub vacía lo terminado que nombra la ficha (hub#2467), pero no las copias de los mensajes, que no llevan la ficha (hub#2474, hub#2477): 90 días |
 | Mensajes aparcados, token de Meta, adjuntos en tránsito | SaaS | SaaS | mensajes sin recoger, sin caducidad (saas#1930) |
 | Texto que lee el asistente al contestar | proveedor de IA por el SaaS | SaaS | fuera de este módulo (L-13) |
 | Adjunto descargado en la bandeja | memoria del navegador | — | se suelta al cerrar el hilo |
@@ -346,3 +346,4 @@ lo de abajo está desfasado o contradice al código.
 - `locales/es.json` (`ui.searchTemplates`): «Buscar nombre o categoría…» — la lista de plantillas solo busca por nombre (Plantillas de Meta).
 - `locales/es.json` (`ui.categoryUtility`, `ui.categoryMarketing`, `ui.categoryAuthentication`): las categorías salen en inglés en la pantalla española («Utility», «Authentication»), mientras el aviso de error dice «Elige Utilidad, Marketing o Autenticación» (F29).
 - Oleada 2 (Automatizaciones, 05/10/2026): F14, F15, F17, F18 y F20 dejaban pendiente de enlazar con el módulo Automatizaciones encender, apagar y restaurar una receta de fábrica, «seguir si falla» y «solo si». Son del hub: la pantalla de Ajustes llama directamente a la puerta de recetas del hub (`crates/server/src/flows_api.rs`: activate, deactivate, restore) y `on_error` y `run_if` son del motor. Lo que sí une los dos módulos: Automatizaciones lista, pausa y restaura esas recetas (FLOWS-F02, FLOWS-F03, FLOWS-F06), su «Usar esta» crea una copia desligada que la tarjeta no ve (FLOWS-F05), y esta pantalla solo pregunta por `flows.drafts.list` para saber si enseñar el enlace «Ajustes avanzados en Automatizaciones» (FLOWS-F07); ya no usa `flows.automations.status` (FLOWS-F29).
+- `locales/es.json` (`errors.meta_unreachable`, `errors.meta_template_failed`): «Meta no ha contestado…» y «Meta ha rechazado la plantilla sin decir por qué…» no salen nunca: el hub entrega esos dos fallos de la plataforma como `cloud_rejected` y la pantalla enseña «erplora.com no ha querido registrar la plantilla…» (F29).
