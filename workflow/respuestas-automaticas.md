@@ -17,8 +17,7 @@ Pasos:
 Entra: lo que el hub dice que hay construido; que Citas, Clientes, Servicios y Personal estén instalados y al día.
 Sale: la receta «WhatsApp → cita reservada» y su acompañante «Cita confirmada → WhatsApp» quedan creadas y encendidas; la primera vez, con exactamente los permisos que declaran; si ya existían, conservan los que dejó el dueño (solo si no les queda ninguno vuelven a recibir los de fábrica). La pantalla llama directamente a la puerta de recetas del hub, no al módulo Automatizaciones. Con Automatizaciones instalada, las dos recetas salen en su lista y se pueden pausar desde allí, y esta tarjeta las ve entonces apagadas (FLOWS-F02, FLOWS-F03); «Usar esta» sobre la misma receta en su galería crea una copia desligada que esta tarjeta no ve (FLOWS-F05); y al pie de Ajustes sale el enlace «Ajustes avanzados en Automatizaciones» (FLOWS-F07).
 Si falla: la tarjeta dice el motivo y pone en pausa lo que llegó a encender, pero una receta que falló a mitad puede quedarse con parte de sus permisos, y la siguiente activación la enciende así; sin permiso, «Solo un dueño o un administrador puede activarlo.». Si el hub no ofrece la receta: con Citas instalada y otra aplicación que la receta pide ausente, en pausa o vieja (o Citas vieja), la tarjeta se sustituye por «“Reservar citas” necesita la aplicación …» con **Ver aplicaciones**; sin Citas ni Reservas activas, «Instala Citas o Reservas para que WhatsApp reserve solo»; si están pero el hub no ofrece ninguna receta y no dice por qué, «Actualiza Citas o Reservas para que WhatsApp reserve solo»; y con Citas ausente o en pausa pero Reservas activa, la tarjeta de citas no aparece, sin aviso.
-Implicados: APPOINTMENTS-F06, APPOINTMENTS-F18, FLOWS-F02, FLOWS-F03, FLOWS-F05, FLOWS-F07, REC_WA_CITA-F01
-Pendiente de enlazar: hub — puerta de recetas de fábrica: encender una receta de un módulo con exactamente sus permisos (`crates/server/src/flows_api.rs`, activate)
+Implicados: APPOINTMENTS-F06, APPOINTMENTS-F18, FLOWS-F02, FLOWS-F03, FLOWS-F05, FLOWS-F07, REC_WA_CITA-F01, HUB-F104, HUB-F105
 QA: W-01 (discrepa)
 
 ### WHATSAPP_INBOX-F15 Activar «Reservar mesa»
@@ -34,8 +33,7 @@ Pasos:
 Entra: lo que el hub dice que hay construido; que Reservas y Clientes estén instalados y al día.
 Sale: la receta «WhatsApp → mesa reservada» creada, encendida y con exactamente sus permisos. No lleva acompañante. Como en F14, la enciende la puerta de recetas del hub; Automatizaciones la lista y la puede pausar (FLOWS-F02, FLOWS-F03), su «Usar esta» crea una copia desligada que esta tarjeta no ve (FLOWS-F05), y el enlace «Ajustes avanzados en Automatizaciones» lleva allí (FLOWS-F07).
 Si falla: igual que F14, nombrando Reservas o Clientes.
-Implicados: FLOWS-F02, FLOWS-F03, FLOWS-F05, FLOWS-F07, RESERVATIONS-F17, REC_WA_MESA-F01
-Pendiente de enlazar: hub — puerta de recetas de fábrica: encender una receta de un módulo con exactamente sus permisos (`crates/server/src/flows_api.rs`, activate)
+Implicados: FLOWS-F02, FLOWS-F03, FLOWS-F05, FLOWS-F07, RESERVATIONS-F17, REC_WA_MESA-F01, HUB-F104, HUB-F105
 QA: WR-01
 
 ### WHATSAPP_INBOX-F16 Decidir si las reservas por WhatsApp se confirman solas
@@ -65,8 +63,7 @@ Pasos:
 Entra: la tarjeta elegida.
 Sale: se apagan primero los acompañantes y la receta de la tarjeta la última, para que nunca quede una respuesta encendida detrás de una tarjeta apagada. Apagar es pausar, por la puerta de recetas del hub: la receta sigue en la lista de Automatizaciones como «En pausa», y pausarla desde allí deja esta tarjeta apagada igual (FLOWS-F03).
 Si falla: la tarjeta dice el motivo y se repinta con lo que de verdad sigue encendido.
-Implicados: FLOWS-F03, REC_WA_CITA-F01, REC_WA_MESA-F01
-Pendiente de enlazar: hub — puerta de recetas de fábrica: apagar (pausar, nunca borrar) una receta de un módulo (`crates/server/src/flows_api.rs`, deactivate)
+Implicados: FLOWS-F03, REC_WA_CITA-F01, REC_WA_MESA-F01, HUB-F106
 QA: ninguno
 
 ### WHATSAPP_INBOX-F18 Actualizar una respuesta automática a su versión mejorada
@@ -81,8 +78,7 @@ Pasos:
 Entra: qué recetas de la tarjeta marca el hub como desfasadas.
 Sale: solo esas recetas sustituidas, conservando su encendido e historial. Es la misma puerta de restaurar del hub que usa «Restaurar la de fábrica» en Automatizaciones (FLOWS-F06).
 Si falla: «Esta respuesta automática ya no existe aquí…» (volver a activarla) o «No se pudo actualizar…»; el aviso sigue solo para lo que no se actualizó.
-Implicados: FLOWS-F06, REC_WA_CITA-F01, REC_WA_MESA-F01
-Pendiente de enlazar: hub — puerta de recetas de fábrica: sustituir una receta por la versión actual del módulo, conservando encendido e historial (`crates/server/src/flows_api.rs`, restore)
+Implicados: FLOWS-F06, REC_WA_CITA-F01, REC_WA_MESA-F01, HUB-F104, HUB-F107
 QA: ninguno
 
 ### WHATSAPP_INBOX-F19 Elegir el hueco escribiendo en vez de tocando
@@ -97,7 +93,7 @@ Pasos:
 Entra: la última lista ofrecida a ese número (solo 24 h).
 Sale: la reserva (F21 o F24); la lista se vacía en cuanto reserva, anula o mueve. Cuando la clienta toca un botón, el hub dice en el mensaje a qué pregunta y de qué automatización contesta: es lo que comprueban las recetas y lo que Automatizaciones deja elegir en «Elige la pregunta» (FLOWS-F14) y vigila en sus avisos de revisión (FLOWS-F11).
 Si falla: si guardar la lista falla, ella recibe su respuesta igual y la próxima vez se le vuelve a ofrecer.
-Implicados: APPOINTMENTS-F02, FLOWS-F11, FLOWS-F14, RESERVATIONS-F05, REC_WA_CITA-F05, REC_WA_MESA-F05
+Implicados: APPOINTMENTS-F02, FLOWS-F11, FLOWS-F14, RESERVATIONS-F05, REC_WA_CITA-F05, REC_WA_MESA-F05, HUB-F265
 QA: W-02
 
 ### WHATSAPP_INBOX-F20 Cuando el asistente no puede contestar
@@ -113,8 +109,7 @@ Pasos:
 Entra: el resultado del paso del asistente.
 Sale: una disculpa y la marca de atención.
 Si falla: si la marca no se puede poner, la disculpa sale igual y el mensaje sigue sin leer en la bandeja.
-Implicados: REC_WA_CITA-F09, REC_WA_MESA-F09
-Pendiente de enlazar: hub — motor de automatizaciones: «seguir si falla» (`on_error`) y «solo si» (`run_if`) de cada paso de la receta
+Implicados: REC_WA_CITA-F09, REC_WA_MESA-F09, HUB-F95, HUB-F97
 QA: ninguno
 
 ### WHATSAPP_INBOX-F21 La clienta pide cita por WhatsApp
