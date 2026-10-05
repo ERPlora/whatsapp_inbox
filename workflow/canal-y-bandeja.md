@@ -15,9 +15,9 @@ Pasos:
 3. Iniciar sesión, elegir conectar la app de WhatsApp Business, escribir el número y escanear el QR con la app del móvil; aceptar compartir el historial.
 4. El bloque pasa a «Conectado» con el número, la etiqueta «App de WhatsApp Business» y **Desconectar**. Se comprueba escribiendo al número desde otro móvil (F03).
 Entra: el código que devuelve Meta tras el QR.
-Sale: el número queda conectado en la plataforma (el hub solo sabe cuál es); empiezan a llegar los mensajes y el historial de los últimos meses.
+Sale: el número queda conectado en la plataforma (el hub solo sabe cuál es); empiezan a llegar los mensajes y el historial de los últimos meses. Por ese número salen también los WhatsApp que manda una automatización del negocio (FLOWS-F15).
 Si falla: el bloque dice el motivo («La conexión se canceló…», «No se pudo abrir la ventana de Facebook…», «Solo un dueño o un administrador…») y deja reintentar; un hub viejo ve «Este hub es demasiado antiguo para conectar el número desde aquí…».
-Implicados: REC_WA_CITA-F01, REC_WA_MESA-F01
+Implicados: FLOWS-F15, REC_WA_CITA-F01, REC_WA_MESA-F01
 Pendiente de enlazar: hub — bloque «Tu número» del shell (abre la ventana de Meta y pasa el código a la plataforma)
 Pendiente de enlazar: saas — pasarela de WhatsApp: canjea el código, guarda el token y suscribe el número
 QA: WA-01, WA-07
@@ -49,9 +49,9 @@ Pasos:
 2. En pocos segundos su conversación aparece arriba en **Bandeja de entrada** con **Sin leer** sumado y la hora en **Último mensaje**; si la bandeja está abierta, se refresca sola.
 3. Un mensaje que llega dos veces aparece una sola vez. Los mensajes del historial que trae la conexión aparecen con la hora en que se dijeron y no suman en **Sin leer**.
 Entra: cada mensaje que el hub recoge de la plataforma (número de la persona, texto, objeto de Meta, si es entrante o la respuesta del dueño, si es en vivo o historial).
-Sale: una conversación por número y el mensaje guardado; aviso público de mensaje recibido (`whatsapp_inbox.message.received`) que dispara F04; el aviso del hub con el mismo mensaje es el que arranca las recetas (F21, F24).
+Sale: una conversación por número y el mensaje guardado; aviso público de mensaje recibido (`whatsapp_inbox.message.received`) que dispara F04; el aviso del hub con el mismo mensaje es el que arranca las recetas (F21, F24). El aviso público también puede arrancar las automatizaciones que monta el negocio en Automatizaciones (la tarjeta de mensajes sin contestar, FLOWS-F04); Automatizaciones avisa de las que saltan también con los mensajes propios o el historial y las repara (FLOWS-F11).
 Si falla: con el cupo del mes agotado el mensaje entrante en vivo no se guarda y nada lo dice en la bandeja (ver F13); si el hub está apagado los mensajes esperan en la plataforma.
-Implicados: REC_WA_CITA-F02, REC_WA_MESA-F02
+Implicados: FLOWS-F04, FLOWS-F11, REC_WA_CITA-F02, REC_WA_MESA-F02
 Pendiente de enlazar: hub — recogida periódica de mensajes de WhatsApp de la plataforma y su aviso al núcleo
 Pendiente de enlazar: saas — pasarela de WhatsApp: recibe de Meta y aparca por hub
 QA: WA-02, WA-08
