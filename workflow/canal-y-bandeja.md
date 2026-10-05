@@ -13,12 +13,11 @@ Pasos:
 1. Abrir **Bandeja de WhatsApp → Ajustes**; el bloque **Tu número** dice que no hay número.
 2. Pulsar **Conectar WhatsApp**: se abre la ventana de Facebook.
 3. Iniciar sesión, elegir conectar la app de WhatsApp Business, escribir el número y escanear el QR con la app del móvil; aceptar compartir el historial.
-4. El bloque pasa a «Conectado» con el número, la etiqueta «App de WhatsApp Business» y **Desconectar**. Se comprueba escribiendo al número desde otro móvil (F03).
+4. El bloque pasa a «Conectado» con el número y **Desconectar**; la etiqueta «App de WhatsApp Business» no sale, porque la plataforma no dice al hub si el número viene de la app. Se comprueba escribiendo al número desde otro móvil (F03).
 Entra: el código que devuelve Meta tras el QR.
 Sale: el número queda conectado en la plataforma (el hub solo sabe cuál es); empiezan a llegar los mensajes y el historial de los últimos meses. Por ese número salen también los WhatsApp que manda una automatización del negocio (FLOWS-F15).
-Si falla: el bloque dice el motivo («La conexión se canceló…», «No se pudo abrir la ventana de Facebook…», «Solo un dueño o un administrador…») y deja reintentar; un hub viejo ve «Este hub es demasiado antiguo para conectar el número desde aquí…».
-Implicados: FLOWS-F15, REC_WA_CITA-F01, REC_WA_MESA-F01
-Pendiente de enlazar: hub — bloque «Tu número» del shell (abre la ventana de Meta y pasa el código a la plataforma)
+Si falla: el bloque dice el motivo («La conexión se canceló…», «No se pudo abrir la ventana de Facebook…», «Solo un dueño o un administrador…») y deja reintentar; si falla la plataforma o Meta (WhatsApp no configurado, Meta no contesta o rechaza, sin cuenta de WhatsApp Business o sin permiso de Facebook), el motivo no llega y sale el genérico «Algo ha fallado al conectar. Inténtalo de nuevo en un minuto.»; un hub viejo ve «Este hub es demasiado antiguo para conectar el número desde aquí…».
+Implicados: FLOWS-F15, REC_WA_CITA-F01, REC_WA_MESA-F01, HUB-F260, HUB-F261, HUB_SHELL-F170
 Pendiente de enlazar: saas — pasarela de WhatsApp: canjea el código, guarda el token y suscribe el número
 QA: WA-01, WA-07
 
@@ -34,13 +33,12 @@ Pasos:
 Entra: el número elegido.
 Sale: la plataforma deja de recoger (o vuelve a recoger) los mensajes de ese número. Las conversaciones guardadas no se tocan.
 Si falla: el bloque dice el motivo y ofrece **Reintentar**.
-Implicados: REC_WA_CITA-F01, REC_WA_MESA-F01
-Pendiente de enlazar: hub — bloque «Tu número» del shell (desconectar y reconectar)
+Implicados: REC_WA_CITA-F01, REC_WA_MESA-F01, HUB-F261, HUB-F262, HUB_SHELL-F37, HUB_SHELL-F171, HUB_SHELL-F172
 Pendiente de enlazar: saas — pasarela de WhatsApp: baja del número y renovación del token
 QA: WA-01, WA-09
 
 ### WHATSAPP_INBOX-F03 Recibir un mensaje en la bandeja
-Estado: hecho
+Estado: parcial — con el cupo del mes agotado las respuestas automáticas corren igual (gastan un turno del asistente y pueden reservar) aunque su respuesta no sale y la bandeja no guarda el mensaje
 Vertical: comun
 Actor: cliente, sistema
 Pantalla: Bandeja de entrada
@@ -50,9 +48,8 @@ Pasos:
 3. Un mensaje que llega dos veces aparece una sola vez. Los mensajes del historial que trae la conexión aparecen con la hora en que se dijeron y no suman en **Sin leer**.
 Entra: cada mensaje que el hub recoge de la plataforma (número de la persona, texto, objeto de Meta, si es entrante o la respuesta del dueño, si es en vivo o historial).
 Sale: una conversación por número y el mensaje guardado; aviso público de mensaje recibido (`whatsapp_inbox.message.received`) que dispara F04; el aviso del hub con el mismo mensaje es el que arranca las recetas (F21, F24). El aviso público también puede arrancar las automatizaciones que monta el negocio en Automatizaciones (la tarjeta de mensajes sin contestar, FLOWS-F04); Automatizaciones avisa de las que saltan también con los mensajes propios o el historial y las repara (FLOWS-F11).
-Si falla: con el cupo del mes agotado el mensaje entrante en vivo no se guarda y nada lo dice en la bandeja (ver F13); si el hub está apagado los mensajes esperan en la plataforma.
-Implicados: FLOWS-F04, FLOWS-F11, REC_WA_CITA-F02, REC_WA_MESA-F02
-Pendiente de enlazar: hub — recogida periódica de mensajes de WhatsApp de la plataforma y su aviso al núcleo
+Si falla: con el cupo del mes agotado el mensaje entrante en vivo no se guarda y nada lo dice en la bandeja (ver F13), pero las respuestas automáticas corren igual: gastan un turno del asistente y pueden reservar; lo que no sale es su respuesta; si el hub está apagado los mensajes esperan en la plataforma.
+Implicados: FLOWS-F04, FLOWS-F11, REC_WA_CITA-F02, REC_WA_MESA-F02, HUB-F263, HUB-F264
 Pendiente de enlazar: saas — pasarela de WhatsApp: recibe de Meta y aparca por hub
 QA: WA-02, WA-08
 
@@ -101,8 +98,7 @@ Pasos:
 Entra: el adjunto, pedido a la plataforma solo al abrir o al pulsar.
 Sale: nada; el archivo solo se guarda mientras el hilo está abierto.
 Si falla: «No se ha podido cargar el adjunto.» con **Reintentar**; en un hub sin esa puerta, «Este adjunto aún no se puede ver aquí…».
-Implicados: pendiente
-Pendiente de enlazar: hub — puerta de adjuntos de WhatsApp
+Implicados: HUB-F245, HUB-F267, HUB_SHELL-F130
 QA: WA-10 (discrepa)
 
 ### WHATSAPP_INBOX-F07 Asignar una conversación a alguien del equipo
@@ -133,8 +129,7 @@ Pasos:
 Entra: el eco de lo que el dueño escribió en el móvil.
 Sale: el mensaje en el hilo correcto; la marca de atención quitada.
 Si falla: si el hub es antiguo y no distingue el eco, la respuesta podría no aparecer (sin confirmar en hubs actuales).
-Implicados: REC_WA_CITA-F09, REC_WA_MESA-F09
-Pendiente de enlazar: hub — recogida de los ecos del móvil y del historial
+Implicados: REC_WA_CITA-F09, REC_WA_MESA-F09, HUB-F264
 QA: W-05, WA-02
 
 ### WHATSAPP_INBOX-F09 Ver quién espera respuesta
@@ -151,8 +146,7 @@ Pasos:
 Entra: las conversaciones marcadas por la receta.
 Sale: nada nuevo; la marca solo la quita la respuesta del negocio (ni el siguiente mensaje de la clienta ni el historial).
 Si falla: si la campana no se puede leer, el hub no la pinta; la marca sigue en la bandeja.
-Implicados: REC_WA_CITA-F09, REC_WA_MESA-F09
-Pendiente de enlazar: hub — campana de avisos del shell
+Implicados: REC_WA_CITA-F09, REC_WA_MESA-F09, HUB_SHELL-F61, HUB_SHELL-F64
 QA: ninguno
 
 ### WHATSAPP_INBOX-F10 Borrar los datos de un número sin ficha
@@ -168,8 +162,7 @@ Pasos:
 Entra: la conversación elegida.
 Sale: mensajes, nombre, número, huecos ofrecidos y solicitudes antiguas vaciados; conversación cerrada y borrada. Si vuelve a escribir, empieza una conversación nueva.
 Si falla: «No se pudieron borrar los datos de este número» (o el motivo) en el panel; el hilo sigue abierto.
-Implicados: pendiente
-Pendiente de enlazar: hub — borrar del historial interno lo que nombra a la persona
+Implicados: HUB-F251
 QA: WA-06 (discrepa), L-11
 
 ### WHATSAPP_INBOX-F11 Borrar los datos de una clienta desde su ficha
@@ -183,8 +176,8 @@ Pasos:
 3. Eliminar una ficha sin borrar sus datos no toca las conversaciones.
 Entra: el aviso de ficha anonimizada (Clientes).
 Sale: lo mismo que F10, para cada conversación de la ficha.
-Si falla: el aviso se reintenta; repetirlo no cambia nada.
-Implicados: CUSTOMERS-F16
+Si falla: el aviso se reintenta hasta 8 veces (unos 4 minutos) y, si sigue fallando, queda en «Eventos caídos» del hub con los datos dentro hasta que alguien lo reenvía o lo cierra; repetirlo no cambia nada.
+Implicados: CUSTOMERS-F16, HUB-F249, HUB-F250
 QA: WA-06 (discrepa), L-11
 
 ### WHATSAPP_INBOX-F12 Unir dos fichas de la misma clienta
@@ -197,7 +190,7 @@ Pasos:
 2. Las conversaciones de la ficha absorbida pasan a la que queda, sin tocar nada más.
 Entra: el aviso de fichas unidas (Clientes).
 Sale: el vínculo de las conversaciones corregido.
-Si falla: el aviso se reintenta; repetirlo no cambia nada.
+Si falla: el aviso se reintenta hasta 8 veces (unos 4 minutos) y, si sigue fallando, queda en «Eventos caídos» del hub con los datos dentro hasta que alguien lo reenvía o lo cierra; repetirlo no cambia nada.
 Implicados: CUSTOMERS-F13
 QA: ninguno
 
@@ -208,13 +201,12 @@ Actor: administrador
 Pantalla: Hub: Plan
 Pasos:
 1. Abrir la pestaña **Plan** del módulo.
-2. Ver los mensajes gastados este mes frente al tope del plan; los dos números los pone la plataforma.
+2. Ver los mensajes gastados este mes frente al tope del plan; los dos números los pone la plataforma y el hub los copia una vez al día (y al arrancar): el consumo puede ir hasta 24 h por detrás, y justo tras instalar el módulo no hay tope hasta la siguiente vuelta.
 3. Al llegar al tope, la pestaña dice «Has consumido todo lo que incluye tu plan este mes.».
 4. Al cambiar de mes el gastado vuelve a cero aunque la plataforma aún no haya hablado.
 Entra: el tope y el gasto del mes que manda la plataforma.
 Sale: nada; no se edita desde el hub.
-Si falla: si la pestaña no puede leerlo, dice que no está disponible; al agotar el cupo la plataforma rechaza los envíos (la receta lo deja anotado en su historial) y la bandeja deja de guardar lo que entra.
-Implicados: REC_WA_CITA-F02, REC_WA_MESA-F02
-Pendiente de enlazar: hub — pestaña Plan del shell
+Si falla: si la pestaña no puede leerlo, dice que no está disponible; al agotar el cupo la plataforma rechaza los envíos: el envío cae al momento a «Eventos caídos» del hub, donde se reenvía a mano, y la bandeja deja de guardar lo que entra. Un freno de tasa de la plataforma se confunde con el cupo agotado y acaba igual.
+Implicados: REC_WA_CITA-F02, REC_WA_MESA-F02, HUB-F162, HUB-F263, HUB-F266, HUB-F272, HUB_SHELL-F46, HUB_SHELL-F47
 Pendiente de enlazar: saas — cuenta de mensajes facturables y tope del plan
 QA: WA-03
