@@ -65,10 +65,8 @@ MANIFEST = json.loads((MODULE_DIR / "module.json").read_text())
 # without the schema, or a CI run with no hub at all, is RED; only a bare local clone skips loudly.
 HUB_DECLARED = os.environ.get("ERPLORA_HUB_DIR", "").strip()
 HUB_SCHEMA = (
-    (pathlib.Path(HUB_DECLARED) if HUB_DECLARED else MODULE_DIR.parents[2] / "hub")
-    / "schemas"
-    / "flow.schema.json"
-)
+    pathlib.Path(HUB_DECLARED) if HUB_DECLARED else MODULE_DIR.parents[2] / "hub"
+) / "schemas" / "flow.schema.json"
 SCHEMA_REQUIRED = bool(HUB_DECLARED) or bool(os.environ.get("CI", "").strip())
 WORKSPACE_MODULES = MODULE_DIR.parent
 
@@ -203,9 +201,7 @@ def family_trigger_problems(name, doc, families):
     want = FAMILY_TRIGGERS.get(family_of(name))
     if want is None:
         return problems  # already reported above; judging it against nothing would say nothing
-    events = {
-        t.get("event") for t in doc.get("triggers", []) if t.get("kind") == "event"
-    }
+    events = {t.get("event") for t in doc.get("triggers", []) if t.get("kind") == "event"}
     if events != {want}:
         problems.append(
             f"{name} wakes up for {sorted(e for e in events if e)} and its family is declared to "
@@ -246,7 +242,7 @@ WHEN_TIME = "start_time_label"
 def confirmation_notice_problems(name, doc):
     """The salon confirms, and the CUSTOMER is told — to the number the DIARY holds.
 
-    Four marks, and each one is a way the same silence comes back.
+    Seven marks, and each one is a way the same silence — or the wrong recipient — comes back.
 
     1. **Something is actually sent.** This is whatsapp_inbox#125 word for word: the salon taps
        «Confirm» in the Agenda and nothing reaches her. A family that wakes on the confirmation
@@ -317,15 +313,15 @@ def confirmation_notice_problems(name, doc):
     phones = {f"steps.{r.get('id')}.{DIARY_PHONE}" for r in readers}
     for notify in notifies:
         to = notify.get("to") or {}
-        sent = (to.get("params") or {}).get(PHONE_FILTER)
-        if to.get("query") != CONVERSATIONS_READ or sent not in phones:
+        sent = (to.get("params") or {}).get(PHONE_PARAM)
+        if to.get("query") != THREAD_BY_NUMBER or sent not in phones:
             problems.append(
                 f"{name} step `{notify.get('id')}` addresses its message through "
-                f"`{to.get('query')}` / `{PHONE_FILTER}` = {sent!r}, and not through "
-                f"`{CONVERSATIONS_READ}` keyed on {sorted(phones) or 'the appointment read'}: the "
+                f"`{to.get('query')}` / `{PHONE_PARAM}` = {sent!r}, and not through "
+                f"`{THREAD_BY_NUMBER}` keyed on {sorted(phones) or 'the appointment read'}: the "
                 f"number the appointment was booked under is the only one in this run the salon "
-                f"vouched for. Anything else picks the conversation by something the salon never "
-                f"said was hers"
+                f"vouched for, and only an EXACT match on it is hers. Anything else picks the "
+                f"conversation by something the salon never said was hers"
             )
 
     guarded = {
@@ -349,28 +345,87 @@ def confirmation_notice_problems(name, doc):
             continue
         problems.append(
             f"{name} step `{reader.get('id')}` reads the appointment and no `condition` demands "
-            f'`{{"{found}": {{"eq": true}}}}`: when the read finds NO row — the appointment '
+            f"`{{\"{found}\": {{\"eq\": true}}}}`: when the read finds NO row — the appointment "
             f"was deleted between the confirmation and the run, and the outbox delivers "
             f"at-least-once — `result: first` still answers, only without the row's fields. A path "
-            f'that resolves to nothing is `null` (`flows/def.rs::resolve`), `json_eq(null, "")` '
-            f'is false, so the `neq: ""` guard above answers TRUE and lets the run through. The '
-            f"phone then travels as `null`, which the list engine treats as ABSENT "
-            f"(`queries.rs`: `p.get(k).is_some_and(|v| !v.is_null())`), the filter is dropped "
-            f"altogether and `{CONVERSATIONS_READ}` answers the first conversation of the hub. It "
-            f"is the `%%` of mark 4 by another road: `flow.recipient_ambiguous` where there are "
-            f"several chats, and a confirmation with an empty service and an empty professional "
-            f"delivered to the wrong customer where there is one"
+            f"that resolves to nothing is `null` (`flows/def.rs::resolve`), `json_eq(null, \"\")` "
+            f"is false, so the `neq: \"\"` guard above answers TRUE and lets the run through. The "
+            f"phone then travels as `null`, and the run only stops later, on a step that blames "
+            f"the number or the conversation for an appointment that no longer exists: the reason "
+            f"the salon reads in the automation's history is the wrong one, and the day, the "
+            f"service and the professional this run would write are all empty"
         )
     for path in sorted(phones - guarded):
         problems.append(
-            f"{name} sends to `{PHONE_FILTER}` = `{path}` and no `condition` step demands "
-            f'`{{"{path}": {{"neq": ""}}}}`: `contact_phone` is declared `op: like`, '
-            f"so an appointment the salon booked over the counter — no phone on the card — goes "
-            f"out as `%%` and matches EVERY conversation in the inbox. The lookup answers "
-            f"`found: true` and the confirmation is delivered to a stranger, or the run dies with "
-            f"`flow.recipient_ambiguous` and nobody can read why. Asking `found` alone is green "
-            f"over both"
+            f"{name} sends to `{PHONE_PARAM}` = `{path}` and no `condition` step demands "
+            f"`{{\"{path}\": {{\"neq\": \"\"}}}}`: an appointment the salon booked over the "
+            f"counter — no phone on the card — then ends the run on the «not an international "
+            f"number» step, and the automation's history reads as if the salon had typed a "
+            f"broken number when it typed none. Each reason stops the run on its own step"
         )
+
+    # Mark 7 — whatsapp_inbox#279: her conversation is found by her EXACT number, or not at all.
+    for step in steps:
+        if step.get("kind") == "query" and step.get("query") == CONVERSATIONS_READ:
+            problems.append(
+                f"{name} step `{step.get('id')}` looks her conversation up with "
+                f"`{CONVERSATIONS_READ}`, whose `contact_phone` filter is «contains»: `600111` — "
+                f"an old card or a phone typed by hand in the diary — finds `+34600111222`, "
+                f"somebody else's chat, and the confirmation goes to her (whatsapp_inbox#279). "
+                f"The lookup is `{THREAD_BY_NUMBER}`, which only matches the exact E.164 number"
+            )
+    lookups = [
+        s
+        for s in steps
+        if s.get("kind") == "query"
+        and s.get("query") == THREAD_BY_NUMBER
+        and (s.get("params") or {}).get(PHONE_PARAM) in phones
+    ]
+    if notifies and not lookups:
+        problems.append(
+            f"{name} sends the confirmation without first asking `{THREAD_BY_NUMBER}` about "
+            f"{sorted(phones) or 'the appointment phone'}: nothing in the run says whether that "
+            f"phone is an international number, or whether she has a conversation to be written "
+            f"to, so the only place it can stop is a refusal in the kernel nobody reads as a reason"
+        )
+    # Where each guard lives: the condition steps, in order, that demand a given clause. A guard
+    # placed after the notify guards nothing, and two reasons sharing one step read as one.
+    first_notify = min(
+        (i for i, s in enumerate(steps) if s.get("kind") == "notify"), default=len(steps)
+    )
+    guard_steps = {}
+    for i, step in enumerate(steps[:first_notify]):
+        if step.get("kind") != "condition":
+            continue
+        for path, clause in (step.get("when") or {}).items():
+            if isinstance(clause, dict) and (clause.get("eq") is True or clause.get("neq") == ""):
+                guard_steps.setdefault(path, set()).add(step.get("id"))
+    for lookup in lookups:
+        reasons = [(lookup["params"][PHONE_PARAM], "the appointment has no phone")]
+        for flag, reason in (
+            (PHONE_IS_INTERNATIONAL, "the appointment's phone is not an E.164 number"),
+            (HAS_THREAD, "she has no WhatsApp conversation on that number"),
+        ):
+            path = f"steps.{lookup.get('id')}.{flag}"
+            reasons.append((path, reason))
+            if path in guard_steps:
+                continue
+            problems.append(
+                f"{name} step `{lookup.get('id')}` answers `{flag}` and no `condition` before the "
+                f"message demands `{{\"{path}\": {{\"eq\": true}}}}`: when {reason}, the run "
+                f"has to stop on a step of its own — that is what the salon reads in the "
+                f"automation's history as the reason the «Confirmed!» did not go out"
+            )
+        for i, (path, reason) in enumerate(reasons):
+            for other_path, other_reason in reasons[i + 1 :]:
+                shared = guard_steps.get(path, set()) & guard_steps.get(other_path, set())
+                if shared:
+                    problems.append(
+                        f"{name} stops on `{sorted(shared)[0]}` both when {reason} and when "
+                        f"{other_reason}: the automation's history names the step that stopped "
+                        f"the run, so two reasons on one step read as one and the salon cannot "
+                        f"tell which to fix"
+                    )
 
     # Mark 6 — whatsapp_inbox#146: the message says WHEN. Skipped with no reader, because then
     # there is nothing to name the hour from and mark 2 already said so.
@@ -378,16 +433,12 @@ def confirmation_notice_problems(name, doc):
         for notify in notifies:
             text = (notify.get("vars") or {}).get("text")
             placeholders = set(
-                re.findall(
-                    r"\{\{\s*([^{}]+?)\s*\}\}", text if isinstance(text, str) else ""
-                )
+                re.findall(r"\{\{\s*([^{}]+?)\s*\}\}", text if isinstance(text, str) else "")
             )
             missing = [
                 label
                 for label in (WHEN_DATE, WHEN_TIME)
-                if not any(
-                    f"steps.{r.get('id')}.{label}" in placeholders for r in readers
-                )
+                if not any(f"steps.{r.get('id')}.{label}" in placeholders for r in readers)
             ]
             if missing:
                 problems.append(
@@ -458,9 +509,7 @@ def declared_command_pins(path):
     body = json.loads(path.read_text())
     items = body["grants"] if isinstance(body, dict) else body
     return {
-        g["value"]: (g.get("payload") or {})
-        for g in items
-        if g.get("kind") == "command"
+        g["value"]: (g.get("payload") or {}) for g in items if g.get("kind") == "command"
     }
 
 
@@ -529,9 +578,7 @@ def resolved_modules(manifests):
 def copies_of(manifests, module_id):
     """Every checkout in the workspace that claims `module_id`, newest first."""
     found = [(d, m) for d, m in manifests if m.get("id") == module_id]
-    return sorted(
-        found, key=lambda dm: version_tuple(dm[1].get("version")) or (), reverse=True
-    )
+    return sorted(found, key=lambda dm: version_tuple(dm[1].get("version")) or (), reverse=True)
 
 
 def workspace_contracts(resolved):
@@ -1001,7 +1048,7 @@ def mute_refusal_problems(name, doc):
     if step.get("on_reject") != "continue":
         problems.append(
             f"{name} step `{writer}` can be REJECTED (`policy: manual`) and does not declare "
-            f'`"on_reject": "continue"`: a «no» ends the run as `cancelled` right there, so '
+            f"`\"on_reject\": \"continue\"`: a «no» ends the run as `cancelled` right there, so "
             f"the `notify` written after it never runs and the customer keeps waiting for the "
             f"answer the automation promised her"
         )
@@ -1121,7 +1168,7 @@ def unanswered_ending_problems(name, doc):
                 problems.append(
                     f"{name} step `{speaker}` writes the message the customer receives and never "
                     f"names the `{word}` ending of `{{{{steps.{writer}.status}}}}` ({issue}): with "
-                    f"`{key}` the run REACHES it, and an outcome the prompt was never told about "
+                    f'`{key}` the run REACHES it, and an outcome the prompt was never told about '
                     f"falls into its «nothing was refused» branch — so she is sent, word for word, "
                     f"the booking the model wrote for an appointment that does not exist"
                 )
@@ -1208,9 +1255,7 @@ def assistant_failure_problems(name, doc):
         # The ONE step allowed between the apology and the stop: the mark that puts her thread on
         # top of the inbox (whatsapp_inbox#238). It is guarded like the apology and cannot end the
         # run (`handoff_mark_problems` demands both), so it cannot come between her and the answer.
-        if _is_handoff_mark(
-            steps[stop_at] if stop_at < len(steps) else {}, fallback.get("run_if")
-        ):
+        if _is_handoff_mark(steps[stop_at] if stop_at < len(steps) else {}, fallback.get("run_if")):
             stop_at += 1
         stop = steps[stop_at] if stop_at < len(steps) else {}
         if not (
@@ -1264,18 +1309,15 @@ def assistant_silence_problems(name, doc):
         text_path = f"steps.{sid}.text"
         failed_stop = next(
             (
-                j
-                for j in range(i + 1, len(steps))
+                j for j in range(i + 1, len(steps))
                 if steps[j].get("kind") == "condition"
-                and (steps[j].get("when") or {}).get(f"steps.{sid}.status")
-                == {"neq": "failed"}
+                and (steps[j].get("when") or {}).get(f"steps.{sid}.status") == {"neq": "failed"}
             ),
             None,
         )
         at = (failed_stop if failed_stop is not None else i + 2) + 1
         replies = [
-            s
-            for s in steps[i + 1 :]
+            s for s in steps[i + 1:]
             if s.get("kind") == "notify"
             and s.get("channel") == "whatsapp"
             and "{{" + text_path + "}}" in json.dumps(s.get("vars") or {})
@@ -1302,7 +1344,7 @@ def assistant_silence_problems(name, doc):
         ):
             problems.append(
                 f"{name} step `{sid}` is not followed, right after the condition that stops a "
-                f'FAILED turn, by a WhatsApp `notify` guarded by `"run_if": '
+                f"FAILED turn, by a WhatsApp `notify` guarded by `\"run_if\": "
                 f"{json.dumps(guard)}`: when the assistant answers with no words and nothing to "
                 f"tap, nothing tells her that the business will answer"
             )
@@ -1407,11 +1449,7 @@ def applied(ledger, rule, name, doc, *args):
 
 def prompt_of(step):
     """The prompt text of an `ai` step, or `""` for every other kind."""
-    return (
-        step.get("prompt")
-        if step.get("kind") == "ai" and isinstance(step.get("prompt"), str)
-        else ""
-    )
+    return step.get("prompt") if step.get("kind") == "ai" and isinstance(step.get("prompt"), str) else ""
 
 
 def undeclared_tool_problems(name, doc, known):
@@ -1525,9 +1563,7 @@ def budget_problems(name, doc):
 # «`channel` set to `customer`», «`channel` puesto a `customer`», «`channel` = `customer`» — the three
 # ways a prompt of this module ORDERS a value for a payload field. An order phrased any other way is
 # prose this rule cannot read: it stays blind to it, never wrong about it.
-ORDERED_VALUE = re.compile(
-    r"`([A-Za-z_][A-Za-z0-9_]*)`\s+(?:set to|puesto a|=)\s+`([^`]+)`"
-)
+ORDERED_VALUE = re.compile(r"`([A-Za-z_][A-Za-z0-9_]*)`\s+(?:set to|puesto a|=)\s+`([^`]+)`")
 
 
 def payload_enums(commands_def):
@@ -1634,9 +1670,7 @@ def identified_cancellation_problems(name, doc):
             if not ordered:
                 continue
             for cname in handed:
-                for (field, value), companion in sorted(
-                    (IDENTITY_BOUND_PAYLOAD.get(cname) or {}).items()
-                ):
+                for (field, value), companion in sorted((IDENTITY_BOUND_PAYLOAD.get(cname) or {}).items()):
                     if (field, value) not in ordered or f"`{companion}`" in line:
                         continue
                     problems.append(
@@ -1787,19 +1821,10 @@ def release_commit(module_dir, version):
     if out is None:
         return None, f"{module_dir.name}/ is not a git checkout ({why})"
     out, why = git_in(
-        module_dir,
-        "log",
-        "--format=%H",
-        "-S",
-        f'"version": "{version}"',
-        "--",
-        "module.json",
+        module_dir, "log", "--format=%H", "-S", f'"version": "{version}"', "--", "module.json"
     )
     if out is None:
-        return (
-            None,
-            f"the history of {module_dir.name}/module.json could not be read ({why})",
-        )
+        return None, f"the history of {module_dir.name}/module.json could not be read ({why})"
     for sha in out.split():
         blob, _ = git_in(module_dir, "show", f"{sha}:module.json")
         if blob is None:
@@ -1860,20 +1885,12 @@ def emits_at_version(module_dir, version):
         return None, why
     blob, why = git_in(module_dir, "show", f"{sha}:module.json")
     if blob is None:
-        return (
-            None,
-            f"{module_dir.name}/module.json is not in the tree of {version} ({why})",
-        )
+        return None, f"{module_dir.name}/module.json is not in the tree of {version} ({why})"
     try:
         emits = ((json.loads(blob) or {}).get("events") or {}).get("emits")
     except ValueError as e:
-        return (
-            None,
-            f"{module_dir.name}/module.json at {version} is not readable JSON ({e})",
-        )
-    return {e for e in emits if isinstance(e, str)} if isinstance(
-        emits, list
-    ) else set(), None
+        return None, f"{module_dir.name}/module.json at {version} is not readable JSON ({e})"
+    return {e for e in emits if isinstance(e, str)} if isinstance(emits, list) else set(), None
 
 
 # `sql_names_at_version`'s answer when the query does not exist in the release published as the
@@ -1907,25 +1924,16 @@ def sql_names_at_version(module_dir, version, qid):
         return None, why
     blob, why = git_in(module_dir, "show", f"{sha}:module.json")
     if blob is None:
-        return (
-            None,
-            f"{module_dir.name}/module.json could not be read at {version} ({why})",
-        )
+        return None, f"{module_dir.name}/module.json could not be read at {version} ({why})"
     try:
         qdef = ((json.loads(blob) or {}).get("queries") or {}).get(qid)
     except ValueError as e:
-        return (
-            None,
-            f"{module_dir.name}/module.json at {version} is not readable JSON ({e})",
-        )
+        return None, f"{module_dir.name}/module.json at {version} is not readable JSON ({e})"
     if not isinstance(qdef, dict):
         return ABSENT_AT_FLOOR, None
     rel = qdef.get("sql")
     if not isinstance(rel, str):
-        return (
-            None,
-            f"`{qid}` declares no `sql` file at {version}, so what it answered could not be read",
-        )
+        return None, f"`{qid}` declares no `sql` file at {version}, so what it answered could not be read"
     blob, _ = git_in(module_dir, "show", f"{sha}:{rel}")
     if blob is None:
         return ABSENT_AT_FLOOR, None
@@ -2494,14 +2502,8 @@ BIRTH_STATUS_READING = {
 # modules (see `flows/README.md`, «La receta dice la VERDAD»): a salon with no settings row
 # confirms, a restaurant with none reviews. Said in the same `true`/`false` as the reading above.
 BIRTH_STATUS_EMPTY = {
-    BOOKING_COMMAND: {
-        "en": "so read it as `true`.",
-        "es": "así que léelo como `true`.",
-    },
-    TABLE_BOOKING_COMMAND: {
-        "en": "so read it as `false`.",
-        "es": "así que léelo como `false`.",
-    },
+    BOOKING_COMMAND: {"en": "so read it as `true`.", "es": "así que léelo como `true`."},
+    TABLE_BOOKING_COMMAND: {"en": "so read it as `false`.", "es": "así que léelo como `false`."},
 }
 
 # The integer wording the prompts used before reservations#54. Present next to the boolean one it
@@ -2587,35 +2589,25 @@ def boolean_since_problems(definitions):
     skipped)` — a history this machine cannot read is a skip, never a red.
     """
     problems, skipped = [], []
-    for booking, (module_id, version, field) in sorted(
-        BIRTH_STATUS_BOOLEAN_SINCE.items()
-    ):
+    for booking, (module_id, version, field) in sorted(BIRTH_STATUS_BOOLEAN_SINCE.items()):
         source = BIRTH_STATUS_SOURCE[booking]
         target = (definitions or {}).get(source)
         if target is None:
-            skipped.append(
-                f"`{source}` is not declared by any checkout here — {version} NOT verified"
-            )
+            skipped.append(f"`{source}` is not declared by any checkout here — {version} NOT verified")
             continue
         module_dir, qdef = target
         rel = qdef.get("sql")
         major, minor, patch = version_tuple(version)
         below = f"{major}.{minor}.{patch - 1}"
-        pattern = re.compile(
-            BOOLEAN_PROJECTION.format(field=re.escape(field)), re.IGNORECASE
-        )
+        pattern = re.compile(BOOLEAN_PROJECTION.format(field=re.escape(field)), re.IGNORECASE)
         for at, expected in ((version, True), (below, False)):
             sha, why = release_commit(module_dir, at)
             if sha is None:
-                skipped.append(
-                    f"`{source}` at {at} could not be read ({why}) — {version} NOT verified"
-                )
+                skipped.append(f"`{source}` at {at} could not be read ({why}) — {version} NOT verified")
                 break
             blob, why = git_in(module_dir, "show", f"{sha}:{rel}")
             if blob is None:
-                skipped.append(
-                    f"`{source}` at {at} could not be read ({why}) — {version} NOT verified"
-                )
+                skipped.append(f"`{source}` at {at} could not be read ({why}) — {version} NOT verified")
                 break
             if bool(pattern.search(SQL_COMMENT.sub(" ", blob))) != expected:
                 problems.append(
@@ -2625,7 +2617,6 @@ def boolean_since_problems(definitions):
                     f"that really made the change"
                 )
     return problems, skipped
-
 
 # ── «a rule with no recipe is a promise nothing keeps» ────────────────────────────────────────
 #
@@ -2968,8 +2959,7 @@ def unpinned_command_problems(name, doc, pins):
                     else "fixes nothing"
                 )
                 harm = PIN_HARM.get(
-                    cname,
-                    "the caller gets to choose the default, which is what the pin is for",
+                    cname, "the caller gets to choose the default, which is what the pin is for"
                 )
                 problems.append(
                     f"{name} hands `{cname}` to the model in `{step.get('id')}`, and its grant "
@@ -3007,9 +2997,7 @@ def declared_query_pins(path):
     """
     body = json.loads(path.read_text())
     items = body["grants"] if isinstance(body, dict) else body
-    return {
-        g["value"]: (g.get("payload") or {}) for g in items if g.get("kind") == "query"
-    }
+    return {g["value"]: (g.get("payload") or {}) for g in items if g.get("kind") == "query"}
 
 
 def unpinned_query_problems(name, doc, pins):
@@ -3070,18 +3058,12 @@ def unpinned_query_problems(name, doc, pins):
             # `{{steps.<id>.id}}` as the `customer_id`, so pinning any OTHER resolver denies the
             # call the moment the two differ — which is exactly the run where the customer was
             # created a step ago and the earlier resolver found nobody.
-            named = [
-                sid
-                for sid in before
-                if "{{steps." + str(sid) + ".id}}" in (prompt_of(step) or "")
-            ]
+            named = [sid for sid in before if "{{steps." + str(sid) + ".id}}" in (prompt_of(step) or "")]
             wanted = sorted(f"steps.{sid}.id" for sid in (named or before))
             if fixed.get(field) in wanted:
                 continue
             sent = (
-                f"fixes `{field}` = `{fixed[field]}`"
-                if field in fixed
-                else "fixes nothing"
+                f"fixes `{field}` = `{fixed[field]}`" if field in fixed else "fixes nothing"
             )
             problems.append(
                 f"{name} hands `{qname}` to the model in `{step.get('id')}`, and its grant "
@@ -3130,11 +3112,7 @@ def pin_mismatch_problems(name, doc, command_pins, query_pins):
         for field, value in sorted(fixed.items()):
             if field in sent and sent[field] == value:
                 continue
-            says = (
-                f"sends `{field}` = `{sent[field]}`"
-                if field in sent
-                else f"omits `{field}`"
-            )
+            says = f"sends `{field}` = `{sent[field]}`" if field in sent else f"omits `{field}`"
             problems.append(
                 f"{name} {says} in its `{kind}` step `{step.get('id')}` (`{operation}`), and "
                 f"`{family_of(name)}.grants.json` fixes `{field}` = `{value}`: the hub refuses "
@@ -3274,7 +3252,7 @@ def missing_instruction_problems(name, doc, families):
             f"whole of whatsapp_inbox#112, and it stays green. Deleting a row has to be as loud "
             f"as deleting the sentence, or the guard is one edit away from being a comment. Give "
             f"it the sentences it may not lose, or, if it carries none, write that down with an "
-            f'empty row (`"{family}": ()`)'
+            f"empty row (`\"{family}\": ()`)"
         )
     parts = name.split(".")
     lang = parts[1] if len(parts) >= 3 else ""
@@ -3579,7 +3557,7 @@ def own_customer_only_problems(name, doc):
         if step.get("kind") != "query" or step.get("query") != RESOLVER_QUERY:
             continue
         sid = step.get("id")
-        later = json.dumps(steps[index + 1 :], ensure_ascii=False, sort_keys=True)
+        later = json.dumps(steps[index + 1:], ensure_ascii=False, sort_keys=True)
         if "{{steps." + str(sid) + "." not in later:
             problems.append(
                 f"{name} resolves the customer in `{sid}` and no later step ever reads "
@@ -3600,12 +3578,7 @@ def own_customer_only_problems(name, doc):
         # prompt as plain text with the battery green. Not hypothetical: `str.format` produced this
         # shape while these very templates were being written.
         for broken in sorted(
-            set(
-                re.findall(
-                    r"(?<!\{)\{steps\." + re.escape(str(sid)) + r"\.[A-Za-z0-9_]+\}",
-                    later,
-                )
-            )
+            set(re.findall(r"(?<!\{)\{steps\." + re.escape(str(sid)) + r"\.[A-Za-z0-9_]+\}", later))
         ):
             problems.append(
                 f"{name} names `{broken}` with ONE brace: the runtime resolves `{{{{…}}}}` and "
@@ -3658,9 +3631,7 @@ def own_customer_only_problems(name, doc):
                 )
                 continue
             for key, expr in sorted(params.items()):
-                text = (
-                    expr if isinstance(expr, str) else json.dumps(expr, sort_keys=True)
-                )
+                text = expr if isinstance(expr, str) else json.dumps(expr, sort_keys=True)
                 if "{{steps." in text or text.startswith("steps."):
                     problems.append(
                         f"{name} step `{rid}` resolves the customer with `{RESOLVER_QUERY}` and "
@@ -3686,9 +3657,7 @@ def own_customer_only_problems(name, doc):
         # reference as a working one. Mark 5 does not cover this either when the same resolver is
         # read correctly elsewhere (`.found`, `.count`) and only `.id` — the one that carries the
         # identity — lost its braces. Measured: that mutant SURVIVED both marks.
-        if not any(
-            "{{steps." + str(s.get("id")) + ".id}}" in prompt for _, s in earlier
-        ):
+        if not any("{{steps." + str(s.get("id")) + ".id}}" in prompt for _, s in earlier):
             named = ", ".join(f"`{s.get('id')}`" for _, s in earlier)
             problems.append(
                 f"{name} step `{sid}` reads diaries with `{OWNED_APPOINTMENTS_QUERY}` and its "
@@ -3753,9 +3722,7 @@ def _clause_matches(op, actual, expected):
     if op == "in":
         return isinstance(expected, list) and any(_json_eq(actual, i) for i in expected)
     if op == "exists":
-        return (actual is not None) == (
-            expected if isinstance(expected, bool) else True
-        )
+        return (actual is not None) == (expected if isinstance(expected, bool) else True)
     raise _UnjudgeableFilter(op)
 
 
@@ -3953,9 +3920,7 @@ def only_the_customer_problems(name, doc):
 
     for trigger in triggers:
         mapping = trigger.get("input") or {}
-        floor_event = next(
-            p for lab, p, _, _ in MESSAGE_KINDS if lab.endswith("declared floor")
-        )
+        floor_event = next(p for lab, p, _, _ in MESSAGE_KINDS if lab.endswith("declared floor"))
         for step in doc.get("steps", []):
             if step.get("kind") != "notify":
                 continue
@@ -3980,6 +3945,7 @@ def only_the_customer_problems(name, doc):
                         f"`event.contact` when the floor rises past hub#1621 (whatsapp_inbox#86)"
                     )
     return problems
+
 
 
 # ── «que la toque, no que la escriba» — whatsapp_inbox#101 ────────────────────────────────────
@@ -4069,11 +4035,7 @@ def tappable_option_problems(name, doc):
     steps = doc.get("steps", [])
     by_id = {s.get("id"): s for s in steps}
     lang = name.split(".")[1] if len(name.split(".")) >= 3 else ""
-    offers = [
-        (i, s)
-        for i, s in enumerate(steps)
-        if s.get("kind") == "notify" and s.get("interactive")
-    ]
+    offers = [(i, s) for i, s in enumerate(steps) if s.get("kind") == "notify" and s.get("interactive")]
 
     for index, step in offers:
         sid = step.get("id")
@@ -4142,7 +4104,7 @@ def tappable_option_problems(name, doc):
             if not guards:
                 problems.append(
                     f"{name} sends `{value}` as rows with no `condition` before step `{sid}` "
-                    f'refusing the EMPTY list (`{{"{value}": {{"neq": []}}}}`). An empty list '
+                    f"refusing the EMPTY list (`{{\"{value}\": {{\"neq\": []}}}}`). An empty list "
                     f"is a perfectly good answer — the turn booked, or answered a question — and "
                     f"is not a message Meta accepts, so the send fails AFTER she was answered. "
                     f"`exists` cannot stand in for it: `[]` is not null"
@@ -4152,10 +4114,7 @@ def tappable_option_problems(name, doc):
         s
         for s in steps
         if s.get("kind") == "ai"
-        and any(
-            b in ((s.get("tools") or {}).get("commands") or [])
-            for b in TAPPABLE_BOOKINGS
-        )
+        and any(b in ((s.get("tools") or {}).get("commands") or []) for b in TAPPABLE_BOOKINGS)
     ]
     # …and a recipe that BOOKS has to offer them, in either family. The attended one was out of
     # this rule until whatsapp_inbox#109, and the reason was real but narrower than it looked: the
@@ -4181,7 +4140,7 @@ def tappable_option_problems(name, doc):
         if not woken:
             problems.append(
                 f"{name} offers rows to tap and no trigger of it wakes up for a tap: Meta sends a "
-                f'tap with NO text, so a filter asking for `event.text` `neq` `""` throws it '
+                f"tap with NO text, so a filter asking for `event.text` `neq` `\"\"` throws it "
                 f"away. She taps the slot she was offered and nothing happens, with no error "
                 f"anywhere — add a trigger on `event.reply_id`, disjoint from the one that waits "
                 f"for words"
@@ -4201,7 +4160,7 @@ def tappable_option_problems(name, doc):
                     f"{name} wakes up for {MEDIA_KIND[0]} as well as for a tap: its filter "
                     f"{json.dumps(trigger.get('filter') or {}, sort_keys=True)} cannot tell them "
                     f"apart, because the core serves `reply_id` EMPTY and never absent "
-                    f'(hub#1633), so anything but `neq ""` on it is true for a picture too. She '
+                    f"(hub#1633), so anything but `neq \"\"` on it is true for a picture too. She "
                     f"sends one and this booking recipe runs over a message with no words in it — "
                     f"a metered turn, and an answer she never asked for"
                 )
@@ -4294,76 +4253,20 @@ def parking_producer_problems(name, doc, commands_def, read_perms):
 # WhatsApp recipe could be switched on.
 KERNEL_STEP_KEYS = {
     "command": {"id", "kind", "command", "params", "on_error", "run_if"},
-    "query": {
-        "id",
-        "kind",
-        "query",
-        "params",
-        "result",
-        "limit",
-        "options",
-        "on_error",
-        "run_if",
-    },
+    "query": {"id", "kind", "query", "params", "result", "limit", "options", "on_error", "run_if"},
     "condition": {"id", "kind", "when"},
     "delay": {
-        "id",
-        "kind",
-        "seconds",
-        "until",
-        "offset_seconds",
-        "max_wait",
-        "past_due_policy",
-        "cancel_on",
-        "reschedule_on",
-        "on_error",
-        "run_if",
+        "id", "kind", "seconds", "until", "offset_seconds", "max_wait", "past_due_policy",
+        "cancel_on", "reschedule_on", "on_error", "run_if",
     },
-    "http": {
-        "id",
-        "kind",
-        "method",
-        "url",
-        "headers",
-        "body",
-        "timeout",
-        "on_error",
-        "run_if",
-    },
+    "http": {"id", "kind", "method", "url", "headers", "body", "timeout", "on_error", "run_if"},
     "ai": {
-        "id",
-        "kind",
-        "prompt",
-        "tools",
-        "policy",
-        "max_iters",
-        "on_expire",
-        "on_reject",
-        "on_error",
-        "output",
-        "run_if",
+        "id", "kind", "prompt", "tools", "policy", "max_iters", "on_expire", "on_reject",
+        "on_error", "output", "run_if",
     },
-    "notify": {
-        "id",
-        "kind",
-        "channel",
-        "to",
-        "template",
-        "vars",
-        "interactive",
-        "on_error",
-        "run_if",
-    },
+    "notify": {"id", "kind", "channel", "to", "template", "vars", "interactive", "on_error", "run_if"},
     "approval": {
-        "id",
-        "kind",
-        "title",
-        "summary",
-        "assignee",
-        "expires_in",
-        "on_expire",
-        "on_reject",
-        "run_if",
+        "id", "kind", "title", "summary", "assignee", "expires_in", "on_expire", "on_reject", "run_if",
     },
 }
 
@@ -4381,11 +4284,9 @@ def unknown_step_key_problems(name, doc):
             )
             continue
         for key in sorted(set(step) - allowed):
-            hint = (
-                " (a `command` step takes its payload in `params`)"
-                if (kind == "command" and key == "payload")
-                else ""
-            )
+            hint = " (a `command` step takes its payload in `params`)" if (
+                kind == "command" and key == "payload"
+            ) else ""
             problems.append(
                 f"{name} step `{step.get('id')}` (`{kind}`) carries `{key}`, a key the kernel "
                 f"does not accept{hint}: the card offers the recipe, and activating it is "
@@ -4616,14 +4517,8 @@ def structural_shape(doc):
     }
 
 
-def _offer(
-    body="Tap one",
-    button="See slots",
-    section="Free slots",
-    rows="steps.reply.slots",
-    footer=None,
-    kind="list",
-):
+def _offer(body="Tap one", button="See slots", section="Free slots", rows="steps.reply.slots",
+           footer=None, kind="list"):
     """A `notify` that offers rows, with one screw loosened at a time."""
     interactive = {
         "type": kind,
@@ -4632,12 +4527,7 @@ def _offer(
     }
     if footer:
         interactive["footer"] = {"text": footer}
-    return {
-        "id": "offer",
-        "kind": "notify",
-        "channel": "whatsapp",
-        "interactive": interactive,
-    }
+    return {"id": "offer", "kind": "notify", "channel": "whatsapp", "interactive": interactive}
 
 
 def _publisher(describe="the free slots", field="slots", type_="options"):
@@ -4655,11 +4545,7 @@ SHAPE_CASES = [
     (
         "the words she reads are translated and it is the same automation",
         _offer(),
-        _offer(
-            body="Toca el que te venga bien",
-            button="Ver huecos",
-            section="Huecos libres",
-        ),
+        _offer(body="Toca el que te venga bien", button="Ver huecos", section="Huecos libres"),
         True,
     ),
     (
@@ -4722,10 +4608,7 @@ SHAPE_CASES = [
 # is gone. Every row below is a MUTANT: break the rule and one of them fails BY NAME.
 _ANSWERS = {"permission": "appointments.view_schedule", "handler": "availability.wasm"}
 _MODULE_READS = {"appointments.view_schedule", "appointments.view_appointment"}
-_WRITES = {
-    "permission": "appointments.add_appointment",
-    "emit": ["appointments.created"],
-}
+_WRITES = {"permission": "appointments.add_appointment", "emit": ["appointments.created"]}
 
 CLASSIFICATION_CASES = [
     (
@@ -4734,36 +4617,16 @@ CLASSIFICATION_CASES = [
         _MODULE_READS,
         True,
     ),
-    (
-        "`risk: normal` said out loud is still an answer",
-        {**_ANSWERS, "ai": {"risk": "normal"}},
-        _MODULE_READS,
-        True,
-    ),
+    ("`risk: normal` said out loud is still an answer", {**_ANSWERS, "ai": {"risk": "normal"}}, _MODULE_READS, True),
     (
         "`emit` is a write however the permission reads",
         {**_ANSWERS, "emit": ["appointments.availability.checked"]},
         _MODULE_READS,
         False,
     ),
-    (
-        "`sql` is a write",
-        {**_ANSWERS, "sql": ["UPDATE appointments SET x = 1"]},
-        _MODULE_READS,
-        False,
-    ),
-    (
-        "`min_affected_rows` counts ROWS CHANGED",
-        {**_ANSWERS, "min_affected_rows": 1},
-        _MODULE_READS,
-        False,
-    ),
-    (
-        "`expect_rows` counts ROWS CHANGED",
-        {**_ANSWERS, "expect_rows": 1},
-        _MODULE_READS,
-        False,
-    ),
+    ("`sql` is a write", {**_ANSWERS, "sql": ["UPDATE appointments SET x = 1"]}, _MODULE_READS, False),
+    ("`min_affected_rows` counts ROWS CHANGED", {**_ANSWERS, "min_affected_rows": 1}, _MODULE_READS, False),
+    ("`expect_rows` counts ROWS CHANGED", {**_ANSWERS, "expect_rows": 1}, _MODULE_READS, False),
     (
         "a declared `risk` above normal beats every other signal",
         {**_ANSWERS, "ai": {"risk": "destructive"}},
@@ -4776,12 +4639,7 @@ CLASSIFICATION_CASES = [
         _MODULE_READS,
         False,
     ),
-    (
-        "a write's own permission is not a read permission",
-        _WRITES,
-        _MODULE_READS,
-        False,
-    ),
+    ("a write's own permission is not a read permission", _WRITES, _MODULE_READS, False),
     ("no permission at all is a write", {}, _MODULE_READS, False),
     ("a module whose queries were never read answers nothing", _ANSWERS, None, False),
 ]
@@ -4796,9 +4654,7 @@ _FIXTURE_READS = {
 }
 
 
-def _ai_step(
-    step_id, policy, commands, prompt="", on_reject=None, queries=(), max_iters=None
-):
+def _ai_step(step_id, policy, commands, prompt="", on_reject=None, queries=(), max_iters=None):
     step = {
         "id": step_id,
         "kind": "ai",
@@ -4874,16 +4730,9 @@ def _fixture_doc(*steps):
 UNATTENDED = "appointment-from-whatsapp.en.flow.json"
 UNNAMED_FAMILY = "order-from-whatsapp.en.flow.json"
 
-
 def _sends(step_id, text):
     """A `notify` that SENDS what an earlier step wrote — the delivery, not a handoff of findings."""
-    return {
-        "id": step_id,
-        "kind": "notify",
-        "channel": "whatsapp",
-        "template": "",
-        "vars": {"text": text},
-    }
+    return {"id": step_id, "kind": "notify", "channel": "whatsapp", "template": "", "vars": {"text": text}}
 
 
 POLICY_CASES = [
@@ -4944,12 +4793,7 @@ POLICY_CASES = [
         UNNAMED_FAMILY,
         _fixture_doc(
             _ai_step("look", "auto", ["appointments.availability.slots"]),
-            _ai_step(
-                "act",
-                "manual",
-                ["appointments.appointments.create"],
-                "{{steps.look.text}}",
-            ),
+            _ai_step("act", "manual", ["appointments.appointments.create"], "{{steps.look.text}}"),
             _sends("send", "{{steps.look.text}}"),
         ),
         1,
@@ -4959,12 +4803,7 @@ POLICY_CASES = [
         UNNAMED_FAMILY,
         _fixture_doc(
             _ai_step("look", "auto", ["appointments.availability.slots"]),
-            _ai_step(
-                "act",
-                "manual",
-                ["appointments.appointments.create"],
-                "{{steps.look.text}}",
-            ),
+            _ai_step("act", "manual", ["appointments.appointments.create"], "{{steps.look.text}}"),
         ),
         1,
     ),
@@ -4974,12 +4813,7 @@ POLICY_CASES = [
         UNATTENDED,
         _fixture_doc(
             _ai_step("look", "auto", ["appointments.availability.slots"]),
-            _ai_step(
-                "act",
-                "auto",
-                ["appointments.appointments.create"],
-                "{{steps.look.text}}",
-            ),
+            _ai_step("act", "auto", ["appointments.appointments.create"], "{{steps.look.text}}"),
         ),
         1,
     ),
@@ -4990,12 +4824,7 @@ POLICY_CASES = [
         UNNAMED_FAMILY,
         _fixture_doc(
             _ai_step("look", "auto", ["appointments.availability.slots"]),
-            _ai_step(
-                "act",
-                "manual",
-                ["appointments.appointments.create"],
-                "{{ steps.look.text }}",
-            ),
+            _ai_step("act", "manual", ["appointments.appointments.create"], "{{ steps.look.text }}"),
         ),
         1,
     ),
@@ -5028,11 +4857,7 @@ def _notify_step(step_id="tell", text="done"):
         "id": step_id,
         "kind": "notify",
         "channel": "whatsapp",
-        "to": {
-            "query": "whatsapp_inbox.conversations.list",
-            "params": {"f_wa_contact_id": "input.from"},
-            "field": "contact_phone",
-        },
+        "to": {"query": "whatsapp_inbox.conversations.list", "params": {"f_wa_contact_id": "input.from"}, "field": "contact_phone"},
         "template": "",
         "vars": {"text": text},
     }
@@ -5125,11 +4950,7 @@ HOUR_CASES = [
         "the shape the unattended family ships: the step that can book carries the rule, in its "
         "own language",
         UNATTENDED,
-        _fixture_doc(
-            _ai_step(
-                "book", "auto", [BOOKING_COMMAND], f"Book it. {HOUR_RULE['en']} Go."
-            )
-        ),
+        _fixture_doc(_ai_step("book", "auto", [BOOKING_COMMAND], f"Book it. {HOUR_RULE['en']} Go.")),
         0,
     ),
     (
@@ -5137,52 +4958,40 @@ HOUR_CASES = [
         "reworded away, and a bot with nobody behind it books people into hours they never asked "
         "for — the document saves, the trigger arms, and nothing anywhere says so",
         UNATTENDED,
-        _fixture_doc(
-            _ai_step("book", "auto", [BOOKING_COMMAND], "Book whatever fits best.")
-        ),
+        _fixture_doc(_ai_step("book", "auto", [BOOKING_COMMAND], "Book whatever fits best.")),
         1,
     ),
     (
         "the Spanish document carries the Spanish wording",
         UNATTENDED_ES,
-        _fixture_doc(
-            _ai_step("book", "auto", [BOOKING_COMMAND], f"Resérvala. {HOUR_RULE['es']}")
-        ),
+        _fixture_doc(_ai_step("book", "auto", [BOOKING_COMMAND], f"Resérvala. {HOUR_RULE['es']}")),
         0,
     ),
     (
         "a translation that kept the English sentence dropped the rule for the reader it has: the "
         "model reads the prompt in the language it is written in, and so does the salon",
         UNATTENDED_ES,
-        _fixture_doc(
-            _ai_step("book", "auto", [BOOKING_COMMAND], f"Resérvala. {HOUR_RULE['en']}")
-        ),
+        _fixture_doc(_ai_step("book", "auto", [BOOKING_COMMAND], f"Resérvala. {HOUR_RULE['en']}")),
         1,
     ),
     (
         "a step that cannot book owes no such promise: the customer-record step writes, but not "
         "into the diary",
         UNATTENDED,
-        _fixture_doc(
-            _ai_step("know", "auto", ["customers.create"], "Find or create them.")
-        ),
+        _fixture_doc(_ai_step("know", "auto", ["customers.create"], "Find or create them.")),
         0,
     ),
     (
         "silent on the attended family: there a person reads the proposal before it books",
         UNNAMED_FAMILY,
-        _fixture_doc(
-            _ai_step("book", "manual", [BOOKING_COMMAND], "Book whatever fits best.")
-        ),
+        _fixture_doc(_ai_step("book", "manual", [BOOKING_COMMAND], "Book whatever fits best.")),
         0,
     ),
     (
         "a language this battery has no wording for is a document it cannot vouch for — a third "
         "translation adds its sentence to HOUR_RULE in the same commit, or it does not ship",
         "appointment-from-whatsapp.fr.flow.json",
-        _fixture_doc(
-            _ai_step("book", "auto", [BOOKING_COMMAND], f"Réserve. {HOUR_RULE['en']}")
-        ),
+        _fixture_doc(_ai_step("book", "auto", [BOOKING_COMMAND], f"Réserve. {HOUR_RULE['en']}")),
         1,
     ),
     (
@@ -5191,12 +5000,7 @@ HOUR_CASES = [
         "rule",
         TABLE_UNATTENDED,
         _fixture_doc(
-            _ai_step(
-                "book",
-                "auto",
-                [TABLE_BOOKING_COMMAND],
-                f"Book it. {TABLE_RULE['en']} Go.",
-            )
+            _ai_step("book", "auto", [TABLE_BOOKING_COMMAND], f"Book it. {TABLE_RULE['en']} Go.")
         ),
         0,
     ),
@@ -5207,9 +5011,7 @@ HOUR_CASES = [
         "and nothing anywhere says so",
         TABLE_UNATTENDED,
         _fixture_doc(
-            _ai_step(
-                "book", "auto", [TABLE_BOOKING_COMMAND], "Book whatever fits best."
-            )
+            _ai_step("book", "auto", [TABLE_BOOKING_COMMAND], "Book whatever fits best.")
         ),
         1,
     ),
@@ -5217,12 +5019,7 @@ HOUR_CASES = [
         "the Spanish table document carries the Spanish wording",
         TABLE_UNATTENDED_ES,
         _fixture_doc(
-            _ai_step(
-                "book",
-                "auto",
-                [TABLE_BOOKING_COMMAND],
-                f"Resérvala. {TABLE_RULE['es']}",
-            )
+            _ai_step("book", "auto", [TABLE_BOOKING_COMMAND], f"Resérvala. {TABLE_RULE['es']}")
         ),
         0,
     ),
@@ -5230,12 +5027,7 @@ HOUR_CASES = [
         "a table translation that kept the English sentence dropped the rule for the reader it has",
         TABLE_UNATTENDED_ES,
         _fixture_doc(
-            _ai_step(
-                "book",
-                "auto",
-                [TABLE_BOOKING_COMMAND],
-                f"Resérvala. {TABLE_RULE['en']}",
-            )
+            _ai_step("book", "auto", [TABLE_BOOKING_COMMAND], f"Resérvala. {TABLE_RULE['en']}")
         ),
         1,
     ),
@@ -5243,9 +5035,7 @@ HOUR_CASES = [
         "silent on the attended table family: there a person reads the proposal before it books",
         TABLE_UNNAMED_FAMILY,
         _fixture_doc(
-            _ai_step(
-                "book", "manual", [TABLE_BOOKING_COMMAND], "Book whatever fits best."
-            )
+            _ai_step("book", "manual", [TABLE_BOOKING_COMMAND], "Book whatever fits best.")
         ),
         0,
     ),
@@ -5254,9 +5044,7 @@ HOUR_CASES = [
         "chair sentence is a document whose rule never mentions how many people are coming",
         TABLE_UNATTENDED,
         _fixture_doc(
-            _ai_step(
-                "book", "auto", [TABLE_BOOKING_COMMAND], f"Book it. {HOUR_RULE['en']}"
-            )
+            _ai_step("book", "auto", [TABLE_BOOKING_COMMAND], f"Book it. {HOUR_RULE['en']}")
         ),
         1,
     ),
@@ -5280,9 +5068,7 @@ _TABLE_BIRTH_EN = BIRTH_STATUS_RULES[TABLE_BOOKING_COMMAND]["en"]
 _TABLE_BIRTH_ES = BIRTH_STATUS_RULES[TABLE_BOOKING_COMMAND]["es"]
 
 
-def _books(
-    prompt, query=_APPT_SETTINGS, command=BOOKING_COMMAND, step_id="book_appointment"
-):
+def _books(prompt, query=_APPT_SETTINGS, command=BOOKING_COMMAND, step_id="book_appointment"):
     """A document that reads the setting and then books, which is the shape #124 leaves."""
     steps = [_ai_step(step_id, "auto", (command,), prompt)]
     if query is not None:
@@ -5335,10 +5121,7 @@ BIRTH_STATUS_CASES = [
         "a read of SOMEBODY ELSE's settings is not the read: the restaurant's `auto_confirm` says "
         "nothing about how a chair is born",
         UNATTENDED,
-        _books(
-            f"Book it. {_BIRTH_EN['pending']} {_BIRTH_EN['confirmed']}",
-            query=_TABLE_SETTINGS,
-        ),
+        _books(f"Book it. {_BIRTH_EN['pending']} {_BIRTH_EN['confirmed']}", query=_TABLE_SETTINGS),
         1,
     ),
     (
@@ -5389,11 +5172,7 @@ BIRTH_STATUS_CASES = [
         "a step that cannot book owes no ending: the customer-record step writes, but not into the "
         "diary",
         UNATTENDED,
-        _books(
-            "Find or create them.",
-            command="customers.create",
-            step_id="know_the_customer",
-        ),
+        _books("Find or create them.", command="customers.create", step_id="know_the_customer"),
         0,
     ),
     (
@@ -5470,10 +5249,7 @@ _RAW_TABLE_ES = (
 
 def _books_table(prompt):
     return _books(
-        prompt,
-        query=_TABLE_SETTINGS,
-        command=TABLE_BOOKING_COMMAND,
-        step_id="book_table",
+        prompt, query=_TABLE_SETTINGS, command=TABLE_BOOKING_COMMAND, step_id="book_table"
     )
 
 
@@ -5550,11 +5326,7 @@ BIRTH_READING_CASES = [
     (
         "a step that cannot book owes no reading",
         TABLE_UNATTENDED,
-        _books(
-            "Find or create them.",
-            command="customers.create",
-            step_id="know_the_customer",
-        ),
+        _books("Find or create them.", command="customers.create", step_id="know_the_customer"),
         {},
         0,
     ),
@@ -5974,9 +5746,7 @@ MOVE_CASES = [
         "a step that cannot book owes nothing: the customer-record step writes, but not into the "
         "diary",
         UNNAMED_FAMILY,
-        _fixture_doc(
-            _ai_step("know", "manual", ["customers.create"], "Find or create them.")
-        ),
+        _fixture_doc(_ai_step("know", "manual", ["customers.create"], "Find or create them.")),
         0,
     ),
     (
@@ -6016,78 +5786,33 @@ _BOOK_FOR_HER = "Book for {{steps.resolve.id}} and for nobody else."
 STEP_KEY_CASES = [
     (
         "the shipped shape: a `command` step sends its payload in `params`",
-        {
-            "steps": [
-                {
-                    "id": "link",
-                    "kind": "command",
-                    "command": "x.write",
-                    "params": {"a": "{{input.from}}"},
-                    "on_error": "continue",
-                }
-            ]
-        },
+        {"steps": [{"id": "link", "kind": "command", "command": "x.write",
+                    "params": {"a": "{{input.from}}"}, "on_error": "continue"}]},
         0,
     ),
     (
         "\U0001f534 the bug: `payload` is the GRANT's word, and on a step the kernel refuses the "
         "whole document with it — the recipe is offered and cannot be switched on",
-        {
-            "steps": [
-                {
-                    "id": "link",
-                    "kind": "command",
-                    "command": "x.write",
-                    "payload": {"a": "{{input.from}}"},
-                }
-            ]
-        },
+        {"steps": [{"id": "link", "kind": "command", "command": "x.write",
+                    "payload": {"a": "{{input.from}}"}}]},
         1,
     ),
     (
         "a key the query kind does not take either — the table is per KIND, not one global list",
-        {
-            "steps": [
-                {
-                    "id": "r",
-                    "kind": "query",
-                    "query": "x.read",
-                    "params": {},
-                    "when": {},
-                }
-            ]
-        },
+        {"steps": [{"id": "r", "kind": "query", "query": "x.read", "params": {}, "when": {}}]},
         1,
     ),
     (
         "a step guarded by `run_if` (hub#2066): the kernel takes it on every kind that DOES "
         "something",
-        {
-            "steps": [
-                {
-                    "id": "sorry",
-                    "kind": "notify",
-                    "channel": "whatsapp",
-                    "template": "",
-                    "vars": {"text": "x"},
-                    "run_if": {"steps.a.status": {"eq": "failed"}},
-                }
-            ]
-        },
+        {"steps": [{"id": "sorry", "kind": "notify", "channel": "whatsapp", "template": "",
+                    "vars": {"text": "x"}, "run_if": {"steps.a.status": {"eq": "failed"}}}]},
         0,
     ),
     (
         "…but not on a `condition`, which IS a guard: the kernel refuses `run_if` there",
-        {
-            "steps": [
-                {
-                    "id": "c",
-                    "kind": "condition",
-                    "when": {},
-                    "run_if": {"steps.a.status": {"eq": "failed"}},
-                }
-            ]
-        },
+        {"steps": [{"id": "c", "kind": "condition", "when": {},
+                    "run_if": {"steps.a.status": {"eq": "failed"}}}]},
         1,
     ),
     (
@@ -6121,13 +5846,7 @@ OWN_CUSTOMER_CASES = [
         "universal on purpose — every template that resolves a stranger owes the `query` step",
         UNATTENDED,
         _fixture_doc(
-            _ai_step(
-                "book",
-                "auto",
-                [BOOKING_COMMAND],
-                "Book it.",
-                queries=(DIRECTORY_QUERY,),
-            )
+            _ai_step("book", "auto", [BOOKING_COMMAND], "Book it.", queries=(DIRECTORY_QUERY,))
         ),
         1,
     ),
@@ -6136,12 +5855,8 @@ OWN_CUSTOMER_CASES = [
         "step that identifies her and the step that books for her",
         UNATTENDED,
         _fixture_doc(
-            _ai_step(
-                "know", "auto", ["customers.create"], "Who?", queries=(DIRECTORY_QUERY,)
-            ),
-            _ai_step(
-                "book", "auto", [BOOKING_COMMAND], "Book.", queries=(DIRECTORY_QUERY,)
-            ),
+            _ai_step("know", "auto", ["customers.create"], "Who?", queries=(DIRECTORY_QUERY,)),
+            _ai_step("book", "auto", [BOOKING_COMMAND], "Book.", queries=(DIRECTORY_QUERY,)),
         ),
         2,
     ),
@@ -6166,9 +5881,7 @@ OWN_CUSTOMER_CASES = [
         "on what a model wrote, so the model still picks who this run is about (counted twice — "
         "it reads another step, and it never reads the trusted phone)",
         UNATTENDED,
-        _own_customer_doc(
-            _BOOK_FOR_HER, _DIARY, params={"f_name": "{{steps.know.text}}"}
-        ),
+        _own_customer_doc(_BOOK_FOR_HER, _DIARY, params={"f_name": "{{steps.know.text}}"}),
         2,
     ),
     (
@@ -6231,12 +5944,8 @@ OWN_CUSTOMER_CASES = [
         "only this mark can see it",
         UNATTENDED,
         _fixture_doc(
-            _query_step(
-                "find", DIRECTORY_QUERY, {"f_phone": "+{{" + TRUSTED_PHONE + "}}"}
-            ),
-            _ai_step(
-                "know", "auto", ["customers.create"], "On file: {{steps.find.found}}."
-            ),
+            _query_step("find", DIRECTORY_QUERY, {"f_phone": "+{{" + TRUSTED_PHONE + "}}"}),
+            _ai_step("know", "auto", ["customers.create"], "On file: {{steps.find.found}}."),
         ),
         1,
     ),
@@ -6245,9 +5954,7 @@ OWN_CUSTOMER_CASES = [
         "reader has none before it either — two reds for one wrong query",
         UNATTENDED,
         _fixture_doc(
-            _query_step(
-                "resolve", DIRECTORY_QUERY, {"f_phone": "+{{" + TRUSTED_PHONE + "}}"}
-            ),
+            _query_step("resolve", DIRECTORY_QUERY, {"f_phone": "+{{" + TRUSTED_PHONE + "}}"}),
             _ai_step("book", "auto", [BOOKING_COMMAND], _BOOK_FOR_HER, queries=_DIARY),
         ),
         2,
@@ -6269,6 +5976,7 @@ OWN_CUSTOMER_CASES = [
         0,
     ),
 ]
+
 
 
 def _wa_doc(condition=None, mapping=None, steps=None):
@@ -6315,8 +6023,7 @@ def _two(second_filter, second_input=None):
             "kind": "event",
             "event": WHATSAPP_EVENT,
             "filter": second_filter,
-            "input": second_input
-            or {"from": "event.from", "text": "event.reply_title"},
+            "input": second_input or {"from": "event.from", "text": "event.reply_title"},
         }
     )
     return doc
@@ -6359,7 +6066,7 @@ ONLY_CUSTOMER_CASES = [
     ),
     (
         "🔴 `eq` reads right and is the regression: on a core at this module's declared floor the "
-        'path is absent, `json_eq(Null, "inbound")` is false, and the automation is off with '
+        "path is absent, `json_eq(Null, \"inbound\")` is false, and the automation is off with "
         "nothing said",
         UNNAMED_FAMILY,
         _wa_doc(
@@ -6434,11 +6141,7 @@ ONLY_CUSTOMER_CASES = [
         UNNAMED_FAMILY,
         _wa_doc(
             LIVE_INBOUND,
-            mapping={
-                "from": "event.from",
-                "text": "event.text",
-                "contact": "event.contact",
-            },
+            mapping={"from": "event.from", "text": "event.text", "contact": "event.contact"},
             steps=[_contact_notify()],
         ),
         1,
@@ -6454,10 +6157,7 @@ ONLY_CUSTOMER_CASES = [
         "every notify step is judged, not the first: two replies wrongly addressed are two "
         "customers who get somebody else's message",
         UNNAMED_FAMILY,
-        _wa_doc(
-            LIVE_INBOUND,
-            steps=[_contact_notify("acknowledge"), _contact_notify("confirm")],
-        ),
+        _wa_doc(LIVE_INBOUND, steps=[_contact_notify("acknowledge"), _contact_notify("confirm")]),
         2,
     ),
     (
@@ -6554,15 +6254,7 @@ SILENCE_CASES = [
     ),
     (
         "a step that proposes nothing owes the customer nothing",
-        _fixture_doc(
-            {
-                "id": "look",
-                "kind": "ai",
-                "policy": "auto",
-                "prompt": "",
-                "tools": {"queries": ["customers.list"]},
-            }
-        ),
+        _fixture_doc({"id": "look", "kind": "ai", "policy": "auto", "prompt": "", "tools": {"queries": ["customers.list"]}}),
         0,
     ),
     (
@@ -6589,12 +6281,7 @@ SILENCE_CASES = [
         "hour and the professional never left the booking step",
         _fixture_doc(
             _ai_step("book", "manual", ["appointments.appointments.create"]),
-            {
-                "id": "reply",
-                "kind": "ai",
-                "policy": "manual",
-                "prompt": "Say something nice.",
-            },
+            {"id": "reply", "kind": "ai", "policy": "manual", "prompt": "Say something nice."},
             _notify_step("tell", "{{steps.reply.text}}"),
         ),
         1,
@@ -6611,10 +6298,7 @@ REFUSAL_CASES = [
         "attended family uses to hand over the slots she taps (whatsapp_inbox#109)",
         _fixture_doc(
             _ai_step(
-                "book",
-                "manual",
-                ["appointments.appointments.create"],
-                on_reject="continue",
+                "book", "manual", ["appointments.appointments.create"], on_reject="continue"
             ),
             {
                 "id": "reply",
@@ -6622,9 +6306,7 @@ REFUSAL_CASES = [
                 "policy": "manual",
                 "prompt": "{{steps.book.text}} {{steps.book.status}}",
                 "tools": {"commands": ["appointments.availability.slots"]},
-                "output": {
-                    "slots": {"type": "options", "describe": "what she may tap"}
-                },
+                "output": {"slots": {"type": "options", "describe": "what she may tap"}},
             },
             _notify_step("tell", "{{steps.reply.text}}"),
         ),
@@ -6635,10 +6317,7 @@ REFUSAL_CASES = [
         "writes the reply knows how the turn ended",
         _fixture_doc(
             _ai_step(
-                "book",
-                "manual",
-                ["appointments.appointments.create"],
-                on_reject="continue",
+                "book", "manual", ["appointments.appointments.create"], on_reject="continue"
             ),
             _relay_step("reply", "book"),
             _notify_step("tell", "{{steps.reply.text}}"),
@@ -6658,12 +6337,7 @@ REFUSAL_CASES = [
     (
         "…and saying `cancel` out loud is the same ending, not an exemption",
         _fixture_doc(
-            _ai_step(
-                "book",
-                "manual",
-                ["appointments.appointments.create"],
-                on_reject="cancel",
-            ),
+            _ai_step("book", "manual", ["appointments.appointments.create"], on_reject="cancel"),
             _relay_step("reply", "book"),
             _notify_step("tell", "{{steps.reply.text}}"),
         ),
@@ -6675,10 +6349,7 @@ REFUSAL_CASES = [
         "is NOT getting",
         _fixture_doc(
             _ai_step(
-                "book",
-                "manual",
-                ["appointments.appointments.create"],
-                on_reject="continue",
+                "book", "manual", ["appointments.appointments.create"], on_reject="continue"
             ),
             _notify_step("tell", "{{steps.book.text}}"),
         ),
@@ -6689,17 +6360,9 @@ REFUSAL_CASES = [
         "sentence the model wrote before anybody decided",
         _fixture_doc(
             _ai_step(
-                "book",
-                "manual",
-                ["appointments.appointments.create"],
-                on_reject="continue",
+                "book", "manual", ["appointments.appointments.create"], on_reject="continue"
             ),
-            {
-                "id": "reply",
-                "kind": "ai",
-                "policy": "manual",
-                "prompt": "Send {{steps.book.text}}",
-            },
+            {"id": "reply", "kind": "ai", "policy": "manual", "prompt": "Send {{steps.book.text}}"},
             _notify_step("tell", "{{steps.reply.text}}"),
         ),
         1,
@@ -6746,18 +6409,13 @@ REFUSAL_CASES = [
     (
         "and a document that proposes nothing owes nobody an answer",
         _fixture_doc(
-            {
-                "id": "look",
-                "kind": "ai",
-                "policy": "manual",
-                "prompt": "",
-                "tools": {"queries": ["customers.list"]},
-            },
+            {"id": "look", "kind": "ai", "policy": "manual", "prompt": "", "tools": {"queries": ["customers.list"]}},
             _notify_step("tell", "hello"),
         ),
         0,
     ),
 ]
+
 
 
 def _assistant(step_id="book", on_error="continue"):
@@ -6767,22 +6425,14 @@ def _assistant(step_id="book", on_error="continue"):
     return step
 
 
-def _apology(
-    writer="book",
-    text="Sorry, someone from the team will answer you here soon.",
-    op="eq",
-):
+def _apology(writer="book", text="Sorry, someone from the team will answer you here soon.", op="eq"):
     step = _notify_step("sorry", text)
     step["run_if"] = {f"steps.{writer}.status": {op: "failed"}}
     return step
 
 
 def _stop_if_failed(writer="book", op="neq"):
-    return {
-        "id": "answered",
-        "kind": "condition",
-        "when": {f"steps.{writer}.status": {op: "failed"}},
-    }
+    return {"id": "answered", "kind": "condition", "when": {f"steps.{writer}.status": {op: "failed"}}}
 
 
 def _handoff_mark(writer="book", guard=None, contact="input.from", on_error="continue"):
@@ -6791,9 +6441,7 @@ def _handoff_mark(writer="book", guard=None, contact="input.from", on_error="con
         "kind": "command",
         "command": "whatsapp_inbox.conversations.needs_attention",
         "params": {"wa_contact_id": contact},
-        "run_if": guard
-        if guard is not None
-        else {f"steps.{writer}.status": {"eq": "failed"}},
+        "run_if": guard if guard is not None else {f"steps.{writer}.status": {"eq": "failed"}},
     }
     if on_error is not None:
         step["on_error"] = on_error
@@ -6801,12 +6449,10 @@ def _handoff_mark(writer="book", guard=None, contact="input.from", on_error="con
 
 
 def _silence_mark(writer="book"):
-    return _handoff_mark(
-        guard={
-            f"steps.{writer}.text": {"in": ["", None]},
-            f"steps.{writer}.slots": {"eq": []},
-        }
-    )
+    return _handoff_mark(guard={
+        f"steps.{writer}.text": {"in": ["", None]}, f"steps.{writer}.slots": {"eq": []},
+    })
+
 
 
 # `(label, document, problems expected)` for `assistant_failure_problems` (whatsapp_inbox#122).
@@ -6815,26 +6461,20 @@ ASSISTANT_FAILURE_CASES = [
         "the shape the fix ships: the turn may fail and carry on, the apology runs only if it did, "
         "the run ends there if it did, the confirmation follows",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _assistant(),
-            _apology(),
-            _stop_if_failed(),
+            _notify_step("ack", "one moment"), _assistant(), _apology(), _stop_if_failed(),
             _notify_step("confirm", "{{steps.book.text}}"),
         ),
         0,
     ),
     (
         "an assistant turn nobody was told to wait for is not this rule's business",
-        _fixture_doc(
-            _assistant(on_error=None), _notify_step("confirm", "{{steps.book.text}}")
-        ),
+        _fixture_doc(_assistant(on_error=None), _notify_step("confirm", "{{steps.book.text}}")),
         0,
     ),
     (
         "\U0001f534 the bug, as it shipped: «one moment», then a turn that dies with the run",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _assistant(on_error=None),
+            _notify_step("ack", "one moment"), _assistant(on_error=None),
             _notify_step("confirm", "{{steps.book.text}}"),
         ),
         3,
@@ -6842,8 +6482,7 @@ ASSISTANT_FAILURE_CASES = [
     (
         "`on_error` alone: the run survives and sends her the EMPTY text of a failed turn",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _assistant(),
+            _notify_step("ack", "one moment"), _assistant(),
             _notify_step("confirm", "{{steps.book.text}}"),
         ),
         2,
@@ -6851,9 +6490,7 @@ ASSISTANT_FAILURE_CASES = [
     (
         "the apology without `on_error`: the kernel ends the run before it is ever reached",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _assistant(on_error=None),
-            _apology(),
+            _notify_step("ack", "one moment"), _assistant(on_error=None), _apology(),
             _stop_if_failed(),
         ),
         1,
@@ -6861,19 +6498,14 @@ ASSISTANT_FAILURE_CASES = [
     (
         "an apology guarded the wrong way round goes out every time the assistant ANSWERED",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _assistant(),
-            _apology(op="neq"),
-            _stop_if_failed(),
+            _notify_step("ack", "one moment"), _assistant(), _apology(op="neq"), _stop_if_failed(),
         ),
         1,
     ),
     (
         "an apology that quotes the step that failed sends her an empty message",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _assistant(),
-            _apology(text="{{steps.book.text}}"),
+            _notify_step("ack", "one moment"), _assistant(), _apology(text="{{steps.book.text}}"),
             _stop_if_failed(),
         ),
         1,
@@ -6881,10 +6513,7 @@ ASSISTANT_FAILURE_CASES = [
     (
         "an apology with no words at all",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _assistant(),
-            _apology(text="  "),
-            _stop_if_failed(),
+            _notify_step("ack", "one moment"), _assistant(), _apology(text="  "), _stop_if_failed(),
         ),
         1,
     ),
@@ -6892,32 +6521,23 @@ ASSISTANT_FAILURE_CASES = [
         "the mark that flags her thread (whatsapp_inbox#238) is the one step allowed between the "
         "apology and the stop",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _assistant(),
-            _apology(),
-            _handoff_mark(),
-            _stop_if_failed(),
-            _notify_step("confirm", "{{steps.book.text}}"),
+            _notify_step("ack", "one moment"), _assistant(), _apology(), _handoff_mark(),
+            _stop_if_failed(), _notify_step("confirm", "{{steps.book.text}}"),
         ),
         0,
     ),
     (
         "any OTHER step between the apology and the stop still breaks the rule",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _assistant(),
-            _apology(),
-            _notify_step("extra", "and another thing"),
-            _stop_if_failed(),
+            _notify_step("ack", "one moment"), _assistant(), _apology(),
+            _notify_step("extra", "and another thing"), _stop_if_failed(),
         ),
         1,
     ),
     (
         "without the condition the confirmation still goes out after the apology",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _assistant(),
-            _apology(),
+            _notify_step("ack", "one moment"), _assistant(), _apology(),
             _notify_step("confirm", "{{steps.book.text}}"),
         ),
         1,
@@ -6925,18 +6545,14 @@ ASSISTANT_FAILURE_CASES = [
     (
         "a condition that stops the run when the assistant ANSWERED",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _assistant(),
-            _apology(),
-            _stop_if_failed(op="eq"),
+            _notify_step("ack", "one moment"), _assistant(), _apology(), _stop_if_failed(op="eq"),
         ),
         1,
     ),
     (
         "the apology addressed to somebody other than the customer who was acknowledged",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _assistant(),
+            _notify_step("ack", "one moment"), _assistant(),
             {**_apology(), "to": {"query": "staff.members.list", "field": "phone"}},
             _stop_if_failed(),
         ),
@@ -6945,11 +6561,8 @@ ASSISTANT_FAILURE_CASES = [
     (
         "EVERY turn she waits on is judged, not only the first: the second one fails unanswered",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _assistant("know"),
-            _apology("know"),
-            _stop_if_failed("know"),
-            _assistant("book", on_error=None),
+            _notify_step("ack", "one moment"), _assistant("know"), _apology("know"),
+            _stop_if_failed("know"), _assistant("book", on_error=None),
             _notify_step("confirm", "{{steps.book.text}}"),
         ),
         3,
@@ -6963,32 +6576,20 @@ def _slot_assistant(step_id="book"):
     return step
 
 
-def _silence_apology(
-    writer="book",
-    text="Sorry, someone from the team will answer you here soon.",
-    guard=None,
-):
+def _silence_apology(writer="book", text="Sorry, someone from the team will answer you here soon.",
+                     guard=None):
     step = _notify_step("sorry_silent", text)
-    step["run_if"] = (
-        guard
-        if guard is not None
-        else {
-            f"steps.{writer}.text": {"in": ["", None]},
-            f"steps.{writer}.slots": {"eq": []},
-        }
-    )
+    step["run_if"] = guard if guard is not None else {
+        f"steps.{writer}.text": {"in": ["", None]}, f"steps.{writer}.slots": {"eq": []},
+    }
     return step
 
 
 def _reply(writer="book", guard=None):
     step = _notify_step("confirm", "{{steps.%s.text}}" % writer)
-    step["run_if"] = (
-        guard
-        if guard is not None
-        else {
-            f"steps.{writer}.text": {"exists": True, "neq": ""},
-        }
-    )
+    step["run_if"] = guard if guard is not None else {
+        f"steps.{writer}.text": {"exists": True, "neq": ""},
+    }
     return step
 
 
@@ -6998,33 +6599,23 @@ ASSISTANT_SILENCE_CASES = [
         "the shape the fix ships: a failed turn is apologised for and stops; a turn with no words "
         "and nothing to tap is apologised for; the reply only goes out when it has words",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _slot_assistant(),
-            _apology(),
-            _stop_if_failed(),
-            _silence_apology(),
-            _reply(),
+            _notify_step("ack", "one moment"), _slot_assistant(), _apology(), _stop_if_failed(),
+            _silence_apology(), _reply(),
         ),
         0,
     ),
     (
         "a turn that declares nothing to tap is silent on its text alone",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _assistant(),
-            _apology(),
-            _stop_if_failed(),
-            _silence_apology(guard={"steps.book.text": {"in": ["", None]}}),
-            _reply(),
+            _notify_step("ack", "one moment"), _assistant(), _apology(), _stop_if_failed(),
+            _silence_apology(guard={"steps.book.text": {"in": ["", None]}}), _reply(),
         ),
         0,
     ),
     (
         "a turn whose words never reach her (it only makes sure the card exists) is not judged",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _assistant("know"),
-            _apology("know"),
+            _notify_step("ack", "one moment"), _assistant("know"), _apology("know"),
             _stop_if_failed("know"),
         ),
         0,
@@ -7033,10 +6624,7 @@ ASSISTANT_SILENCE_CASES = [
         "\U0001f534 the bug, as #122 shipped it: a `done` turn with no words sends her an EMPTY "
         "message, and nothing else",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _slot_assistant(),
-            _apology(),
-            _stop_if_failed(),
+            _notify_step("ack", "one moment"), _slot_assistant(), _apology(), _stop_if_failed(),
             _notify_step("confirm", "{{steps.book.text}}"),
         ),
         2,
@@ -7044,10 +6632,7 @@ ASSISTANT_SILENCE_CASES = [
     (
         "the reply guarded but no apology: she is not sent an empty message — she is sent nothing",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _slot_assistant(),
-            _apology(),
-            _stop_if_failed(),
+            _notify_step("ack", "one moment"), _slot_assistant(), _apology(), _stop_if_failed(),
             _reply(),
         ),
         1,
@@ -7055,25 +6640,17 @@ ASSISTANT_SILENCE_CASES = [
     (
         "the apology but an unguarded reply: she gets the apology AND an empty message",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _slot_assistant(),
-            _apology(),
-            _stop_if_failed(),
-            _silence_apology(),
-            _notify_step("confirm", "{{steps.book.text}}"),
+            _notify_step("ack", "one moment"), _slot_assistant(), _apology(), _stop_if_failed(),
+            _silence_apology(), _notify_step("confirm", "{{steps.book.text}}"),
         ),
         1,
     ),
     (
-        'a reply guarded with `neq ""` alone lets a MISSING text through, which the kernel '
+        "a reply guarded with `neq \"\"` alone lets a MISSING text through, which the kernel "
         "refuses and the run dies",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _slot_assistant(),
-            _apology(),
-            _stop_if_failed(),
-            _silence_apology(),
-            _reply(guard={"steps.book.text": {"neq": ""}}),
+            _notify_step("ack", "one moment"), _slot_assistant(), _apology(), _stop_if_failed(),
+            _silence_apology(), _reply(guard={"steps.book.text": {"neq": ""}}),
         ),
         1,
     ),
@@ -7081,25 +6658,16 @@ ASSISTANT_SILENCE_CASES = [
         "an apology on the text alone when the turn declares slots: no words but slots to tap is "
         "an ANSWER, and she would be told nobody can help while being offered the list",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _slot_assistant(),
-            _apology(),
-            _stop_if_failed(),
-            _silence_apology(guard={"steps.book.text": {"in": ["", None]}}),
-            _reply(),
+            _notify_step("ack", "one moment"), _slot_assistant(), _apology(), _stop_if_failed(),
+            _silence_apology(guard={"steps.book.text": {"in": ["", None]}}), _reply(),
         ),
         1,
     ),
     (
-        'an apology on `eq ""` only: a turn with no text key at all is not caught',
+        "an apology on `eq \"\"` only: a turn with no text key at all is not caught",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _slot_assistant(),
-            _apology(),
-            _stop_if_failed(),
-            _silence_apology(
-                guard={"steps.book.text": {"eq": ""}, "steps.book.slots": {"eq": []}}
-            ),
+            _notify_step("ack", "one moment"), _slot_assistant(), _apology(), _stop_if_failed(),
+            _silence_apology(guard={"steps.book.text": {"eq": ""}, "steps.book.slots": {"eq": []}}),
             _reply(),
         ),
         1,
@@ -7108,12 +6676,8 @@ ASSISTANT_SILENCE_CASES = [
         "the silence apology BEFORE the failure stop: a failed turn with no words is apologised "
         "for twice",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _slot_assistant(),
-            _apology(),
-            _silence_apology(),
-            _stop_if_failed(),
-            _reply(),
+            _notify_step("ack", "one moment"), _slot_assistant(), _apology(), _silence_apology(),
+            _stop_if_failed(), _reply(),
         ),
         1,
     ),
@@ -7121,26 +6685,16 @@ ASSISTANT_SILENCE_CASES = [
         "an apology that quotes the words that were never written: not fixed words, and one more "
         "message sending her the empty text",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _slot_assistant(),
-            _apology(),
-            _stop_if_failed(),
-            _silence_apology(text="{{steps.book.text}}"),
-            _reply(),
+            _notify_step("ack", "one moment"), _slot_assistant(), _apology(), _stop_if_failed(),
+            _silence_apology(text="{{steps.book.text}}"), _reply(),
         ),
         2,
     ),
     (
         "the apology addressed to somebody other than the customer who was acknowledged",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _slot_assistant(),
-            _apology(),
-            _stop_if_failed(),
-            {
-                **_silence_apology(),
-                "to": {"query": "staff.members.list", "field": "phone"},
-            },
+            _notify_step("ack", "one moment"), _slot_assistant(), _apology(), _stop_if_failed(),
+            {**_silence_apology(), "to": {"query": "staff.members.list", "field": "phone"}},
             _reply(),
         ),
         1,
@@ -7153,58 +6707,39 @@ HANDOFF_MARK_CASES = [
     (
         "the shape the fix ships: each apology is followed by the mark, guarded the same way",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _slot_assistant(),
-            _apology(),
-            _handoff_mark(),
-            _stop_if_failed(),
-            _silence_apology(),
-            _silence_mark(),
-            _reply(),
+            _notify_step("ack", "one moment"), _slot_assistant(), _apology(), _handoff_mark(),
+            _stop_if_failed(), _silence_apology(), _silence_mark(), _reply(),
         ),
         0,
     ),
     (
         "\U0001f534 the bug, as it shipped: two apologies and nothing left in the inbox",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _slot_assistant(),
-            _apology(),
-            _stop_if_failed(),
-            _silence_apology(),
-            _reply(),
+            _notify_step("ack", "one moment"), _slot_assistant(), _apology(), _stop_if_failed(),
+            _silence_apology(), _reply(),
         ),
         2,
     ),
     (
         "a mark with no guard flags every conversation the automation answered",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _assistant(),
-            _apology(),
-            {k: v for k, v in _handoff_mark().items() if k != "run_if"},
-            _stop_if_failed(),
+            _notify_step("ack", "one moment"), _assistant(), _apology(),
+            {k: v for k, v in _handoff_mark().items() if k != "run_if"}, _stop_if_failed(),
         ),
         1,
     ),
     (
         "a mark guarded the wrong way round flags her only when the assistant ANSWERED",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _assistant(),
-            _apology(),
-            _handoff_mark(guard={"steps.book.status": {"neq": "failed"}}),
-            _stop_if_failed(),
+            _notify_step("ack", "one moment"), _assistant(), _apology(),
+            _handoff_mark(guard={"steps.book.status": {"neq": "failed"}}), _stop_if_failed(),
         ),
         1,
     ),
     (
         "a mark BEFORE the apology: she is told after a step that may fail",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _assistant(),
-            _handoff_mark(),
-            _apology(),
+            _notify_step("ack", "one moment"), _assistant(), _handoff_mark(), _apology(),
             _stop_if_failed(),
         ),
         1,
@@ -7212,21 +6747,15 @@ HANDOFF_MARK_CASES = [
     (
         "a mark on somebody else's thread",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _assistant(),
-            _apology(),
-            _handoff_mark(contact="steps.find_customer.phone"),
-            _stop_if_failed(),
+            _notify_step("ack", "one moment"), _assistant(), _apology(),
+            _handoff_mark(contact="steps.find_customer.phone"), _stop_if_failed(),
         ),
         1,
     ),
     (
         "a mark that ends the run when it fails",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _assistant(),
-            _apology(),
-            _handoff_mark(on_error=None),
+            _notify_step("ack", "one moment"), _assistant(), _apology(), _handoff_mark(on_error=None),
             _stop_if_failed(),
         ),
         1,
@@ -7234,13 +6763,8 @@ HANDOFF_MARK_CASES = [
     (
         "the silence apology is judged too, not only the failure one",
         _fixture_doc(
-            _notify_step("ack", "one moment"),
-            _slot_assistant(),
-            _apology(),
-            _handoff_mark(),
-            _stop_if_failed(),
-            _silence_apology(),
-            _reply(),
+            _notify_step("ack", "one moment"), _slot_assistant(), _apology(), _handoff_mark(),
+            _stop_if_failed(), _silence_apology(), _reply(),
         ),
         1,
     ),
@@ -7259,10 +6783,7 @@ ENDING_CASES = [
         _fixture_doc(
             dict(
                 _ai_step(
-                    "book",
-                    "manual",
-                    ["appointments.appointments.create"],
-                    on_reject="continue",
+                    "book", "manual", ["appointments.appointments.create"], on_reject="continue"
                 ),
                 on_expire="continue",
                 on_error="continue",
@@ -7277,10 +6798,7 @@ ENDING_CASES = [
         "customer left waiting for ever — two holes, two problems",
         _fixture_doc(
             _ai_step(
-                "book",
-                "manual",
-                ["appointments.appointments.create"],
-                on_reject="continue",
+                "book", "manual", ["appointments.appointments.create"], on_reject="continue"
             ),
             _ending_relay("reply", "book"),
             _notify_step("tell", "{{steps.reply.text}}"),
@@ -7293,10 +6811,7 @@ ENDING_CASES = [
         _fixture_doc(
             dict(
                 _ai_step(
-                    "book",
-                    "manual",
-                    ["appointments.appointments.create"],
-                    on_reject="continue",
+                    "book", "manual", ["appointments.appointments.create"], on_reject="continue"
                 ),
                 on_error="continue",
             ),
@@ -7311,10 +6826,7 @@ ENDING_CASES = [
         _fixture_doc(
             dict(
                 _ai_step(
-                    "book",
-                    "manual",
-                    ["appointments.appointments.create"],
-                    on_reject="continue",
+                    "book", "manual", ["appointments.appointments.create"], on_reject="continue"
                 ),
                 on_expire="continue",
             ),
@@ -7328,10 +6840,7 @@ ENDING_CASES = [
         _fixture_doc(
             dict(
                 _ai_step(
-                    "book",
-                    "manual",
-                    ["appointments.appointments.create"],
-                    on_reject="continue",
+                    "book", "manual", ["appointments.appointments.create"], on_reject="continue"
                 ),
                 on_expire="reject",
                 on_error="stop",
@@ -7347,10 +6856,7 @@ ENDING_CASES = [
         _fixture_doc(
             dict(
                 _ai_step(
-                    "book",
-                    "manual",
-                    ["appointments.appointments.create"],
-                    on_reject="continue",
+                    "book", "manual", ["appointments.appointments.create"], on_reject="continue"
                 ),
                 on_expire="continue",
                 on_error="continue",
@@ -7365,10 +6871,7 @@ ENDING_CASES = [
         _fixture_doc(
             dict(
                 _ai_step(
-                    "book",
-                    "manual",
-                    ["appointments.appointments.create"],
-                    on_reject="continue",
+                    "book", "manual", ["appointments.appointments.create"], on_reject="continue"
                 ),
                 on_expire="continue",
                 on_error="continue",
@@ -7383,10 +6886,7 @@ ENDING_CASES = [
         _fixture_doc(
             dict(
                 _ai_step(
-                    "book",
-                    "manual",
-                    ["appointments.appointments.create"],
-                    on_reject="continue",
+                    "book", "manual", ["appointments.appointments.create"], on_reject="continue"
                 ),
                 on_expire="continue",
                 on_error="continue",
@@ -7403,20 +6903,12 @@ ENDING_CASES = [
         _fixture_doc(
             dict(
                 _ai_step(
-                    "book",
-                    "manual",
-                    ["appointments.appointments.create"],
-                    on_reject="continue",
+                    "book", "manual", ["appointments.appointments.create"], on_reject="continue"
                 ),
                 on_expire="continue",
                 on_error="continue",
             ),
-            {
-                "id": "reply",
-                "kind": "ai",
-                "policy": "manual",
-                "prompt": "Send {{steps.book.text}}",
-            },
+            {"id": "reply", "kind": "ai", "policy": "manual", "prompt": "Send {{steps.book.text}}"},
             _notify_step("tell", "{{steps.reply.text}}"),
         ),
         0,
@@ -7438,13 +6930,7 @@ ENDING_CASES = [
     (
         "and a document that proposes nothing has no ending to survive",
         _fixture_doc(
-            {
-                "id": "look",
-                "kind": "ai",
-                "policy": "manual",
-                "prompt": "",
-                "tools": {"queries": ["customers.list"]},
-            },
+            {"id": "look", "kind": "ai", "policy": "manual", "prompt": "", "tools": {"queries": ["customers.list"]}},
             _notify_step("tell", "hello"),
         ),
         0,
@@ -7455,10 +6941,7 @@ ENDING_CASES = [
         _fixture_doc(
             dict(
                 _ai_step(
-                    "book",
-                    "manual",
-                    ["appointments.appointments.create"],
-                    on_reject="continue",
+                    "book", "manual", ["appointments.appointments.create"], on_reject="continue"
                 ),
                 on_expire="continue",
                 on_error="continue",
@@ -7469,9 +6952,7 @@ ENDING_CASES = [
                 "policy": "manual",
                 "prompt": "{{steps.book.text}} {{steps.book.status}} `expired` `failed`",
                 "tools": {"commands": ["appointments.availability.slots"]},
-                "output": {
-                    "slots": {"type": "options", "describe": "what she may tap"}
-                },
+                "output": {"slots": {"type": "options", "describe": "what she may tap"}},
             },
             _notify_step("tell", "{{steps.reply.text}}"),
         ),
@@ -7493,65 +6974,38 @@ TOOL_CASES = [
     (
         "a prompt that only names what the step handed it is fine",
         _fixture_doc(
-            _ai_step(
-                "s",
-                "manual",
-                ["appointments.appointments.create"],
-                "Propose `appointments.appointments.create` with the slot.",
-            ),
+            _ai_step("s", "manual", ["appointments.appointments.create"], "Propose `appointments.appointments.create` with the slot."),
         ),
         0,
     ),
     (
         "a prompt that orders a command the step never declared",
         _fixture_doc(
-            _ai_step(
-                "s",
-                "manual",
-                ["appointments.appointments.create"],
-                "If they cancel, call `appointments.appointments.cancel`.",
-            ),
+            _ai_step("s", "manual", ["appointments.appointments.create"], "If they cancel, call `appointments.appointments.cancel`."),
         ),
         1,
     ),
     (
         "a prompt that orders a QUERY the step never declared",
         _fixture_doc(
-            {
-                "id": "s",
-                "kind": "ai",
-                "policy": "manual",
-                "tools": {"queries": ["customers.list"]},
-                "prompt": "Look them up with `customers.list` and their visits with `appointments.appointments.list_for_customer`.",
-            },
+            {"id": "s", "kind": "ai", "policy": "manual", "tools": {"queries": ["customers.list"]},
+             "prompt": "Look them up with `customers.list` and their visits with `appointments.appointments.list_for_customer`."},
         ),
         1,
     ),
     (
         "a word that is not an operation of any module is prose, not a tool",
         _fixture_doc(
-            _ai_step(
-                "s",
-                "manual",
-                ["appointments.appointments.create"],
-                "Put the estimate in `internal_notes` and the ask in `notes`.",
-            ),
+            _ai_step("s", "manual", ["appointments.appointments.create"], "Put the estimate in `internal_notes` and the ask in `notes`."),
         ),
         0,
     ),
     (
         "a step that hands over queries AND commands is judged against both",
         _fixture_doc(
-            {
-                "id": "s",
-                "kind": "ai",
-                "policy": "manual",
-                "tools": {
-                    "queries": ["customers.list"],
-                    "commands": ["appointments.appointments.cancel"],
-                },
-                "prompt": "Find them with `customers.list`, then `appointments.appointments.cancel`.",
-            },
+            {"id": "s", "kind": "ai", "policy": "manual",
+             "tools": {"queries": ["customers.list"], "commands": ["appointments.appointments.cancel"]},
+             "prompt": "Find them with `customers.list`, then `appointments.appointments.cancel`."},
         ),
         0,
     ),
@@ -7567,12 +7021,7 @@ ORDER_CASES = [
     (
         "a tool the prompt names is a tool the prompt spends",
         _fixture_doc(
-            _ai_step(
-                "s",
-                "manual",
-                ["appointments.appointments.create"],
-                "Propose `appointments.appointments.create`.",
-            ),
+            _ai_step("s", "manual", ["appointments.appointments.create"], "Propose `appointments.appointments.create`."),
         ),
         0,
     ),
@@ -7582,10 +7031,7 @@ ORDER_CASES = [
             _ai_step(
                 "s",
                 "manual",
-                [
-                    "appointments.appointments.create",
-                    "appointments.appointments.cancel",
-                ],
+                ["appointments.appointments.create", "appointments.appointments.cancel"],
                 "Propose `appointments.appointments.create`.",
             ),
         ),
@@ -7594,32 +7040,15 @@ ORDER_CASES = [
     (
         "a QUERY handed over that the prompt never names, the same",
         _fixture_doc(
-            {
-                "id": "s",
-                "kind": "ai",
-                "policy": "manual",
-                "tools": {
-                    "queries": [
-                        "customers.list",
-                        "appointments.appointments.list_for_customer",
-                    ]
-                },
-                "prompt": "Find them with `customers.list`.",
-            },
+            {"id": "s", "kind": "ai", "policy": "manual",
+             "tools": {"queries": ["customers.list", "appointments.appointments.list_for_customer"]},
+             "prompt": "Find them with `customers.list`."},
         ),
         1,
     ),
     (
         "a step that hands nothing over owes nothing",
-        _fixture_doc(
-            {
-                "id": "s",
-                "kind": "ai",
-                "policy": "manual",
-                "prompt": "Answer in one line.",
-                "tools": {},
-            }
-        ),
+        _fixture_doc({"id": "s", "kind": "ai", "policy": "manual", "prompt": "Answer in one line.", "tools": {}}),
         0,
     ),
     ("a notify step hands no tools", _fixture_doc(_notify_step()), 0),
@@ -7627,42 +7056,23 @@ ORDER_CASES = [
 
 
 def _budget_step(max_iters):
-    return {
-        **_ai_step("s", "manual", ["appointments.appointments.create"]),
-        "max_iters": max_iters,
-    }
+    return {**_ai_step("s", "manual", ["appointments.appointments.create"]), "max_iters": max_iters}
 
 
 BUDGET_CASES = [
-    (
-        "at the cap is what the module ships",
-        _fixture_doc(_budget_step(MAX_ITERS_CAP)),
-        0,
-    ),
-    (
-        "one past the cap is a document no hub saves",
-        _fixture_doc(_budget_step(MAX_ITERS_CAP + 1)),
-        1,
-    ),
+    ("at the cap is what the module ships", _fixture_doc(_budget_step(MAX_ITERS_CAP)), 0),
+    ("one past the cap is a document no hub saves", _fixture_doc(_budget_step(MAX_ITERS_CAP + 1)), 1),
     ("zero turns is not a step", _fixture_doc(_budget_step(0)), 1),
-    (
-        "a step that leaves it unset takes the hub's default",
-        _fixture_doc(_ai_step("s", "manual", [])),
-        0,
-    ),
+    ("a step that leaves it unset takes the hub's default", _fixture_doc(_ai_step("s", "manual", [])), 0),
     (
         "🔴 one turn and a tool in its hands: the call spends the only turn it has, the step dies "
         "with `flow.agent_max_iters` and she is answered by nobody",
-        _fixture_doc(
-            _ai_step("s", "manual", ["appointments.availability.slots"], max_iters=1)
-        ),
+        _fixture_doc(_ai_step("s", "manual", ["appointments.availability.slots"], max_iters=1)),
         1,
     ),
     (
         "two turns is the floor that works: one to ask, one to answer",
-        _fixture_doc(
-            _ai_step("s", "manual", ["appointments.availability.slots"], max_iters=2)
-        ),
+        _fixture_doc(_ai_step("s", "manual", ["appointments.availability.slots"], max_iters=2)),
         0,
     ),
     (
@@ -7672,9 +7082,7 @@ BUDGET_CASES = [
     ),
 ]
 
-_FIXTURE_ENUMS = {
-    "appointments.appointments.cancel": {"channel": ["staff", "customer"]}
-}
+_FIXTURE_ENUMS = {"appointments.appointments.cancel": {"channel": ["staff", "customer"]}}
 
 
 def _enum_step(prompt, commands=("appointments.appointments.cancel",)):
@@ -7684,43 +7092,28 @@ def _enum_step(prompt, commands=("appointments.appointments.cancel",)):
 ENUM_CASES = [
     (
         "`customer` is one of the two words the cancel gate accepts",
-        _enum_step(
-            "Propose `appointments.appointments.cancel` with `channel` set to `customer`."
-        ),
+        _enum_step("Propose `appointments.appointments.cancel` with `channel` set to `customer`."),
         0,
     ),
     (
         "`whatsapp` — what the issue said — is a proposal the hub refuses after approval",
-        _enum_step(
-            "Propose `appointments.appointments.cancel` with `channel` set to `whatsapp`."
-        ),
+        _enum_step("Propose `appointments.appointments.cancel` with `channel` set to `whatsapp`."),
         1,
     ),
     (
         "the Spanish order reads the same",
-        _enum_step(
-            "Propón `appointments.appointments.cancel` con `channel` puesto a `whatsapp`."
-        ),
+        _enum_step("Propón `appointments.appointments.cancel` con `channel` puesto a `whatsapp`."),
         1,
     ),
-    (
-        "and so does an equals sign",
-        _enum_step("`appointments.appointments.cancel`, `channel` = `whatsapp`"),
-        1,
-    ),
+    ("and so does an equals sign", _enum_step("`appointments.appointments.cancel`, `channel` = `whatsapp`"), 1),
     (
         "a value for a field no handed command constrains is prose",
-        _enum_step(
-            "`appointments.appointments.cancel`; filter by `phone` = `+{{input.from}}`."
-        ),
+        _enum_step("`appointments.appointments.cancel`; filter by `phone` = `+{{input.from}}`."),
         0,
     ),
     (
         "a command the step never handed over constrains nothing here",
-        _enum_step(
-            "`appointments.appointments.create`, `channel` set to `whatsapp`",
-            ("appointments.appointments.create",),
-        ),
+        _enum_step("`appointments.appointments.create`, `channel` set to `whatsapp`", ("appointments.appointments.create",)),
         0,
     ),
 ]
@@ -7776,9 +7169,7 @@ IDENTITY_CASES = [
     ),
     (
         "a prompt that never orders the channel is not ordering a cancellation either",
-        _enum_step(
-            "You may call `appointments.appointments.cancel` if she asks for it."
-        ),
+        _enum_step("You may call `appointments.appointments.cancel` if she asks for it."),
         0,
     ),
 ]
@@ -7793,10 +7184,7 @@ _PIN_NONE = {CANCEL_COMMAND: {}}
 # …and the same pair for MOVING (whatsapp_inbox#105). Kept apart from `_PIN_OK` so a row can
 # describe the half-applied fix this issue is most likely to ship: cancelling narrowed months ago,
 # moving added afterwards with the grant left wide.
-_PIN_OK_BOTH = {
-    CANCEL_COMMAND: {"channel": "customer"},
-    MOVE_COMMAND: {"channel": "customer"},
-}
+_PIN_OK_BOTH = {CANCEL_COMMAND: {"channel": "customer"}, MOVE_COMMAND: {"channel": "customer"}}
 _PIN_MOVE_WIDE = {CANCEL_COMMAND: {"channel": "customer"}, MOVE_COMMAND: {}}
 
 
@@ -7849,9 +7237,7 @@ PIN_CASES = [
         "which `channel` the cancellation carries — a review is a workflow control, never a "
         "permission boundary",
         UNNAMED_FAMILY,
-        _fixture_doc(
-            _ai_step("propose_appointment", "manual", (BOOKING_COMMAND, CANCEL_COMMAND))
-        ),
+        _fixture_doc(_ai_step("propose_appointment", "manual", (BOOKING_COMMAND, CANCEL_COMMAND))),
         _PIN_NONE,
         1,
     ),
@@ -7860,9 +7246,7 @@ PIN_CASES = [
         "says AS THE CUSTOMER — which is the declaration this battery can hold it to, not proof "
         "that a hub enforces it (hub#1654) nor that the gallery card copies it (ERPlora/flows#99)",
         UNNAMED_FAMILY,
-        _fixture_doc(
-            _ai_step("propose_appointment", "manual", (BOOKING_COMMAND, CANCEL_COMMAND))
-        ),
+        _fixture_doc(_ai_step("propose_appointment", "manual", (BOOKING_COMMAND, CANCEL_COMMAND))),
         _PIN_OK,
         0,
     ),
@@ -7872,12 +7256,7 @@ PIN_CASES = [
         "policy cannot fall through the one hole that reading it would open",
         UNATTENDED,
         _fixture_doc(
-            {
-                "id": "book",
-                "kind": "ai",
-                "prompt": "",
-                "tools": {"commands": [CANCEL_COMMAND]},
-            }
+            {"id": "book", "kind": "ai", "prompt": "", "tools": {"commands": [CANCEL_COMMAND]}}
         ),
         _PIN_NONE,
         1,
@@ -7888,9 +7267,7 @@ PIN_CASES = [
         "`appointments.availability.check` only asks whether a slot is still free — nothing it "
         "is sent can widen anything or write anything false",
         UNATTENDED,
-        _fixture_doc(
-            _ai_step("book_appointment", "auto", ("appointments.availability.check",))
-        ),
+        _fixture_doc(_ai_step("book_appointment", "auto", ("appointments.availability.check",))),
         {"appointments.availability.check": {}},
         0,
     ),
@@ -7957,14 +7334,7 @@ PIN_CASES = [
         "the DOCUMENT maps, so there is no model choosing the channel and pinning it would break a "
         "template that legitimately cancels for the salon",
         UNATTENDED,
-        _fixture_doc(
-            {
-                "id": "drop_it",
-                "kind": "command",
-                "command": CANCEL_COMMAND,
-                "params": {},
-            }
-        ),
+        _fixture_doc({"id": "drop_it", "kind": "command", "command": CANCEL_COMMAND, "params": {}}),
         _PIN_NONE,
         0,
     ),
@@ -8016,9 +7386,7 @@ _QPIN_NONE = {OWNED_APPOINTMENTS_QUERY: {}}
 
 def _diary_reader(policy="auto", sid="book_appointment"):
     """The step whatsapp_inbox#119 is about: a model holding the read that returns a whole diary."""
-    return _ai_step(
-        sid, policy, (BOOKING_COMMAND,), queries=(OWNED_APPOINTMENTS_QUERY,)
-    )
+    return _ai_step(sid, policy, (BOOKING_COMMAND,), queries=(OWNED_APPOINTMENTS_QUERY,))
 
 
 def _diary_reader_using(resolver, policy="auto", sid="book_appointment"):
@@ -8101,11 +7469,7 @@ QUERY_PIN_CASES = [
         UNATTENDED,
         _fixture_doc(
             _RESOLVER,
-            _query_step(
-                "her_diary",
-                OWNED_APPOINTMENTS_QUERY,
-                {"customer_id": "{{steps.resolve_customer.id}}"},
-            ),
+            _query_step("her_diary", OWNED_APPOINTMENTS_QUERY, {"customer_id": "{{steps.resolve_customer.id}}"}),
         ),
         _QPIN_NONE,
         0,
@@ -8114,9 +7478,7 @@ QUERY_PIN_CASES = [
         "silent on a read this table says nothing about: the rule names the diary, not every query "
         "a model may ever hold",
         UNATTENDED,
-        _fixture_doc(
-            _RESOLVER, _ai_step("ask", "auto", (), queries=("services.services.list",))
-        ),
+        _fixture_doc(_RESOLVER, _ai_step("ask", "auto", (), queries=("services.services.list",))),
         {"services.services.list": {}},
         0,
     ),
@@ -8213,9 +7575,7 @@ STEP_PIN_CASES = [
     (
         "a `{{…}}` template is not the path the grant names: it renders to TEXT, so it only "
         "equals the pinned value while that value happens to be a string — write the pin's form",
-        _fixture_doc(
-            _fixed_step("command", _FLAG_CMD, {"wa_contact_id": "{{input.from}}"})
-        ),
+        _fixture_doc(_fixed_step("command", _FLAG_CMD, {"wa_contact_id": "{{input.from}}"})),
         {_FLAG_CMD: dict(_FROM)},
         {},
         1,
@@ -8233,11 +7593,7 @@ STEP_PIN_CASES = [
     ),
     (
         "a literal pin is matched by the same literal",
-        _fixture_doc(
-            _fixed_step(
-                "command", CANCEL_COMMAND, {"channel": "customer", "id": "input.id"}
-            )
-        ),
+        _fixture_doc(_fixed_step("command", CANCEL_COMMAND, {"channel": "customer", "id": "input.id"})),
         {CANCEL_COMMAND: {"channel": "customer"}},
         {},
         0,
@@ -8258,11 +7614,7 @@ STEP_PIN_CASES = [
     ),
     (
         "fields the grant does NOT fix are free: the pin narrows, it is not a schema",
-        _fixture_doc(
-            _fixed_step(
-                "command", _FLAG_CMD, {**_FROM, "offered_slots": "steps.x.slots"}
-            )
-        ),
+        _fixture_doc(_fixed_step("command", _FLAG_CMD, {**_FROM, "offered_slots": "steps.x.slots"})),
         {_FLAG_CMD: dict(_FROM)},
         {},
         0,
@@ -8284,9 +7636,7 @@ STEP_PIN_CASES = [
     (
         "a deterministic READ goes through the same pin (`check_query_grant`): recalling the "
         "offer of another thread than the grant fixes is refused too",
-        _fixture_doc(
-            _fixed_step("query", _RECALL_QUERY, {"wa_contact_id": "input.to"}, "recall")
-        ),
+        _fixture_doc(_fixed_step("query", _RECALL_QUERY, {"wa_contact_id": "input.to"}, "recall")),
         {},
         {_RECALL_QUERY: dict(_FROM)},
         1,
@@ -8301,9 +7651,7 @@ STEP_PIN_CASES = [
     (
         "the pin is keyed by the PAIR (kind, name), as `Authority.pins` is: a command pin does "
         "not bind a query step that shares its name",
-        _fixture_doc(
-            _fixed_step("query", _FLAG_CMD, {"wa_contact_id": "input.to"}, "read")
-        ),
+        _fixture_doc(_fixed_step("query", _FLAG_CMD, {"wa_contact_id": "input.to"}, "read")),
         {_FLAG_CMD: dict(_FROM)},
         {},
         0,
@@ -8441,9 +7789,7 @@ INSTRUCTION_CASES = [
         "watching: a model with no sentence telling it why `channel` is `customer` decides on its "
         "own what it means",
         _APPOINTMENT_ES,
-        _saying(
-            "aquí no se dice nada del `channel`", _ES_BOOKED_ONLINE, _ES_CARD_SOURCE
-        ),
+        _saying("aquí no se dice nada del `channel`", _ES_BOOKED_ONLINE, _ES_CARD_SOURCE),
         _SHIPPED_FAMILIES,
         2,
     ),
@@ -8496,9 +7842,7 @@ INSTRUCTION_CASES = [
 # The floor rule's own mutants. A document that hands MOVE over, one that does not, and the two
 # readings of the neighbour's past: the release that already took the fields and the one below it.
 _FLOOR_MOVER = {
-    "steps": [
-        {"id": "book_appointment", "kind": "ai", "tools": {"commands": [MOVE_COMMAND]}}
-    ]
+    "steps": [{"id": "book_appointment", "kind": "ai", "tools": {"commands": [MOVE_COMMAND]}}]
 }
 _FLOOR_BOOKER = {
     "steps": [
@@ -8510,13 +7854,7 @@ _FLOOR_BOOKER = {
     ]
 }
 _FLOOR_CUSTOMER = {
-    "steps": [
-        {
-            "id": "know_the_customer",
-            "kind": "ai",
-            "tools": {"commands": ["customers.create"]},
-        }
-    ]
+    "steps": [{"id": "know_the_customer", "kind": "ai", "tools": {"commands": ["customers.create"]}}]
 }
 _FLOOR_TAKES_BOTH = {
     MOVE_COMMAND: {"appointment_id", "start_datetime", "channel", "customer_id"}
@@ -8659,13 +7997,7 @@ FLOOR_CASES = [
         "…and the floor that already takes it is the green, so the row above cannot be one that "
         "fires whatever the floor says",
         _FLOOR_BOOKER,
-        {
-            "appointments.appointments.create": {
-                "customer_id",
-                "start_datetime",
-                "booked_online",
-            }
-        },
+        {"appointments.appointments.create": {"customer_id", "start_datetime", "booked_online"}},
         0,
     ),
 ]
@@ -8701,18 +8033,8 @@ def _floor_reading_problems():
             )
             for args in (
                 ["add", "-A"],
-                [
-                    "-c",
-                    "user.name=t",
-                    "-c",
-                    "user.email=t@t",
-                    "-c",
-                    "commit.gpgsign=false",
-                    "commit",
-                    "-q",
-                    "-m",
-                    message,
-                ],
+                ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false",
+                 "commit", "-q", "-m", message],
             ):
                 done = subprocess.run(
                     ["git", "-C", str(root)] + args, capture_output=True, text=True
@@ -8734,9 +8056,7 @@ def _floor_reading_problems():
                 f"{done.stderr.strip()} — `schema_at_version` was NOT proved"
             ]
         # Two releases, the shape `appointments` really has: the fields land in the SECOND one.
-        if not commit(
-            "1.1.72", ["appointment_id", "start_datetime"], "chore(release): v1.1.72"
-        ):
+        if not commit("1.1.72", ["appointment_id", "start_datetime"], "chore(release): v1.1.72"):
             return problems
         if not commit(
             "1.1.73",
@@ -8790,14 +8110,7 @@ def _floor_reading_problems():
             (
                 "the floor that takes everything these templates send",
                 {"appointments": "1.1.73"},
-                {
-                    MOVE_COMMAND: {
-                        "appointment_id",
-                        "start_datetime",
-                        "channel",
-                        "customer_id",
-                    }
-                },
+                {MOVE_COMMAND: {"appointment_id", "start_datetime", "channel", "customer_id"}},
                 0,
             ),
             (
@@ -8813,9 +8126,7 @@ def _floor_reading_problems():
                 0,
             ),
         ]:
-            got_props, got_skips = floor_payload_properties(
-                floors, commands_def, resolved
-            )
+            got_props, got_skips = floor_payload_properties(floors, commands_def, resolved)
             if got_props != want_props or len(got_skips) != want_skips:
                 problems.append(
                     f"the battery's own collection of floor payloads is wrong — {label}: expected "
@@ -8845,9 +8156,7 @@ def _floor_read_reading_problems():
         (root / "queries").mkdir()
 
         def run(*args):
-            done = subprocess.run(
-                ["git", "-C", str(root), *args], capture_output=True, text=True
-            )
+            done = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
             if done.returncode != 0:
                 problems.append(
                     f"the battery could not build its own git fixture (`git {args[0]}`): "
@@ -8860,23 +8169,13 @@ def _floor_read_reading_problems():
         def commit(version, sql, declared=rel):
             queries = {} if declared is None else {APPOINTMENT_READ: {"sql": declared}}
             (root / "module.json").write_text(
-                json.dumps(
-                    {"id": "appointments", "version": version, "queries": queries}
-                )
+                json.dumps({"id": "appointments", "version": version, "queries": queries})
             )
             if sql is not None:
                 (root / "queries" / "appointment_get.sql").write_text(sql)
             return run("add", "-A") and run(
-                "-c",
-                "user.name=t",
-                "-c",
-                "user.email=t@t",
-                "-c",
-                "commit.gpgsign=false",
-                "commit",
-                "-q",
-                "-m",
-                f"chore(release): v{version}",
+                "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false",
+                "commit", "-q", "-m", f"chore(release): v{version}",
             )
 
         if not run("init", "-q"):
@@ -8917,12 +8216,7 @@ def _floor_read_reading_problems():
             ("the release that answers them", "1.1.77", {WHEN_DATE, WHEN_TIME}, set()),
         ]:
             got, why = sql_names_at_version(root, version, APPOINTMENT_READ)
-            if (
-                got is None
-                or got is ABSENT_AT_FLOOR
-                or not present <= got
-                or absent & got
-            ):
+            if got is None or got is ABSENT_AT_FLOOR or not present <= got or absent & got:
                 problems.append(
                     f"the battery's own reading of a released query is wrong — {label}: wanted "
                     f"{sorted(present)} in and {sorted(absent)} out, got "
@@ -8939,14 +8233,8 @@ def _floor_read_reading_problems():
         # `requires.json` left the battery green while the hub offered the recipe to copies where
         # `customers.by_phone` does not exist — every message failing, nobody answered.
         for label, version in [
-            (
-                "the release before the query existed — its manifest does not declare it",
-                "1.1.75",
-            ),
-            (
-                "a release that declares the query over a SQL file its tree does not carry",
-                "1.1.78",
-            ),
+            ("the release before the query existed — its manifest does not declare it", "1.1.75"),
+            ("a release that declares the query over a SQL file its tree does not carry", "1.1.78"),
         ]:
             got, why = sql_names_at_version(root, version, APPOINTMENT_READ)
             if got is not ABSENT_AT_FLOOR or why:
@@ -8968,16 +8256,11 @@ def _floor_read_reading_problems():
                 0,
             ),
         ]:
-            got, skips = floor_read_columns(
-                floors, definitions, resolved, {APPOINTMENT_READ}
-            )
+            got, skips = floor_read_columns(floors, definitions, resolved, {APPOINTMENT_READ})
             reading = (
                 got.get(APPOINTMENT_READ) is ABSENT_AT_FLOOR
                 if want is ABSENT_AT_FLOOR
-                else (
-                    APPOINTMENT_READ in got
-                    and got[APPOINTMENT_READ] is not ABSENT_AT_FLOOR
-                )
+                else (APPOINTMENT_READ in got and got[APPOINTMENT_READ] is not ABSENT_AT_FLOOR)
             )
             if reading != bool(want) or len(skips) != want_skips:
                 problems.append(
@@ -8995,38 +8278,22 @@ def _identity_reading_problems():
         root = pathlib.Path(tmp)
         (root / "schemas").mkdir()
         (root / "schemas" / "cancel.json").write_text(
-            json.dumps(
-                {
-                    "type": "object",
-                    "properties": {
-                        "appointment_id": {"type": "string"},
-                        "channel": {"type": "string"},
-                        "customer_id": {"type": "string"},
-                    },
-                }
-            )
+            json.dumps({
+                "type": "object",
+                "properties": {
+                    "appointment_id": {"type": "string"},
+                    "channel": {"type": "string"},
+                    "customer_id": {"type": "string"},
+                },
+            })
         )
-        got = payload_properties(
-            {
-                "appointments.appointments.cancel": (
-                    root,
-                    {"schema": "schemas/cancel.json"},
-                ),
-                "appointments.appointments.create": (
-                    root,
-                    {"schema": "schemas/missing.json"},
-                ),
-                "customers.list": (root, {}),
-            }
-        )
+        got = payload_properties({
+            "appointments.appointments.cancel": (root, {"schema": "schemas/cancel.json"}),
+            "appointments.appointments.create": (root, {"schema": "schemas/missing.json"}),
+            "customers.list": (root, {}),
+        })
         problems = []
-        want = {
-            "appointments.appointments.cancel": {
-                "appointment_id",
-                "channel",
-                "customer_id",
-            }
-        }
+        want = {"appointments.appointments.cancel": {"appointment_id", "channel", "customer_id"}}
         if got != want:
             problems.append(
                 f"the battery's own reading of payload properties is wrong: expected {want}, got {got}"
@@ -9034,16 +8301,9 @@ def _identity_reading_problems():
     # …and the anchor itself: the real table against a schema that HAS the pair, against one that
     # lost it (the shape `appointments` dropping `customer_id` would take), and against a workspace
     # whose schema could not be read — which stays quiet, because layer 1b already said so.
-    _CHANNEL_ENUM = {
-        "appointments.appointments.cancel": {"channel": ["staff", "customer"]}
-    }
+    _CHANNEL_ENUM = {"appointments.appointments.cancel": {"channel": ["staff", "customer"]}}
     for label, props, enums, expected in [
-        (
-            "the schema declares both fields and the pinned value",
-            want,
-            _CHANNEL_ENUM,
-            0,
-        ),
+        ("the schema declares both fields and the pinned value", want, _CHANNEL_ENUM, 0),
         (
             "`customer_id` is gone from the schema",
             {"appointments.appointments.cancel": {"appointment_id", "channel"}},
@@ -9089,34 +8349,22 @@ def _enum_reading_problems():
         root = pathlib.Path(tmp)
         (root / "schemas").mkdir()
         (root / "schemas" / "cancel.json").write_text(
-            json.dumps(
-                {
-                    "type": "object",
-                    "properties": {
-                        "appointment_id": {"type": "string"},
-                        "channel": {"type": "string", "enum": ["staff", "customer"]},
-                    },
-                }
-            )
+            json.dumps({
+                "type": "object",
+                "properties": {
+                    "appointment_id": {"type": "string"},
+                    "channel": {"type": "string", "enum": ["staff", "customer"]},
+                },
+            })
         )
-        got = payload_enums(
-            {
-                "appointments.appointments.cancel": (
-                    root,
-                    {"schema": "schemas/cancel.json"},
-                ),
-                "appointments.appointments.create": (
-                    root,
-                    {"schema": "schemas/missing.json"},
-                ),
-                "customers.list": (root, {}),
-            }
-        )
+        got = payload_enums({
+            "appointments.appointments.cancel": (root, {"schema": "schemas/cancel.json"}),
+            "appointments.appointments.create": (root, {"schema": "schemas/missing.json"}),
+            "customers.list": (root, {}),
+        })
     want = {"appointments.appointments.cancel": {"channel": ["staff", "customer"]}}
     if got != want:
-        return [
-            f"the battery's own reading of payload enums is wrong: expected {want}, got {got}"
-        ]
+        return [f"the battery's own reading of payload enums is wrong: expected {want}, got {got}"]
     return []
 
 
@@ -9215,7 +8463,7 @@ TAPPABLE_CASES = [
         1,
     ),
     (
-        'the trigger as it ships tells the two apart: `neq ""` wakes up for the tap and leaves '
+        "the trigger as it ships tells the two apart: `neq \"\"` wakes up for the tap and leaves "
         "the photo alone",
         UNNAMED_FAMILY,
         _tap_doc(),
@@ -9281,11 +8529,7 @@ TAPPABLE_CASES = [
             **_tap_doc(guard=False),
             "steps": [
                 _tap_doc(guard=False)["steps"][0],
-                {
-                    "id": "any",
-                    "kind": "condition",
-                    "when": {"steps.pick.slots": {"exists": True}},
-                },
+                {"id": "any", "kind": "condition", "when": {"steps.pick.slots": {"exists": True}}},
                 _tap_doc(guard=False)["steps"][1],
             ],
         },
@@ -9521,6 +8765,12 @@ def _confirmation(
     notify=True,
     notify_to=None,
     text=None,
+    lookup_query=THREAD_BY_NUMBER,
+    notify_query=THREAD_BY_NUMBER,
+    international_guard=True,
+    thread_guard=True,
+    one_step_for_both_flags=False,
+    guards_after_notify=False,
 ):
     """The whatsapp_inbox#125 recipe, with one screw loosened at a time."""
     phone = f"steps.{read_id}.{DIARY_PHONE}"
@@ -9529,6 +8779,10 @@ def _confirmation(
             f"Confirmed! See you on {{{{steps.{read_id}.{WHEN_DATE}}}}} at "
             f"{{{{steps.{read_id}.{WHEN_TIME}}}}}."
         )
+
+    def by(query, value):
+        return {PHONE_PARAM if query == THREAD_BY_NUMBER else "f_contact_phone": value}
+
     steps = []
     if read:
         steps.append(
@@ -9541,37 +8795,60 @@ def _confirmation(
                 "limit": 1,
             }
         )
+    has_a_phone = {}
+    if read and found_guard:
+        has_a_phone[f"steps.{read_id}.{READ_FOUND}"] = {"eq": True}
+    if guard:
+        has_a_phone[phone] = {"neq": ""}
+    if has_a_phone:
+        steps.append({"id": "has_a_phone", "kind": "condition", "when": has_a_phone})
     steps.append(
         {
             "id": "reachable_on_whatsapp",
             "kind": "query",
-            "query": CONVERSATIONS_READ,
-            "params": {PHONE_FILTER: phone},
+            "query": lookup_query,
+            "params": by(lookup_query, phone),
             "result": "first",
             "limit": 1,
         }
     )
-    when = {"steps.reachable_on_whatsapp.found": {"eq": True}}
-    if guard:
-        when[phone] = {"neq": ""}
-    if read and found_guard:
-        when[f"steps.{read_id}.{READ_FOUND}"] = {"eq": True}
-    steps.append({"id": "has_a_thread", "kind": "condition", "when": when})
+    flags = []
+    if international_guard:
+        flags.append(("phone_is_international", PHONE_IS_INTERNATIONAL))
+    if thread_guard:
+        flags.append(("has_a_thread", HAS_THREAD))
+    if lookup_query == CONVERSATIONS_READ:
+        flags = [("has_a_thread", READ_FOUND)]
+    guards = [
+        {
+            "id": step_id,
+            "kind": "condition",
+            "when": {f"steps.reachable_on_whatsapp.{flag}": {"eq": True}},
+        }
+        for step_id, flag in flags
+    ]
+    if one_step_for_both_flags and guards:
+        merged = {}
+        for g in guards:
+            merged.update(g["when"])
+        guards = [{"id": "reachable", "kind": "condition", "when": merged}]
+    tell = []
     if notify:
-        steps.append(
+        tell.append(
             {
                 "id": "tell_the_customer",
                 "kind": "notify",
                 "channel": "whatsapp",
                 "to": {
-                    "query": CONVERSATIONS_READ,
-                    "params": {PHONE_FILTER: notify_to or phone},
+                    "query": notify_query,
+                    "params": by(notify_query, notify_to or phone),
                     "field": "contact_phone",
                 },
                 "template": "",
                 "vars": {"text": text},
             }
         )
+    steps += tell + guards if guards_after_notify else guards + tell
     return {
         "schema_version": 1,
         "triggers": [
@@ -9583,6 +8860,15 @@ def _confirmation(
         ],
         "steps": steps,
     }
+
+
+def _phone_and_international_on_one_step():
+    """The recipe with the «no phone» clause moved onto the «not international» condition."""
+    doc = _confirmation()
+    steps = {s["id"]: s for s in doc["steps"]}
+    phone = f"steps.read_appointment.{DIARY_PHONE}"
+    steps["phone_is_international"]["when"][phone] = steps["has_a_phone"]["when"].pop(phone)
+    return doc
 
 
 CONFIRMATION_CASES = [
@@ -9608,22 +8894,20 @@ CONFIRMATION_CASES = [
         1,
     ),
     (
-        "🔴 the guard that keeps an EMPTY phone out of the lookup is gone, leaving `found` on its "
-        "own. `contact_phone` is `op: like`, so a walk-in booked over the counter with no number "
-        "on her card goes out as `%%`, matches every conversation in the inbox and answers "
-        "`found: true`: the confirmation is delivered to a stranger, or the run dies with "
-        "`flow.recipient_ambiguous` and nobody can read why",
+        "🔴 the guard on an EMPTY phone is gone: a walk-in booked over the counter with no number "
+        "on her card ends the run on «not an international number», and the history blames a "
+        "number the salon never typed",
         _CONFIRMED_DOC,
-        _confirmation(found_guard=False),
+        _confirmation(guard=False),
         1,
     ),
     (
-        "🔴 the same `%%`, reached by `null`: nothing demands that the diary read FOUND the "
-        "appointment. Deleted between the confirmation and the run — the outbox delivers "
-        'at-least-once — the read answers with no fields, the `neq: ""` above is TRUE over a '
-        "`null`, and the phone travels as `null`, which the list engine reads as NO FILTER AT ALL",
+        "🔴 nothing demands that the diary read FOUND the appointment. Deleted between the "
+        "confirmation and the run — the outbox delivers at-least-once — the read answers with no "
+        "fields, the `neq: \"\"` is TRUE over a `null`, and the run stops later blaming the "
+        "number for an appointment that no longer exists",
         _CONFIRMED_DOC,
-        _confirmation(guard=False),
+        _confirmation(found_guard=False),
         1,
     ),
     (
@@ -9637,9 +8921,59 @@ CONFIRMATION_CASES = [
         "🔴 the diary is never read: the event carries `appointment_id` and nothing else, so there "
         "is no phone, no service and no professional in this run — nothing to write with, and "
         "nowhere to write it (two marks, because the notify is then keyed on a value no step "
-        "produces)",
+        "produces, and nothing asks whether THAT phone is a number with a conversation)",
         _CONFIRMED_DOC,
         _confirmation(read=False),
+        3,
+    ),
+    (
+        "🔴 whatsapp_inbox#279 word for word — the recipe as it shipped: the lookup and the "
+        "recipient go through the inbox LIST, whose phone filter is «contains», so `600111` finds "
+        "`+34600111222`, somebody else's chat (the notify, the lookup, and no exact door asked)",
+        _CONFIRMED_DOC,
+        _confirmation(lookup_query=CONVERSATIONS_READ, notify_query=CONVERSATIONS_READ),
+        3,
+    ),
+    (
+        "🔴 the exact door is asked, but the message is still addressed through the list: the "
+        "lookup says she is reachable and the «contains» filter picks who gets it",
+        _CONFIRMED_DOC,
+        _confirmation(notify_query=CONVERSATIONS_READ),
+        1,
+    ),
+    (
+        "🔴 nothing demands that the phone IS an international number: `600 111 222` typed by hand "
+        "is refused by the kernel as a recipient and the history reads «failed», not why",
+        _CONFIRMED_DOC,
+        _confirmation(international_guard=False),
+        1,
+    ),
+    (
+        "🔴 nothing demands that she HAS a conversation on that number: the run dies in the "
+        "kernel with `flow.recipient_not_found` instead of stopping on its own step",
+        _CONFIRMED_DOC,
+        _confirmation(thread_guard=False),
+        1,
+    ),
+    (
+        "🔴 both flags on ONE condition: the history says the same step stopped the run for a "
+        "broken number and for a customer with no WhatsApp, and the salon cannot tell which to fix",
+        _CONFIRMED_DOC,
+        _confirmation(one_step_for_both_flags=True),
+        1,
+    ),
+    (
+        "🔴 the «no phone» guard and the «not international» guard share one step: a walk-in with "
+        "no number reads the same as a phone typed with spaces",
+        _CONFIRMED_DOC,
+        _phone_and_international_on_one_step(),
+        1,
+    ),
+    (
+        "🔴 both flags guarded, but AFTER the message: a condition that runs once the WhatsApp has "
+        "gone out stops nothing (two flags, two problems)",
+        _CONFIRMED_DOC,
+        _confirmation(guards_after_notify=True),
         2,
     ),
     (
@@ -9664,27 +8998,21 @@ CONFIRMATION_CASES = [
         "🔴 the day without the hour: «see you on Tuesday» leaves her guessing the half she needs "
         "to set an alarm by",
         _CONFIRMED_DOC,
-        _confirmation(
-            text="Confirmed! See you on {{steps.read_appointment.start_date_label}}."
-        ),
+        _confirmation(text="Confirmed! See you on {{steps.read_appointment.start_date_label}}."),
         1,
     ),
     (
         "🔴 the hour without the day: «see you at 10:30» — which 10:30, when she asked for two "
         "slots or the salon moved her",
         _CONFIRMED_DOC,
-        _confirmation(
-            text="Confirmed! See you at {{steps.read_appointment.start_time_label}}."
-        ),
+        _confirmation(text="Confirmed! See you at {{steps.read_appointment.start_time_label}}."),
         1,
     ),
     (
         "🔴 the raw instant instead of the labels: `2026-09-15T10:30:00+02:00` reaches her phone "
         "as it is, because the mapping language has no clock and no formatter",
         _CONFIRMED_DOC,
-        _confirmation(
-            text="Confirmed! See you at {{steps.read_appointment.start_datetime}}."
-        ),
+        _confirmation(text="Confirmed! See you at {{steps.read_appointment.start_datetime}}."),
         1,
     ),
     (
@@ -9713,13 +9041,10 @@ CONFIRMATION_CASES = [
 # What `appointments.appointments.get` NAMED in its published SQL on each side of appointments#151 —
 # the release that started answering the day and the hour already readable is 1.1.77 (`2cd6d26`),
 # and 1.1.76 (`52588bf`) is the one below it. Trimmed to the names this family reads.
-_READS_1_1_76 = {
-    APPOINTMENT_READ: {"customer_phone", "service_name", "staff_name", "start_datetime"}
-}
+_READS_1_1_76 = {APPOINTMENT_READ: {"customer_phone", "service_name", "staff_name", "start_datetime"}}
 _READS_1_1_77 = {
     APPOINTMENT_READ: _READS_1_1_76[APPOINTMENT_READ] | {WHEN_DATE, WHEN_TIME}
 }
-
 
 def _read_only_in_a_condition_key():
     """The confirmation recipe with one more guard, on a column the fixture floors never answer."""
@@ -9774,10 +9099,11 @@ FLOOR_READ_CASES = [
         0,
     ),
     (
-        "a read of this module's OWN query is pinned by no neighbour's floor: nothing is "
-        "promised about it, so nothing is demanded (`reachable_on_whatsapp.contact_phone`)",
+        "a read of this module's OWN query is pinned by no neighbour's floor — `main()` only "
+        "floors the modules `requires.json` names — so nothing is demanded of it "
+        "(`reachable_on_whatsapp.phone_is_international`, `.has_thread`)",
         _confirmation(),
-        {CONVERSATIONS_READ: set()} | _READS_1_1_77,
+        {q: c for q, c in _READS_1_1_77.items() if q != THREAD_BY_NUMBER},
         0,
     ),
     (
@@ -9797,9 +9123,7 @@ def _assistant_with_tools(queries=(), commands=()):
         tools["queries"] = list(queries)
     if commands:
         tools["commands"] = list(commands)
-    return {
-        "steps": [{"id": "book", "kind": "ai", "prompt": "Book it.", "tools": tools}]
-    }
+    return {"steps": [{"id": "book", "kind": "ai", "prompt": "Book it.", "tools": tools}]}
 
 
 def _finds_customer(query="customers.by_phone"):
@@ -9807,14 +9131,8 @@ def _finds_customer(query="customers.by_phone"):
     `resolve_customer` — reading the customer by the number she writes from."""
     return {
         "steps": [
-            {
-                "id": sid,
-                "kind": "query",
-                "query": query,
-                "params": {"phone": "{{input.from}}"},
-                "result": "first",
-                "limit": 1,
-            }
+            {"id": sid, "kind": "query", "query": query, "params": {"phone": "{{input.from}}"},
+             "result": "first", "limit": 1}
             for sid in ("find_customer", "resolve_customer")
         ]
     }
@@ -9822,21 +9140,8 @@ def _finds_customer(query="customers.by_phone"):
 
 # What `customers.by_phone` MENTIONED in the two releases around customers#81 (read off the real
 # trees: `f6b0a35` = v2.3.46 and `120185f` = v2.3.47).
-_BY_PHONE_2_3_46 = {
-    "WITH",
-    "wanted",
-    "regexp_replace",
-    "phone",
-    "customers",
-    "hub_id",
-    "ltrim",
-}
-_BY_PHONE_2_3_47 = _BY_PHONE_2_3_46 | {
-    "hub_settings",
-    "country_code",
-    "calling_codes",
-    "iso",
-}
+_BY_PHONE_2_3_46 = {"WITH", "wanted", "regexp_replace", "phone", "customers", "hub_id", "ltrim"}
+_BY_PHONE_2_3_47 = _BY_PHONE_2_3_46 | {"hub_settings", "country_code", "calling_codes", "iso"}
 
 HOME_COUNTRY_CASES = [
     (
@@ -9920,37 +9225,21 @@ UNFLOORED_READ_CASES = [
     (
         "every neighbour behind the assistant's tools has its floor; its own tools owe none",
         _assistant_with_tools(
-            queries=[
-                "services.services.list",
-                "whatsapp_inbox.conversations.last_offer",
-            ],
-            commands=[
-                "customers.create",
-                "whatsapp_inbox.conversations.remember_offer",
-            ],
+            queries=["services.services.list", "whatsapp_inbox.conversations.last_offer"],
+            commands=["customers.create", "whatsapp_inbox.conversations.remember_offer"],
         ),
         {"services": "1.1.7", "customers": "2.3.45"},
         0,
     ),
     (
         "one problem per unfloored neighbour, not one per tool it hands over",
-        _assistant_with_tools(
-            queries=["staff.members.list", "staff.schedules.list_for_member"]
-        ),
+        _assistant_with_tools(queries=["staff.members.list", "staff.schedules.list_for_member"]),
         {},
         1,
     ),
     (
         "🔴 a neighbour's `command` step with no floor is the same hole as a read",
-        {
-            "steps": [
-                {
-                    "id": "book",
-                    "kind": "command",
-                    "command": "appointments.appointments.create",
-                }
-            ]
-        },
+        {"steps": [{"id": "book", "kind": "command", "command": "appointments.appointments.create"}]},
         {},
         1,
     ),
@@ -9988,9 +9277,7 @@ def self_check():
                 f"problem(s), got {len(got)}: {got}"
             )
     for label, source, translation, same in SHAPE_CASES:
-        got = structural_shape({"steps": [source]}) == structural_shape(
-            {"steps": [translation]}
-        )
+        got = structural_shape({"steps": [source]}) == structural_shape({"steps": [translation]})
         if got is not same:
             problems.append(
                 f"the battery's own «a translation is words» rule is wrong — {label}: expected "
@@ -10090,24 +9377,14 @@ def self_check():
     with tempfile.TemporaryDirectory() as tmp:
         grants = [
             {"kind": "command", "value": "x.write", "payload": {"channel": "customer"}},
-            {
-                "kind": "query",
-                "value": "x.read",
-                "payload": {"customer_id": "steps.r.id"},
-            },
+            {"kind": "query", "value": "x.read", "payload": {"customer_id": "steps.r.id"}},
             {"kind": "query", "value": "x.wide"},
         ]
-        for shape, body in (
-            ("an object with `grants`", {"grants": grants}),
-            ("a bare list", grants),
-        ):
+        for shape, body in (("an object with `grants`", {"grants": grants}), ("a bare list", grants)):
             path = pathlib.Path(tmp) / "fixture.grants.json"
             path.write_text(json.dumps(body))
             for reader, expected in (
-                (
-                    declared_query_pins,
-                    {"x.read": {"customer_id": "steps.r.id"}, "x.wide": {}},
-                ),
+                (declared_query_pins, {"x.read": {"customer_id": "steps.r.id"}, "x.wide": {}}),
                 (declared_command_pins, {"x.write": {"channel": "customer"}}),
             ):
                 got = reader(path)
@@ -10493,9 +9770,7 @@ def main():
 
         # 3a) `policy` against what each declared command actually does — see `policy_problems`.
         if commands_def is not None:
-            problems += applied(
-                ledger, policy_problems, path.name, doc, commands_def, read_perms
-            )
+            problems += applied(ledger, policy_problems, path.name, doc, commands_def, read_perms)
 
         # 3a-bis) …and it SAYS so afterwards (whatsapp_inbox#58). Needs no manifest: it is about the
         # shape of the document, so it runs on a bare checkout too.
@@ -10527,9 +9802,7 @@ def main():
         # its read really answers, over a floor where it answers it (whatsapp_inbox#152).
         fpath = floors_of(path)
         family_floors = (
-            (json.loads(fpath.read_text()) or {}).get("modules") or {}
-            if fpath.is_file()
-            else {}
+            (json.loads(fpath.read_text()) or {}).get("modules") or {} if fpath.is_file() else {}
         )
         problems += applied(
             ledger, birth_status_reading_problems, path.name, doc, family_floors
@@ -10561,11 +9834,7 @@ def main():
         # the GRANT and not in the prompt, wherever nobody is watching (whatsapp_inbox#100).
         # Reads the sidecar, never a manifest: a bare checkout judges it too.
         problems += applied(
-            ledger,
-            unpinned_command_problems,
-            path.name,
-            doc,
-            declared_command_pins(gpath),
+            ledger, unpinned_command_problems, path.name, doc, declared_command_pins(gpath)
         )
         problems += applied(
             ledger, unpinned_query_problems, path.name, doc, declared_query_pins(gpath)
@@ -10591,11 +9860,7 @@ def main():
         # Needs the manifests: «is this a tool name or is it prose» is a question only they answer.
         if contracts is not None:
             problems += applied(
-                ledger,
-                undeclared_tool_problems,
-                path.name,
-                doc,
-                contracts[0] | contracts[1],
+                ledger, undeclared_tool_problems, path.name, doc, contracts[0] | contracts[1]
             )
 
         # 3a-iv) …and the reverse: every tool handed over is one the prompt ORDERS
@@ -10629,21 +9894,13 @@ def main():
         if commands_def is not None:
             fpath = floors_of(path)
             if fpath not in floor_props_by_family:
-                declared = (
-                    (json.loads(fpath.read_text()) or {}).get("modules") or {}
-                    if fpath.is_file()
-                    else {}
-                )
+                declared = (json.loads(fpath.read_text()) or {}).get("modules") or {} if fpath.is_file() else {}
                 floor_props_by_family[fpath], floor_skips = floor_payload_properties(
                     declared, commands_def, resolved
                 )
                 skipped += [f"{fpath.name}: {why}" for why in floor_skips]
             problems += applied(
-                ledger,
-                floor_field_problems,
-                path.name,
-                doc,
-                floor_props_by_family[fpath],
+                ledger, floor_field_problems, path.name, doc, floor_props_by_family[fpath]
             )
 
         # 3a-vi-quinquies) …and the neighbour ALREADY DECLARED the event this family waits on at
@@ -10653,32 +9910,18 @@ def main():
         if resolved is not None:
             fpath = floors_of(path)
             if fpath not in floor_emits_by_family:
-                declared = (
-                    (json.loads(fpath.read_text()) or {}).get("modules") or {}
-                    if fpath.is_file()
-                    else {}
-                )
-                floor_emits_by_family[fpath], emit_skips = floor_emitted_events(
-                    declared, resolved
-                )
+                declared = (json.loads(fpath.read_text()) or {}).get("modules") or {} if fpath.is_file() else {}
+                floor_emits_by_family[fpath], emit_skips = floor_emitted_events(declared, resolved)
                 skipped += [f"{fpath.name}: {why}" for why in emit_skips]
             problems += applied(
-                ledger,
-                floor_trigger_problems,
-                path.name,
-                doc,
-                floor_emits_by_family[fpath],
+                ledger, floor_trigger_problems, path.name, doc, floor_emits_by_family[fpath]
             )
 
         # 3a-vi-septies) …and every neighbour this family reads HAS a floor to hold it to
         # (whatsapp_inbox#173). Pure — it reads the document and its `requires.json`, never a
         # neighbour — so it runs with or without the workspace next door.
         fpath = floors_of(path)
-        declared = (
-            (json.loads(fpath.read_text()) or {}).get("modules") or {}
-            if fpath.is_file()
-            else {}
-        )
+        declared = (json.loads(fpath.read_text()) or {}).get("modules") or {} if fpath.is_file() else {}
         problems += applied(ledger, unfloored_read_problems, path.name, doc, declared)
 
         # 3a-vi-sexies) …and the neighbour already ANSWERED the columns this family reads back at
@@ -10686,11 +9929,7 @@ def main():
         # the customer receives the placeholder.
         if definitions is not None:
             fpath = floors_of(path)
-            declared = (
-                (json.loads(fpath.read_text()) or {}).get("modules") or {}
-                if fpath.is_file()
-                else {}
-            )
+            declared = (json.loads(fpath.read_text()) or {}).get("modules") or {} if fpath.is_file() else {}
             cached = floor_reads_by_family.setdefault(fpath, {})
             wanted = {
                 s.get("query")
@@ -10698,9 +9937,7 @@ def main():
                 if s.get("kind") == "query" and isinstance(s.get("query"), str)
             } - set(cached)
             if wanted:
-                got, read_skips = floor_read_columns(
-                    declared, definitions, resolved, wanted
-                )
+                got, read_skips = floor_read_columns(declared, definitions, resolved, wanted)
                 cached.update(got)
                 cached.update({q: None for q in wanted - set(got)})
                 skipped += [f"{fpath.name}: {why}" for why in read_skips]
@@ -10768,12 +10005,7 @@ def main():
         # Manifest-aware — telling a read from a write needs the module that declares it.
         if commands_def is not None:
             problems += applied(
-                ledger,
-                parking_producer_problems,
-                path.name,
-                doc,
-                commands_def,
-                read_perms,
+                ledger, parking_producer_problems, path.name, doc, commands_def, read_perms
             )
 
         # The trigger this whole issue is about: a template that listens to something else is a
