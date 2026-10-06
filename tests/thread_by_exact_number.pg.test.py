@@ -55,6 +55,8 @@ MARTA = "+34600111222"
 SARA_DELETED = "+34600333444"
 LU_OTHER_HUB_ONLY = "+34600555666"
 UK = "+447700900123"
+# A thread stored before the inbox normalised to E.164 (F03): its number has no `+`.
+LEGACY_NO_PLUS = "34600777888"
 
 
 def load(name, rel):
@@ -138,6 +140,7 @@ def seed(db):
         ("c3", HUB, "34600333444", "Sara", SARA_DELETED, 1),
         ("c4", OTHER_HUB, "34600555666", "Lu", LU_OTHER_HUB_ONLY, 0),
         ("c5", HUB, "447700900123", "Amy", UK, 0),
+        ("c6", HUB, "34600777888", "Old", LEGACY_NO_PLUS, 0),
     ]
     values = ", ".join(
         f"({sql_literal(i)}, {sql_literal(h)}, {sql_literal(w)}, {sql_literal(n)},"
@@ -238,6 +241,29 @@ CASES = [
         NO_THREAD,
     ),
     ("an empty phone is not a number", "", HUB, "false", NO_THREAD),
+    (
+        "text in front of her number (`tel:+34…`) is not a number",
+        "tel:" + MARTA,
+        HUB,
+        "false",
+        NO_THREAD,
+    ),
+    (
+        "a phone that resolved to nothing (NULL) is not a number, and the flag says `false`, "
+        "not NULL",
+        None,
+        HUB,
+        "false",
+        NO_THREAD,
+    ),
+    (
+        "🔴 a legacy thread stored WITHOUT the `+` is not found by the same non-E.164 text: equal "
+        "text is not enough, the number has to be international",
+        LEGACY_NO_PLUS,
+        HUB,
+        "false",
+        NO_THREAD,
+    ),
     ("`+0…` — no country code starts with 0", "+034600111222", HUB, "false", NO_THREAD),
     (
         "16 digits are more than E.164 allows",
