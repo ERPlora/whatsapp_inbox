@@ -132,6 +132,30 @@ módulo de `origin/main` cae `an_admin_erases_…` («`600333444` is still store
 idempotencia y cada columna los prueba `tests/number_erasure.pg.test.py` (dos hubs en la misma BD,
 23 mutantes ejecutados), que además compara el SET con el del borrado desde la ficha.
 
+### `confirmation_exact_number_e2e.rs` (whatsapp_inbox#279)
+
+El «¡Confirmada!» de la receta acompañante sale solo a la conversación del número **exacto** de la
+cita, o a nadie: `appointments.appointments.confirm` → `appointments.appointment.confirmed` → la
+receta publicada `appointment-confirmed-to-whatsapp` con sus grants → `conversations.by_phone` →
+`flow.reminder.due` encolado para ese número, o el run para en el paso que dice por qué
+(`has_a_phone`, `phone_is_international`, `has_a_thread`). Instala `customers`, `taxes`,
+`services`, `staff`, `schedules`, `appointments` y este módulo, a su `origin/main`; corre en
+`origin/develop` del hub:
+
+```bash
+cp tests/e2e/confirmation_exact_number_e2e.rs "$HUB/crates/runtime/tests/"
+cd "$HUB" && DATABASE_URL=… ERPLORA_MODULES_DIR="$MODS" \
+  cargo test -p erplora-runtime --test confirmation_exact_number_e2e
+```
+
+Control negativo medido: con la receta de `origin/main` (la que buscaba con `conversations.list`,
+filtro «contiene») caen 2 de 5: `600111` encola «¡Confirmada!…» para `+34600111222`, la
+conversación de otra persona, y `600 111 222` no para en su propio paso. Mutantes de receta
+ejecutados: quitar `phone_is_international`, quitar `has_a_thread`, unir las dos banderas en un
+paso, invertir su orden y volver a `conversations.list` como destinatario: cae al menos un test con
+cada uno. El aislamiento entre hubs y cada defensa de la consulta los prueba
+`tests/thread_by_exact_number.pg.test.py` (dos hubs en la misma BD).
+
 ## Qué NO prueba, y por qué no puede
 
 - **El mensaje de WhatsApp real.** El evento se inserta como lo inserta `inbound_poll.rs`
