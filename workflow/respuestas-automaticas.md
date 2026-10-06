@@ -147,7 +147,7 @@ Implicados: APPOINTMENTS-F02, APPOINTMENTS-F06, REC_WA_CITA-F08
 QA: W-04 (discrepa)
 
 ### WHATSAPP_INBOX-F23 La clienta recibe el aviso cuando el salón confirma
-Estado: parcial — el aviso es texto libre: si han pasado más de 24 h desde el último mensaje de la clienta, Meta lo rechaza y no hay plantilla de respaldo; con «Las citas se confirman solas» la clienta recibe dos mensajes (la respuesta de la reserva y el aviso de confirmada), sin orden garantizado; y el historial de la automatización dice «La condición no se cumplió» sin nombrar cuál: el motivo se distingue solo por el paso en que paró
+Estado: parcial — el aviso es texto libre: si han pasado más de 24 h desde el último mensaje de la clienta, Meta lo rechaza y no hay plantilla de respaldo; con «Las citas se confirman solas» la clienta recibe dos mensajes (la respuesta de la reserva y el aviso de confirmada), sin orden garantizado; y el historial de la automatización dice «La condición no se cumplió» sin nombrar cuál: el motivo se distingue solo por el paso en que paró (flows#163); y una cita antigua o con el teléfono cambiado a mano guarda su copia sin formato internacional, así que no recibe el aviso aunque tenga conversación (appointments#313)
 Vertical: peluqueria
 Actor: responsable, cliente
 Pantalla: WhatsApp: chat del cliente
