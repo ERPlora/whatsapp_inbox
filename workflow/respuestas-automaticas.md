@@ -147,16 +147,16 @@ Implicados: APPOINTMENTS-F02, APPOINTMENTS-F06, REC_WA_CITA-F08
 QA: W-04 (discrepa)
 
 ### WHATSAPP_INBOX-F23 La clienta recibe el aviso cuando el salón confirma
-Estado: parcial — el aviso es texto libre: si han pasado más de 24 h desde el último mensaje de la clienta, Meta lo rechaza y no hay plantilla de respaldo; con «Las citas se confirman solas» la clienta recibe dos mensajes (la respuesta de la reserva y el aviso de confirmada), sin orden garantizado; y la conversación se busca con el teléfono de la cita como texto contenido en el de la conversación, así que un teléfono con espacios o guiones no la encuentra (no se avisa) y uno incompleto puede dar con la de otra persona
+Estado: parcial — el aviso es texto libre: si han pasado más de 24 h desde el último mensaje de la clienta, Meta lo rechaza y no hay plantilla de respaldo; con «Las citas se confirman solas» la clienta recibe dos mensajes (la respuesta de la reserva y el aviso de confirmada), sin orden garantizado; y el historial de la automatización dice «La condición no se cumplió» sin nombrar cuál: el motivo se distingue solo por el paso en que paró
 Vertical: peluqueria
 Actor: responsable, cliente
 Pantalla: WhatsApp: chat del cliente
 Pasos:
 1. Con «Las reviso yo antes», la encargada pulsa **Confirmar** en la Agenda.
 2. Si la clienta tiene conversación de WhatsApp con el negocio, recibe el texto fijo de la receta «¡Confirmada! Te esperamos el {día} a las {hora} para tu {servicio} con {profesional}.», con el día y la hora ya escritos en el idioma y la zona del negocio.
-3. La conversación se busca con el teléfono guardado en la cita, como texto contenido en el de la conversación: si en la cita está con espacios o guiones no se encuentra, y si está incompleto puede encontrar la de otra persona. Si no tiene teléfono o no hay conversación, no se manda nada y el motivo queda en el historial de la automatización.
+3. La conversación se busca con el teléfono guardado en la cita, y solo vale el número internacional (E.164: `+`, prefijo de país y cifras, sin espacios) **exacto** de una conversación de este negocio. Las fichas de Clientes ya guardan el número así (CUSTOMERS-F11); si la cita tiene un teléfono escrito a mano incompleto, con espacios o sin `+`, no se avisa a nadie: nunca sale a la conversación de otra persona. Cada motivo para no mandar nada termina el run en un paso propio, en este orden: la cita ya no existe o no tiene teléfono (2.º paso), el teléfono no es un número internacional (4.º), ese número no tiene conversación de WhatsApp (5.º); el paso en que paró queda en el historial de la automatización.
 4. El aviso sale con **cualquier** confirmación de una cita cuyo teléfono tenga conversación: también la de una cita del mostrador, y también la de una cita que nace ya confirmada porque «Las citas se confirman solas» está encendido (F16); en ese caso la clienta recibe los dos mensajes, la respuesta de F21 y este aviso, en cualquier orden (salen de dos automatizaciones distintas).
-Entra: la cita confirmada (Citas) y la conversación de su teléfono.
+Entra: la cita confirmada (Citas) y la conversación cuyo número es exactamente el de la cita.
 Sale: un WhatsApp a la clienta.
 Si falla: el motivo queda en el historial de la automatización; nada se ve en la Agenda.
 Implicados: APPOINTMENTS-F03, APPOINTMENTS-F18, CUSTOMERS-F11, REC_PELUQUERIA-F07, REC_WA_CITA-F07

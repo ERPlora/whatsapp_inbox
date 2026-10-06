@@ -36,18 +36,27 @@
     {
       "id": "reachable_on_whatsapp",
       "kind": "query",
-      "query": "whatsapp_inbox.conversations.list",
+      "query": "whatsapp_inbox.conversations.by_phone",
       "params": {
-        "f_contact_phone": "steps.read_appointment.customer_phone"
+        "phone": "steps.read_appointment.customer_phone"
       },
       "result": "first",
       "limit": 1
     },
     {
+      "id": "phone_is_international",
+      "kind": "condition",
+      "when": {
+        "steps.reachable_on_whatsapp.phone_is_international": {
+          "eq": true
+        }
+      }
+    },
+    {
       "id": "has_a_thread",
       "kind": "condition",
       "when": {
-        "steps.reachable_on_whatsapp.found": {
+        "steps.reachable_on_whatsapp.has_thread": {
           "eq": true
         }
       }
@@ -57,9 +66,9 @@
       "kind": "notify",
       "channel": "whatsapp",
       "to": {
-        "query": "whatsapp_inbox.conversations.list",
+        "query": "whatsapp_inbox.conversations.by_phone",
         "params": {
-          "f_contact_phone": "steps.read_appointment.customer_phone"
+          "phone": "steps.read_appointment.customer_phone"
         },
         "field": "contact_phone"
       },

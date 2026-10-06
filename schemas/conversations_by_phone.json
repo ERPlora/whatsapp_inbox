@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "whatsapp_inbox.conversations.by_phone",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["phone"],
+  "properties": {
+    "phone": { "type": "string", "maxLength": 64 }
+  }
+}

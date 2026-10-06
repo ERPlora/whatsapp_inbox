@@ -13,13 +13,13 @@
     },
     {
       "kind": "query",
-      "value": "whatsapp_inbox.conversations.list",
+      "value": "whatsapp_inbox.conversations.by_phone",
       "payload": {
-        "f_contact_phone": "steps.read_appointment.customer_phone"
+        "phone": "steps.read_appointment.customer_phone"
       },
       "reason": {
-        "en": "Check that customer already has a WhatsApp conversation with you, and only that customer's.",
-        "es": "Comprobar que esa clienta ya tiene una conversación de WhatsApp contigo, y solo la suya."
+        "en": "Check that the appointment's phone is a full international number and that this exact number already has a WhatsApp conversation with you.",
+        "es": "Comprobar que el teléfono de la cita es un número internacional completo y que ese número exacto ya tiene una conversación de WhatsApp contigo."
       }
     },
     {
@@ -32,7 +32,7 @@
     },
     {
       "kind": "recipient_query",
-      "value": "whatsapp_inbox.conversations.list#contact_phone",
+      "value": "whatsapp_inbox.conversations.by_phone#contact_phone",
       "reason": {
         "en": "Write only to the person who is in that conversation, and to nobody else.",
         "es": "Escribir solo a la persona de esa conversación, y a nadie más."
