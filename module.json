@@ -169,6 +169,11 @@
         "description": "Retrieves the details of a WhatsApp conversation by its ID"
       }
     },
+    "whatsapp_inbox.conversations.by_phone": {
+      "permission": "whatsapp_inbox.view_conversation",
+      "sql": "queries/conversations_by_phone.sql",
+      "schema": "schemas/conversations_by_phone.json"
+    },
     "whatsapp_inbox.conversations.last_offer": {
       "permission": "whatsapp_inbox.view_conversation",
       "sql": "queries/conversation_last_offer.sql",

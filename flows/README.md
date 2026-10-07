@@ -572,29 +572,39 @@ DISPARADOR — las dos de reservar arrancan con `hub.whatsapp.message_received`,
 vez atenderían el mismo mensaje dos veces. Esta arranca con `appointments.appointment.confirmed`,
 que no escucha ninguna otra: no hay con quién duplicarse.
 
-Cinco pasos en línea recta:
+Seis pasos en línea recta, y cada motivo para no escribir para en un paso propio: el historial de la
+automatización enseña en qué paso terminó el run, y así se distingue «la cita no tiene teléfono» de
+«el teléfono no es un número internacional» y de «ese número no tiene conversación».
 
 1. **`read_appointment`** — `appointments.appointments.get`. El evento solo trae `appointment_id`,
    así que el teléfono, el servicio y la profesional salen de la cita, no del evento.
-2. **`has_a_phone`** — dos cláusulas sobre la lectura de arriba, y las dos hacen falta.
-   🔴 `neq: ""` sobre `customer_phone`: `conversations.list` filtra `contact_phone` con `op: like`,
-   así que un teléfono vacío viaja como `%%` y casa con **TODAS** las conversaciones del hub — la
-   confirmación de una clienta acabaría en el móvil de otra. 🔴 Y `found: {eq: true}`, porque el
-   `neq: ""` **no cubre el caso de que no haya fila**: si la cita se borró entre la confirmación y el
-   run (el outbox entrega *at-least-once*), `result: "first"` contesta igual, solo que sin los campos
-   de la fila; un path que no resuelve es `null` (`flows/def.rs::resolve`), `json_eq(null, "")` es
-   `false` y el `neq` responde **true**. El teléfono viajaría entonces como `null`, que el motor de
-   listas trata como **ausente** (`queries.rs`), el filtro se cae entero y la lectura contesta la
-   primera conversación del hub. Es el mismo `%%` por otro camino. Lo fija
-   `confirmation_notice_problems` en `tests/flow_templates.test.py`, marca 5.
-3. **`reachable_on_whatsapp`** — la conversación de ese teléfono, si la hay.
-4. **`has_a_thread`** — `found`. Sin hilo no hay a quién escribir: el run para ahí y deja el motivo
-   en su historial, que no es lo mismo que callarse.
-5. **`tell_the_customer`** — `notify` por `whatsapp` al `contact_phone` de esa conversación.
+2. **`has_a_phone`** — dos cláusulas sobre la lectura de arriba. `found: {eq: true}`: si la cita se
+   borró entre la confirmación y el run (el outbox entrega *at-least-once*), `result: "first"`
+   contesta igual, solo que sin los campos de la fila; un path que no resuelve es `null`
+   (`flows/def.rs::resolve`), `json_eq(null, "")` es `false` y el `neq` respondería **true**. Y
+   `neq: ""` sobre `customer_phone`: una cita del mostrador sin teléfono para aquí, y no en el paso
+   4 culpando a un número que nadie tecleó. Marcas 4 y 5 de `confirmation_notice_problems`.
+3. **`reachable_on_whatsapp`** — `whatsapp_inbox.conversations.by_phone` con el teléfono de la cita.
+   🔴 **No** `conversations.list`: esa filtra `contact_phone` como «contiene» (la búsqueda de la
+   bandeja, F05, lo necesita), y `600111` —una ficha vieja que la tarea de E.164 de Clientes no pudo
+   reescribir, o un teléfono tecleado a mano en la cita— encontraba `+34600111222`, la conversación
+   de **otra** persona (whatsapp_inbox#279). `by_phone` contesta **siempre una fila** con dos
+   banderas: `phone_is_international` (el teléfono es E.164: `+`, prefijo que no empieza por 0,
+   7–15 cifras, nada más) y `has_thread` (una conversación viva de este hub tiene **exactamente** ese
+   número), más su `contact_phone`. Lo fija `tests/thread_by_exact_number.pg.test.py` contra
+   Postgres real (exacto, solo E.164, solo este hub, nunca una conversación borrada).
+4. **`phone_is_international`** — `eq: true`. `600 111 222`, `34600111222` o `0034…` paran aquí:
+   la cita tiene teléfono, pero no es un número al que escribir sin adivinar el país.
+5. **`has_a_thread`** — `has_thread: eq true`. Sin conversación con ese número no hay a quién
+   escribir: el run para aquí.
+6. **`tell_the_customer`** — `notify` por `whatsapp` al `contact_phone` que contesta
+   `conversations.by_phone` con el mismo teléfono: el destinatario sale de la misma puerta exacta,
+   nunca de la lista. Marca 7 de `confirmation_notice_problems` (y la 3, que exige esa puerta en el
+   `to`).
 
 ### Por qué no se filtra a las citas que «vinieron por WhatsApp»
 
-Porque la fila de la cita no guarda su origen, y el paso 4 ya acota lo suficiente: **solo escribe a
+Porque la fila de la cita no guarda su origen, y el paso 5 ya acota lo suficiente: **solo escribe a
 quien tiene conversación de WhatsApp abierta con el negocio**. Una clienta que pidió por teléfono y
 además escribe por WhatsApp recibirá también su confirmación, y eso es lo que se quiere.
 

@@ -218,9 +218,16 @@ CONFIRMATION_TRIGGER = "appointments.appointment.confirmed"
 APPOINTMENT_READ = "appointments.appointments.get"
 CONVERSATIONS_READ = "whatsapp_inbox.conversations.list"
 CONFIRMED_ID = "input.appointment_id"
-# The one field of the diary that says where to write to her, and the filter that carries it.
+# The one field of the diary that says where to write to her.
 DIARY_PHONE = "customer_phone"
-PHONE_FILTER = "f_contact_phone"
+# whatsapp_inbox#279 — the door that finds her conversation by her EXACT E.164 number. The inbox
+# list filters `contact_phone` as «contains» (WHATSAPP_INBOX-F05 needs it), so `600111` found
+# `+34600111222`, somebody else's chat. This door answers one row with two flags, each one a
+# reason the recipe stops on with its own condition.
+THREAD_BY_NUMBER = "whatsapp_inbox.conversations.by_phone"
+PHONE_PARAM = "phone"
+PHONE_IS_INTERNATIONAL = "phone_is_international"
+HAS_THREAD = "has_thread"
 # The contract key a `result: "first"` read always answers with, row or no row (`flows/query.rs`):
 # it is the ONLY thing that tells this family apart from a run whose appointment vanished.
 READ_FOUND = "found"
@@ -235,7 +242,7 @@ WHEN_TIME = "start_time_label"
 def confirmation_notice_problems(name, doc):
     """The salon confirms, and the CUSTOMER is told — to the number the DIARY holds.
 
-    Four marks, and each one is a way the same silence comes back.
+    Seven marks, and each one is a way the same silence — or the wrong recipient — comes back.
 
     1. **Something is actually sent.** This is whatsapp_inbox#125 word for word: the salon taps
        «Confirm» in the Agenda and nothing reaches her. A family that wakes on the confirmation
@@ -247,14 +254,18 @@ def confirmation_notice_problems(name, doc):
        `appointments.appointments.get`.
     3. **She is addressed by THAT phone.** The number the appointment was booked under is the one
        the salon holds for her; anything else is a guess about who this run is about.
-    4. 🔴 **And the run stops when the diary has no phone for her.** `contact_phone` is declared
-       `op: like` (`module.json`), so an EMPTY value goes out as `%%` and matches every
-       conversation in the inbox — the lookup answers `found: true` and the first stranger in the
-       list is either written to or, if the kernel notices the ambiguity, the run dies with
-       `flow.recipient_ambiguous` for a reason nobody can read. A guard that only asks `found` is
-       green over both. The `neq: ""` is what makes «we have no number for her» end the run
-       quietly, which is the flow working, and it is the only thing standing between a walk-in
-       booked by phone and a confirmation sent to somebody else's chat.
+    4. **The run stops on its own step when the diary has no phone for her.** «No number on the
+       appointment» is a different reason from «a number that is not international» (mark 7), and
+       the automation's history can only tell them apart if each one ends the run on its own
+       condition. Before whatsapp_inbox#279 this guard was also the only thing keeping an empty
+       phone from going out as `%%` through the «contains» filter of the inbox list.
+    7. 🔴 **Her conversation is found by her EXACT E.164 number, or not at all**
+       (whatsapp_inbox#279). `conversations.list` filters `contact_phone` as «contains»: `600111`
+       — an old card the E.164 task could not rewrite, or a phone typed by hand in the diary —
+       finds `+34600111222`, somebody else's chat, and the confirmation goes to her. The lookup
+       and the recipient both go through `conversations.by_phone`, keyed on the diary's phone, and
+       the run demands both of its flags with `eq: true`: `phone_is_international` (stop: the
+       number is not E.164) and `has_thread` (stop: she has no conversation).
     """
     if CONFIRMATION_TRIGGER not in {
         t.get("event") for t in doc.get("triggers", []) if t.get("kind") == "event"
@@ -302,15 +313,15 @@ def confirmation_notice_problems(name, doc):
     phones = {f"steps.{r.get('id')}.{DIARY_PHONE}" for r in readers}
     for notify in notifies:
         to = notify.get("to") or {}
-        sent = (to.get("params") or {}).get(PHONE_FILTER)
-        if to.get("query") != CONVERSATIONS_READ or sent not in phones:
+        sent = (to.get("params") or {}).get(PHONE_PARAM)
+        if to.get("query") != THREAD_BY_NUMBER or sent not in phones:
             problems.append(
                 f"{name} step `{notify.get('id')}` addresses its message through "
-                f"`{to.get('query')}` / `{PHONE_FILTER}` = {sent!r}, and not through "
-                f"`{CONVERSATIONS_READ}` keyed on {sorted(phones) or 'the appointment read'}: the "
+                f"`{to.get('query')}` / `{PHONE_PARAM}` = {sent!r}, and not through "
+                f"`{THREAD_BY_NUMBER}` keyed on {sorted(phones) or 'the appointment read'}: the "
                 f"number the appointment was booked under is the only one in this run the salon "
-                f"vouched for. Anything else picks the conversation by something the salon never "
-                f"said was hers"
+                f"vouched for, and only an EXACT match on it is hers. Anything else picks the "
+                f"conversation by something the salon never said was hers"
             )
 
     guarded = {
@@ -339,23 +350,82 @@ def confirmation_notice_problems(name, doc):
             f"at-least-once — `result: first` still answers, only without the row's fields. A path "
             f"that resolves to nothing is `null` (`flows/def.rs::resolve`), `json_eq(null, \"\")` "
             f"is false, so the `neq: \"\"` guard above answers TRUE and lets the run through. The "
-            f"phone then travels as `null`, which the list engine treats as ABSENT "
-            f"(`queries.rs`: `p.get(k).is_some_and(|v| !v.is_null())`), the filter is dropped "
-            f"altogether and `{CONVERSATIONS_READ}` answers the first conversation of the hub. It "
-            f"is the `%%` of mark 4 by another road: `flow.recipient_ambiguous` where there are "
-            f"several chats, and a confirmation with an empty service and an empty professional "
-            f"delivered to the wrong customer where there is one"
+            f"phone then travels as `null`, and the run only stops later, on a step that blames "
+            f"the number or the conversation for an appointment that no longer exists: the reason "
+            f"the salon reads in the automation's history is the wrong one, and the day, the "
+            f"service and the professional this run would write are all empty"
         )
     for path in sorted(phones - guarded):
         problems.append(
-            f"{name} sends to `{PHONE_FILTER}` = `{path}` and no `condition` step demands "
-            f"`{{\"{path}\": {{\"neq\": \"\"}}}}`: `contact_phone` is declared `op: like`, "
-            f"so an appointment the salon booked over the counter — no phone on the card — goes "
-            f"out as `%%` and matches EVERY conversation in the inbox. The lookup answers "
-            f"`found: true` and the confirmation is delivered to a stranger, or the run dies with "
-            f"`flow.recipient_ambiguous` and nobody can read why. Asking `found` alone is green "
-            f"over both"
+            f"{name} sends to `{PHONE_PARAM}` = `{path}` and no `condition` step demands "
+            f"`{{\"{path}\": {{\"neq\": \"\"}}}}`: an appointment the salon booked over the "
+            f"counter — no phone on the card — then ends the run on the «not an international "
+            f"number» step, and the automation's history reads as if the salon had typed a "
+            f"broken number when it typed none. Each reason stops the run on its own step"
         )
+
+    # Mark 7 — whatsapp_inbox#279: her conversation is found by her EXACT number, or not at all.
+    for step in steps:
+        if step.get("kind") == "query" and step.get("query") == CONVERSATIONS_READ:
+            problems.append(
+                f"{name} step `{step.get('id')}` looks her conversation up with "
+                f"`{CONVERSATIONS_READ}`, whose `contact_phone` filter is «contains»: `600111` — "
+                f"an old card or a phone typed by hand in the diary — finds `+34600111222`, "
+                f"somebody else's chat, and the confirmation goes to her (whatsapp_inbox#279). "
+                f"The lookup is `{THREAD_BY_NUMBER}`, which only matches the exact E.164 number"
+            )
+    lookups = [
+        s
+        for s in steps
+        if s.get("kind") == "query"
+        and s.get("query") == THREAD_BY_NUMBER
+        and (s.get("params") or {}).get(PHONE_PARAM) in phones
+    ]
+    if notifies and not lookups:
+        problems.append(
+            f"{name} sends the confirmation without first asking `{THREAD_BY_NUMBER}` about "
+            f"{sorted(phones) or 'the appointment phone'}: nothing in the run says whether that "
+            f"phone is an international number, or whether she has a conversation to be written "
+            f"to, so the only place it can stop is a refusal in the kernel nobody reads as a reason"
+        )
+    # Where each guard lives: the condition steps, in order, that demand a given clause. A guard
+    # placed after the notify guards nothing, and two reasons sharing one step read as one.
+    first_notify = min(
+        (i for i, s in enumerate(steps) if s.get("kind") == "notify"), default=len(steps)
+    )
+    guard_steps = {}
+    for i, step in enumerate(steps[:first_notify]):
+        if step.get("kind") != "condition":
+            continue
+        for path, clause in (step.get("when") or {}).items():
+            if isinstance(clause, dict) and (clause.get("eq") is True or clause.get("neq") == ""):
+                guard_steps.setdefault(path, set()).add(step.get("id"))
+    for lookup in lookups:
+        reasons = [(lookup["params"][PHONE_PARAM], "the appointment has no phone")]
+        for flag, reason in (
+            (PHONE_IS_INTERNATIONAL, "the appointment's phone is not an E.164 number"),
+            (HAS_THREAD, "she has no WhatsApp conversation on that number"),
+        ):
+            path = f"steps.{lookup.get('id')}.{flag}"
+            reasons.append((path, reason))
+            if path in guard_steps:
+                continue
+            problems.append(
+                f"{name} step `{lookup.get('id')}` answers `{flag}` and no `condition` before the "
+                f"message demands `{{\"{path}\": {{\"eq\": true}}}}`: when {reason}, the run "
+                f"has to stop on a step of its own — that is what the salon reads in the "
+                f"automation's history as the reason the «Confirmed!» did not go out"
+            )
+        for i, (path, reason) in enumerate(reasons):
+            for other_path, other_reason in reasons[i + 1 :]:
+                shared = guard_steps.get(path, set()) & guard_steps.get(other_path, set())
+                if shared:
+                    problems.append(
+                        f"{name} stops on `{sorted(shared)[0]}` both when {reason} and when "
+                        f"{other_reason}: the automation's history names the step that stopped "
+                        f"the run, so two reasons on one step read as one and the salon cannot "
+                        f"tell which to fix"
+                    )
 
     # Mark 6 — whatsapp_inbox#146: the message says WHEN. Skipped with no reader, because then
     # there is nothing to name the hour from and mark 2 already said so.
@@ -8695,6 +8765,12 @@ def _confirmation(
     notify=True,
     notify_to=None,
     text=None,
+    lookup_query=THREAD_BY_NUMBER,
+    notify_query=THREAD_BY_NUMBER,
+    international_guard=True,
+    thread_guard=True,
+    one_step_for_both_flags=False,
+    guards_after_notify=False,
 ):
     """The whatsapp_inbox#125 recipe, with one screw loosened at a time."""
     phone = f"steps.{read_id}.{DIARY_PHONE}"
@@ -8703,6 +8779,10 @@ def _confirmation(
             f"Confirmed! See you on {{{{steps.{read_id}.{WHEN_DATE}}}}} at "
             f"{{{{steps.{read_id}.{WHEN_TIME}}}}}."
         )
+
+    def by(query, value):
+        return {PHONE_PARAM if query == THREAD_BY_NUMBER else "f_contact_phone": value}
+
     steps = []
     if read:
         steps.append(
@@ -8715,37 +8795,60 @@ def _confirmation(
                 "limit": 1,
             }
         )
+    has_a_phone = {}
+    if read and found_guard:
+        has_a_phone[f"steps.{read_id}.{READ_FOUND}"] = {"eq": True}
+    if guard:
+        has_a_phone[phone] = {"neq": ""}
+    if has_a_phone:
+        steps.append({"id": "has_a_phone", "kind": "condition", "when": has_a_phone})
     steps.append(
         {
             "id": "reachable_on_whatsapp",
             "kind": "query",
-            "query": CONVERSATIONS_READ,
-            "params": {PHONE_FILTER: phone},
+            "query": lookup_query,
+            "params": by(lookup_query, phone),
             "result": "first",
             "limit": 1,
         }
     )
-    when = {"steps.reachable_on_whatsapp.found": {"eq": True}}
-    if guard:
-        when[phone] = {"neq": ""}
-    if read and found_guard:
-        when[f"steps.{read_id}.{READ_FOUND}"] = {"eq": True}
-    steps.append({"id": "has_a_thread", "kind": "condition", "when": when})
+    flags = []
+    if international_guard:
+        flags.append(("phone_is_international", PHONE_IS_INTERNATIONAL))
+    if thread_guard:
+        flags.append(("has_a_thread", HAS_THREAD))
+    if lookup_query == CONVERSATIONS_READ:
+        flags = [("has_a_thread", READ_FOUND)]
+    guards = [
+        {
+            "id": step_id,
+            "kind": "condition",
+            "when": {f"steps.reachable_on_whatsapp.{flag}": {"eq": True}},
+        }
+        for step_id, flag in flags
+    ]
+    if one_step_for_both_flags and guards:
+        merged = {}
+        for g in guards:
+            merged.update(g["when"])
+        guards = [{"id": "reachable", "kind": "condition", "when": merged}]
+    tell = []
     if notify:
-        steps.append(
+        tell.append(
             {
                 "id": "tell_the_customer",
                 "kind": "notify",
                 "channel": "whatsapp",
                 "to": {
-                    "query": CONVERSATIONS_READ,
-                    "params": {PHONE_FILTER: notify_to or phone},
+                    "query": notify_query,
+                    "params": by(notify_query, notify_to or phone),
                     "field": "contact_phone",
                 },
                 "template": "",
                 "vars": {"text": text},
             }
         )
+    steps += tell + guards if guards_after_notify else guards + tell
     return {
         "schema_version": 1,
         "triggers": [
@@ -8757,6 +8860,15 @@ def _confirmation(
         ],
         "steps": steps,
     }
+
+
+def _phone_and_international_on_one_step():
+    """The recipe with the «no phone» clause moved onto the «not international» condition."""
+    doc = _confirmation()
+    steps = {s["id"]: s for s in doc["steps"]}
+    phone = f"steps.read_appointment.{DIARY_PHONE}"
+    steps["phone_is_international"]["when"][phone] = steps["has_a_phone"]["when"].pop(phone)
+    return doc
 
 
 CONFIRMATION_CASES = [
@@ -8782,22 +8894,20 @@ CONFIRMATION_CASES = [
         1,
     ),
     (
-        "🔴 the guard that keeps an EMPTY phone out of the lookup is gone, leaving `found` on its "
-        "own. `contact_phone` is `op: like`, so a walk-in booked over the counter with no number "
-        "on her card goes out as `%%`, matches every conversation in the inbox and answers "
-        "`found: true`: the confirmation is delivered to a stranger, or the run dies with "
-        "`flow.recipient_ambiguous` and nobody can read why",
+        "🔴 the guard on an EMPTY phone is gone: a walk-in booked over the counter with no number "
+        "on her card ends the run on «not an international number», and the history blames a "
+        "number the salon never typed",
         _CONFIRMED_DOC,
-        _confirmation(found_guard=False),
+        _confirmation(guard=False),
         1,
     ),
     (
-        "🔴 the same `%%`, reached by `null`: nothing demands that the diary read FOUND the "
-        "appointment. Deleted between the confirmation and the run — the outbox delivers "
-        "at-least-once — the read answers with no fields, the `neq: \"\"` above is TRUE over a "
-        "`null`, and the phone travels as `null`, which the list engine reads as NO FILTER AT ALL",
+        "🔴 nothing demands that the diary read FOUND the appointment. Deleted between the "
+        "confirmation and the run — the outbox delivers at-least-once — the read answers with no "
+        "fields, the `neq: \"\"` is TRUE over a `null`, and the run stops later blaming the "
+        "number for an appointment that no longer exists",
         _CONFIRMED_DOC,
-        _confirmation(guard=False),
+        _confirmation(found_guard=False),
         1,
     ),
     (
@@ -8811,9 +8921,59 @@ CONFIRMATION_CASES = [
         "🔴 the diary is never read: the event carries `appointment_id` and nothing else, so there "
         "is no phone, no service and no professional in this run — nothing to write with, and "
         "nowhere to write it (two marks, because the notify is then keyed on a value no step "
-        "produces)",
+        "produces, and nothing asks whether THAT phone is a number with a conversation)",
         _CONFIRMED_DOC,
         _confirmation(read=False),
+        3,
+    ),
+    (
+        "🔴 whatsapp_inbox#279 word for word — the recipe as it shipped: the lookup and the "
+        "recipient go through the inbox LIST, whose phone filter is «contains», so `600111` finds "
+        "`+34600111222`, somebody else's chat (the notify, the lookup, and no exact door asked)",
+        _CONFIRMED_DOC,
+        _confirmation(lookup_query=CONVERSATIONS_READ, notify_query=CONVERSATIONS_READ),
+        3,
+    ),
+    (
+        "🔴 the exact door is asked, but the message is still addressed through the list: the "
+        "lookup says she is reachable and the «contains» filter picks who gets it",
+        _CONFIRMED_DOC,
+        _confirmation(notify_query=CONVERSATIONS_READ),
+        1,
+    ),
+    (
+        "🔴 nothing demands that the phone IS an international number: `600 111 222` typed by hand "
+        "is refused by the kernel as a recipient and the history reads «failed», not why",
+        _CONFIRMED_DOC,
+        _confirmation(international_guard=False),
+        1,
+    ),
+    (
+        "🔴 nothing demands that she HAS a conversation on that number: the run dies in the "
+        "kernel with `flow.recipient_not_found` instead of stopping on its own step",
+        _CONFIRMED_DOC,
+        _confirmation(thread_guard=False),
+        1,
+    ),
+    (
+        "🔴 both flags on ONE condition: the history says the same step stopped the run for a "
+        "broken number and for a customer with no WhatsApp, and the salon cannot tell which to fix",
+        _CONFIRMED_DOC,
+        _confirmation(one_step_for_both_flags=True),
+        1,
+    ),
+    (
+        "🔴 the «no phone» guard and the «not international» guard share one step: a walk-in with "
+        "no number reads the same as a phone typed with spaces",
+        _CONFIRMED_DOC,
+        _phone_and_international_on_one_step(),
+        1,
+    ),
+    (
+        "🔴 both flags guarded, but AFTER the message: a condition that runs once the WhatsApp has "
+        "gone out stops nothing (two flags, two problems)",
+        _CONFIRMED_DOC,
+        _confirmation(guards_after_notify=True),
         2,
     ),
     (
@@ -8939,10 +9099,11 @@ FLOOR_READ_CASES = [
         0,
     ),
     (
-        "a read of this module's OWN query is pinned by no neighbour's floor: nothing is "
-        "promised about it, so nothing is demanded (`reachable_on_whatsapp.contact_phone`)",
+        "a read of this module's OWN query is pinned by no neighbour's floor — `main()` only "
+        "floors the modules `requires.json` names — so nothing is demanded of it "
+        "(`reachable_on_whatsapp.phone_is_international`, `.has_thread`)",
         _confirmation(),
-        {CONVERSATIONS_READ: set()} | _READS_1_1_77,
+        {q: c for q, c in _READS_1_1_77.items() if q != THREAD_BY_NUMBER},
         0,
     ),
     (

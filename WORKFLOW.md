@@ -161,7 +161,7 @@ columnas en la misma entrega.
 | El mismo disparador: las dos recetas escuchan el mismo aviso de mensaje recibido, con el mismo filtro. Si las dos tarjetas están encendidas, cada mensaje arranca las dos y el cliente puede acabar con dos reservas, o con una cita y una mesa (la pantalla no lo impide) | F14, F15, F21, F24 |
 | Un solo código de pantalla para las dos tarjetas: activar, desactivar, actualizar y el interruptor de confirmación | F14, F15, F16, F17, F18 |
 | Las mismas órdenes y consultas de este módulo dentro de las dos recetas: recordar y releer la lista ofrecida, marcar «Necesita atención», unir la conversación a la ficha, y la lista de conversaciones como destinatario de cada respuesta. Cambiar una rompe las dos recetas | F19, F20, F21, F24 |
-| La lista de conversaciones buscada por teléfono: la usa la receta acompañante de la cita para encontrar a quién avisar | F23 (y cualquier cambio en cómo se filtra la lista, F05) |
+| La búsqueda de la conversación por el número exacto (`conversations.by_phone`): la usa la receta acompañante de la cita para encontrar a quién avisar; la lista de conversaciones ya no (su filtro de teléfono es «contiene» y es solo de la bandeja, F05) | F23 |
 | Acuse inmediato, disculpa fija y lista escrita: mismas piezas en las dos recetas | F19, F20, F21, F24 |
 | Plantillas de Meta | F27–F31 |
 
@@ -217,9 +217,9 @@ una plantilla (todas mandan texto libre dentro de las 24 h).
 | Número de quien escribe guardado en E.164 (`+` y dígitos) | hecho | F03 |
 | Destinatario de una respuesta: se lee de la conversación, nunca se teclea; el hub exige `+` | hecho | F21, F24 |
 | Comparar con la ficha de cliente como NÚMERO (sin `00` ni `0` troncal, prefijo del país del negocio) | parcial: regla propia, sin libphonenumber ni números ya normalizados; la tabla de prefijos está copiada aquí y en la búsqueda por teléfono de Clientes (CUSTOMERS-F10): un país nuevo se añade en los dos | F04 |
-| Teléfono de la ficha guardado en E.164 | no hecho: Clientes lo guarda como se teclea (CUSTOMERS-F11) | F04, F23 |
+| Teléfono de la ficha guardado en E.164 | hecho en Clientes (CUSTOMERS-F11): toda escritura de la ficha lo guarda en E.164 y una tarea programada reescribe las fichas antiguas; la que no se pudo reescribir se queda como estaba | F04, F23 |
 | Buscar en la bandeja por teléfono escrito de cualquier forma | parcial: compara texto; `600 111 222` no encuentra `+34600111222` | F05 |
-| Encontrar la conversación de la clienta a partir del teléfono de su cita, para avisarla | no hecho: busca el teléfono de la cita como texto contenido en el de la conversación; con espacios o guiones no la encuentra (no se avisa) y un número incompleto puede dar con la de otra persona | F23 |
+| Encontrar la conversación de la clienta a partir del teléfono de su cita, para avisarla | hecho: solo con el número E.164 exacto de la cita, en este negocio; un teléfono incompleto, con espacios o sin `+` no se avisa y el run para en su propio paso («no es un número internacional»), nunca en la conversación de otra persona. Citas aún guarda sin formato internacional el teléfono cambiado a mano en la cita y la copia de las citas anteriores a CUSTOMERS-F11: esas no reciben el aviso (appointments#313) | F23 |
 | Botón de llamada de una plantilla con prefijo de país | parcial: no se valida en pantalla; lo rechaza el SaaS | F29, F30 |
 | Número del negocio conectado | hecho (lo da Meta; bloque del hub) | F01 |
 
