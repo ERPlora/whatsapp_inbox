@@ -203,6 +203,6 @@ Pasos:
 4. Al cambiar de mes el gastado vuelve a cero aunque la plataforma aún no haya hablado.
 Entra: el tope y el gasto del mes que manda la plataforma.
 Sale: nada; no se edita desde el hub.
-Si falla: si la pestaña no puede leerlo, dice que no está disponible; al agotar el cupo la plataforma rechaza los envíos: el envío cae al momento a «Eventos caídos» del hub, donde se reenvía a mano, y la bandeja deja de guardar lo que entra. Un freno de tasa de la plataforma se confunde con el cupo agotado y acaba igual.
+Si falla: si la pestaña no puede leerlo, dice que no está disponible; al agotar el cupo la plataforma rechaza los envíos: el envío cae al momento a «Eventos caídos» del hub, donde se reenvía a mano, y la bandeja deja de guardar lo que entra. Un freno de tasa de la plataforma no es el cupo: el hub espera lo que pide y vuelve a mandarlo solo, sin pasar por «Eventos caídos» (HUB-F266, hub#2649).
 Implicados: REC_WA_CITA-F02, REC_WA_MESA-F02, HUB-F162, HUB-F263, HUB-F266, HUB-F272, HUB_SHELL-F46, HUB_SHELL-F47, SAAS_DASHBOARD-F108, SAAS_WHATSAPP_INBOX-F13, SAAS_WHATSAPP_INBOX-F14
 QA: WA-03
