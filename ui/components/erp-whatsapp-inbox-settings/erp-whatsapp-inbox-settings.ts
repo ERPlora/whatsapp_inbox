@@ -325,8 +325,17 @@ class ErpWhatsappInboxSettings extends LitElement {
     if (!flows?.activateTemplate) return;
     this.busy = use.family;
     this.cardError = { ...this.cardError, [use.family]: null };
+    // Read before anything moves: the listing is repainted below and would no longer name them.
+    const rivals = this.rivalsOf(use);
     const turnedOn: string[] = [];
     try {
+      // The other reply stops BEFORE this one starts (whatsapp_inbox#284): for the few hundred
+      // milliseconds in between nobody answers, which a customer never notices; the other order
+      // answers her twice.
+      for (const rival of rivals) {
+        await this.stop(flows, rival);
+        if (this.justActivated === rival.family) this.justActivated = '';
+      }
       for (const family of [use.family, ...use.companions]) {
         await flows.activateTemplate(family);
         turnedOn.push(family);
@@ -339,9 +348,43 @@ class ErpWhatsappInboxSettings extends LitElement {
       this.asking = '';
       this.cardError = { ...this.cardError, [use.family]: activationError(e) };
       await this.undo(flows, turnedOn);
+      await this.restart(flows, rivals);
       await this.refresh(flows);
     } finally {
       this.busy = '';
+    }
+  }
+
+  /**
+   * The OTHER cards whose reply is running right now.
+   *
+   * **One booking reply per number, and the screen is what keeps it that way** (whatsapp_inbox#284).
+   * Both recipes listen to the same «message received» with the same filter and neither knows about
+   * the other, so with two cards on every customer got two acknowledgements, two answers, and could
+   * end up with an appointment AND a table. The market's answer is the same everywhere: one active
+   * bot per sender, and turning another one on turns the first off (Infobip, D7, Twilio's single «A
+   * message comes in», Meta's handover protocol). A PAUSED reply answers nobody, so it is no rival.
+   */
+  private rivalsOf(use: WhatsAppUse): WhatsAppUse[] {
+    return WHATSAPP_USES.filter((other) => other !== use && templateState(this.built[other.family]) === 'on');
+  }
+
+  /**
+   * Puts back the replies a failed switch had stopped, the card's own recipe FIRST — the mirror of
+   * {@link stop}. Switching to a reply that never started must not leave the number answering
+   * nobody. `activateTemplate` finds what it already built and leaves it running, so a rival that
+   * was only half stopped is simply running again. A restart that fails is not swallowed: the
+   * console carries it and the refresh that follows paints what is really off.
+   */
+  private async restart(flows: ScopedFlows, uses: readonly WhatsAppUse[]) {
+    for (const use of uses) {
+      for (const family of [use.family, ...use.companions]) {
+        try {
+          await flows.activateTemplate?.(family);
+        } catch (e) {
+          console.warn(`[${MODULE_ID}] could not turn ${family} back on after a failed switch`, e);
+        }
+      }
     }
   }
 
@@ -377,8 +420,7 @@ class ErpWhatsappInboxSettings extends LitElement {
     this.busy = use.family;
     this.cardError = { ...this.cardError, [use.family]: null };
     try {
-      for (const family of [...use.companions].reverse()) await flows.deactivateTemplate(family);
-      await flows.deactivateTemplate(use.family);
+      await this.stop(flows, use);
       this.justActivated = '';
       await this.refresh(flows);
     } catch (e) {
@@ -387,6 +429,12 @@ class ErpWhatsappInboxSettings extends LitElement {
     } finally {
       this.busy = '';
     }
+  }
+
+  /** The companions first, the card's own recipe last: the order {@link deactivate} explains. */
+  private async stop(flows: ScopedFlows, use: WhatsAppUse) {
+    for (const family of [...use.companions].reverse()) await flows.deactivateTemplate?.(family);
+    await flows.deactivateTemplate?.(use.family);
   }
 
   /**
@@ -566,6 +614,16 @@ class ErpWhatsappInboxSettings extends LitElement {
               @click=${() => { this.asking = use.family; this.cardError = { ...this.cardError, [use.family]: null }; }}
             >${this.t('ui.activate')}</ion-button>`}
 
+        ${on
+          ? this.rivalsOf(use).map(
+              (rival) =>
+                // Two replies running got there from outside this screen (Automations resumes a paused
+                // one with no idea of the other, FLOWS-F03): say it where she turns one off.
+                html`<ok-inline-feedback data-testid=${`whatsapp-settings-two-replies-${use.family}`} tone="warning"
+                  >${this.t('ui.twoRepliesOn', { name: this.t(rival.nameKey) })}</ok-inline-feedback
+                >`,
+            )
+          : nothing}
         ${this.renderOutdated(use)}
         ${this.asking === use.family ? this.renderConsent(use) : nothing}
         ${error ? html`<ok-inline-feedback data-testid=${`whatsapp-settings-card-error-${use.family}`} tone="danger">${errorText(error, (k) => this.t(k))}</ok-inline-feedback>` : nothing}
@@ -611,11 +669,21 @@ class ErpWhatsappInboxSettings extends LitElement {
     `;
   }
 
-  /** The consent: ONE sentence naming the consequence, and two buttons. Nothing runs until «yes». */
+  /**
+   * The consent: ONE sentence naming the consequence, and two buttons. Nothing runs until «yes».
+   * With another reply running, turning it off is part of the consequence, so it is said here, by
+   * name, before the tap that does it (whatsapp_inbox#284).
+   */
   private renderConsent(use: WhatsAppUse) {
     return html`
       <div class="consent">
         <p>${this.t(use.consentKey)}</p>
+        ${this.rivalsOf(use).map(
+          (rival) =>
+            html`<ok-inline-feedback data-testid=${`whatsapp-settings-switches-off-${use.family}`} tone="warning"
+              >${this.t('ui.activateSwitchesOff', { name: this.t(rival.nameKey) })}</ok-inline-feedback
+            >`,
+        )}
         <ion-button
           size="small"
           data-testid=${`whatsapp-settings-confirm-activate-${use.family}`}

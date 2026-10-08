@@ -5,34 +5,36 @@ Prefijo: WHATSAPP_INBOX
 ## Flujos
 
 ### WHATSAPP_INBOX-F14 Activar «Reservar citas»
-Estado: parcial — la pantalla deja encender también «Reservar mesa» y no avisa: con las dos encendidas cada mensaje arranca las dos recetas y el cliente puede acabar con dos reservas, o con una cita y una mesa
+Estado: hecho
 Vertical: peluqueria
 Actor: administrador
 Pantalla: Ajustes
 Pasos:
 1. En **Ajustes → ¿Para qué lo usas?**, la tarjeta **Reservar citas** explica qué hace.
-2. Pulsar **Activar**: aparece la frase «WhatsApp contestará solo: lee tu agenda, ofrece los huecos libres, reserva, mueve o anula la cita de la clienta que escribe…» con **Activar** y **Ahora no**.
-3. Pulsar **Activar**: la tarjeta pasa a «Activo» con **Desactivar** y dice «Listo. Escríbete desde otro móvil: “quiero cita mañana”.».
+2. Pulsar **Activar**: aparece la frase «WhatsApp contestará solo: lee tu agenda, ofrece los huecos libres, reserva, mueve o anula la cita de la clienta que escribe…» con **Activar** y **Ahora no**. Si «Reservar mesa» está encendida, debajo dice «Solo una respuesta automática puede contestar en tu número: al activar esta se apaga «Reservar mesa».».
+3. Pulsar **Activar**: primero se apaga «Reservar mesa» si estaba encendida (su tarjeta pasa a «Desactivada»), y después la tarjeta pasa a «Activo» con **Desactivar** y dice «Listo. Escríbete desde otro móvil: “quiero cita mañana”.». Una respuesta en pausa no se toca: no contesta a nadie.
 4. Aparece el interruptor de confirmación (F16).
+5. Si las dos llegan a estar encendidas por fuera de esta pantalla (Automatizaciones reanuda una en pausa, FLOWS-F03), cada tarjeta encendida dice «“Reservar mesa” también está encendida: cada mensaje recibe dos respuestas automáticas. Desactiva la que no uses.» (o nombrando «Reservar citas»); desactivar una (F17) quita el aviso.
 Entra: lo que el hub dice que hay construido; que Citas, Clientes, Servicios y Personal estén instalados y al día.
-Sale: la receta «WhatsApp → cita reservada» y su acompañante «Cita confirmada → WhatsApp» quedan creadas y encendidas; la primera vez, con exactamente los permisos que declaran; si ya existían, conservan los que dejó el dueño (solo si no les queda ninguno vuelven a recibir los de fábrica). La pantalla llama directamente a la puerta de recetas del hub, no al módulo Automatizaciones. Con Automatizaciones instalada, las dos recetas salen en su lista y se pueden pausar desde allí, y esta tarjeta las ve entonces apagadas (FLOWS-F02, FLOWS-F03); «Usar esta» sobre la misma receta en su galería crea una copia desligada que esta tarjeta no ve (FLOWS-F05); y al pie de Ajustes sale el enlace «Ajustes avanzados en Automatizaciones» (FLOWS-F07).
-Si falla: la tarjeta dice el motivo y pone en pausa lo que llegó a encender, pero una receta que falló a mitad puede quedarse con parte de sus permisos, y la siguiente activación la enciende así; sin permiso, «Solo un dueño o un administrador puede activarlo.». Si el hub no ofrece la receta: con Citas instalada y otra aplicación que la receta pide ausente, en pausa o vieja (o Citas vieja), la tarjeta se sustituye por «“Reservar citas” necesita la aplicación …» con **Ver aplicaciones**; sin Citas ni Reservas activas, «Instala Citas o Reservas para que WhatsApp reserve solo»; si están pero el hub no ofrece ninguna receta y no dice por qué, «Actualiza Citas o Reservas para que WhatsApp reserve solo»; y con Citas ausente o en pausa pero Reservas activa, la tarjeta de citas no aparece, sin aviso.
+Sale: la receta «WhatsApp → cita reservada» y su acompañante «Cita confirmada → WhatsApp» quedan creadas y encendidas, y la receta «WhatsApp → mesa reservada» apagada: una sola respuesta automática de reservas contesta en el número (whatsapp_inbox#284; las dos escuchan el mismo mensaje recibido); la primera vez, con exactamente los permisos que declaran; si ya existían, conservan los que dejó el dueño (solo si no les queda ninguno vuelven a recibir los de fábrica). La pantalla llama directamente a la puerta de recetas del hub, no al módulo Automatizaciones. Con Automatizaciones instalada, las dos recetas salen en su lista y se pueden pausar desde allí, y esta tarjeta las ve entonces apagadas (FLOWS-F02, FLOWS-F03); «Usar esta» sobre la misma receta en su galería crea una copia desligada que esta tarjeta no ve (FLOWS-F05); y al pie de Ajustes sale el enlace «Ajustes avanzados en Automatizaciones» (FLOWS-F07).
+Si falla: la tarjeta dice el motivo, pone en pausa lo que llegó a encender y vuelve a encender la respuesta que había apagado para dejarle sitio, así el número nunca se queda sin contestar (si esa tampoco vuelve, su tarjeta sale «Desactivada»); pero una receta que falló a mitad puede quedarse con parte de sus permisos, y la siguiente activación la enciende así; sin permiso, «Solo un dueño o un administrador puede activarlo.». Si el hub no ofrece la receta: con Citas instalada y otra aplicación que la receta pide ausente, en pausa o vieja (o Citas vieja), la tarjeta se sustituye por «“Reservar citas” necesita la aplicación …» con **Ver aplicaciones**; sin Citas ni Reservas activas, «Instala Citas o Reservas para que WhatsApp reserve solo»; si están pero el hub no ofrece ninguna receta y no dice por qué, «Actualiza Citas o Reservas para que WhatsApp reserve solo»; y con Citas ausente o en pausa pero Reservas activa, la tarjeta de citas no aparece, sin aviso.
 Implicados: APPOINTMENTS-F06, APPOINTMENTS-F18, FLOWS-F02, FLOWS-F03, FLOWS-F05, FLOWS-F07, REC_WA_CITA-F01, HUB-F104, HUB-F105
 QA: W-01 (discrepa)
 
 ### WHATSAPP_INBOX-F15 Activar «Reservar mesa»
-Estado: parcial — la pantalla deja encender también «Reservar citas» y no avisa: con las dos encendidas cada mensaje arranca las dos recetas y el cliente puede acabar con dos reservas, o con una cita y una mesa
+Estado: hecho
 Vertical: restaurante
 Actor: administrador
 Pantalla: Ajustes
 Pasos:
 1. En **Ajustes → ¿Para qué lo usas?**, la tarjeta **Reservar mesa** explica qué hace.
-2. Pulsar **Activar**: aparece «WhatsApp contestará solo: mira las mesas libres, reserva la mesa de quien escribe y le contesta. ¿Lo activas?» con **Activar** y **Ahora no**.
-3. Pulsar **Activar**: la tarjeta pasa a «Activo» con **Desactivar** y dice «Listo. Escríbete desde otro móvil: “quiero mesa para dos mañana”.».
+2. Pulsar **Activar**: aparece «WhatsApp contestará solo: mira las mesas libres, reserva la mesa de quien escribe y le contesta. ¿Lo activas?» con **Activar** y **Ahora no**. Si «Reservar citas» está encendida, debajo dice «Solo una respuesta automática puede contestar en tu número: al activar esta se apaga «Reservar citas».».
+3. Pulsar **Activar**: primero se apagan «Reservar citas» y su aviso de cita confirmada si estaban encendidos, y después la tarjeta pasa a «Activo» con **Desactivar** y dice «Listo. Escríbete desde otro móvil: “quiero mesa para dos mañana”.».
 4. Aparece el interruptor de confirmación (F16).
+5. Con las dos encendidas por fuera de esta pantalla, el mismo aviso que en F14, nombrando «Reservar citas».
 Entra: lo que el hub dice que hay construido; que Reservas y Clientes estén instalados y al día.
-Sale: la receta «WhatsApp → mesa reservada» creada, encendida y con exactamente sus permisos. No lleva acompañante. Como en F14, la enciende la puerta de recetas del hub; Automatizaciones la lista y la puede pausar (FLOWS-F02, FLOWS-F03), su «Usar esta» crea una copia desligada que esta tarjeta no ve (FLOWS-F05), y el enlace «Ajustes avanzados en Automatizaciones» lleva allí (FLOWS-F07).
-Si falla: igual que F14, nombrando Reservas o Clientes.
+Sale: la receta «WhatsApp → mesa reservada» creada, encendida y con exactamente sus permisos, y las de la cita apagadas (como en F14). No lleva acompañante. Como en F14, la enciende la puerta de recetas del hub; Automatizaciones la lista y la puede pausar (FLOWS-F02, FLOWS-F03), su «Usar esta» crea una copia desligada que esta tarjeta no ve (FLOWS-F05), y el enlace «Ajustes avanzados en Automatizaciones» lleva allí (FLOWS-F07).
+Si falla: igual que F14, nombrando Reservas o Clientes; la respuesta de citas que se apagó vuelve a encenderse.
 Implicados: FLOWS-F02, FLOWS-F03, FLOWS-F05, FLOWS-F07, RESERVATIONS-F17, REC_WA_MESA-F01, HUB-F104, HUB-F105
 QA: WR-01
 

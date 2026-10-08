@@ -152,6 +152,8 @@
     "useReservationsPolicyAuto": "Las reservas se confirman solas",
     "useReservationsPolicyReviewHelp": "Cada reserva nueva te espera en Reservas con “Confirmar”; al cliente le decimos que se la confirmas en breve.",
     "useReservationsPolicyError": "No se pudo guardar cómo se confirman las reservas. Inténtalo otra vez.",
+    "activateSwitchesOff": "Solo una respuesta automática puede contestar en tu número: al activar esta se apaga «{name}».",
+    "twoRepliesOn": "«{name}» también está encendida: cada mensaje recibe dos respuestas automáticas. Desactiva la que no uses.",
     "doorRefusalUnknown": "No se ha podido registrar la plantilla en Meta, y el motivo es uno que esta pantalla aún no conoce ({code}). Queda guardada aquí: busca ese código en WhatsApp Manager o enviáselo a soporte.",
     "doorRefusalNoCode": "No se ha podido registrar la plantilla en Meta. Queda guardada aquí: prueba a guardarla otra vez dentro de un rato.",
     "metaRejectedReason": "Motivo de Meta: {reason}",

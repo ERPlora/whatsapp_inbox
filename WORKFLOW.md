@@ -63,8 +63,8 @@ lista exacta de lo que hay que revisar en el otro negocio al tocar una pieza de 
 4. En el hub, como administrador: **Bandeja de WhatsApp → Ajustes → Tu número →
    Conectar WhatsApp**, iniciar sesión en Facebook y escanear el QR (F01).
 5. En **¿Para qué lo usas?**, tocar **Activar** en la tarjeta del negocio y aceptar la frase (F14 o
-   F15). Encender **solo la del negocio**: la pantalla deja encender las dos, y entonces cada
-   mensaje arranca las dos recetas (F14, F15).
+   F15). Solo una puede contestar en el número: si la otra estaba encendida, la frase lo dice y al
+   aceptar se apaga (F14, F15).
 6. Elegir **Las citas/reservas se confirman solas** o **Las reviso yo antes** (F16).
 7. Escribir al número desde otro móvil (`quiero cita mañana` / `quiero mesa para dos mañana`) y
    comprobar que llega a la bandeja y que contesta.
@@ -131,8 +131,8 @@ acuse, la lista con el botón **Ver huecos**, la confirmación, la disculpa o el
 | WHATSAPP_INBOX-F11 | Borrar los datos de una clienta desde su ficha | parcial | comun | canal-y-bandeja |
 | WHATSAPP_INBOX-F12 | Unir dos fichas de la misma clienta | hecho | comun | canal-y-bandeja |
 | WHATSAPP_INBOX-F13 | Ver el consumo del mes y llegar al tope | parcial | comun | canal-y-bandeja |
-| WHATSAPP_INBOX-F14 | Activar «Reservar citas» | parcial | peluqueria | respuestas-automaticas |
-| WHATSAPP_INBOX-F15 | Activar «Reservar mesa» | parcial | restaurante | respuestas-automaticas |
+| WHATSAPP_INBOX-F14 | Activar «Reservar citas» | hecho | peluqueria | respuestas-automaticas |
+| WHATSAPP_INBOX-F15 | Activar «Reservar mesa» | hecho | restaurante | respuestas-automaticas |
 | WHATSAPP_INBOX-F16 | Decidir si las reservas por WhatsApp se confirman solas | hecho | comun | respuestas-automaticas |
 | WHATSAPP_INBOX-F17 | Desactivar una respuesta automática | hecho | comun | respuestas-automaticas |
 | WHATSAPP_INBOX-F18 | Actualizar una respuesta automática a su versión mejorada | hecho | comun | respuestas-automaticas |
@@ -158,7 +158,7 @@ columnas en la misma entrega.
 | Pieza compartida | Flujos que la usan |
 |---|---|
 | Canal, recepción, bandeja, reconocimiento por número, borrado de datos, cupo | F01–F13 (los dos negocios) |
-| El mismo disparador: las dos recetas escuchan el mismo aviso de mensaje recibido, con el mismo filtro. Si las dos tarjetas están encendidas, cada mensaje arranca las dos y el cliente puede acabar con dos reservas, o con una cita y una mesa (la pantalla no lo impide) | F14, F15, F21, F24 |
+| El mismo disparador: las dos recetas escuchan el mismo aviso de mensaje recibido, con el mismo filtro. Por eso solo una puede estar encendida: activar una apaga la otra, y si las dos llegan a estarlo desde Automatizaciones, cada tarjeta lo avisa (whatsapp_inbox#284) | F14, F15, F21, F24 |
 | Un solo código de pantalla para las dos tarjetas: activar, desactivar, actualizar y el interruptor de confirmación | F14, F15, F16, F17, F18 |
 | Las mismas órdenes y consultas de este módulo dentro de las dos recetas: recordar y releer la lista ofrecida, marcar «Necesita atención», unir la conversación a la ficha, y la lista de conversaciones como destinatario de cada respuesta. Cambiar una rompe las dos recetas | F19, F20, F21, F24 |
 | La búsqueda de la conversación por el número exacto (`conversations.by_phone`): la usa la receta acompañante de la cita para encontrar a quién avisar; la lista de conversaciones ya no (su filtro de teléfono es «contiene» y es solo de la bandeja, F05) | F23 |
@@ -265,7 +265,7 @@ receta con los permisos que el dueño consintió.
 
 Solo lo que el código hace cumplir. Lo que depende de que el asistente obedezca su guion (que la
 hora la elija quien escribe, que la frase diga si la reserva quedó hecha o pendiente) está en F21 y F24,
-no aquí; y que solo haya una receta de reservar encendida no lo impide nada (hueco de F14 y F15).
+no aquí.
 
 - **Aislamiento**: cada lectura y escritura va por negocio; una conversación de otro negocio no
   existe («Esa conversación no existe en este negocio.»).
@@ -279,6 +279,9 @@ no aquí; y que solo haya una receta de reservar encendida no lo impide nada (hu
   cliente, donde Citas aplica sus propias reglas.
 - **La política de confirmación se lee antes de reservar**, en un paso fijo de la receta, no a
   criterio del asistente.
+- **Una sola respuesta automática de reservas en el número**: activar una tarjeta apaga antes la
+  otra, y si la nueva no se enciende, la otra vuelve. Automatizaciones puede reanudar la apagada sin
+  saberlo (FLOWS-F03): entonces las dos tarjetas lo avisan, pero no se impide (F14, F15).
 - **Cada mensaje, una vez**: un reintento no duplica mensaje, no leído ni cobro.
 - **El historial y las respuestas del dueño no cuentan como no leídos ni gastan cupo.**
 - **Un solo contador del mes**: el que escribe la plataforma; el hub no lo edita.
@@ -342,7 +345,6 @@ lo de abajo está desfasado o contradice al código.
 - `locales/es.json` (`ui.useAppointmentsPolicyReviewHelp`): «Cada cita nueva te espera en la Agenda» — solo las que reserva la clienta; las del mostrador nacen Pendiente con el interruptor como esté (F16). En Reservas, en cambio, el interruptor sí vale para toda reserva nueva.
 - `flows/README.md` («Por qué no se filtra a las citas que vinieron por WhatsApp») no dice que, con «Las citas se confirman solas», la cita recién reservada también dispara el aviso de cita confirmada: la clienta recibe la respuesta de la reserva y el aviso «¡Confirmada!…», sin orden garantizado entre los dos (F23; comprobado en Citas, que anuncia la confirmación al crear una cita que nace confirmada).
 - `flows/appointment-from-whatsapp.*.flow.json`: el prompt explica el motivo `held` de `appointments.availability.check` («otra solicitud lo tiene apartado»); Citas retiró la retención de huecos (appointments#184) y ya no lo devuelve.
-- `flows/README.md` («UNA sola instalada, y no es un consejo»): la pantalla no lo hace cumplir; deja encender las dos tarjetas y entonces cada mensaje arranca las dos recetas (F14, F15).
 - `locales/es.json` (`ui.searchTemplates`): «Buscar nombre o categoría…» — la lista de plantillas solo busca por nombre (Plantillas de Meta).
 - `locales/es.json` (`ui.categoryUtility`, `ui.categoryMarketing`, `ui.categoryAuthentication`): las categorías salen en inglés en la pantalla española («Utility», «Authentication»), mientras el aviso de error dice «Elige Utilidad, Marketing o Autenticación» (F29).
 - Oleada 2 (Automatizaciones, 05/10/2026): F14, F15, F17, F18 y F20 dejaban pendiente de enlazar con el módulo Automatizaciones encender, apagar y restaurar una receta de fábrica, «seguir si falla» y «solo si». Son del hub: la pantalla de Ajustes llama directamente a la puerta de recetas del hub (`crates/server/src/flows_api.rs`: activate, deactivate, restore) y `on_error` y `run_if` son del motor. Lo que sí une los dos módulos: Automatizaciones lista, pausa y restaura esas recetas (FLOWS-F02, FLOWS-F03, FLOWS-F06), su «Usar esta» crea una copia desligada que la tarjeta no ve (FLOWS-F05), y esta pantalla solo pregunta por `flows.drafts.list` para saber si enseñar el enlace «Ajustes avanzados en Automatizaciones» (FLOWS-F07); ya no usa `flows.automations.status` (FLOWS-F29).

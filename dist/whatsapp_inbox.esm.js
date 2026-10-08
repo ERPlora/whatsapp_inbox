@@ -5022,6 +5022,8 @@ var es_default = {
     useReservationsPolicyAuto: "Las reservas se confirman solas",
     useReservationsPolicyReviewHelp: "Cada reserva nueva te espera en Reservas con \u201CConfirmar\u201D; al cliente le decimos que se la confirmas en breve.",
     useReservationsPolicyError: "No se pudo guardar c\xF3mo se confirman las reservas. Int\xE9ntalo otra vez.",
+    activateSwitchesOff: "Solo una respuesta autom\xE1tica puede contestar en tu n\xFAmero: al activar esta se apaga \xAB{name}\xBB.",
+    twoRepliesOn: "\xAB{name}\xBB tambi\xE9n est\xE1 encendida: cada mensaje recibe dos respuestas autom\xE1ticas. Desactiva la que no uses.",
     doorRefusalUnknown: "No se ha podido registrar la plantilla en Meta, y el motivo es uno que esta pantalla a\xFAn no conoce ({code}). Queda guardada aqu\xED: busca ese c\xF3digo en WhatsApp Manager o envi\xE1selo a soporte.",
     doorRefusalNoCode: "No se ha podido registrar la plantilla en Meta. Queda guardada aqu\xED: prueba a guardarla otra vez dentro de un rato.",
     metaRejectedReason: "Motivo de Meta: {reason}",
@@ -5279,6 +5281,8 @@ var en_default = {
     useReservationsPolicyAuto: "Bookings are confirmed automatically",
     useReservationsPolicyReviewHelp: "Each new booking waits for you in Reservations with \u201CConfirm\u201D; the guest is told you will confirm shortly.",
     useReservationsPolicyError: "We could not save how table bookings are confirmed. Try again.",
+    activateSwitchesOff: "Only one automatic reply can answer your number: turning this one on turns off \u201C{name}\u201D.",
+    twoRepliesOn: "\u201C{name}\u201D is on too: every message gets two automatic replies. Turn off the one you do not use.",
     doorRefusalUnknown: "The template could not be registered with Meta, and the reason is one this screen does not know yet ({code}). It is saved here: look that code up in WhatsApp Manager or send it to support.",
     doorRefusalNoCode: "The template could not be registered with Meta. It is saved here: try saving it again in a moment.",
     metaRejectedReason: "Meta's reason: {reason}",
@@ -6325,8 +6329,13 @@ var ErpWhatsappInboxSettings = class extends i3 {
     if (!flows?.activateTemplate) return;
     this.busy = use.family;
     this.cardError = { ...this.cardError, [use.family]: null };
+    const rivals = this.rivalsOf(use);
     const turnedOn = [];
     try {
+      for (const rival of rivals) {
+        await this.stop(flows, rival);
+        if (this.justActivated === rival.family) this.justActivated = "";
+      }
       for (const family of [use.family, ...use.companions]) {
         await flows.activateTemplate(family);
         turnedOn.push(family);
@@ -6339,9 +6348,41 @@ var ErpWhatsappInboxSettings = class extends i3 {
       this.asking = "";
       this.cardError = { ...this.cardError, [use.family]: activationError(e5) };
       await this.undo(flows, turnedOn);
+      await this.restart(flows, rivals);
       await this.refresh(flows);
     } finally {
       this.busy = "";
+    }
+  }
+  /**
+   * The OTHER cards whose reply is running right now.
+   *
+   * **One booking reply per number, and the screen is what keeps it that way** (whatsapp_inbox#284).
+   * Both recipes listen to the same «message received» with the same filter and neither knows about
+   * the other, so with two cards on every customer got two acknowledgements, two answers, and could
+   * end up with an appointment AND a table. The market's answer is the same everywhere: one active
+   * bot per sender, and turning another one on turns the first off (Infobip, D7, Twilio's single «A
+   * message comes in», Meta's handover protocol). A PAUSED reply answers nobody, so it is no rival.
+   */
+  rivalsOf(use) {
+    return WHATSAPP_USES.filter((other) => other !== use && templateState(this.built[other.family]) === "on");
+  }
+  /**
+   * Puts back the replies a failed switch had stopped, the card's own recipe FIRST — the mirror of
+   * {@link stop}. Switching to a reply that never started must not leave the number answering
+   * nobody. `activateTemplate` finds what it already built and leaves it running, so a rival that
+   * was only half stopped is simply running again. A restart that fails is not swallowed: the
+   * console carries it and the refresh that follows paints what is really off.
+   */
+  async restart(flows, uses) {
+    for (const use of uses) {
+      for (const family of [use.family, ...use.companions]) {
+        try {
+          await flows.activateTemplate?.(family);
+        } catch (e5) {
+          console.warn(`[${MODULE_ID}] could not turn ${family} back on after a failed switch`, e5);
+        }
+      }
     }
   }
   /**
@@ -6375,8 +6416,7 @@ var ErpWhatsappInboxSettings = class extends i3 {
     this.busy = use.family;
     this.cardError = { ...this.cardError, [use.family]: null };
     try {
-      for (const family of [...use.companions].reverse()) await flows.deactivateTemplate(family);
-      await flows.deactivateTemplate(use.family);
+      await this.stop(flows, use);
       this.justActivated = "";
       await this.refresh(flows);
     } catch (e5) {
@@ -6385,6 +6425,11 @@ var ErpWhatsappInboxSettings = class extends i3 {
     } finally {
       this.busy = "";
     }
+  }
+  /** The companions first, the card's own recipe last: the order {@link deactivate} explains. */
+  async stop(flows, use) {
+    for (const family of [...use.companions].reverse()) await flows.deactivateTemplate?.(family);
+    await flows.deactivateTemplate?.(use.family);
   }
   /**
    * The families of this card the module has improved since they were built — the card's own recipe
@@ -6527,6 +6572,15 @@ var ErpWhatsappInboxSettings = class extends i3 {
     }}
             >${this.t("ui.activate")}</ion-button>`}
 
+        ${on ? this.rivalsOf(use).map(
+      (rival) => (
+        // Two replies running got there from outside this screen (Automations resumes a paused
+        // one with no idea of the other, FLOWS-F03): say it where she turns one off.
+        b2`<ok-inline-feedback data-testid=${`whatsapp-settings-two-replies-${use.family}`} tone="warning"
+                  >${this.t("ui.twoRepliesOn", { name: this.t(rival.nameKey) })}</ok-inline-feedback
+                >`
+      )
+    ) : A}
         ${this.renderOutdated(use)}
         ${this.asking === use.family ? this.renderConsent(use) : A}
         ${error ? b2`<ok-inline-feedback data-testid=${`whatsapp-settings-card-error-${use.family}`} tone="danger">${errorText(error, (k2) => this.t(k2))}</ok-inline-feedback>` : A}
@@ -6574,11 +6628,20 @@ var ErpWhatsappInboxSettings = class extends i3 {
           >${this.t("ui.recipeUpdate")}</ion-button>`}
     `;
   }
-  /** The consent: ONE sentence naming the consequence, and two buttons. Nothing runs until «yes». */
+  /**
+   * The consent: ONE sentence naming the consequence, and two buttons. Nothing runs until «yes».
+   * With another reply running, turning it off is part of the consequence, so it is said here, by
+   * name, before the tap that does it (whatsapp_inbox#284).
+   */
   renderConsent(use) {
     return b2`
       <div class="consent">
         <p>${this.t(use.consentKey)}</p>
+        ${this.rivalsOf(use).map(
+      (rival) => b2`<ok-inline-feedback data-testid=${`whatsapp-settings-switches-off-${use.family}`} tone="warning"
+              >${this.t("ui.activateSwitchesOff", { name: this.t(rival.nameKey) })}</ok-inline-feedback
+            >`
+    )}
         <ion-button
           size="small"
           data-testid=${`whatsapp-settings-confirm-activate-${use.family}`}
