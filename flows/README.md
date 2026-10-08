@@ -13,7 +13,10 @@ Hay **dos familias, una por uso** — la que da HORA (peluquería, estética) y 
 
 🔴 **UNA sola instalada, y no es un consejo:** las dos disparan con el MISMO evento
 (`hub.whatsapp.message_received`), así que dos instaladas a la vez arrancan dos flujos con el mismo
-mensaje y el cliente acaba con dos reservas — o con una cita y una mesa.
+mensaje y el cliente acaba con dos reservas — o con una cita y una mesa. La tarjeta de Ajustes lo
+hace cumplir (whatsapp_inbox#284): activar una apaga ANTES la otra (con su acompañante) y, si la
+nueva no arranca, vuelve a encender la que apagó; si las dos acaban encendidas por Automatizaciones,
+cada tarjeta lo avisa. Quien instale a mano por la puerta de abajo no tiene esa red.
 
 🪦 **Hasta whatsapp_inbox#124 eran cuatro, en dos pares:** cada uso llevaba además una receta de
 «propuesta», cuya escritura esperaba en la bandeja de aprobación del hub. Se borraron, y no por

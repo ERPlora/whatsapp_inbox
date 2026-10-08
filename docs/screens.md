@@ -193,6 +193,14 @@ Appointments, Customers, Services and Staff; «Book a table» needs Reservations
 hub that does not say which app fails yet, the warning stays the general «Update Appointments or
 Reservations».
 
+**One booking reply per number** ([#284](https://github.com/ERPlora/whatsapp_inbox/issues/284)).
+«Book appointments» and «Book a table» both answer the same incoming message, so only one of them
+can be on. Turning one on asks first — «Only one automatic reply can answer your number: turning
+this one on turns off “Book a table”.» — and then switches the other off before switching this one
+on; if the new one fails, the old one is turned back on, so the number never goes unanswered. If
+both end up on anyway (Automations resumed a paused one), each card says so: «“Book a table” is on
+too: every message gets two automatic replies. Turn off the one you do not use.»
+
 Each card also says whether that automation is **already set up here**
 ([#79](https://github.com/ERPlora/whatsapp_inbox/issues/79)), so the salon that has been taking
 appointments through WhatsApp for weeks is not invited to build a second one that answers the same

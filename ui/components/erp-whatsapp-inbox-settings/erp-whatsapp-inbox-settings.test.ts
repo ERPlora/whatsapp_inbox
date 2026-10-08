@@ -448,6 +448,119 @@ describe('step 2 · one tap turns the recipe on, through the kernel and under th
 });
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
+// ONE booking reply per number (whatsapp_inbox#284)
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+/**
+ * Both recipes listen to the same «message received» with the same filter, so with both cards on
+ * every message started BOTH: measured in the bench of the module map (08/10), one «quiero cita
+ * mañana por la tarde» got two acknowledgements and two apologies, and could have ended as an
+ * appointment AND a table. The market answers it the same way everywhere — one active bot per
+ * sender, and turning on another one turns the first off (Infobip, D7, Twilio's single «A message
+ * comes in», Meta's handover: one app owns the conversation). So the two cards are a choice of one.
+ */
+describe('one booking reply per number: turning one card on turns the other off', () => {
+  const allOn = (use: (typeof WHATSAPP_USES)[number]) =>
+    Object.fromEntries([use.family, ...use.companions].map((f) => [f, { flow_id: `f-${f}`, enabled: true }]));
+
+  it('with the salon reply running, the table consent says the salon one will be turned off, by name', async () => {
+    mountWith({ built: allOn(APPOINTMENTS) });
+    const el = await mount();
+    await tap(el, `whatsapp-settings-activate-${RESERVATIONS.family}`);
+    expect(
+      pick(el, `whatsapp-settings-switches-off-${RESERVATIONS.family}`)?.textContent?.trim(),
+      'the owner is not told that saying yes stops the reply she already has',
+    ).toBe(fill(sentence('ui.activateSwitchesOff'), { name: sentence(APPOINTMENTS.nameKey) }));
+    expect(kernel.filter((k) => k.call === 'activate' || k.call === 'deactivate'), 'the first tap must change nothing').toEqual([]);
+  });
+
+  it('with nothing else running, the consent says nothing about switching', async () => {
+    mountWith({ built: { [APPOINTMENTS.family]: { flow_id: 'f1', enabled: false } } });
+    const el = await mount();
+    await tap(el, `whatsapp-settings-activate-${RESERVATIONS.family}`);
+    expect(pick(el, `whatsapp-settings-switches-off-${RESERVATIONS.family}`), 'a PAUSED reply answers nobody: nothing to switch').toBeNull();
+    await tap(el, `whatsapp-settings-confirm-activate-${RESERVATIONS.family}`);
+    expect(kernel.filter((k) => k.call === 'deactivate'), 'stopped something that was not running').toEqual([]);
+  });
+
+  it('consenting stops the other reply FIRST (companions, then its own recipe) and then turns this one on', async () => {
+    mountWith({ built: allOn(APPOINTMENTS) });
+    const el = await mount();
+    await tap(el, `whatsapp-settings-activate-${RESERVATIONS.family}`);
+    await tap(el, `whatsapp-settings-confirm-activate-${RESERVATIONS.family}`);
+    expect(
+      kernel.filter((k) => k.call === 'activate' || k.call === 'deactivate'),
+      'both replies are left running: every message gets two answers',
+    ).toEqual([
+      ...[...APPOINTMENTS.companions].reverse().map((family) => ({ call: 'deactivate', family, scopedTo: MODULE_ID })),
+      { call: 'deactivate', family: APPOINTMENTS.family, scopedTo: MODULE_ID },
+      { call: 'activate', family: RESERVATIONS.family, scopedTo: MODULE_ID },
+      ...RESERVATIONS.companions.map((family) => ({ call: 'activate', family, scopedTo: MODULE_ID })),
+    ]);
+    expect(pick(el, `whatsapp-settings-state-${RESERVATIONS.family}`)?.textContent?.trim()).toBe(esLocale.ui.stateOn);
+    expect(pick(el, `whatsapp-settings-state-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.stateOff);
+  });
+
+  it('and the other way round: the salon card switches the table reply off', async () => {
+    mountWith({ built: allOn(RESERVATIONS) });
+    const el = await mount();
+    await tap(el, `whatsapp-settings-activate-${APPOINTMENTS.family}`);
+    expect(pick(el, `whatsapp-settings-switches-off-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(
+      fill(sentence('ui.activateSwitchesOff'), { name: sentence(RESERVATIONS.nameKey) }),
+    );
+    await tap(el, `whatsapp-settings-confirm-activate-${APPOINTMENTS.family}`);
+    expect(pick(el, `whatsapp-settings-state-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.stateOn);
+    expect(pick(el, `whatsapp-settings-state-${RESERVATIONS.family}`)?.textContent?.trim()).toBe(esLocale.ui.stateOff);
+  });
+
+  it('if the new one refuses, the reply she had is turned back on: the number is never left answering nobody', async () => {
+    mountWith({
+      built: allOn(APPOINTMENTS),
+      activateError: { code: 'network_error', message: 'dropped' },
+      activateErrorFamily: RESERVATIONS.family,
+    });
+    const el = await mount();
+    await tap(el, `whatsapp-settings-activate-${RESERVATIONS.family}`);
+    await tap(el, `whatsapp-settings-confirm-activate-${RESERVATIONS.family}`);
+    const after = kernel.slice(kernel.findIndex((k) => k.call === 'activate' && k.family === RESERVATIONS.family) + 1);
+    expect(
+      after.filter((k) => k.call === 'activate'),
+      'the salon reply was stopped for a table reply that never started',
+    ).toEqual([
+      { call: 'activate', family: APPOINTMENTS.family, scopedTo: MODULE_ID },
+      ...APPOINTMENTS.companions.map((family) => ({ call: 'activate', family, scopedTo: MODULE_ID })),
+    ]);
+    expect(pick(el, `whatsapp-settings-state-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.stateOn);
+    expect(pick(el, `whatsapp-settings-card-error-${RESERVATIONS.family}`), 'the refusal is swallowed').not.toBeNull();
+  });
+
+  it('both running already (turned on from Automations): each card says the other one is on too', async () => {
+    mountWith({ built: { ...allOn(APPOINTMENTS), ...allOn(RESERVATIONS) } });
+    const el = await mount();
+    expect(pick(el, `whatsapp-settings-two-replies-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(
+      fill(sentence('ui.twoRepliesOn'), { name: sentence(RESERVATIONS.nameKey) }),
+    );
+    expect(pick(el, `whatsapp-settings-two-replies-${RESERVATIONS.family}`)?.textContent?.trim()).toBe(
+      fill(sentence('ui.twoRepliesOn'), { name: sentence(APPOINTMENTS.nameKey) }),
+    );
+  });
+
+  it('one running and the other paused: no warning, there is only one answer', async () => {
+    mountWith({ built: { ...allOn(APPOINTMENTS), [RESERVATIONS.family]: { flow_id: 'f-r', enabled: false } } });
+    const el = await mount();
+    expect(pick(el, `whatsapp-settings-two-replies-${APPOINTMENTS.family}`)).toBeNull();
+    expect(pick(el, `whatsapp-settings-two-replies-${RESERVATIONS.family}`)).toBeNull();
+  });
+
+  it('turning one off from the warning leaves a single reply and the warning goes', async () => {
+    mountWith({ built: { ...allOn(APPOINTMENTS), ...allOn(RESERVATIONS) } });
+    const el = await mount();
+    await tap(el, `whatsapp-settings-deactivate-${RESERVATIONS.family}`);
+    expect(pick(el, `whatsapp-settings-two-replies-${APPOINTMENTS.family}`)).toBeNull();
+    expect(pick(el, `whatsapp-settings-state-${APPOINTMENTS.family}`)?.textContent?.trim()).toBe(esLocale.ui.stateOn);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
 // A recipe the module improved AFTER she turned it on (whatsapp_inbox#241)
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
 /**
@@ -1286,6 +1399,7 @@ describe('every sentence of this screen ships in both languages, translated', ()
     'usesNeedMissingModule', 'usesNeedPausedModule', 'usesNeedUpdatedModule',
     'recipeOutdated', 'recipeUpdate', 'recipeUpdateConfirm', 'recipeUpdated',
     'errRecipeUpdate', 'errRecipeUpdateGone', 'recipeUpdateForbidden',
+    'activateSwitchesOff', 'twoRepliesOn',
     // Derived, never listed: every sentence a card owns — its name, its summary, its consent, its
     // «text your number» line AND the four words of its switch — comes off the use itself, so a
     // card added later cannot ship half-translated by being forgotten in a list over here.

@@ -151,6 +151,8 @@
     "useReservationsPolicyAuto": "Bookings are confirmed automatically",
     "useReservationsPolicyReviewHelp": "Each new booking waits for you in Reservations with “Confirm”; the guest is told you will confirm shortly.",
     "useReservationsPolicyError": "We could not save how table bookings are confirmed. Try again.",
+    "activateSwitchesOff": "Only one automatic reply can answer your number: turning this one on turns off “{name}”.",
+    "twoRepliesOn": "“{name}” is on too: every message gets two automatic replies. Turn off the one you do not use.",
     "doorRefusalUnknown": "The template could not be registered with Meta, and the reason is one this screen does not know yet ({code}). It is saved here: look that code up in WhatsApp Manager or send it to support.",
     "doorRefusalNoCode": "The template could not be registered with Meta. It is saved here: try saving it again in a moment.",
     "metaRejectedReason": "Meta's reason: {reason}",

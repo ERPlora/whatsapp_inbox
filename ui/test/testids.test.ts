@@ -129,6 +129,8 @@ const COVERED: Record<
       'whatsapp-settings-policy-error-',
       'whatsapp-settings-policy-review-',
       'whatsapp-settings-state-',
+      'whatsapp-settings-switches-off-',
+      'whatsapp-settings-two-replies-',
       'whatsapp-settings-update-',
       'whatsapp-settings-updated-',
       'whatsapp-settings-uses-blocked-',
