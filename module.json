@@ -299,7 +299,14 @@
       "permission": "whatsapp_inbox.manage_settings",
       "sql": "queries/usage_get.sql",
       "ai": {
-        "description": "Inbound WhatsApp messages consumed this calendar month and the monthly allowance of the plan (0 = no cap). Read-only: the allowance is set by billing, never from the hub."
+        "description": "Billable WhatsApp messages the business sent this calendar month, as metered by the platform, and the monthly allowance of the plan (0 = no cap). Read-only: the allowance is set by billing, never from the hub."
+      }
+    },
+    "whatsapp_inbox.usage.cap_reached": {
+      "permission": "whatsapp_inbox.view_conversation",
+      "sql": "queries/usage_cap_reached.sql",
+      "ai": {
+        "description": "Whether this month's WhatsApp allowance is spent: one row with cap_reached (1 = spent, 0 = not, also when there is no cap) and monthly_limit. At the cap incoming messages are still saved in the inbox; only what the business sends is limited, so automatic replies pause until next month or a plan upgrade."
       }
     },
     "whatsapp_inbox.conversations.unlinked": {
@@ -503,7 +510,7 @@
         "whatsapp_inbox.message.received"
       ],
       "ai": {
-        "description": "Ingests an inbound WhatsApp message: upserts the conversation, persists the message, and emits whatsapp_inbox.message.received for other modules (e.g. communications inbox) to react. Enforces the free-tier monthly message limit when configured."
+        "description": "Ingests an inbound WhatsApp message: upserts the conversation, persists the message, and emits whatsapp_inbox.message.received for other modules (e.g. communications inbox) to react. The message is always saved, also when the monthly allowance is spent: the allowance limits what the business sends, not what it receives."
       }
     },
     "whatsapp_inbox._ingest_inbound_message": {

@@ -36,7 +36,7 @@ Implicados: REC_WA_CITA-F01, REC_WA_MESA-F01, HUB-F261, HUB-F262, HUB_SHELL-F37,
 QA: WA-01, WA-09
 
 ### WHATSAPP_INBOX-F03 Recibir un mensaje en la bandeja
-Estado: parcial — con el cupo del mes agotado las respuestas automáticas corren igual (gastan un turno del asistente y pueden reservar) aunque su respuesta no sale y la bandeja no guarda el mensaje
+Estado: hecho
 Vertical: comun
 Actor: cliente, sistema
 Pantalla: Bandeja de entrada
@@ -44,9 +44,10 @@ Pasos:
 1. La clienta escribe al número del negocio.
 2. En pocos segundos su conversación aparece arriba en **Bandeja de entrada** con **Sin leer** sumado y la hora en **Último mensaje**; si la bandeja está abierta, se refresca sola.
 3. Un mensaje que llega dos veces aparece una sola vez. Los mensajes del historial que trae la conexión aparecen con la hora en que se dijeron y no suman en **Sin leer**.
+4. Con los mensajes del plan gastados este mes, el mensaje llega igual, con **Sin leer** sumado: el cupo solo limita lo que se envía (F13).
 Entra: cada mensaje que el hub recoge de la plataforma (número de la persona, texto, objeto de Meta, si es entrante o la respuesta del dueño, si es en vivo o historial).
 Sale: una conversación por número y el mensaje guardado; aviso público de mensaje recibido (`whatsapp_inbox.message.received`) que dispara F04; el aviso del hub con el mismo mensaje es el que arranca las recetas (F21, F24). El aviso público también puede arrancar las automatizaciones que monta el negocio en Automatizaciones (la tarjeta de mensajes sin contestar, FLOWS-F04); Automatizaciones avisa de las que saltan también con los mensajes propios o el historial y las repara (FLOWS-F11).
-Si falla: con el cupo del mes agotado el mensaje entrante en vivo no se guarda y nada lo dice en la bandeja (ver F13), pero las respuestas automáticas corren igual: gastan un turno del asistente y pueden reservar; lo que no sale es su respuesta; si el hub está apagado los mensajes esperan en la plataforma.
+Si falla: si el hub está apagado los mensajes esperan en la plataforma y entran al volver.
 Implicados: FLOWS-F04, FLOWS-F11, REC_WA_CITA-F02, REC_WA_MESA-F02, HUB-F263, HUB-F264, SAAS_WHATSAPP_INBOX-F07
 QA: WA-02, WA-08
 
@@ -135,7 +136,7 @@ Vertical: comun
 Actor: empleado, responsable, administrador
 Pantalla: Hub: Campana de avisos
 Pasos:
-1. Cuando el asistente de la respuesta automática falla o no dice nada (F20), la campana del hub muestra «Clientes de WhatsApp esperando respuesta» con cuántos, en cualquier pantalla.
+1. Cuando el asistente de la respuesta automática falla o no dice nada (F20), o cuando la respuesta automática no contesta porque se gastaron los mensajes del plan del mes (F13), la campana del hub muestra «Clientes de WhatsApp esperando respuesta» con cuántos, en cualquier pantalla.
 2. Tocar la campana abre la **Bandeja de entrada**, con esas conversaciones arriba y la marca «Necesita atención».
 3. Al abrir una, el aviso explica que se quita contestando desde el móvil.
 4. Contestar desde la app del móvil (F08): la marca y el número de la campana desaparecen.
@@ -192,17 +193,20 @@ Implicados: CUSTOMERS-F13
 QA: ninguno
 
 ### WHATSAPP_INBOX-F13 Ver el consumo del mes y llegar al tope
-Estado: parcial — al llegar al tope la pestaña Plan lo dice, pero nada dice que los mensajes entrantes en vivo dejan de guardarse en la bandeja
+Estado: parcial — el tope que leen la pestaña, la bandeja y las respuestas automáticas lo copia el hub una vez al día (HUB-F272): la pausa puede empezar y terminar hasta 24 h tarde, también tras mejorar el plan
 Vertical: comun
-Actor: administrador
-Pantalla: Hub: Plan
+Actor: administrador, empleado, responsable, cliente
+Pantalla: Hub: Plan, Bandeja de entrada
 Pasos:
 1. Abrir la pestaña **Plan** del módulo.
 2. Ver los mensajes gastados este mes frente al tope del plan; los dos números los pone la plataforma y el hub los copia una vez al día (y al arrancar): el consumo puede ir hasta 24 h por detrás, y justo tras instalar el módulo no hay tope hasta la siguiente vuelta.
 3. Al llegar al tope, la pestaña dice «Has consumido todo lo que incluye tu plan este mes.».
-4. Al cambiar de mes el gastado vuelve a cero aunque la plataforma aún no haya hablado.
+4. En el tope, la **Bandeja de entrada** dice encima de la lista «Has usado todos los mensajes de WhatsApp de tu plan este mes. Los mensajes siguen llegando aquí, pero las respuestas automáticas están en pausa hasta el mes que viene o hasta que mejores el plan. Contesta desde la app WhatsApp Business del móvil.»; lo vuelve a mirar con cada mensaje que llega, sin recargar.
+5. Lo que escriben los clientes se sigue guardando en la bandeja con **Sin leer** sumado (F03): el cupo solo limita lo que el negocio envía.
+6. En el tope, las respuestas automáticas de cita y de mesa no contestan nada, no llaman al asistente ni reservan: marcan la conversación «Necesita atención», que sube a la campana (F09); se contesta desde el móvil (F08).
+7. Al cambiar de mes el gastado vuelve a cero aunque la plataforma aún no haya hablado: el aviso se va y las respuestas automáticas vuelven a contestar.
 Entra: el tope y el gasto del mes que manda la plataforma.
-Sale: nada; no se edita desde el hub.
-Si falla: si la pestaña no puede leerlo, dice que no está disponible; al agotar el cupo la plataforma rechaza los envíos: el envío cae al momento a «Eventos caídos» del hub, donde se reenvía a mano, y la bandeja deja de guardar lo que entra. Un freno de tasa de la plataforma no es el cupo: el hub espera lo que pide y vuelve a mandarlo solo, sin pasar por «Eventos caídos» (HUB-F266, hub#2649).
+Sale: nada se edita desde el hub; en el tope, la marca «Necesita atención» en cada conversación que escribe.
+Si falla: si la pestaña no puede leerlo, dice que no está disponible; si la bandeja no puede leerlo, no pinta el aviso; si la respuesta automática no puede leerlo, contesta como si no hubiera tope (y el envío lo rechaza la plataforma si de verdad estaba agotado). La plataforma rechaza los envíos en el tope: el envío cae al momento a «Eventos caídos» del hub, donde se reenvía a mano (así le pasa al aviso de cita confirmada, F23, que no mira el tope). Un freno de tasa de la plataforma no es el cupo: el hub espera lo que pide y vuelve a mandarlo solo, sin pasar por «Eventos caídos» (HUB-F266, hub#2649).
 Implicados: REC_WA_CITA-F02, REC_WA_MESA-F02, HUB-F162, HUB-F263, HUB-F266, HUB-F272, HUB_SHELL-F46, HUB_SHELL-F47, SAAS_DASHBOARD-F108, SAAS_WHATSAPP_INBOX-F13, SAAS_WHATSAPP_INBOX-F14
 QA: WA-03

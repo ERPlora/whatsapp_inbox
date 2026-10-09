@@ -307,31 +307,20 @@ def sql_literal(value):
 
 
 def free_tier_window(db):
-    """Run the real guard and check WHICH number it weighs, and for WHICH month. Failures as a list.
+    """Run the real ingest at, below and past the cap: every message LANDS. Failures as a list.
 
-    Two things are pinned here, and the second one replaced the first as the risk.
+    Until whatsapp_inbox#287 this statement was the plan guard: once the spend the platform reported
+    reached the cap it wrote 0 rows, and a customer who had written was simply not in the inbox,
+    with nothing anywhere saying why. What is sold is what the business SENDS (WATI, Twilio, Square
+    Messages: the allowance limits outgoing traffic, what comes in is always received), so the cap
+    weighs nothing here any more. Which number it weighs and for which month — the semantics this
+    function used to pin on the guard (whatsapp_inbox#24, #155) — now live on the one reader of the
+    cap, `queries/usage_cap_reached.sql`, and are pinned by `tests/cap_reached.pg.test.py`.
 
-    **Which number.** Until whatsapp_inbox#155 this guard COUNTED the live inbound messages of the
-    month, which is not the unit that is sold: what the business bought — and what Meta charges
-    ERPlora for — are the messages the business SENDS, and the platform already meters exactly that
-    (`usage.billable_messages`). One allowance had two meters, and the owner could read «4 of 30»
-    on erplora.com with the channel already shut in their hub, both numbers true. The guard now
-    weighs the figure `whatsapp_inbox._quota.set` stored, and `h-mountain` below is the positive
-    control for that: forty live inbound rows of the month, and the door still has to open, because
-    the business was never charged for a single one of them.
-
-    **Which month.** The figure travels without the month it counts and the Cloud sync ticks once a
-    day, so it is stored stamped with the UTC month of `:now` and read as 0 in any other one. The
-    session runs in `Europe/Madrid` on purpose: this comparison must never go back through
-    `erp_month_start`, which lowers to `date_trunc('month', x::timestamptz)` and truncates in the
-    SESSION time zone — the same call would read a different month per connection, and against this
-    TEXT column (ADR-0007 §1) it did not even PREPARE, which is the defect whatsapp_inbox#24 paid
-    for. `h-last-month` is the positive control: a figure stamped July is not «still spent» in
-    August.
-
-    Seed, all with the same cap of 2: `h1` is spent (2, stamped August), `h-mountain` has spent 1
-    and carries forty August inbound rows plus July rows, an outbound one and a message of the
-    coexistence backlog (whatsapp_inbox#91), and `h-last-month` is spent but stamped July.
+    The seed is kept as it was on purpose, so the scenarios that used to be refused are still here:
+    `h1` is spent (2 of 2, stamped August) and `i3` arrives with its message table EMPTY — the one
+    the old guard refused. `h-mountain` carries forty August inbound rows, `h-last-month` a spend
+    stamped July. The session runs in `Europe/Madrid`, as before.
     """
     ingest, names = translate((MODULE_DIR / SQL_FILE).read_text())
     fixed = {
@@ -392,7 +381,7 @@ def free_tier_window(db):
         # i2: spent, but the figure belongs to JULY — August starts clean.
         + execute("i2", "2026-08-01T00:00:00+00:00", "h-last-month")
         + "\n"
-        # i3: spent this month, and the message table is EMPTY. The guard has to refuse anyway.
+        # i3: spent this month, and the message table is EMPTY. It used to be refused; it lands.
         + execute("i3", "2026-08-09T18:33:14.9+00:00", "h1")
         + "\n"
         # i4: the same hub in SEPTEMBER, before the day's tick — a fresh window, not last month's
@@ -408,20 +397,19 @@ def free_tier_window(db):
         return [f"the plan guard could not run: {error}"]
 
     got = r.stdout.strip().splitlines()[-1].strip() if r.stdout.strip() else ""
-    want = "i1,i2,i4"  # i3 is the one the platform says is over the limit
+    want = "i1,i2,i3,i4"
     if got != want:
         return [
-            "the plan guard weighs the wrong number: the messages that got through are "
-            f"[{got}], expected [{want}]. i1 = allowance left on a hub with forty inbound rows of "
-            "the month (the guard must not count rows the merchant was never charged for), "
-            "i2 = spent, but stamped LAST month, i3 = spent this month with an EMPTY message table "
-            "(the guard must refuse it anyway), i4 = the same hub in September, a fresh window"
+            "the ingest still drops messages at the cap: the ones that landed are "
+            f"[{got}], expected [{want}]. i3 arrives with the platform reporting the allowance "
+            "spent this month — what is sold is what the business SENDS, so a customer's message "
+            "lands anyway, and the inbox says the automatic replies are paused (whatsapp_inbox#287)"
         ]
     return []
 
 
 def main():
-    # The premise: the free-tier guard still travels with the command under test.
+    # The premise: the statement that used to be the plan guard still travels with the command.
     spec = MANIFEST["commands"][COMMAND]
     files = spec["sql"] if isinstance(spec["sql"], list) else [spec["sql"]]
     assert SQL_FILE in files, f"{COMMAND} no longer runs {SQL_FILE}: {files}"
@@ -459,7 +447,7 @@ def main():
             )
             return 1
 
-        # It parses. Now: does it count the right month? (the semantics the fix chose)
+        # It parses. Now: does every message land, at the cap too? (whatsapp_inbox#287)
         problems = free_tier_window(db)
         for problem in problems:
             print(f"FAIL {COMMAND}  [{SQL_FILE}]\n    {problem}")
@@ -468,7 +456,7 @@ def main():
 
         print(
             f"OK: Postgres prepares all {len(targets)} declared statements with every bind "
-            f"untyped, and {COMMAND} meters the UTC calendar month (session in Europe/Madrid)"
+            f"untyped, and {COMMAND} lands every message, at the cap too (whatsapp_inbox#287)"
         )
         return 0
     finally:

@@ -54,6 +54,37 @@
   ],
   "steps": [
     {
+      "id": "plan",
+      "kind": "query",
+      "query": "whatsapp_inbox.usage.cap_reached",
+      "result": "first",
+      "limit": 1,
+      "on_error": "continue"
+    },
+    {
+      "id": "flag_cap_reached",
+      "kind": "command",
+      "command": "whatsapp_inbox.conversations.needs_attention",
+      "params": {
+        "wa_contact_id": "input.from"
+      },
+      "run_if": {
+        "steps.plan.cap_reached": {
+          "eq": 1
+        }
+      },
+      "on_error": "continue"
+    },
+    {
+      "id": "within_plan",
+      "kind": "condition",
+      "when": {
+        "steps.plan.cap_reached": {
+          "neq": 1
+        }
+      }
+    },
+    {
       "id": "acknowledge",
       "kind": "notify",
       "channel": "whatsapp",

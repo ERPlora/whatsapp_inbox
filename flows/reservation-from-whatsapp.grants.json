@@ -18,6 +18,14 @@
     },
     {
       "kind": "query",
+      "value": "whatsapp_inbox.usage.cap_reached",
+      "reason": {
+        "en": "Check whether this month's WhatsApp messages are used up, so at the limit it answers nothing, books nothing and leaves the conversation marked for you to answer.",
+        "es": "Comprobar si se han gastado los mensajes de WhatsApp del mes, para que en el tope no conteste ni reserve nada y deje la conversación marcada para que contestes tú."
+      }
+    },
+    {
+      "kind": "query",
       "value": "customers.by_phone",
       "reason": {
         "en": "Look the customer up by their phone number.",

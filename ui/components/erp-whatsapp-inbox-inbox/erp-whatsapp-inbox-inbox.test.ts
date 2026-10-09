@@ -967,3 +967,69 @@ describe('erasing the data of one number from its thread (whatsapp_inbox#263)', 
     expect(q(el, 'whatsapp-inbox-erase-done')?.textContent).toContain('ui.eraseNumberDone');
   });
 });
+
+// At the month's cap every message still lands in the inbox, and the automatic replies pause
+// (whatsapp_inbox#287). Until then the cap made live messages vanish with nothing saying why; now
+// the inbox is where the business learns that nobody automatic is answering — WATI, Respond.io and
+// Square Messages all say it where the conversations are read, not only on a billing tab.
+describe('at the month cap the inbox says the automatic replies are paused (whatsapp_inbox#287)', () => {
+  type Erplora = { query: (name: string, params?: Record<string, unknown>) => Promise<unknown> };
+  const CAP_QUERY = 'whatsapp_inbox.usage.cap_reached';
+
+  /** `usage.cap_reached` answers `cap` (or throws when `cap` is an Error); everything else as usual. */
+  function capAnswers(cap: () => number | Error) {
+    const g = globalThis as unknown as { erplora: Erplora };
+    const base = g.erplora.query;
+    g.erplora.query = async (name, params = {}) => {
+      if (name === CAP_QUERY) {
+        consultas.push({ name, params });
+        const value = cap();
+        if (value instanceof Error) throw value;
+        return [{ cap_reached: value, monthly_limit: 500 }];
+      }
+      return base(name, params);
+    };
+  }
+
+  const banner = (el: HTMLElement & { shadowRoot: ShadowRoot }) =>
+    el.shadowRoot.querySelector('[data-testid="whatsapp-inbox-cap-reached"]');
+
+  it('with the allowance spent, the inbox says it above the list', async () => {
+    capAnswers(() => 1);
+    const el = await montar();
+    expect(consultas.some((c) => c.name === CAP_QUERY), 'the inbox never asks whether the cap is reached').toBe(true);
+    expect(banner(el), 'at the cap nothing in the inbox says the automatic replies are paused').not.toBeNull();
+    expect(banner(el)?.textContent).toContain('ui.capReached');
+    expect(tabla(el), 'the warning replaced the list: the messages still arrive and have to be read').not.toBeNull();
+  });
+
+  it('with allowance left there is no warning', async () => {
+    capAnswers(() => 0);
+    const el = await montar();
+    expect(banner(el)).toBeNull();
+  });
+
+  it('a read that fails paints no warning (the list carries its own error)', async () => {
+    capAnswers(() => new Error('network'));
+    const el = await montar();
+    expect(banner(el)).toBeNull();
+    expect(tabla(el)).not.toBeNull();
+  });
+
+  it('a new message asks again: the warning appears the moment the cap is reached', async () => {
+    let cap = 0;
+    capAnswers(() => cap);
+    let onMessage: (() => void) | undefined;
+    (globalThis as { erplora: { on: unknown } }).erplora.on = (name: string, fn: () => void) => {
+      if (name === 'whatsapp_inbox.message.received') onMessage = fn;
+      return () => {};
+    };
+    const el = await montar();
+    expect(banner(el)).toBeNull();
+    cap = 1;
+    onMessage!();
+    await new Promise((r) => setTimeout(r, 0));
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    expect(banner(el), 'the warning only appears after reloading the page').not.toBeNull();
+  });
+});

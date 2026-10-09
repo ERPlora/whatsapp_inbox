@@ -94,6 +94,7 @@
     "eraseNumberSubmit": "Borrar datos",
     "erasing": "Borrando…",
     "eraseNumberDone": "Se han borrado los datos de este número.",
+    "capReached": "Has usado todos los mensajes de WhatsApp de tu plan este mes. Los mensajes siguen llegando aquí, pero las respuestas automáticas están en pausa hasta el mes que viene o hasta que mejores el plan. Contesta desde la app WhatsApp Business del móvil.",
     "errEraseNumber": "No se pudieron borrar los datos de este número",
     "delete": "Borrar",
     "edit": "Editar",

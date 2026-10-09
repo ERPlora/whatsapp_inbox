@@ -82,7 +82,10 @@ lista, del más antiguo al más reciente, con fotos y stickers en línea, notas 
 el administrador ve, dentro del hilo, **Asignada a** + **Asignar/Desasignar** y **Borrar datos de
 este número**. Vacía: «Sin conversaciones.»; cargando: «Cargando…»; error de lista: mensaje con
 reintento; error del hilo: el motivo que devuelva el hub o, si no trae ninguno, «No se pudo cargar
-la conversación».
+la conversación». Con los mensajes del plan gastados este mes, encima de la lista: «Has usado todos
+los mensajes de WhatsApp de tu plan este mes. Los mensajes siguen llegando aquí, pero las respuestas
+automáticas están en pausa hasta el mes que viene o hasta que mejores el plan. Contesta desde la app
+WhatsApp Business del móvil.» (F13).
 
 ### Ajustes
 Menú **Bandeja de WhatsApp → Ajustes** (título «Ajustes del canal»), solo administrador. Tres
@@ -120,7 +123,7 @@ acuse, la lista con el botón **Ver huecos**, la confirmación, la disculpa o el
 |---|---|---|---|---|
 | WHATSAPP_INBOX-F01 | Conectar el número de WhatsApp del negocio | parcial | comun | canal-y-bandeja |
 | WHATSAPP_INBOX-F02 | Desconectar o volver a conectar el número | hecho | comun | canal-y-bandeja |
-| WHATSAPP_INBOX-F03 | Recibir un mensaje en la bandeja | parcial | comun | canal-y-bandeja |
+| WHATSAPP_INBOX-F03 | Recibir un mensaje en la bandeja | hecho | comun | canal-y-bandeja |
 | WHATSAPP_INBOX-F04 | Reconocer a la clienta por su número | hecho | comun | canal-y-bandeja |
 | WHATSAPP_INBOX-F05 | Leer una conversación | parcial | comun | canal-y-bandeja |
 | WHATSAPP_INBOX-F06 | Ver una foto, una nota de voz o un documento | hecho | comun | canal-y-bandeja |
@@ -160,7 +163,8 @@ columnas en la misma entrega.
 | Canal, recepción, bandeja, reconocimiento por número, borrado de datos, cupo | F01–F13 (los dos negocios) |
 | El mismo disparador: las dos recetas escuchan el mismo aviso de mensaje recibido, con el mismo filtro. Por eso solo una puede estar encendida: activar una apaga la otra, y si las dos llegan a estarlo desde Automatizaciones, cada tarjeta lo avisa (whatsapp_inbox#284) | F14, F15, F21, F24 |
 | Un solo código de pantalla para las dos tarjetas: activar, desactivar, actualizar y el interruptor de confirmación | F14, F15, F16, F17, F18 |
-| Las mismas órdenes y consultas de este módulo dentro de las dos recetas: recordar y releer la lista ofrecida, marcar «Necesita atención», unir la conversación a la ficha, y la lista de conversaciones como destinatario de cada respuesta. Cambiar una rompe las dos recetas | F19, F20, F21, F24 |
+| Las mismas órdenes y consultas de este módulo dentro de las dos recetas: leer el tope del mes, recordar y releer la lista ofrecida, marcar «Necesita atención», unir la conversación a la ficha, y la lista de conversaciones como destinatario de cada respuesta. Cambiar una rompe las dos recetas | F13, F19, F20, F21, F24 |
+| La pausa en el tope del mes: los mismos tres primeros pasos en las dos recetas (leer el tope, marcar «Necesita atención», parar), y la batería de recetas los exige a las dos | F13, F20, F21, F24 |
 | La búsqueda de la conversación por el número exacto (`conversations.by_phone`): la usa la receta acompañante de la cita para encontrar a quién avisar; la lista de conversaciones ya no (su filtro de teléfono es «contiene» y es solo de la bandeja, F05) | F23 |
 | Acuse inmediato, disculpa fija y lista escrita: mismas piezas en las dos recetas | F19, F20, F21, F24 |
 | Plantillas de Meta | F27–F31 |
@@ -283,7 +287,10 @@ no aquí.
   otra, y si la nueva no se enciende, la otra vuelve. Automatizaciones puede reanudar la apagada sin
   saberlo (FLOWS-F03): entonces las dos tarjetas lo avisan, pero no se impide (F14, F15).
 - **Cada mensaje, una vez**: un reintento no duplica mensaje, no leído ni cobro.
-- **El historial y las respuestas del dueño no cuentan como no leídos ni gastan cupo.**
+- **El cupo solo limita lo que se envía: lo que entra se guarda siempre**, también en el tope. En
+  el tope, las dos respuestas automáticas de reservas paran en su primer paso, antes del acuse y
+  del asistente, y marcan la conversación «Necesita atención» (F13).
+- **El historial y las respuestas del dueño no cuentan como no leídos.**
 - **Un solo contador del mes**: el que escribe la plataforma; el hub no lo edita.
 - **Borrar datos es irreversible y pregunta antes**, nombrando el número.
 - **Meta se consulta una vez al abrir Ajustes** (aunque no se despliegue Plantillas de Meta),
@@ -309,13 +316,10 @@ Se resuelven con `market-decision`; no las decide el worker.
 1. **Contestar desde el hub.** Square Messages, Shopify Inbox o WhatsApp Web contestan desde la
    bandeja; aquí se contesta solo desde el móvil o por receta. ¿Se añade, dentro de la ventana de
    24 h y con plantilla fuera de ella?
-2. **Tope del plan.** Al llegar al tope, la pestaña Plan dice «Has consumido todo lo que incluye tu
-   plan este mes.», pero nada dice que los mensajes que entran dejan de guardarse en la bandeja,
-   aunque lo que se vende son los mensajes que el negocio envía. ¿Se siguen guardando y se avisa?
-3. **Aviso de confirmación fuera de 24 h** (F23, F26): ¿qué plantilla de Utilidad aprobada se usa y
+2. **Aviso de confirmación fuera de 24 h** (F23, F26): ¿qué plantilla de Utilidad aprobada se usa y
    quién la crea?
-4. **Consentimiento y baja** (L-11): ¿lo lleva este módulo o Clientes?
-5. **Decir a la clienta que le contesta un asistente** (L-12): el acuse no lo dice.
+3. **Consentimiento y baja** (L-11): ¿lo lleva este módulo o Clientes?
+4. **Decir a la clienta que le contesta un asistente** (L-12): el acuse no lo dice.
 
 ## Fuentes contrastadas
 
@@ -333,7 +337,6 @@ lo de abajo está desfasado o contradice al código.
 - `flows/README.md`: un mensaje escrito no arranca la receta (hub#2061) — hub#2061 está cerrada y la receta tiene los dos disparadores.
 - `flows/README.md`: la lista numerada «no se hace todavía» — está hecha (whatsapp_inbox#76, F19).
 - `flows/README.md`: cambiar o anular una mesa espera a reservations#50 — reservations#50 está cerrada y la puerta existe; lo que falta es que la receta la use (F25).
-- `module.json`: la descripción de `usage.get` para el asistente dice «mensajes entrantes» — son los mensajes facturables que cuenta la plataforma (whatsapp_inbox#155).
 - `hand-book/modulos/whatsapp_inbox.md`: Solicitudes, modo de aprobación, aprobar/marcar atendida y «el estado de la plantilla no se sincroniza» — todo retirado o cambiado (whatsapp_inbox#193, #206, #134).
 - `architecture/modules/whatsapp_inbox.md`: versión 2.1.28 y filtros de lista (`conversation_id`, `name` eq) que no son los del manifest; «`source` no llega a columna» (la migración 006 lo guarda); cabecera multimedia «en solo lectura» y a la vez escrita desde #218 (lo segundo es lo cierto).
 - `qa-hub-beauty` W-01: «sin número → Conecta el número primero» — esa frase no existe y activar no comprueba el número (F14).
