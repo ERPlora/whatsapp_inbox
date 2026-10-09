@@ -107,7 +107,7 @@ Pasos:
 1. Si el asistente falla o no dice nada, el cliente recibe un texto fijo de la receta: en la cita «Perdona, ahora mismo no puedo mirar la agenda. Alguien del equipo te contestará por aquí en cuanto pueda.»; en la mesa, igual con «las reservas».
 2. Su conversación queda marcada «Necesita atención» y aparece en la campana (F09).
 3. Nada más se le manda en ese turno.
-4. La marca **solo** se pone en ese caso. Cuando es el propio asistente quien contesta que alguien del negocio le responderá (la pregunta no es de reservar, el número no identifica a una sola ficha, o en la mesa pide cambiar o anular, F25), la conversación **no** se marca ni sube a la campana, en los dos negocios.
+4. La marca **solo** se pone en ese caso y cuando la respuesta automática no contesta porque se gastaron los mensajes del plan del mes (F13). Cuando es el propio asistente quien contesta que alguien del negocio le responderá (la pregunta no es de reservar, el número no identifica a una sola ficha, o en la mesa pide cambiar o anular, F25), la conversación **no** se marca ni sube a la campana, en los dos negocios.
 Entra: el resultado del paso del asistente.
 Sale: una disculpa y la marca de atención.
 Si falla: si la marca no se puede poner, la disculpa sale igual y el mensaje sigue sin leer en la bandeja.
@@ -127,7 +127,7 @@ Pasos:
 5. Recibe una respuesta que redacta el asistente: que la cita está reservada (día, hora y profesional) si el salón confirma solo, o que se la ha apuntado y el salón se la confirma, según F16. La cita está en la Agenda.
 Entra: el mensaje escrito o la opción tocada (no el historial, ni las respuestas del dueño, ni fotos sin texto).
 Sale: ficha nueva si hacía falta (Clientes), conversación unida a la ficha, cita aceptada o pendiente (Citas), respuesta por WhatsApp. La receta lee los servicios y su duración del catálogo de Servicios (SERVICES-F10) y la apertura del día y las horas libres de Citas, que a su vez aplica el horario de Horarios; no pregunta a Horarios directamente.
-Si falla: F20; sin hueco, le dice el porqué y ofrece otros.
+Si falla: F20; sin hueco, le dice el porqué y ofrece otros. Con los mensajes del plan del mes gastados no recibe nada: ni acuse ni respuesta ni cita; su mensaje está en la bandeja con «Necesita atención» (F13).
 Implicados: APPOINTMENTS-F02, APPOINTMENTS-F18, CUSTOMERS-F10, CUSTOMERS-F12, CUSTOMERS-F26, SERVICES-F10, STAFF-F09, REC_WA_CITA-F03, REC_WA_CITA-F04, REC_WA_CITA-F05, REC_WA_CITA-F07
 QA: W-02, W-06, W-07, L-12
 
@@ -144,7 +144,7 @@ Pasos:
 5. Recibe la respuesta con lo que ha pasado.
 Entra: el mensaje y las citas de esa clienta.
 Sale: cita anulada o movida en Citas; nunca la de otra persona.
-Si falla: F20; si Citas lo rechaza, se le explica.
+Si falla: F20; si Citas lo rechaza, se le explica. Con los mensajes del plan del mes gastados, nada se anula ni se mueve y no recibe respuesta; la conversación queda «Necesita atención» (F13).
 Implicados: APPOINTMENTS-F02, APPOINTMENTS-F06, REC_WA_CITA-F08
 QA: W-04 (discrepa)
 
@@ -177,7 +177,7 @@ Pasos:
 5. Recibe una respuesta que redacta el asistente: que la mesa está reservada, o que se la ha apuntado y el restaurante se la confirma, según F16.
 Entra: el mensaje escrito o la opción tocada; su ficha si ya existe (no se crea).
 Sale: reserva aceptada o pendiente, o entrada en la lista de espera (Reservas), con su teléfono y el nombre que dé en el mensaje (si no da ninguno, su teléfono hace de nombre; aunque tenga ficha, el nombre no se toma de ella, solo queda ligada); respuesta por WhatsApp.
-Si falla: F20; sin plazas o con demasiados comensales, se le explica.
+Si falla: F20; sin plazas o con demasiados comensales, se le explica. Con los mensajes del plan del mes gastados no recibe nada: ni acuse ni respuesta ni reserva; su mensaje está en la bandeja con «Necesita atención» (F13).
 Implicados: CUSTOMERS-F10, RESERVATIONS-F01, RESERVATIONS-F02, RESERVATIONS-F05, RESERVATIONS-F14, RESERVATIONS-F17, REC_WA_MESA-F03, REC_WA_MESA-F04, REC_WA_MESA-F05, REC_WA_MESA-F07
 QA: WR-02, WR-03, WR-04
 

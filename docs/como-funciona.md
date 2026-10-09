@@ -235,7 +235,10 @@ flowchart LR
 ```
 
 - Si se agota la cuota del plan, el SaaS contesta `429 quota_exceeded` **sin** llamar a Meta y el
-  paso queda en la cola con su motivo visible en el hub.
+  paso queda en la cola con su motivo visible en el hub. Las dos respuestas automáticas de reservas
+  no llegan a ese punto: en su primer paso leen `whatsapp_inbox.usage.cap_reached` y, en el tope,
+  no contestan, no llaman al asistente ni reservan, y marcan la conversación «Necesita atención».
+  Lo que entra se guarda siempre y la bandeja avisa del tope (whatsapp_inbox#287).
 - Lo que el dueño contesta **desde el móvil** todavía no aparece en la Bandeja (`ERPlora/saas#1883`);
   el historial anterior a la conexión, tampoco (`ERPlora/saas#1884`).
 
