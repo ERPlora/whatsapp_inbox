@@ -8,7 +8,13 @@
 import { describe, expect, it } from 'vitest';
 import esLocale from '../../locales/es.json';
 import enLocale from '../../locales/en.json';
-import { doorErrorCode, doorRefusalText, META_DOOR_REFUSAL_CODES } from './meta-door-refusal';
+import {
+  deleteRefusalText,
+  doorErrorCode,
+  doorRefusalText,
+  META_DELETE_REFUSAL_CODES,
+  META_DOOR_REFUSAL_CODES,
+} from './meta-door-refusal';
 
 const CATALOG: Record<string, unknown> = { es: esLocale, en: enLocale };
 
@@ -143,5 +149,47 @@ describe('la lista de códigos es la de la puerta, no una invención', () => {
     ]) {
       expect(META_DOOR_REFUSAL_CODES, `falta \`${code}\``).toContain(code);
     }
+  });
+});
+
+// whatsapp_inbox#296 — borrar una plantilla también pregunta a Meta, y su «no» es OTRO: las frases
+// de arriba dicen «queda guardada aquí, vuelve a guardarla», que ante un borrado mandan a hacer lo
+// contrario. Cada código del borrado dice que la plantilla SIGUE (en Meta y en la lista) y qué hacer.
+describe('borrar en Meta: cada «no» de la puerta dice que la plantilla sigue y qué hacer (whatsapp_inbox#296)', () => {
+  it('la lista son los códigos de la puerta de borrado: SaaS F19 + sobre del runtime + permiso', () => {
+    for (const code of [
+      'no_whatsapp_number',
+      'meta_rate_limited',
+      'meta_permission_denied',
+      'meta_unreachable',
+      'meta_template_failed',
+      'cloud_rejected',
+      'cloud_unreachable',
+      'cloud_unreadable',
+      'hub_not_enrolled',
+      'capability_denied',
+    ]) {
+      expect(META_DELETE_REFUSAL_CODES, `falta \`${code}\``).toContain(code);
+    }
+    // «Meta ya no la tiene» no es un rechazo del borrado: es que ya está borrada allí.
+    expect(META_DELETE_REFUSAL_CODES).not.toContain('template_not_found');
+  });
+
+  it.each([...META_DELETE_REFUSAL_CODES])('«%s» tiene su frase de BORRADO en en y en es', (code) => {
+    for (const lang of ['en', 'es'] as const) {
+      const text = deleteRefusalText(CATALOG, lang, refusal(code));
+      expect(text, `falta la cadena \`${lang}\` de \`${code}\``).toBeTruthy();
+      expect(text).not.toBe(code);
+      expect(text, `\`${code}\` reutiliza la frase de GUARDAR`).not.toBe(doorRefusalText(CATALOG, lang, refusal(code)));
+    }
+    expect(deleteRefusalText(CATALOG, 'es', refusal(code))).not.toBe(deleteRefusalText(CATALOG, 'en', refusal(code)));
+  });
+
+  it('un código que no conoce lo CONSERVA en la frase, y sin código tampoco se calla', () => {
+    const text = deleteRefusalText(CATALOG, 'es', refusal('un_codigo_de_manana'));
+    expect(text).toContain('un_codigo_de_manana');
+    expect(text).not.toBe(doorRefusalText(CATALOG, 'es', refusal('un_codigo_de_manana')));
+    expect(deleteRefusalText(CATALOG, 'es', new Error('boom'))).toBeTruthy();
+    expect(deleteRefusalText(CATALOG, 'es', new Error('boom'))).not.toBe(doorRefusalText(CATALOG, 'es', new Error('boom')));
   });
 });

@@ -35,6 +35,12 @@ const listados: number[] = [];
 /** What the door answers when it is READ. A test that wants a refusal replaces it with a thrower. */
 let respondeListado: () => Promise<Record<string, unknown>>;
 
+/** The names the door was asked to delete in Meta, call by call (whatsapp_inbox#296). */
+const borradosEnMeta: string[] = [];
+
+/** What the door answers to a delete. A test that wants a refusal replaces it with a thrower. */
+let respondeBorrado: (name: string) => Promise<void>;
+
 /** Every template row this hub holds, as `queries/templates_list.sql` PROJECTS them: `meta_status`
  *  already lowercased (or `not_sent` when there is no `meta_template_id`) and `meta_rejected_reason`
  *  never null. The refresh reads them all, not just the page on screen. */
@@ -54,6 +60,8 @@ beforeEach(() => {
   pasos.length = 0;
   puerta.length = 0;
   listados.length = 0;
+  borradosEnMeta.length = 0;
+  respondeBorrado = async () => undefined;
   respondePuerta = async () => ({ status: 'PENDING', meta_id: '77', rejected_reason: '' });
   // Meta holding NOTHING is the quiet default: a tab that syncs against an empty answer writes
   // nothing, so every battery written before whatsapp_inbox#134 goes on measuring what it measured.
@@ -78,6 +86,11 @@ beforeEach(() => {
         list: async () => {
           listados.push(listados.length + 1);
           return respondeListado();
+        },
+        remove: async (name: string) => {
+          borradosEnMeta.push(name);
+          pasos.push('door.remove');
+          return respondeBorrado(name);
         },
       },
     }),
