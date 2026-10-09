@@ -107,6 +107,11 @@ else asks them to.
 in the tab, or write a new one with a different name. The mark needs a fresh answer from Meta that
 lists at least one template; with no WhatsApp number connected nothing is marked.
 
+**"I deleted a template and it is still in the list."** Meta did not delete it, so nothing was
+deleted here either: the sentence above the list says why (no answer from Meta, too many requests,
+no number connected, the «Notifications» permission off…) and what to do. Deleting removes it at Meta
+in every language, and Meta does not let you reuse that name for 30 days (#296).
+
 **"Meta says my template is missing an example."** Every variable of the body (`{{1}}`, `{{2}}`… or
 `{{name}}`) needs a sample of what it will say in a real message. Write it in the «Sample for …»
 field under the body (#208): «Guardar» stays off until every numbered variable has one.

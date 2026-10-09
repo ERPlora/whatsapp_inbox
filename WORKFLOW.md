@@ -153,7 +153,7 @@ acuse, la lista con el botón **Ver huecos**, la confirmación, la disculpa o el
 | WHATSAPP_INBOX-F28 | Traer las plantillas creadas en WhatsApp Manager | parcial | comun | plantillas |
 | WHATSAPP_INBOX-F29 | Crear una plantilla y mandarla a revisión | parcial | comun | plantillas |
 | WHATSAPP_INBOX-F30 | Editar una plantilla | parcial | comun | plantillas |
-| WHATSAPP_INBOX-F31 | Borrar una plantilla | parcial | comun | plantillas |
+| WHATSAPP_INBOX-F31 | Borrar una plantilla | hecho | comun | plantillas |
 
 ## Qué comparten los verticales
 
@@ -212,7 +212,7 @@ una plantilla (todas mandan texto libre dentro de las 24 h).
 | Estado: aprobada, en revisión, rechazada + motivo, pausada, desactivada, borrada | hecho (al abrir) | hecho (respuesta al registrar) | hecho | — |
 | Estado en apelación, calidad de la plantilla | no hecho | — | — | — |
 | Aviso de Meta cuando cambia el estado | no hecho: solo al abrir la pestaña (saas#1904) | — | — | — |
-| Borrar en Meta | — | — | — | no hecho: borrar aquí no borra en Meta (F31) |
+| Borrar en Meta | — | — | — | hecho: borrar aquí la borra antes en Meta, por nombre y en todos sus idiomas; si Meta dice que no, no se borra nada (F31) |
 | Activar o desactivar una plantilla | — | no hecho: no hay control | no hecho | — |
 | Mensaje fuera de la ventana de 24 h con plantilla aprobada | — | — | — | no hecho en las recetas (F23) |
 
