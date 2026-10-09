@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""The spend on the «Plan» tab is the platform's, and it is the one that cuts the channel
-(whatsapp_inbox#155).
+"""The spend on the «Plan» tab is the platform's, and it is the one that pauses the automatic
+replies (whatsapp_inbox#155, #287).
 
 The cap has come from the Cloud since whatsapp_inbox#37 (`_quota.set` writes
 `free_tier_monthly_limit`), but the SPEND next to it was counted here, locally, as
@@ -36,8 +36,8 @@ The payload carries the number but not the month it counts (`usage.month` stays 
 the sync ticks once a day. Without a stamp, a business that ended September at 30/30 would wake
 up on 1 October with the channel still shut for up to 24 h, because the stored number would
 still be September's. So the spend is stored with the UTC month it was written for, and every
-reader — the tab and both ingest guards — reads it as `0` when that month is not the month of
-`:now`. Same month arithmetic as everywhere else in this module: `substr(:now, 1, 7)` in the TEXT
+reader — the tab and the cap reader `whatsapp_inbox.usage.cap_reached` — reads it as `0` when that
+month is not the month of `:now`. Same month arithmetic as everywhere else in this module: `substr(:now, 1, 7)` in the TEXT
 domain, never `erp_month_start` (whatsapp_inbox#24).
 
 ## What is asserted, against a real Postgres built from this module's own migrations
@@ -48,9 +48,12 @@ domain, never `erp_month_start` (whatsapp_inbox#24).
    counting rows cannot pass by agreeing with the seed.
 3. A tick without the spend keeps the stored spend and still moves the cap; a `0` is written.
 4. A new month does not inherit the previous month's spend.
-5. Both ingest guards cut on the platform's number: they stop traffic with an EMPTY message
-   table when the platform says the allowance is spent, and they let traffic through with the
-   table full when it says it is not. That is the positive control in both directions.
+5. The cap reader cuts on the platform's number: `whatsapp_inbox.usage.cap_reached` says «spent»
+   with an EMPTY message table when the platform says the allowance is spent, and «not spent»
+   with the table full when it says it is not. That is the positive control in both directions.
+   And both ingest doors land the message either way: the cap limits what the business SENDS,
+   never what comes in (whatsapp_inbox#287 — until then the two ingests were the guards, and at
+   the cap a customer's live message vanished from the inbox with nothing saying why).
 
 Usage: tests/quota_usage_is_the_platforms.pg.test.py   (exit 0 = green)
   Uses the `erplora-test-pg-5433` container by default (override: ERPLORA_TEST_PG_CONTAINER).
@@ -73,8 +76,9 @@ MANIFEST = json.loads((MODULE_DIR / "module.json").read_text())
 CONTAINER = os.environ.get("ERPLORA_TEST_PG_CONTAINER", "erplora-test-pg-5433")
 
 OWNER_DOOR = "whatsapp_inbox._quota.set"
-WEBHOOK_GUARD = "commands/message_ingest_msg.sql"
-LISTENER_GUARD = "commands/inbound_message_insert.sql"
+WEBHOOK_INGEST = "commands/message_ingest_msg.sql"
+LISTENER_INGEST = "commands/inbound_message_insert.sql"
+CAP_QUERY = "whatsapp_inbox.usage.cap_reached"
 
 # The field name the runtime sends, byte for byte (`USAGE_FIELD`, hub#1955). It is looked up in
 # `properties` of the schema below: a rename here silently unplugs the spend.
@@ -185,6 +189,27 @@ def tab_reads(db, now, hub_id=HUB):
     return row.replace("|", "/")
 
 
+def cap_reads(db, now, hub_id=HUB):
+    """`cap_reached` as `whatsapp_inbox.usage.cap_reached` answers it — the SHIPPED query, run."""
+    rel = MANIFEST["queries"][CAP_QUERY]["sql"]
+    sql, names = translate((MODULE_DIR / rel).read_text())
+    binds = {"hub_id": hub_id, "now": now}
+    missing = [n for n in names if n not in binds]
+    if missing:
+        return f"<`{rel}` binds {missing}, which a query step with no params does not carry>"
+    values = ", ".join(literal(binds[n]) for n in names)
+    r = psql(
+        db,
+        "\\pset tuples_only on\n\\pset format unaligned\n"
+        f"PREPARE k AS {sql}\nEXECUTE k({values});\nDEALLOCATE k;\n",
+    )
+    if r.returncode != 0:
+        error = " ".join(x for x in r.stderr.splitlines() if x.startswith("ERROR"))
+        return f"<`{rel}` could not run: {error}>"
+    row = r.stdout.strip().splitlines()[-1].strip() if r.stdout.strip() else ""
+    return row.split("|")[0]
+
+
 def seed_inbound(db, count, month="2026-09", hub_id=HUB):
     """`count` LIVE inbound messages of `month` — traffic the old meter would have counted."""
     rows = ", ".join(
@@ -204,12 +229,11 @@ def seed_inbound(db, count, month="2026-09", hub_id=HUB):
 
 
 def ingest_through(db, guard_file, wa_message_id, now, hub_id=HUB):
-    """Runs ONE ingest guard and answers whether the message LANDED.
+    """Runs ONE ingest INSERT and answers whether the message LANDED.
 
-    The guarded INSERT is run alone, the way its sibling gate does it
-    (`free_tier_window` in `messages_ingest.pg.test.py`): the statement that carries the guard is
-    what is under test, and running its two companions would need fifteen binds that decide
-    nothing here. `0 rows` is how the runtime learns the allowance is spent.
+    The INSERT is run alone, the way its sibling gate does it (`free_tier_window` in
+    `messages_ingest.pg.test.py`): the statement that writes the row is what is under test, and
+    running its two companions would need fifteen binds that decide nothing here.
     """
     sql, names = translate((MODULE_DIR / guard_file).read_text())
     binds = {
@@ -298,7 +322,7 @@ def check_the_schema_declares_the_spend():
         )
     if CAP_FIELD not in required:
         problems.append(
-            f"`{CAP_FIELD}` stopped being required: the cap is what arms both ingest guards, and "
+            f"`{CAP_FIELD}` stopped being required: the cap is what pauses the automatic replies, and "
             "a door that accepts a payload without it writes a hub's allowance away"
         )
     if schema.get("additionalProperties") is not False:
@@ -400,7 +424,7 @@ def check_a_new_month_does_not_inherit_the_spend(db):
 
     # The other half of the stamp: the first October tick that DOES bring a spend has to move the
     # month with it. A stamp that is written once and then kept reads every later month as 0 for
-    # ever — the tab says «0 of 30» all year and neither guard ever cuts, with every test about the
+    # ever — the tab says «0 of 30» all year and the replies never pause, with every test about the
     # seeding tick still green.
     problems = set_quota(db, "2026-10-02T06:00:00+00:00", "q-6", CAP, 7)
     if problems:
@@ -415,20 +439,20 @@ def check_a_new_month_does_not_inherit_the_spend(db):
     return []
 
 
-def check_both_guards_cut_on_the_platforms_number(db):
-    """(5) the number on the tab and the number that silences WhatsApp are one number.
+def check_the_cap_reader_cuts_on_the_platforms_number(db):
+    """(5) the number on the tab and the number that pauses the replies are one number — and what
+    comes in lands either way (whatsapp_inbox#287).
 
     Both directions are asserted with the message table saying the OPPOSITE of the platform, so
     neither answer can be right by accident:
 
-      * spent, empty table → the guard must refuse. A guard still counting rows sees 0 and lets
-        it through.
-      * not spent, table well past the cap → the guard must accept. A guard still counting rows
-        sees 40 and shuts a business that has not sent a single message.
+      * spent, empty table → the reader must say spent. A reader counting rows sees 0.
+      * not spent, table well past the cap → the reader must say not spent. A reader counting rows
+        sees 40 and pauses a business that has not sent a single message.
     """
     problems = []
-    for guard in (WEBHOOK_GUARD, LISTENER_GUARD):
-        hub = f"spent-{pathlib.Path(guard).stem}"
+    for door in (WEBHOOK_INGEST, LISTENER_INGEST):
+        hub = f"spent-{pathlib.Path(door).stem}"
         r = psql(
             db,
             "INSERT INTO whatsapp_inbox_conversation"
@@ -448,19 +472,26 @@ def check_both_guards_cut_on_the_platforms_number(db):
         )
         if failed:
             return failed
+        got = cap_reads(db, "2026-09-10T10:00:00+00:00", hub)
+        if got != "1":
+            problems.append(
+                f"`{CAP_QUERY}` answers [{got}] with the platform reporting {CAP} of {CAP} spent "
+                "and NOT ONE row in the message table, expected [1]: the reader is still counting "
+                "this module's own traffic, so the automatic replies never pause"
+            )
         landed, failed = ingest_through(
-            db, guard, f"blocked-{hub}", "2026-09-10T10:00:00+00:00", hub
+            db, door, f"at-cap-{hub}", "2026-09-10T10:00:00+00:00", hub
         )
         if failed:
             return failed
-        if landed:
+        if not landed:
             problems.append(
-                f"`{guard}` let a message in with the platform reporting {CAP} of {CAP} spent and "
-                "NOT ONE row in the message table: the guard is still counting this module's own "
-                "traffic, so the allowance the business bought is never applied"
+                f"`{door}` dropped a customer's message at the cap: the allowance limits what the "
+                "business SENDS, and a message that does not land is one nobody ever reads "
+                "(whatsapp_inbox#287)"
             )
 
-        hub = f"fresh-{pathlib.Path(guard).stem}"
+        hub = f"fresh-{pathlib.Path(door).stem}"
         r = psql(
             db,
             "INSERT INTO whatsapp_inbox_conversation"
@@ -481,34 +512,29 @@ def check_both_guards_cut_on_the_platforms_number(db):
         )
         if failed:
             return failed
-        landed, failed = ingest_through(
-            db, guard, f"allowed-{hub}", "2026-09-10T10:00:00+00:00", hub
-        )
-        if failed:
-            return failed
-        if not landed:
+        got = cap_reads(db, "2026-09-10T10:00:00+00:00", hub)
+        if got != "0":
             problems.append(
-                f"`{guard}` refused a message with the platform reporting 0 of {CAP} spent, on a "
-                f"hub whose message table holds {CAP + 10} inbound rows of the month: the guard is "
-                "counting rows the business was never charged for and cutting a channel that has "
-                "allowance left"
+                f"`{CAP_QUERY}` answers [{got}] with the platform reporting 0 of {CAP} spent, on a "
+                f"hub whose message table holds {CAP + 10} inbound rows of the month, expected [0]: "
+                "the reader is counting rows the business was never charged for"
             )
-
-        # The month gate reaches the guard too, not only the tab.
         landed, failed = ingest_through(
-            db,
-            guard,
-            f"next-month-{hub}",
-            "2026-10-01T00:30:00+00:00",
-            f"spent-{pathlib.Path(guard).stem}",
+            db, door, f"allowed-{hub}", "2026-09-10T10:00:00+00:00", hub
         )
         if failed:
             return failed
         if not landed:
+            problems.append(f"`{door}` refused a message with allowance left")
+
+        # The month gate reaches the reader too, not only the tab.
+        got = cap_reads(
+            db, "2026-10-01T00:30:00+00:00", f"spent-{pathlib.Path(door).stem}"
+        )
+        if got != "0":
             problems.append(
-                f"`{guard}` was still shut on 1 October for a hub whose spend was stamped "
-                "September: the guard reads the stored spend without checking the month it counts, "
-                "so the new month starts with the old month's bill"
+                f"`{CAP_QUERY}` still answers [{got}] on 1 October for a hub whose spend was "
+                "stamped September, expected [0]: the new month starts with the old month's bill"
             )
     return problems
 
@@ -557,7 +583,7 @@ def main():
             check_a_tick_without_the_spend_keeps_it,
             check_a_zero_that_arrives_is_written,
             check_a_new_month_does_not_inherit_the_spend,
-            check_both_guards_cut_on_the_platforms_number,
+            check_the_cap_reader_cuts_on_the_platforms_number,
         ):
             problems = check(db)
             for problem in problems:
@@ -567,7 +593,8 @@ def main():
 
         print(
             "OK: one meter — the platform writes the spend through `_quota.set`, the «Plan» tab "
-            "paints that number, both ingest guards cut on it, an absent spend preserves it and a "
+            "paints that number, `usage.cap_reached` cuts on it while every message still lands, an "
+            "absent spend preserves it and a "
             "new month does not inherit it"
         )
         return 0

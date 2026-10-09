@@ -343,7 +343,7 @@ def served_payload(
 def seed_quota(db, limit, hub_id="h1", spend=0, month="2026-09"):
     """The plan of a hub exactly as the platform wrote it through `whatsapp_inbox._quota.set`.
 
-    `limit > 0` is what arms both ingest guards; `spend` is the figure they weigh against it since
+    `limit > 0` is what arms the cap reader; `spend` is the figure it weighs against it since
     whatsapp_inbox#155 — the billable messages the PLATFORM counted, not anything this module can
     see. `month` is the UTC month that figure counts, and a figure of any other month reads as 0.
 
@@ -610,10 +610,10 @@ def cap_reached_reported(db, hub_id):
 def usage_reported(db, hub_id):
     """`billable_this_month/monthly_limit` as `queries/usage_get.sql` answers it — run, not rewritten.
 
-    The screen and the guard have to say the SAME number: a merchant whose channel stopped at the
-    limit while the settings screen reads 0 has no way of knowing what happened. So this runs the
+    The screen and the cap reader have to say the SAME number: a merchant whose automatic replies
+    paused at the limit while the settings screen reads 0 has no way of knowing what happened. So this runs the
     SHIPPED query, lowered exactly as the runtime lowers it, instead of a hand-written expression
-    that could agree with the guard by accident.
+    that could agree with the reader by accident.
     """
     rel = MANIFEST["queries"]["whatsapp_inbox.usage.get"]["sql"]
     sql, names = translate((MODULE_DIR / rel).read_text())
