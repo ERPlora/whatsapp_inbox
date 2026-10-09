@@ -5760,6 +5760,7 @@ var ErpWhatsappInboxInbox = class extends i3 {
       }
       this.detail = conversation;
       this.assignTo = conversation.assigned_to_id ?? "";
+      if (Number(conversation.unread_count) > 0) void this.markRead(conversation.id);
       const page = await erplora().queryPage("whatsapp_inbox.messages.list", {
         limit: THREAD_PAGE,
         sort: "created_at",
@@ -5773,6 +5774,17 @@ var ErpWhatsappInboxInbox = class extends i3 {
       }
     } catch (e5) {
       this.detailError = e5 instanceof Error ? e5.message : erplora().t(CATALOG, "ui.errLoadThread");
+    }
+  }
+  /** whatsapp_inbox#290 — a thread on screen is a thread read, like WhatsApp Web, Square Messages
+   *  or Shopify Inbox: «Unread» goes back to none and the list is asked again to show it. Also on a
+   *  message arriving in the open thread, since `onDomainEvent` reloads it. A mark that fails keeps
+   *  the thread on screen and says nothing: the list still shows the count, which is the truth. */
+  async markRead(conversationId) {
+    try {
+      await erplora().command("whatsapp_inbox.conversations.mark_read", { conversation_id: conversationId });
+      await this.ctrl.load();
+    } catch {
     }
   }
   closeDetail() {
