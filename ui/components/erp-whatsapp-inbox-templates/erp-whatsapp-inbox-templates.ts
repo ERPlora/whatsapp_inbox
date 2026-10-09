@@ -220,6 +220,8 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     /* La vista llena el alto: el data-table ocupa el resto (scroll interno, pie fijo). */
     .page { display:flex; flex-direction:column; min-height:0; flex:1 1 auto; }
     .page > ok-data-table { flex:1 1 auto; min-height:0; }
+    /* A button straight in the page (the delete refusal's «Open Permissions», #296) keeps its own width. */
+    .page > ion-button { align-self:flex-start; }
     /* El alta va en el panel lateral de la tabla (estrecho) → columna, no fila. */
     .form { display:flex; flex-direction:column; gap:.7rem; }
     .form ion-button { align-self:flex-end; }
