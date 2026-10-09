@@ -1436,6 +1436,86 @@ def handoff_mark_problems(name, doc):
     return problems
 
 
+# whatsapp_inbox#287 — the read that answers «is this month's WhatsApp allowance spent?», and the
+# column of its one row the recipe stops on.
+CAP_QUERY = "whatsapp_inbox.usage.cap_reached"
+CAP_FIELD = "cap_reached"
+INBOUND_EVENT = "hub.whatsapp.message_received"
+
+
+def cap_gate_problems(name, doc):
+    """At the month's cap the recipe spends nothing and leaves her to the team — whatsapp_inbox#287.
+
+    What the plan sells is what the business SENDS, and at the cap the platform refuses every send.
+    Until #287 a recipe woken by her message ran anyway: the acknowledgement was refused, the
+    assistant spent a turn and could BOOK, and the answer telling her so was refused too — an
+    appointment in the diary that nobody had told her about. WATI, Twilio and Square Messages do
+    the same thing at the cap: what comes in is received, the automation stops, a person answers.
+
+    So every family woken by an incoming message opens with exactly three steps, before it sends
+    or asks anything:
+
+    1. a `query` on `whatsapp_inbox.usage.cap_reached` with `result: "first"` and
+       `on_error: "continue"` — a read that fails must not take the customer's answer down with it;
+    2. the `needs_attention` mark on HER thread (`input.from`), run only when the read says
+       `cap_reached == 1`, with `on_error: "continue"` — nobody automatic will answer her, so the
+       inbox and the bell have to show she is waiting;
+    3. a `condition` that goes on only when `cap_reached` is NOT 1. `neq 1` and never `eq 0`: a
+       failed read leaves the field null, and `null neq 1` lets the run go on as before the cap
+       existed, while `eq 0` would silently stop every answer the day the read breaks.
+    """
+    if FAMILY_TRIGGERS.get(family_of(name)) != INBOUND_EVENT:
+        return []
+    steps = list(doc.get("steps", [])) + [{}, {}, {}]
+    read, mark, gate = steps[0], steps[1], steps[2]
+    if not (
+        read.get("kind") == "query"
+        and read.get("query") == CAP_QUERY
+        and read.get("result") == "first"
+    ):
+        return [
+            f"{name} does not open with a `query` on `{CAP_QUERY}` (`result: first`): at the "
+            f"month's cap it still acknowledges, spends a turn of the assistant and can book, "
+            f"and every answer is refused by the platform — she never hears about it"
+        ]
+    problems = []
+    rid = read.get("id")
+    if read.get("on_error") != "continue":
+        problems.append(
+            f"{name} step `{rid}` reads the cap with on_error={read.get('on_error')!r}: a failed "
+            f"read would end the run before she gets any answer"
+        )
+    reached = {f"steps.{rid}.{CAP_FIELD}": {"eq": 1}}
+    if not (
+        mark.get("kind") == "command"
+        and mark.get("command") == NEEDS_ATTENTION
+        and mark.get("run_if") == reached
+    ):
+        problems.append(
+            f"{name}: the step after `{rid}` is not a `command` on `{NEEDS_ATTENTION}` guarded by "
+            f"{json.dumps(reached)}: at the cap nobody automatic answers her and nothing tells "
+            f"the team she is waiting"
+        )
+    else:
+        if (mark.get("params") or {}).get("wa_contact_id") != "input.from":
+            problems.append(
+                f"{name} step `{mark.get('id')}` flags {mark.get('params')!r}, not the thread of "
+                f"the phone this message came from"
+            )
+        if mark.get("on_error") != "continue":
+            problems.append(
+                f"{name} step `{mark.get('id')}` flags her thread with "
+                f"on_error={mark.get('on_error')!r}: a failure there ends the run as `failed`"
+            )
+    within = {f"steps.{rid}.{CAP_FIELD}": {"neq": 1}}
+    if not (gate.get("kind") == "condition" and gate.get("when") == within):
+        problems.append(
+            f"{name}: the third step is not a `condition` on {json.dumps(within)}: either the run "
+            f"goes on at the cap, or it stops every answer the day the read fails"
+        )
+    return problems
+
+
 # The rules `main()` has to apply to EVERY real document. `self_check()` proves each of them against
 # synthetic documents — which is exactly why deleting the one line that applied a rule to the REAL
 # templates used to leave the battery green (whatsapp_inbox#69, mutant N5): the cases still passed,
@@ -4312,6 +4392,7 @@ DOCUMENT_RULES = (
     assistant_failure_problems,
     assistant_silence_problems,
     handoff_mark_problems,
+    cap_gate_problems,
     undeclared_tool_problems,
     unordered_tool_problems,
     budget_problems,
@@ -4357,6 +4438,7 @@ SELF_CHECKED_RULES = (
     assistant_failure_problems,
     assistant_silence_problems,
     handoff_mark_problems,
+    cap_gate_problems,
     undeclared_tool_problems,
     unordered_tool_problems,
     budget_problems,
@@ -6698,6 +6780,106 @@ ASSISTANT_SILENCE_CASES = [
             _reply(),
         ),
         1,
+    ),
+]
+
+
+# `(label, file name, document, problems expected)` for `cap_gate_problems` (whatsapp_inbox#287).
+def _cap_read(step_id="plan", on_error="continue", query=CAP_QUERY):
+    step = _query_step(step_id, query=query)
+    if on_error is not None:
+        step["on_error"] = on_error
+    return step
+
+
+def _cap_mark(reader="plan", contact="input.from", on_error="continue", op="eq"):
+    return _handoff_mark(
+        guard={f"steps.{reader}.{CAP_FIELD}": {op: 1}}, contact=contact, on_error=on_error
+    )
+
+
+def _cap_gate(reader="plan", when=None):
+    return {
+        "id": "within_plan",
+        "kind": "condition",
+        "when": when if when is not None else {f"steps.{reader}.{CAP_FIELD}": {"neq": 1}},
+    }
+
+
+CAP_GATE_CASES = [
+    (
+        "the shape the fix ships: read the cap, flag her at the cap, go on only below it",
+        UNATTENDED,
+        _fixture_doc(_cap_read(), _cap_mark(), _cap_gate(), _notify_step("ack", "one moment")),
+        0,
+    ),
+    (
+        "\U0001f534 the bug, as it shipped: no read, the run acknowledges and books at the cap",
+        UNATTENDED,
+        _fixture_doc(_notify_step("ack", "one moment"), _slot_assistant()),
+        1,
+    ),
+    (
+        "the read comes after the acknowledgement: a send is spent before anything is asked",
+        UNATTENDED,
+        _fixture_doc(_notify_step("ack", "one moment"), _cap_read(), _cap_mark(), _cap_gate()),
+        1,
+    ),
+    (
+        "the read reads something else",
+        "reservation-from-whatsapp.es.flow.json",
+        _fixture_doc(_cap_read(query="whatsapp_inbox.usage.get"), _cap_mark(), _cap_gate()),
+        1,
+    ),
+    (
+        "a failed read ends the run before she gets any answer",
+        UNATTENDED,
+        _fixture_doc(_cap_read(on_error=None), _cap_mark(), _cap_gate()),
+        1,
+    ),
+    (
+        "nobody is flagged at the cap",
+        UNATTENDED,
+        _fixture_doc(_cap_read(), _cap_gate(), _notify_step("ack", "one moment")),
+        2,
+    ),
+    (
+        "the mark flags her when the plan is NOT spent",
+        UNATTENDED,
+        _fixture_doc(_cap_read(), _cap_mark(op="neq"), _cap_gate()),
+        1,
+    ),
+    (
+        "the mark flags somebody else's thread",
+        UNATTENDED,
+        _fixture_doc(_cap_read(), _cap_mark(contact="steps.find_customer.phone"), _cap_gate()),
+        1,
+    ),
+    (
+        "a failed mark ends the run as failed",
+        UNATTENDED,
+        _fixture_doc(_cap_read(), _cap_mark(on_error=None), _cap_gate()),
+        1,
+    ),
+    (
+        "the gate fails closed: a broken read silences every answer",
+        UNATTENDED,
+        _fixture_doc(
+            _cap_read(), _cap_mark(), _cap_gate(when={f"steps.plan.{CAP_FIELD}": {"eq": 0}})
+        ),
+        1,
+    ),
+    (
+        "no gate: the run flags her and books anyway",
+        UNATTENDED,
+        _fixture_doc(_cap_read(), _cap_mark(), _notify_step("ack", "one moment")),
+        1,
+    ),
+    (
+        "a family woken by something else is not held to it",
+        "appointment-confirmed-to-whatsapp.es.flow.json",
+        _fixture_doc(_notify_step("tell", "confirmed")),
+        0,
     ),
 ]
 
@@ -9472,6 +9654,13 @@ def self_check():
                 f"the battery's own «she was promised an answer, flag her thread» rule is wrong — "
                 f"{label}: expected {expected} problem(s), got {len(got)}: {got}"
             )
+    for label, fname, doc, expected in CAP_GATE_CASES:
+        got = cap_gate_problems(fname, doc)
+        if len(got) != expected:
+            problems.append(
+                f"the battery's own «at the cap, spend nothing and flag her» rule is wrong — "
+                f"{label}: expected {expected} problem(s), got {len(got)}: {got}"
+            )
     for label, doc, expected in TOOL_CASES:
         got = undeclared_tool_problems("(self-check)", doc, _KNOWN_OPS)
         if len(got) != expected:
@@ -9785,6 +9974,8 @@ def main():
         problems += applied(ledger, assistant_failure_problems, path.name, doc)
         problems += applied(ledger, assistant_silence_problems, path.name, doc)
         problems += applied(ledger, handoff_mark_problems, path.name, doc)
+        # …and at the month's cap it spends nothing and leaves her to the team (whatsapp_inbox#287).
+        problems += applied(ledger, cap_gate_problems, path.name, doc)
 
         # 3a-bis-ii) …and a family that CALLS itself unattended really is (whatsapp_inbox#58): the
         # other half of the exception `policy_problems` grants it. Needs no manifest either.
