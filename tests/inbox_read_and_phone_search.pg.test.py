@@ -308,6 +308,14 @@ def check_phone_search(db):
             [],
             "the Phone column filter with somebody else's number",
         ),
+        # With no digit there is no number to compare: the filter compares text, the same answer
+        # the search box gives (every stored phone carries its `+`).
+        (
+            {"f_contact_phone": "+"},
+            ["c1", "c2", "c3"],
+            "the Phone column filter with no digit (compared as text, like the search box)",
+        ),
+        ({"search": "+"}, ["c1", "c2", "c3"], "a search with no digit"),
     ]
     for params, expected, what in cases:
         got, err = listed(db, params)
