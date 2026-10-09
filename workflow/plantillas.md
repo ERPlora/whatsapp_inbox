@@ -15,8 +15,9 @@ Pasos:
 3. Pulsar **Editar** (o tocar la fila) en una plantilla: el panel enseña su estado, qué hacer («Puedes enviarla cuando quieras…», «Meta la ha rechazado…») y, si la rechazó, «Motivo de Meta: …».
 Entra: las plantillas guardadas aquí y lo que Meta dice hoy de cada una (por nombre e idioma).
 Sale: el veredicto nuevo guardado en cada plantilla que cambió; una que Meta tuvo y ya no lista queda como «Borrada en WhatsApp Manager» y no se elimina. Automatizaciones lee esta lista para ofrecer las plantillas aprobadas en un paso de mensaje (FLOWS-F15).
-Si falla: «No hemos podido comprobar con Meta si hay veredictos nuevos, así que lo que ves es lo último que sabemos…»; la lista sigue visible.
+Si falla: «No hemos podido comprobar con Meta si hay veredictos nuevos, así que lo que ves es lo último que sabemos…»; la lista sigue visible. Si la Bandeja de WhatsApp no tiene el permiso **Notificaciones** del hub, el aviso lo dice («No podemos preguntar a Meta por tus plantillas: la Bandeja de WhatsApp necesita el permiso «Notificaciones», y está apagado…») con **Abrir Permisos**, que lleva a **Ajustes → Permisos** del hub; la lista sigue visible.
 Implicados: FLOWS-F15, HUB-F268, SAAS_WHATSAPP_INBOX-F16
+Pendiente de enlazar: hub — HUB_SHELL-F167 (conceder un permiso a una app): adonde lleva **Abrir Permisos**; su frase de «Notificaciones» aún no dice que la Bandeja lo necesita para las plantillas (hub#2729)
 QA: WA-04
 
 ### WHATSAPP_INBOX-F28 Traer las plantillas creadas en WhatsApp Manager
@@ -48,7 +49,7 @@ Pasos:
 6. Pulsar **Añadir** (desactivado mientras falte el nombre, un ejemplo, el archivo o un dato de un botón). Se guarda aquí y se manda a Meta; el panel se cierra y la plantilla encabeza la lista «En revisión».
 Entra: lo que escribe el administrador.
 Sale: la plantilla guardada aquí y registrada en Meta con su veredicto; aviso público de plantilla creada.
-Si falla: la plantilla queda guardada aquí y el panel sigue abierto, ya como edición, con el motivo encima de **Guardar** (por ejemplo «Meta no ha aceptado el nombre…», «Meta necesita un ejemplo para cada hueco…»); si Meta no contesta o rechaza la plantilla por su cuenta, el motivo no llega y sale el genérico «erplora.com no ha querido registrar la plantilla…»; guardarla otra vez no la duplica.
+Si falla: la plantilla queda guardada aquí y el panel sigue abierto, ya como edición, con el motivo encima de **Guardar** (por ejemplo «Meta no ha aceptado el nombre…», «Meta necesita un ejemplo para cada hueco…»); si Meta no contesta o rechaza la plantilla por su cuenta, el motivo no llega y sale el genérico «erplora.com no ha querido registrar la plantilla…»; sin el permiso **Notificaciones** del hub, el motivo lo nombra («…necesita el permiso «Notificaciones» para enviar plantillas a Meta, y está apagado. Actívalo en Ajustes → Permisos…»); guardarla otra vez no la duplica.
 Implicados: HUB-F269, HUB-F270, SAAS_WHATSAPP_INBOX-F17, SAAS_WHATSAPP_INBOX-F18
 QA: WA-04
 

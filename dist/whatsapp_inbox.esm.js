@@ -5029,6 +5029,7 @@ var es_default = {
     doorRefusalNoCode: "No se ha podido registrar la plantilla en Meta. Queda guardada aqu\xED: prueba a guardarla otra vez dentro de un rato.",
     metaRejectedReason: "Motivo de Meta: {reason}",
     metaSyncUnavailable: "No hemos podido comprobar con Meta si hay veredictos nuevos, as\xED que lo que ves es lo \xFAltimo que sabemos. Vuelve a abrir esta pesta\xF1a dentro de un rato.",
+    notifyPermissionTemplates: "No podemos preguntar a Meta por tus plantillas: la Bandeja de WhatsApp necesita el permiso \xABNotificaciones\xBB, y est\xE1 apagado. Lo que ves es lo \xFAltimo que sabemos.",
     headerMediaImage: "Cabecera con imagen: la imagen se elige al enviar el mensaje.",
     headerMediaVideo: "Cabecera con v\xEDdeo: el v\xEDdeo se elige al enviar el mensaje.",
     headerMediaDocument: "Cabecera con documento: el documento se elige al enviar el mensaje.",
@@ -5059,7 +5060,7 @@ var es_default = {
       cloud_unreachable: "Esta caja no ha podido conectar con erplora.com. La plantilla queda guardada aqu\xED; revisa la conexi\xF3n a internet y vuelve a guardarla para enviarla a revisi\xF3n.",
       cloud_unreadable: "erplora.com ha contestado algo que esta caja no ha sabido leer. La plantilla queda guardada aqu\xED: int\xE9ntalo dentro de un rato.",
       hub_not_enrolled: "Esta caja todav\xEDa no est\xE1 emparejada con erplora.com, as\xED que no puede enviar plantillas a Meta. Avisa a soporte.",
-      capability_denied: "WhatsApp no tiene permiso para enviar mensajes desde este hub. Conc\xE9deselo en Ajustes \u2192 Permisos y vuelve a guardar la plantilla.",
+      capability_denied: "La Bandeja de WhatsApp necesita el permiso \xABNotificaciones\xBB para enviar plantillas a Meta, y est\xE1 apagado. Act\xEDvalo en Ajustes \u2192 Permisos y vuelve a guardar la plantilla.",
       invalid_buttons: "Meta no ha aceptado los botones. Cada uno tiene que ser una respuesta r\xE1pida, un enlace o una llamada: rev\xEDsalos y vuelve a guardar.",
       invalid_button_text: "Meta no ha aceptado un bot\xF3n: todos necesitan un texto de 25 caracteres como mucho.",
       invalid_button_url: "Meta no ha aceptado un bot\xF3n de enlace. Escribe la direcci\xF3n completa, empezando por https://, y sin variables tipo {{1}}.",
@@ -5083,6 +5084,9 @@ var es_default = {
     },
     mediaLoading: "Cargando el adjunto\u2026",
     mediaError: "No se ha podido cargar el adjunto.",
+    notifyPermissionMedia: "Para ense\xF1ar los adjuntos, la Bandeja de WhatsApp necesita el permiso \xABNotificaciones\xBB, y est\xE1 apagado.",
+    notifyPermissionOpen: "Abrir Permisos",
+    notifyPermissionAskAdmin: "Pide a quien administra el hub que lo active en Ajustes \u2192 Permisos.",
     mediaRetry: "Reintentar",
     mediaUnavailable: "Este adjunto a\xFAn no se puede ver aqu\xED: lo tienes en el WhatsApp de tu m\xF3vil.",
     mediaPlay: "Reproducir",
@@ -5289,6 +5293,7 @@ var en_default = {
     doorRefusalNoCode: "The template could not be registered with Meta. It is saved here: try saving it again in a moment.",
     metaRejectedReason: "Meta's reason: {reason}",
     metaSyncUnavailable: "We could not check with Meta for new verdicts, so what you see is the last we know. Open this tab again in a while.",
+    notifyPermissionTemplates: "We cannot ask Meta about your templates: WhatsApp Inbox needs the \xABNotifications\xBB permission, and it is turned off. What you see is the last we know.",
     headerMediaImage: "Image header: the image is chosen when the message is sent.",
     headerMediaVideo: "Video header: the video is chosen when the message is sent.",
     headerMediaDocument: "Document header: the document is chosen when the message is sent.",
@@ -5319,7 +5324,7 @@ var en_default = {
       cloud_unreachable: "This till could not reach erplora.com. The template is saved here; check the internet connection and save it again to send it for review.",
       cloud_unreadable: "erplora.com answered something this till could not read. The template is saved here \u2014 try again in a moment.",
       hub_not_enrolled: "This till is not yet paired with erplora.com, so it cannot send templates to Meta. Contact support.",
-      capability_denied: "WhatsApp Inbox is not allowed to send WhatsApp messages on this hub. Grant it in Settings \u2192 Permissions and save the template again.",
+      capability_denied: "WhatsApp Inbox needs the \xABNotifications\xBB permission to send templates to Meta, and it is turned off. Turn it on in Settings \u2192 Permissions and save the template again.",
       invalid_buttons: "Meta did not accept the buttons. Each one has to be a quick reply, a link or a call \u2014 check them and save again.",
       invalid_button_text: "Meta did not accept a button: every button needs a label of up to 25 characters.",
       invalid_button_url: "Meta did not accept a link button. Write the full address, starting with https://, and without {{1}}-style variables.",
@@ -5343,6 +5348,9 @@ var en_default = {
     },
     mediaLoading: "Loading attachment\u2026",
     mediaError: "Could not load the attachment.",
+    notifyPermissionMedia: "To show attachments, WhatsApp Inbox needs the \xABNotifications\xBB permission, and it is turned off.",
+    notifyPermissionOpen: "Open Permissions",
+    notifyPermissionAskAdmin: "Ask whoever manages the hub to turn it on in Settings \u2192 Permissions.",
     mediaRetry: "Try again",
     mediaUnavailable: "This attachment cannot be shown here yet: you can see it on your phone's WhatsApp.",
     mediaPlay: "Play",
@@ -5508,6 +5516,42 @@ function mediaFileName(media, label) {
   if (media.filename) return media.filename;
   const extension = EXTENSIONS[media.mimeType.split(";")[0].trim().toLowerCase()];
   return extension ? `${label}.${extension}` : label;
+}
+
+// ui/lib/meta-door-refusal.ts
+var SOURCE_LANG2 = "en";
+function doorErrorCode(e5) {
+  const code = e5?.code;
+  return typeof code === "string" ? code : "";
+}
+function textFor2(catalog, lang, key) {
+  const ui = catalog[lang]?.ui;
+  const bucket = ui?.doorRefusal;
+  const text3 = key ? bucket?.[key] : void 0;
+  return typeof text3 === "string" && text3.trim() ? text3 : "";
+}
+function unknownText(catalog, lang, key, code) {
+  const ui = catalog[lang]?.ui;
+  const text3 = ui?.[key];
+  if (typeof text3 !== "string" || !text3.trim()) return "";
+  return text3.replaceAll("{code}", code);
+}
+function doorRefusalText(catalog, locale, e5) {
+  const code = doorErrorCode(e5);
+  const declared = textFor2(catalog, locale, code) || textFor2(catalog, SOURCE_LANG2, code);
+  if (declared) return declared;
+  const key = code ? "doorRefusalUnknown" : "doorRefusalNoCode";
+  return unknownText(catalog, locale, key, code) || unknownText(catalog, SOURCE_LANG2, key, code) || code;
+}
+
+// ui/lib/notify-permission.ts
+var NOTIFY_PERMISSION_PATH = "/settings#permissions";
+function isNotifyPermissionDenied(e5) {
+  return doorErrorCode(e5) === "capability_denied";
+}
+function openNotifyPermission() {
+  window.history.pushState({}, "", NOTIFY_PERMISSION_PATH);
+  window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
 // ui/components/erp-whatsapp-inbox-inbox/erp-whatsapp-inbox-inbox.ts
@@ -5809,8 +5853,8 @@ var ErpWhatsappInboxInbox = class extends i3 {
     let next;
     try {
       next = { status: "ready", url: URL.createObjectURL(await door2.get(mediaId)) };
-    } catch {
-      next = { status: "error" };
+    } catch (e5) {
+      next = { status: isNotifyPermissionDenied(e5) ? "denied" : "error" };
     }
     if (this.media[mediaId]?.status !== "loading") {
       if (next.status === "ready") URL.revokeObjectURL(next.url);
@@ -5904,6 +5948,10 @@ var ErpWhatsappInboxInbox = class extends i3 {
           </ion-button>`;
     } else if (state.status === "loading") {
       content = b2`<p class="note">${t5("ui.mediaLoading")}</p>`;
+    } else if (state.status === "denied") {
+      content = b2`<p class="err" data-testid="whatsapp-inbox-media-needs-permission">${t5("ui.notifyPermissionMedia")}</p>
+        ${can("whatsapp_inbox.manage_settings") ? b2`<ion-button data-testid="whatsapp-inbox-media-open-permissions" size="small" fill="outline"
+              @click=${() => openNotifyPermission()}>${t5("ui.notifyPermissionOpen")}</ion-button>` : b2`<p class="note">${t5("ui.notifyPermissionAskAdmin")}</p>`}`;
     } else if (state.status === "error") {
       content = b2`<p class="err">${t5("ui.mediaError")}</p>
         <ion-button data-testid="whatsapp-inbox-media-retry" size="small" fill="clear"
@@ -6805,32 +6853,6 @@ function updateError(e5) {
 var errorText = (error, t5) => "key" in error ? t5(error.key) : error.detail;
 define("erp-whatsapp-inbox-settings", ErpWhatsappInboxSettings);
 
-// ui/lib/meta-door-refusal.ts
-var SOURCE_LANG2 = "en";
-function doorErrorCode(e5) {
-  const code = e5?.code;
-  return typeof code === "string" ? code : "";
-}
-function textFor2(catalog, lang, key) {
-  const ui = catalog[lang]?.ui;
-  const bucket = ui?.doorRefusal;
-  const text3 = key ? bucket?.[key] : void 0;
-  return typeof text3 === "string" && text3.trim() ? text3 : "";
-}
-function unknownText(catalog, lang, key, code) {
-  const ui = catalog[lang]?.ui;
-  const text3 = ui?.[key];
-  if (typeof text3 !== "string" || !text3.trim()) return "";
-  return text3.replaceAll("{code}", code);
-}
-function doorRefusalText(catalog, locale, e5) {
-  const code = doorErrorCode(e5);
-  const declared = textFor2(catalog, locale, code) || textFor2(catalog, SOURCE_LANG2, code);
-  if (declared) return declared;
-  const key = code ? "doorRefusalUnknown" : "doorRefusalNoCode";
-  return unknownText(catalog, locale, key, code) || unknownText(catalog, SOURCE_LANG2, key, code) || code;
-}
-
 // ui/lib/meta-template-status.ts
 var META_TEMPLATE_STATES = [
   "not_sent",
@@ -7119,6 +7141,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     this.editingId = "";
     this.pendingDelete = null;
     this.metaSyncNotice = "";
+    this.metaSyncNeedsPermission = false;
     this.metaOnly = [];
     this.editingMeta = null;
     this.editingMetaCode = "";
@@ -7362,14 +7385,19 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
    */
   async refreshMetaVerdicts() {
     this.metaSyncNotice = "";
+    this.metaSyncNeedsPermission = false;
     this.metaOnly = [];
     let answer;
     let rows;
     try {
       answer = await erplora3().forModule("whatsapp_inbox").whatsappTemplates.list();
       rows = await erplora3().queryAll("whatsapp_inbox.templates.list");
-    } catch {
-      this.metaSyncNotice = erplora3().t(CATALOG3, "ui.metaSyncUnavailable");
+    } catch (e5) {
+      this.metaSyncNeedsPermission = isNotifyPermissionDenied(e5);
+      this.metaSyncNotice = erplora3().t(
+        CATALOG3,
+        this.metaSyncNeedsPermission ? "ui.notifyPermissionTemplates" : "ui.metaSyncUnavailable"
+      );
       return;
     }
     if (answer?.stale === true) this.metaSyncNotice = erplora3().t(CATALOG3, "ui.metaSyncUnavailable");
@@ -7858,7 +7886,9 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     return b2`<div class="page">
         ${this.pageError ? b2`<p class="err" data-testid="whatsapp-templates-error">${this.pageError}</p>` : A}
         ${this.ctrl?.error && !dataTableShowsLoadError() ? b2`<p class="err" data-testid="whatsapp-templates-load-error">${this.ctrl.error}</p>` : A}
-        ${this.metaSyncNotice ? b2`<section class="panel"><p data-testid="whatsapp-templates-meta-sync-notice">${this.metaSyncNotice}</p></section>` : A}
+        ${this.metaSyncNotice ? b2`<section class="panel"><p data-testid="whatsapp-templates-meta-sync-notice">${this.metaSyncNotice}</p>
+              ${this.metaSyncNeedsPermission ? b2`<ion-button data-testid="whatsapp-templates-open-permissions" size="small" fill="outline"
+                    @click=${() => openNotifyPermission()}>${t5("ui.notifyPermissionOpen")}</ion-button>` : A}</section>` : A}
         ${this.metaOnly.length ? b2`<section class="panel"><p data-testid="whatsapp-templates-meta-only">${erplora3().t(CATALOG3, "ui.metaOnlyTemplates", { names: this.metaOnly.join(", ") })}</p></section>` : A}
         ${this.renderDeleteConfirm()}
         <ok-data-table testid="whatsapp-templates-table" .error=${this.ctrl?.error ?? ""} @retry=${() => this.ctrl?.load()} .serverSide=${true} .fill=${true} .primaryAction=${{ label: t5("ui.add"), icon: "add" }} @primaryAction=${() => this.openCreate()} .views=${true} .actions=${this.rowActions} .rowClickable=${true} .cardTitle=${(row) => String(row.name ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "desc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchTemplates")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyTemplates")} @rowAction=${(e5) => this.onRowAction(e5)} @rowClick=${(e5) => this.onRowAction({ detail: { actionId: "edit", row: e5.detail.row } })} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @pageSizeChange=${(e5) => this.ctrl.setPageSize(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}>
@@ -7920,6 +7950,9 @@ __decorateClass([
 __decorateClass([
   r5()
 ], _ErpWhatsappInboxTemplates.prototype, "metaSyncNotice", 2);
+__decorateClass([
+  r5()
+], _ErpWhatsappInboxTemplates.prototype, "metaSyncNeedsPermission", 2);
 __decorateClass([
   r5()
 ], _ErpWhatsappInboxTemplates.prototype, "metaOnly", 2);

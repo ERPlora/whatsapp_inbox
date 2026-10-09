@@ -14,7 +14,7 @@
 // from a ROW ACTION, not a row click: `ok-data-table` says so in its own header contract ("filas NO
 // clicables: se pasan `actions` y se escucha `rowAction`"), and the same gesture is what `tickets`
 // already uses for its detail.
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const CONVERSATION = {
   id: 'c1',
@@ -538,6 +538,58 @@ describe('the thread SHOWS what the customer sent (whatsapp_inbox#192)', () => {
     await esperar(el);
     expect(burbuja(el).querySelector('img'), 'retrying did not show the photo').toBeTruthy();
     expect(burbuja(el).textContent).not.toContain('ui.mediaError');
+  });
+
+  // whatsapp_inbox#294 — the door is gated by the hub's «Notifications» permission (`notify`,
+  // default-deny). Denied, it answered `capability_denied` and the bubble said «could not load the
+  // attachment» with a Retry that can never work: the owner read a network fault, not a switch.
+  describe('when the «Notifications» permission is not granted (whatsapp_inbox#294)', () => {
+    const denegado = () => {
+      respuesta = async () => {
+        throw Object.assign(new Error('forbidden'), { code: 'capability_denied' });
+      };
+    };
+
+    it('the bubble says WHICH permission is missing, not that the download failed, and offers no useless retry', async () => {
+      conPuerta();
+      denegado();
+      hiloDelHub = [FOTO];
+      const el = await montar();
+      await abrirConversacion(el);
+      await esperar(el);
+      expect(burbuja(el).textContent).toContain('ui.notifyPermissionMedia');
+      expect(burbuja(el).textContent, 'still blames the download').not.toContain('ui.mediaError');
+      expect(burbuja(el).querySelector('[data-testid="whatsapp-inbox-media-retry"]'), 'retrying cannot grant a permission').toBeNull();
+    });
+
+    it('an admin gets the way to the switch: Settings → Permissions of the hub', async () => {
+      conPuerta();
+      denegado();
+      hiloDelHub = [FOTO];
+      const push = vi.spyOn(window.history, 'pushState');
+      const el = await montar();
+      await abrirConversacion(el);
+      await esperar(el);
+      const abrir = burbuja(el).querySelector('[data-testid="whatsapp-inbox-media-open-permissions"]') as HTMLElement | null;
+      expect(abrir, 'says what is missing but not where to grant it').not.toBeNull();
+      abrir!.click();
+      expect(push).toHaveBeenCalledWith({}, '', '/settings#permissions');
+      push.mockRestore();
+    });
+
+    it('somebody who cannot grant it is told to ask, and gets no button that would only refuse them', async () => {
+      conPuerta();
+      denegado();
+      hiloDelHub = [FOTO];
+      (globalThis as { erplora: { hasPermission: (p: string) => boolean } }).erplora.hasPermission = (p) =>
+        p !== 'whatsapp_inbox.manage_settings';
+      const el = await montar();
+      await abrirConversacion(el);
+      await esperar(el);
+      expect(burbuja(el).textContent).toContain('ui.notifyPermissionMedia');
+      expect(burbuja(el).textContent).toContain('ui.notifyPermissionAskAdmin');
+      expect(burbuja(el).querySelector('[data-testid="whatsapp-inbox-media-open-permissions"]')).toBeNull();
+    });
   });
 
   it('a voice note is only downloaded when the owner asks to play it, then gets a player', async () => {

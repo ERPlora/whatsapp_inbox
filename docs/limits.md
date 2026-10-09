@@ -96,6 +96,12 @@ which is admin-only.
 **"Meta approved my template and the hub still says pending."** The verdict is refreshed when the
 Templates tab opens. If a notice says Meta could not be reached, open the tab again later.
 
+**"Attachments and templates say WhatsApp Inbox needs the «Notifications» permission."** Both reach
+Meta through the hub's «Notifications» permission (`notify`), which stays off until the owner grants
+it (#294). Waiting or retrying never fixes it: an administrator taps **Open Permissions** (or goes
+to **Settings → Permissions** of the hub) and turns «Notifications» on for WhatsApp Inbox; anyone
+else asks them to.
+
 **"I deleted a template in WhatsApp Manager and it is still in the list."** It stays, marked
 «Deleted in WhatsApp Manager», so the text is not lost: nothing that uses it will be sent. Delete it
 in the tab, or write a new one with a different name. The mark needs a fresh answer from Meta that
