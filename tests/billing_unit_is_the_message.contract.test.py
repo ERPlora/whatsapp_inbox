@@ -8,8 +8,9 @@ the other two:
 
   * the CATALOG — `billing.tiers[].quota.<metric>` — names the unit and its allowance;
   * the COUNTER — `queries/usage_get.sql`, behind `billing.usage.used` — produces the 24;
-  * the two INGEST GUARDS — the commands that weigh that number against
-    `whatsapp_inbox_settings.free_tier_monthly_limit` — decide when WhatsApp goes quiet.
+  * the CAP READER — `queries/usage_cap_reached.sql`, behind `whatsapp_inbox.usage.cap_reached` —
+    weighs that number against `whatsapp_inbox_settings.free_tier_monthly_limit` and decides when
+    the automatic replies pause and the inbox says so (whatsapp_inbox#287).
 
 ## The two ways they have drifted apart, and why this file checks what it checks
 
@@ -32,9 +33,18 @@ and shows it to the owner on erplora.com, so one allowance had two meters and th
 arrives through the same internal door as the cap (`whatsapp_inbox._quota.set`, whatsapp_inbox#37)
 and is stored on the settings singleton; the tab and both guards read that one stored figure.
 
+**What the cap stops (whatsapp_inbox#287).** Until #287 the two ingest commands were the guards:
+at the cap they wrote 0 rows, so the customer's live message vanished from the inbox with nothing
+saying so, while the automatic replies ran anyway — spending a turn of the assistant and able to
+book — and only their answer was refused by the platform. What is sold is what the business SENDS
+(WATI, Twilio, Square Messages: the allowance limits outgoing traffic; what comes in is always
+received). So the ingest no longer weighs anything: every message lands, and the cap is READ by
+`whatsapp_inbox.usage.cap_reached`, which the recipes ask before they spend anything and the inbox
+asks to paint its warning.
+
 ## So what is asserted
 
-1. **The tab and every guard read the SAME expression**, compared as text with aliases and
+1. **The tab and every cap reader read the SAME expression**, compared as text with aliases and
    whitespace normalised — not «both look at the meter», the same expression. A month gate present
    in one and absent from the other is a tab that reassures a business right up to the minute its
    channel stops.
@@ -45,6 +55,9 @@ and is stored on the settings singleton; the tab and both guards read that one s
 4. **The expression carries both halves** — the figure and the month it counts. Dropping the stamp
    leaves a business that ended the month at its cap shut for up to a day of the next one.
 5. **The catalog, the metric and the unit still agree**, which is the original #13 check.
+6. **What comes in is never weighed against the cap** (whatsapp_inbox#287): no statement that
+   writes a message or a conversation names the allowance column, and the cap has its reader
+   (`whatsapp_inbox.usage.cap_reached`) for the recipes and the inbox to ask.
 
 Usage: tests/billing_unit_is_the_message.contract.test.py   (exit 0 = green). No Postgres, no Docker.
 """
@@ -63,9 +76,17 @@ MANIFEST = json.loads((MODULE_DIR / "module.json").read_text())
 # covered the day it is written, not the day somebody remembers this file.
 ENFORCEMENT_COLUMN = "free_tier_monthly_limit"
 
-# The table the meter lives on. Used to tell a WRITER of the meter from a READER: the guards name the
-# meter columns too, but they INSERT into the message table.
+# The table the meter lives on. Used to tell a WRITER of the meter from a READER: the cap reader
+# names the meter columns too, but it writes nothing.
 SETTINGS_TABLE = "whatsapp_inbox_settings"
+
+# The tables what comes IN is written to (whatsapp_inbox#287). A statement that writes one of them
+# and names the allowance column is the cap swallowing a customer's message again.
+INBOUND_TABLES = ("whatsapp_inbox_message", "whatsapp_inbox_conversation")
+
+# The one read that answers «is this month's allowance spent?» — for the recipes, which stop before
+# spending anything, and for the inbox, which says so (whatsapp_inbox#287).
+CAP_QUERY = "whatsapp_inbox.usage.cap_reached"
 
 # The unit the platform bills in, and every noun this project meters anything in. A metric may
 # contain its own and no other: the defect this file closes was a key naming one unit while the
@@ -169,10 +190,23 @@ def the_counter():
     )
 
 
-def the_ingest_guards():
-    """Every command that weighs something against the Cloud's allowance column."""
+def the_cap_readers():
+    """Every statement that weighs something against the Cloud's allowance column.
+
+    Commands AND queries: since whatsapp_inbox#287 the reader is a query, and a guard put back on a
+    command tomorrow is found the day it is written, not the day somebody remembers this file. The
+    counter's own file is the reference everything is compared to, so it is not one of them.
+    """
     guards, unreadable = [], []
-    for path in sorted((MODULE_DIR / "commands").glob("*.sql")):
+    counter_files = {
+        pathlib.Path(rel).name for rel in sql_paths_of_query(usage_block().get("query"))
+    }
+    paths = sorted((MODULE_DIR / "commands").glob("*.sql")) + sorted(
+        (MODULE_DIR / "queries").glob("*.sql")
+    )
+    for path in paths:
+        if path.parent.name == "queries" and path.name in counter_files:
+            continue
         text = strip_comments(path.read_text())
         # A command that WRITES the meter names the column on the left of an `=` and is not a
         # guard: `_quota.set` carries `free_tier_monthly_limit = excluded.free_tier_monthly_limit`
@@ -261,7 +295,7 @@ def catalog_metrics():
 def check_the_tab_and_every_guard_read_one_expression(counter):
     """(1) and (4): the number on screen and the number that silences WhatsApp are ONE rule."""
     problems = []
-    guards, unreadable = the_ingest_guards()
+    guards, unreadable = the_cap_readers()
     for name, _ in unreadable:
         problems.append(
             f"{name}: this command weighs something against `{ENFORCEMENT_COLUMN}` but not a "
@@ -270,9 +304,16 @@ def check_the_tab_and_every_guard_read_one_expression(counter):
         )
     if not guards:
         return problems + [
-            f"no command weighs anything against `{ENFORCEMENT_COLUMN}`: nothing enforces the "
+            f"nothing weighs anything against `{ENFORCEMENT_COLUMN}`: nothing enforces the "
             "allowance the Cloud resolved, so the plan is sold and never applied"
         ]
+    cap_files = {pathlib.Path(rel).name for rel in sql_paths_of_query(CAP_QUERY)}
+    if not cap_files & {g["name"] for g in guards}:
+        problems.append(
+            f"`{CAP_QUERY}` does not weigh the spend against `{ENFORCEMENT_COLUMN}` (or is not "
+            "declared): the recipes have nothing to ask before they spend a turn of the assistant "
+            "at the cap, and the inbox nothing to say it with (whatsapp_inbox#287)"
+        )
 
     wanted = normalise(counter["core"])
     for guard in guards:
@@ -298,7 +339,7 @@ def check_the_tab_and_every_guard_read_one_expression(counter):
 def check_nobody_counts_rows_against_the_allowance(counter):
     """(2) the two-meter defect returning, and it renders identically to a correct tab."""
     problems = []
-    guards, _ = the_ingest_guards()
+    guards, _ = the_cap_readers()
     for where, text in [(counter["rel"], counter["expression"])] + [
         (g["name"], g["before"]) for g in guards
     ]:
@@ -326,6 +367,24 @@ def check_the_meter_columns_belong_to_the_platform(counter):
                 f"{sorted(owner)}: the numbers on this row are the invoice, and a second writer is "
                 "a hub — or the assistant acting for it — editing its own bill "
                 "(whatsapp_inbox#37)"
+            )
+    return problems
+
+
+def check_what_comes_in_is_never_weighed():
+    """(6) the cap limits what is SENT; a customer's message always lands (whatsapp_inbox#287)."""
+    problems = []
+    for path in sorted((MODULE_DIR / "commands").glob("*.sql")):
+        text = strip_comments(path.read_text())
+        writes_inbound = re.search(
+            rf"\b(?:INSERT\s+INTO|UPDATE)\s+(?:{'|'.join(INBOUND_TABLES)})\b", text, re.IGNORECASE
+        )
+        if writes_inbound and re.search(rf"\b{ENFORCEMENT_COLUMN}\b", text):
+            problems.append(
+                f"{path.name} writes `{writes_inbound.group(0).split()[-1]}` and names "
+                f"`{ENFORCEMENT_COLUMN}`: at the cap the customer's message would not land, and "
+                "nothing in the inbox says so — what is sold is what the business SENDS, what comes "
+                "in is always received (whatsapp_inbox#287)"
             )
     return problems
 
@@ -375,6 +434,7 @@ def main():
 
     problems = check_the_tab_and_every_guard_read_one_expression(counter)
     problems += check_nobody_counts_rows_against_the_allowance(counter)
+    problems += check_what_comes_in_is_never_weighed()
     problems += check_the_meter_columns_belong_to_the_platform(counter)
     problems += check_the_metric_names_the_unit_that_is_billed()
     problems += check_the_catalog_sells_the_metric_the_counter_reports()
@@ -387,10 +447,10 @@ def main():
         )
         return 1
 
-    guards, _ = the_ingest_guards()
+    guards, _ = the_cap_readers()
     print(
         f"OK: one meter end to end — the catalog sells `{usage_block()['metric']}`, and the «Plan» "
-        f"tab and {len(guards)} ingest guard(s) read the one figure the platform wrote, with the "
+        f"tab and {len(guards)} cap reader(s) read the one figure the platform wrote, with the "
         f"same expression over {meter_columns_of(counter['core'])}"
     )
     return 0

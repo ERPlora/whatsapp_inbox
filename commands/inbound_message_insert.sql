@@ -35,33 +35,17 @@
 -- shape as `direction`, for the same reason: a hub older than hub#1612 sends no `source`, and
 -- everything such a hub could serve was live traffic.
 --
--- **The plan guard travels with the traffic.** It is the same guard as
--- `commands/message_ingest_msg.sql` and it has to be here for the same reason it is there: this is
--- the door every real inbound message now comes through, and a second door past a meter is not a
--- feature, it is the meter being off. It is armed only for a LIVE INBOUND message: an owner who
--- answers their own customers must not have their business stopped by replying, a message of the
--- 180-day coexistence backlog (`source = 'history'`) is not new traffic, and a direction nobody
--- recognises cannot be claimed to be a customer.
---
--- 🔴 **What it weighs is the PLATFORM's spend, not a count of these rows** (whatsapp_inbox#155).
--- Both guards and `queries/usage_get.sql` used to COUNT the live inbound messages of the month —
--- a different unit from the one that is sold, since what the business bought and what Meta charges
--- ERPlora for are the messages the business SENDS. One allowance had two meters, and the merchant
--- could read «4 of 30» on erplora.com while this door had already gone quiet. Now the three read
--- the ONE figure `whatsapp_inbox._quota.set` wrote, with the same expression, so the number on the
--- «Plan» tab is the number that cuts the channel.
---
--- That also settles whatsapp_inbox#91 by construction: the backlog lands as `direction =
--- 'inbound'` and is stamped with the runtime clock of the connection, so while the guard counted
--- rows a salon with 300 messages of history was out of allowance the minute it connected the
--- number. Nothing counts rows any more, so nothing can spend an allowance the business was never
--- charged for. **The month the spend belongs to is part of the comparison**: the Cloud sync ticks
--- once a day and the payload carries no month, so the figure is stored stamped with the UTC month
--- it was written for and read as 0 in any other one — without that, a business that ended
--- September at its cap would find this door shut for up to 24 h of October. Text domain and
--- `substr(:now, 1, 7)`, never `erp_month_start`, see whatsapp_inbox#24 for the full reasoning.
--- 0 rows = over the limit; the stats statement that follows checks whether the row actually landed
--- instead of assuming it did.
+-- **Nothing here weighs the plan: every message lands** (whatsapp_inbox#287). This statement used
+-- to carry the monthly cap as a `WHERE NOT EXISTS (…free_tier_monthly_limit…)`, armed for live
+-- inbound traffic: at the cap it wrote 0 rows, so the customer's message vanished from the inbox
+-- with nothing saying why, while the automatic replies — which listen to the core event, not to
+-- this row — ran anyway, spent a turn of the assistant and could book. What the business buys,
+-- and what Meta charges ERPlora for, are the messages the business SENDS (whatsapp_inbox#155); WATI,
+-- Twilio and Square Messages limit outgoing traffic and always receive what comes in. So the cap
+-- is READ by `whatsapp_inbox.usage.cap_reached` (`queries/usage_cap_reached.sql`): the recipes
+-- ask it before they spend anything and the inbox asks it to say the replies are paused.
+-- `tests/billing_unit_is_the_message.contract.test.py` fails if a statement that writes a message
+-- or a conversation names the allowance column again.
 --
 -- **`ON CONFLICT DO NOTHING` against `uq_wa_msg_hub_wamsgid`** (migration 005, whatsapp_inbox#30).
 -- Same reason as its twin in `commands/message_ingest_msg.sql`, from the other side: a message
@@ -155,17 +139,6 @@ FROM (
     ) c
   ) e
 ) sent
-WHERE (
-  COALESCE(NULLIF((:direction)::text, ''), 'inbound') <> 'inbound'
-  OR COALESCE(NULLIF((:source)::text, ''), 'live') <> 'live'
-  OR NOT EXISTS (
-    SELECT 1 FROM whatsapp_inbox_settings s
-    WHERE s.hub_id = :hub_id AND s.is_deleted = 0
-      AND s.free_tier_monthly_limit > 0
-      AND CASE WHEN s.monthly_usage_month = substr(:now, 1, 7) THEN s.monthly_usage ELSE 0 END
-          >= s.free_tier_monthly_limit
-  )
-)
 ON CONFLICT (hub_id, wa_message_id) WHERE is_deleted = 0 DO UPDATE SET
   extra_metadata = EXCLUDED.extra_metadata,
   message_type   = EXCLUDED.message_type,

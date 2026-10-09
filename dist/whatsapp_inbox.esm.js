@@ -4964,6 +4964,7 @@ var es_default = {
     eraseNumberSubmit: "Borrar datos",
     erasing: "Borrando\u2026",
     eraseNumberDone: "Se han borrado los datos de este n\xFAmero.",
+    capReached: "Has usado todos los mensajes de WhatsApp de tu plan este mes. Los mensajes siguen llegando aqu\xED, pero las respuestas autom\xE1ticas est\xE1n en pausa hasta el mes que viene o hasta que mejores el plan. Contesta desde la app WhatsApp Business del m\xF3vil.",
     errEraseNumber: "No se pudieron borrar los datos de este n\xFAmero",
     delete: "Borrar",
     edit: "Editar",
@@ -5223,6 +5224,7 @@ var en_default = {
     eraseNumberSubmit: "Erase data",
     erasing: "Erasing\u2026",
     eraseNumberDone: "The data of this number has been erased.",
+    capReached: "You have used all the WhatsApp messages in your plan this month. Messages keep arriving here, but the automatic replies are paused until next month or until you upgrade your plan. Answer from the WhatsApp Business app on your phone.",
     errEraseNumber: "Could not erase the data of this number",
     delete: "Delete",
     edit: "Edit",
@@ -5572,6 +5574,7 @@ var ErpWhatsappInboxInbox = class extends i3 {
     this.erasing = false;
     this.eraseError = "";
     this.eraseDone = false;
+    this.capReached = false;
     this.onLocaleChange = () => this.requestUpdate();
   }
   static {
@@ -5703,6 +5706,7 @@ var ErpWhatsappInboxInbox = class extends i3 {
       sort: "attention_first",
       dir: "desc"
     });
+    void this.loadCap();
     await this.ctrl.load();
     try {
       const off1 = erplora().on("whatsapp_inbox.conversation.assigned", () => this.onDomainEvent());
@@ -5723,7 +5727,19 @@ var ErpWhatsappInboxInbox = class extends i3 {
   /** A new message must land in the thread the operator is READING, not only in the list. */
   onDomainEvent() {
     void this.ctrl.load();
+    void this.loadCap();
     if (this.detail) void this.loadDetail(this.detail.id);
+  }
+  /** Asks whether this month's allowance is spent. A failed read paints nothing: the warning is
+   *  about the automatic replies, and the list below already says when the hub cannot be read. */
+  async loadCap() {
+    try {
+      const rows = await erplora().query("whatsapp_inbox.usage.cap_reached");
+      const row = Array.isArray(rows) ? rows[0] : void 0;
+      this.capReached = Number(row?.cap_reached) === 1;
+    } catch {
+      this.capReached = false;
+    }
   }
   // ── The thread ────────────────────────────────────────────────────────────
   async loadDetail(conversationId) {
@@ -6012,6 +6028,7 @@ var ErpWhatsappInboxInbox = class extends i3 {
           <h2>${t5("ui.inboxTitle")}</h2>
         </header>
         ${this.ctrl?.error && !dataTableShowsLoadError() ? b2`<p class="err" data-testid="whatsapp-inbox-load-error">${this.ctrl.error}</p>` : A}
+        ${this.capReached ? b2`<ok-inline-feedback data-testid="whatsapp-inbox-cap-reached" tone="warning" icon="alert-circle-outline">${t5("ui.capReached")}</ok-inline-feedback>` : A}
         ${this.eraseDone ? b2`<ok-inline-feedback data-testid="whatsapp-inbox-erase-done" tone="success" icon="checkmark-circle-outline">${t5("ui.eraseNumberDone")}</ok-inline-feedback>` : A}
         ${this.renderDetail()}
         <ok-data-table testid="whatsapp-inbox-table" .error=${this.ctrl?.error ?? ""} @retry=${() => this.ctrl?.load()} .serverSide=${true} .views=${true} .fill=${true} .actions=${this.rowActions} .rowClickable=${true} .cardTitle=${(row) => String(row.contact_name ?? row.contact_phone ?? "\u2014")} .columns=${this.columns} .rows=${this.ctrl?.rows ?? []} .total=${this.ctrl?.total ?? 0} .page=${this.ctrl?.state.page ?? 0} .pageSize=${this.ctrl?.state.pageSize ?? 50} .sort=${this.ctrl?.state.sort} .sortDir=${this.ctrl?.state.dir ?? "asc"} .searchable=${true} .searchPlaceholder=${t5("ui.searchInbox")} .emptyMessage=${this.ctrl?.loading ? t5("ui.loading") : t5("ui.emptyInbox")} @rowAction=${(e5) => this.onRowAction(e5)} @rowClick=${(e5) => this.onRowAction({ detail: { actionId: "open", row: e5.detail.row } })} @pageChange=${(e5) => this.ctrl.setPage(e5.detail)} @pageSizeChange=${(e5) => this.ctrl.setPageSize(e5.detail)} @sortChange=${(e5) => this.ctrl.setSort(e5.detail.sort, e5.detail.dir)} @searchChange=${(e5) => this.ctrl.setSearch(e5.detail)} @filterChange=${(e5) => this.ctrl.setFilter(e5.detail.col, e5.detail.value)}></ok-data-table>
@@ -6060,6 +6077,9 @@ __decorateClass([
 __decorateClass([
   r5()
 ], ErpWhatsappInboxInbox.prototype, "eraseDone", 2);
+__decorateClass([
+  r5()
+], ErpWhatsappInboxInbox.prototype, "capReached", 2);
 define("erp-whatsapp-inbox-inbox", ErpWhatsappInboxInbox);
 
 // ui/lib/whatsapp-uses.ts

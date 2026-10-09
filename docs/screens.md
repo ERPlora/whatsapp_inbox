@@ -24,6 +24,14 @@ each of those messages keeps the time it was **actually sent** (Meta's own times
 conversation stays down the list where it belongs and its thread reads in the order things were
 said. A history message that arrives without a usable time is dated when it reached the hub.
 
+When the business has used up the WhatsApp messages of its plan this month
+(`whatsapp_inbox.usage.cap_reached`, the same meter the hub's «Plan» tab paints), a warning above
+the list says so: messages keep arriving here, the automatic replies are paused until next month or
+until the plan is upgraded, and the customer is answered from the WhatsApp Business app on the
+phone. Every customer who writes meanwhile is marked «Needs attention» by the reply that stood down
+(whatsapp_inbox#287). The warning is asked again with every new message; if the meter cannot be
+read, no warning is painted.
+
 Times are shown on the **business clock** (the hub's time zone, not the device's) and in the hub's
 language: the «Last message» column reads the time if it is from today, «Yesterday», or the date if
 older; each message in the thread reads the same way, with its time next to «Yesterday» or the date.

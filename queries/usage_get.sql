@@ -10,16 +10,16 @@
 -- again here produced a second number for one allowance — the owner could read «4 of 30» in their
 -- account and find WhatsApp cut off in their hub at the same time, both true, and no way to tell
 -- which one was going to stop them (whatsapp_inbox#155). The figure below is the one the platform
--- wrote, and it is the SAME expression the two ingest guards weigh against the cap
--- (`commands/message_ingest_msg.sql`, `commands/inbound_message_insert.sql`): one meter, or a
--- merchant reads one number while a different one silences their channel.
+-- wrote, and it is the SAME expression `queries/usage_cap_reached.sql` weighs against the cap
+-- (whatsapp_inbox#287): one meter, or a merchant reads one number while a different one pauses
+-- their automatic replies.
 --
 -- **The month gate is not a detail.** The payload that brings the spend carries no month and the
 -- Cloud sync ticks once a day, so the figure is stored with the UTC month it was written for. Read
 -- in any other month it is «not known yet», not «still spent» — otherwise a business that ended
 -- September at its cap would spend up to 24 h of October looking at September's bill, with the
--- channel shut. `monthly_usage_month` is `''` until the platform speaks for the first time, which
--- never matches a real month and therefore reads as 0.
+-- automatic replies paused. `monthly_usage_month` is `''` until the platform speaks for the first
+-- time, which never matches a real month and therefore reads as 0.
 --
 -- Month boundary compared in the TEXT domain and NEVER with `erp_month_start` (whatsapp_inbox#24):
 -- `:now` is always UTC RFC-3339, so its first 7 characters ARE the UTC month, and that is the same

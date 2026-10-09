@@ -46,17 +46,25 @@ más deja de ser una traducción.
    factura—, que no lo haya escrito **el propio negocio** (`event.direction`) y que no venga del
    **histórico** que WhatsApp entrega al conectar el número (`event.source`). Ver «Por qué el filtro
    dice `neq` y no `eq`» más abajo.
-2. **`acknowledge`** — contesta **al instante** por WhatsApp: «recibido, lo miro ahora». No es
+2. **`plan`** / **`flag_cap_reached`** / **`within_plan`** — antes de nada mira si el negocio ha
+   gastado los mensajes de WhatsApp de su plan este mes (`whatsapp_inbox.usage.cap_reached`, el
+   mismo medidor que pinta la pestaña Plan). En el tope **no contesta, no llama al asistente ni
+   reserva**: marca la conversación «Necesita atención» (sube a la campana) y el run para en
+   `within_plan`. El mensaje de la clienta ya está en la bandeja, que avisa del tope: el cupo solo
+   limita lo que se envía (whatsapp_inbox#287). Si la lectura falla (`on_error: continue`), el
+   valor es nulo, `neq 1` se cumple y la receta sigue como si no hubiera tope; la batería de recetas
+   (`cap_gate_problems`) exige estos tres pasos, en este orden, a las dos familias.
+3. **`acknowledge`** — contesta **al instante** por WhatsApp: «recibido, lo miro ahora». No es
    cortesía: el turno de IA que viene detrás tarda, y quien escribe a las 3 AM tiene que ver algo
    antes.
-3. **`find_customer`** / **`know_the_customer`** / **`resolve_customer`** — una cita se reserva
+4. **`find_customer`** / **`know_the_customer`** / **`resolve_customer`** — una cita se reserva
    contra un cliente REAL (`appointments.appointments.create` exige `customer_id`). Si el contacto
    no tiene ficha, la IA la **crea** en el turno; el `query` de detrás vuelve a leerla para que el
    id que se use sea el de la fila que hay en la base de datos, nunca uno que el modelo recuerde.
-4. **`booking_policy`** — un `kind: query` que lee `appointments.settings.get` **antes** de que se
+5. **`booking_policy`** — un `kind: query` que lee `appointments.settings.get` **antes** de que se
    le pida nada al modelo. Es lo único del run que sabe si la cita va a nacer `pending` o
    `confirmed`, y está aquí por eso: ver «La receta dice la verdad» más abajo.
-5. **`book_appointment`** — primero decide **qué le están pidiendo** (reservar, anular o mover) y
+6. **`book_appointment`** — primero decide **qué le están pidiendo** (reservar, anular o mover) y
    luego **mira y hace en el mismo turno**. Elige el servicio, **estima la duración** cuando el
    catálogo no la declara, pregunta la disponibilidad a las operaciones que contestan con la
    autoridad de la propia puerta de reserva —`appointments.availability.day_opening` (cuándo abre
@@ -64,11 +72,11 @@ más deja de ser una traducción.
    `.slots` (los huecos libres de verdad) y `.check` (confirmar el que se elija)— y con eso en la
    mano **reserva**. `policy: "auto"`: lo que el modelo llama **ocurre en el turno** (ADR-0283 D3,
    por la puerta de `Origin::Automation`). No hay bandeja y no hay nadie detrás.
-6. **`confirm_to_customer`** — le dice a la clienta **qué ha pasado**, por el mismo WhatsApp por el
+7. **`confirm_to_customer`** — le dice a la clienta **qué ha pasado**, por el mismo WhatsApp por el
    que escribió. Manda lo que el paso anterior escribió (`{{steps.book_appointment.text}}`), y por
    eso el prompt de ese paso termina diciéndole al modelo que **lo que responda se le manda a ella,
    palabra por palabra**: día, hora y profesional por su nombre, sin ids ni notas internas.
-7. **`any_slot_to_offer`** + **`offer_slots`** — si no se reservó nada porque hay que elegir, los
+8. **`any_slot_to_offer`** + **`offer_slots`** — si no se reservó nada porque hay que elegir, los
    huecos vuelven en `slots` y salen como una lista que la clienta **toca**. El id de cada hueco
    lleva inicio, profesional y servicio, así que su respuesta no tiene que repetir nada.
 
@@ -509,14 +517,16 @@ en los dos `*.requires.json` y en el `depends_on` de `module.json` es 2.3.47. Un
 Clientes cuyo SQL no nombra el país se trata como «no sabe el país», nunca como «seguramente vale»:
 lo vigila `home_country_match_problems`, que lee ese SQL en el árbol publicado como suelo.
 
-1. **`acknowledge`** — contesta al instante por WhatsApp, igual que en citas.
-2. **`book_table`** — decide qué le están pidiendo y, si es una mesa, **mira y reserva en el mismo
+1. **`plan`** / **`flag_cap_reached`** / **`within_plan`** — en el tope del mes no contesta ni
+   reserva y marca la conversación, igual que en citas (whatsapp_inbox#287).
+2. **`acknowledge`** — contesta al instante por WhatsApp, igual que en citas.
+3. **`book_table`** — decide qué le están pidiendo y, si es una mesa, **mira y reserva en el mismo
    turno**: los ajustes del restaurante (`reservations.settings.get`), los días cerrados
    (`reservations.blocked_dates.on_date`), los turnos de servicio de ese día
    (`reservations.timeslots.list`) y cuánto queda libre en cada uno
    (`reservations.slots.count_for`), y con eso reserva con `reservations.reservations.create` o
    apunta en la lista de espera con `reservations.waitlist.create`.
-3. **`confirm_to_customer`** — se lo manda por el mismo WhatsApp por el que escribió.
+4. **`confirm_to_customer`** — se lo manda por el mismo WhatsApp por el que escribió.
 
 Y delante de `book_table` va su **`booking_policy`**, igual que en citas: aquí lee
 `reservations.settings.get`, y el flag se llama `auto_confirm` y vuelve **booleano** (`true`/`false`,

@@ -59,6 +59,18 @@ neither declares a webhook receiver or network access to Meta.
 
 What reacts to a message — answering, booking — is the flow templates shipped in `flows/`.
 
+## The monthly allowance limits what is sent, never what comes in
+
+What the plan sells is the WhatsApp messages the business **sends**. So every message a customer
+writes is stored, also once this month's allowance is spent (whatsapp_inbox#287; before it, a live
+message at the cap vanished from the inbox with nothing saying why). At the cap the two booking
+replies read `whatsapp_inbox.usage.cap_reached` in their first step and stand down before the
+acknowledgement and the assistant — no turn of the assistant spent, nothing booked — and mark the
+conversation «Needs attention», so it rises to the hub's bell and someone answers from the phone.
+The inbox shows a warning while the cap lasts. If the meter cannot be read, the reply carries on as
+if there were no cap. The figures are the platform's and the hub copies them once a day, so the
+pause can start and end up to a day late.
+
 ## One `wa_message_id` is one message, whichever door it comes through
 
 Two commands write the same message row: the public `messages.ingest` and the internal

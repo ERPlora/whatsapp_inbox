@@ -6,7 +6,8 @@
       "whatsapp_inbox.conversations.get",
       "whatsapp_inbox.conversations.list",
       "whatsapp_inbox.messages.list",
-      "whatsapp_inbox.templates.list"
+      "whatsapp_inbox.templates.list",
+      "whatsapp_inbox.usage.cap_reached"
     ],
     "optional_queries": [
       "appointments.settings.get",

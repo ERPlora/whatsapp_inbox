@@ -75,6 +75,12 @@ declared here is a webhook receiver or network access to Meta.
 `(hub_id, wa_message_id)` sits under both ingestion doors. On a hub that carried duplicates from
 before, migration 005 kept the oldest copy of each and soft-deleted the rest.
 
+**"Customers write, but the automatic replies say nothing."** Look above the inbox list: if it says
+the plan's WhatsApp messages are used up, the replies are paused on purpose until next month or a
+bigger plan, and each customer who wrote is marked «Needs attention». Her message is in the inbox
+all the same: the allowance only limits what is sent (whatsapp_inbox#287). The hub copies the
+platform's figures once a day, so after upgrading the replies may stay paused for up to a day.
+
 **"The auto-reply never went out."** This module sends nothing, auto-replies included — that is a
 flow's notify step. The old auto-reply settings, which nothing ever sent, were retired (#127).
 
