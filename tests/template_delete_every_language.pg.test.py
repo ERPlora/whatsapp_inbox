@@ -17,6 +17,8 @@ the owner for something this screen did.
    nothing here (the `hub_id` gate, with two hubs).
 4. A sibling that was already deleted keeps its own `deleted_at`: the delete is not a rewrite of
    history.
+5. The command is not offered to the assistant: it deletes only here, and the delete in Meta is the
+   screen's door call — an assistant calling it would reproduce the bug through another door.
 
 Usage: tests/template_delete_every_language.pg.test.py   (exit 0 = green)
   Uses the `erplora-test-pg-5433` container by default (override: ERPLORA_TEST_PG_CONTAINER).
@@ -153,6 +155,13 @@ def check_every_language_goes(db):
 def main():
     if S.DELETE_COMMAND not in S.MANIFEST.get("commands", {}):
         print(f"FAIL: `{S.DELETE_COMMAND}` is not declared in module.json")
+        return 1
+    if "ai" in S.MANIFEST["commands"][S.DELETE_COMMAND]:
+        print(
+            f"FAIL: `{S.DELETE_COMMAND}` is exposed to the assistant (`ai`). The command only "
+            f"deletes HERE; the delete in Meta is the screen's door call (whatsapp_inbox#296), so "
+            f"an assistant calling it would hide a template Meta goes on sending — F31 again"
+        )
         return 1
     if not S.docker_available():
         print(f"SKIPPED: no Postgres in container {S.CONTAINER} (nothing was verified)")

@@ -10,7 +10,7 @@ import type { ListController, ListClient, ListParams, ListPage } from '@erplora/
 import esLocale from '../../../locales/es.json';
 import enLocale from '../../../locales/en.json';
 import { domainErrorText as declaredErrorText } from '../../lib/domain-error-text';
-import { doorRefusalText } from '../../lib/meta-door-refusal';
+import { deleteRefusalText, doorErrorCode, doorRefusalText } from '../../lib/meta-door-refusal';
 import { isNotifyPermissionDenied, openNotifyPermission } from '../../lib/notify-permission';
 import {
   META_TEMPLATE_STATES,
@@ -49,6 +49,9 @@ interface WhatsappTemplatesDoor {
    *  handle `register` needs (`header_handle`), with the kind Meta reads in the file's BYTES
    *  (`format`) — hub#2232, saas#2377. Absent on a hub from before that door: optional on purpose. */
   uploadHeaderSample?(file: Blob): Promise<{ header_handle?: unknown; format?: unknown }>;
+  /** Deletes the template of that NAME in Meta, every language of it at once — Meta deletes by
+   *  name (`DELETE /{waba-id}/message_templates?name=<n>`), and so does the door (HUB-F271). */
+  remove(name: string): Promise<void>;
 }
 
 interface ErploraClientLike extends ListClient {
@@ -286,6 +289,8 @@ export class ErpWhatsappInboxTemplates extends LitElement {
 
   /** The template whose delete is awaiting confirmation, in the page. */
   @state() pendingDelete: Template | null = null;
+  /** whatsapp_inbox#296: Meta refused the delete because the «Notifications» permission is off. */
+  @state() deleteNeedsPermission = false;
 
   /** What went wrong while putting Meta's verdicts up to date, in one sentence (whatsapp_inbox#134).
    *  `''` when the tab and Meta agree. It is NOT `formError`: nothing the owner did failed, and the
@@ -975,14 +980,40 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     }
   }
 
+  /** Whether Meta holds this template's NAME: the row, or any other language of it on screen, went
+   *  there. Meta deletes by name, so one copy in Meta is enough for the delete to reach it. */
+  private nameIsInMeta(row: Template, rows: readonly Partial<Template>[]): boolean {
+    return [row, ...rows.filter((r) => r.name === row.name)].some((r) => typeof r.meta_template_id === 'string' && r.meta_template_id.trim() !== '');
+  }
+
   /** Deleting asks first, in the page — never `window.confirm`, which a POS webview swallows. Same
-   *  in-page confirm panel `customers` uses for its tags. */
+   *  in-page confirm panel `customers` uses for its tags.
+   *
+   *  whatsapp_inbox#296 (F31): a template Meta has is deleted in Meta FIRST, through the door, and
+   *  only then here — the other order would hide here a template Meta goes on sending, with no row
+   *  left to retry from. Meta deletes by name, so it goes by name and takes every language here too
+   *  (`commands/template_delete.sql`). `template_not_found` means Meta has already dropped it: not
+   *  a refusal, the delete goes on. Any other «no» deletes nothing and says so. */
   private async confirmDelete() {
     const row = this.pendingDelete;
     if (!row) return;
     this.saving = true;
     this.pageError = '';
+    this.deleteNeedsPermission = false;
     try {
+      // Every row, not the page on screen: the other language of the name may be on another page.
+      const all = await erplora().queryAll<Template>('whatsapp_inbox.templates.list');
+      if (this.nameIsInMeta(row, all)) {
+        try {
+          await erplora().forModule('whatsapp_inbox').whatsappTemplates.remove(row.name);
+        } catch (e) {
+          if (doorErrorCode(e) !== 'template_not_found') {
+            this.pageError = deleteRefusalText(CATALOG, erplora().locale, e);
+            this.deleteNeedsPermission = isNotifyPermissionDenied(e);
+            return;
+          }
+        }
+      }
       await erplora().command('whatsapp_inbox.templates.delete', { template_id: row.id });
       if (this.editingId === row.id) {
         // The panel's refusal was about this template, which no longer exists.
@@ -1004,6 +1035,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     if (ev.detail.actionId === 'delete') {
       this.pendingDelete = row;
       this.pageError = '';
+      this.deleteNeedsPermission = false;
     }
   }
 
@@ -1170,6 +1202,9 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     const t = (k: string): string => erplora().t(CATALOG, k);
     return html`<section class="panel">
       <p>${t('ui.confirmDeleteTemplate')} <strong>${this.pendingDelete.name}</strong></p>
+      ${this.nameIsInMeta(this.pendingDelete, this.ctrl?.rows ?? [])
+        ? html`<p data-testid="whatsapp-templates-delete-in-meta">${t('ui.confirmDeleteTemplateInMeta')}</p>`
+        : nothing}
       <ion-button data-testid="whatsapp-templates-delete-confirm" size="small" class="tone-danger" ?disabled=${this.saving}
         @click=${() => this.confirmDelete()}>${t('ui.delete')}</ion-button>
       <ion-button data-testid="whatsapp-templates-delete-cancel" size="small" fill="clear" @click=${() => (this.pendingDelete = null)}>${t('ui.cancel')}</ion-button>
@@ -1181,7 +1216,11 @@ export class ErpWhatsappInboxTemplates extends LitElement {
     const locked = this.managedInMeta;
     return html`<div class="page">
         ${this.pageError
-          ? html`<p class="err" data-testid="whatsapp-templates-error">${this.pageError}</p>`
+          ? html`<p class="err" data-testid="whatsapp-templates-error">${this.pageError}</p>
+              ${this.deleteNeedsPermission
+                ? html`<ion-button data-testid="whatsapp-templates-delete-open-permissions" size="small" fill="outline"
+                    @click=${() => openNotifyPermission()}>${t('ui.notifyPermissionOpen')}</ion-button>`
+                : nothing}`
           : nothing}
         ${this.ctrl?.error && !dataTableShowsLoadError()
           ? html`<p class="err" data-testid="whatsapp-templates-load-error">${this.ctrl.error}</p>`
