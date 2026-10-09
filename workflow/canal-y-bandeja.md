@@ -148,7 +148,7 @@ Implicados: REC_WA_CITA-F09, REC_WA_MESA-F09, HUB_SHELL-F61, HUB_SHELL-F64
 QA: ninguno
 
 ### WHATSAPP_INBOX-F10 Borrar los datos de un número sin ficha
-Estado: parcial — el módulo borra lo suyo, pero el historial interno del hub conserva el texto 90 días (hub#2474) y la plataforma guarda los mensajes no recogidos (saas#1930)
+Estado: parcial — la plataforma guarda los mensajes no recogidos (saas#1930)
 Vertical: comun
 Actor: administrador
 Pantalla: Bandeja de entrada
@@ -158,13 +158,13 @@ Pasos:
 3. Leer «¿Borrar los datos de este número?» con el número y el aviso de que no se puede deshacer; pulsar **Borrar datos** (o **Cancelar**).
 4. El hilo se cierra, la lista se recarga sin él y aparece «Se han borrado los datos de este número.».
 Entra: la conversación elegida.
-Sale: mensajes, nombre, número, huecos ofrecidos y solicitudes antiguas vaciados; conversación cerrada y borrada. Si vuelve a escribir, empieza una conversación nueva.
+Sale: mensajes, nombre, número, huecos ofrecidos y solicitudes antiguas vaciados; conversación cerrada y borrada. Si vuelve a escribir, empieza una conversación nueva. El módulo publica `whatsapp_inbox.conversation.anonymized` con el identificador de la conversación (nunca el número) y el hub vacía las copias de esos mensajes en su historial (HUB-F251).
 Si falla: «No se pudieron borrar los datos de este número» (o el motivo) en el panel; el hilo sigue abierto.
-Implicados: HUB-F251
+Implicados: HUB-F249, HUB-F251
 QA: WA-06 (discrepa), L-11
 
 ### WHATSAPP_INBOX-F11 Borrar los datos de una clienta desde su ficha
-Estado: parcial — mismo resto en el hub que F10 (hub#2467, hub#2477); solo alcanza conversaciones unidas a la ficha
+Estado: parcial — solo alcanza conversaciones unidas a la ficha; la plataforma guarda los mensajes no recogidos (saas#1930)
 Vertical: comun
 Actor: sistema
 Pantalla: ninguna
@@ -173,7 +173,7 @@ Pasos:
 2. Todas las conversaciones unidas a esa ficha quedan vaciadas y cerradas como en F10, sin más pasos.
 3. Eliminar una ficha sin borrar sus datos no toca las conversaciones.
 Entra: el aviso de ficha anonimizada (Clientes).
-Sale: lo mismo que F10, para cada conversación de la ficha.
+Sale: lo mismo que F10, para cada conversación de la ficha. El aviso aquí es el de Clientes: el hub lo sigue por las conversaciones de la ficha hasta sus mensajes y vacía sus copias en su historial (HUB-F249).
 Si falla: el aviso se reintenta hasta 8 veces (unos 4 minutos) y, si sigue fallando, queda en «Eventos caídos» del hub con los datos dentro hasta que alguien lo reenvía o lo cierra; repetirlo no cambia nada.
 Implicados: CUSTOMERS-F16, HUB-F249, HUB-F250, SAAS_WHATSAPP_INBOX-F21
 QA: WA-06 (discrepa), L-11

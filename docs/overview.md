@@ -37,6 +37,7 @@ loose reference resolved through public queries, never by reading another module
 |---|---|
 | `whatsapp_inbox.message.received` | an inbound message is ingested |
 | `whatsapp_inbox.conversation.assigned` | a conversation is assigned |
+| `whatsapp_inbox.conversation.anonymized` | «Erase this number's data» erased a thread (`conversation_id` only, never the number) |
 | `whatsapp_inbox.template.created` / `.updated` / `.deleted` | templates change |
 
 **Events it listens to** — one, since [#27](https://github.com/ERPlora/whatsapp_inbox/pull/27):
@@ -65,6 +66,15 @@ the public command `whatsapp_inbox.conversations.erase` (`whatsapp_inbox.manage_
 whatsapp_inbox#263). It erases the same columns as the erasure from the sheet, in this hub only, and
 answers `whatsapp_inbox.conversation_not_found` for a thread id this hub does not have. It is not
 offered to the assistant: an irreversible erasure is pressed by a person.
+
+Both doors also reach the hub's own history, where every inbound message is kept for up to 90 days
+(the core's copy with the number and the text, this module's `message.received` and what reacted to
+it). The erasure from the sheet needs nothing from this module: the hub follows `customer.anonymized`
+into the tables of the apps that listen to it — the thread of that customer, then its messages
+(hub#2477). The erasure of a number has no sheet to follow, so the command emits
+`whatsapp_inbox.conversation.anonymized` with the `conversation_id`, and the hub empties the history
+of that thread's messages the same way (hub#2474). A hub older than that ignores the event's reach
+and only empties what names the thread id itself.
 
 Both doors also erase what the retired «Requests» tray had extracted from those threads
 (whatsapp_inbox#264): the tray's table was set aside as `_deprecated_whatsapp_inbox_request`, not

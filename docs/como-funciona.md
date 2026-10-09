@@ -216,6 +216,7 @@ permisos**: el dueño concede los permisos, la revisa y la activa.
 |---|---|
 | `whatsapp_inbox.message.received` | Entra un mensaje de un cliente |
 | `whatsapp_inbox.conversation.assigned` | Se asigna la conversación a una persona |
+| `whatsapp_inbox.conversation.anonymized` | Se borran los datos de un número (solo lleva `conversation_id`) |
 | `whatsapp_inbox.template.created` · `.updated` · `.deleted` | Cambian las plantillas |
 
 Y los que el módulo **escucha**: `hub.whatsapp.message_received` (del núcleo del hub) y

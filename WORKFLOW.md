@@ -253,7 +253,7 @@ una plantilla (todas mandan texto libre dentro de las 24 h).
 | Ficha vinculada, persona asignada | referencia sin copia del dato | Clientes / núcleo | no se copian aquí |
 | Ficha de cliente (nombre, teléfono, origen WhatsApp) | Clientes | Clientes | su «Borrar datos» (avisa a este módulo, F11) |
 | Cita o reserva creada (nombre, teléfono, notas internas) | Citas / Reservas | Citas / Reservas | se vacían: Citas y Reservas escuchan el borrado de datos de la ficha y vacían nombre, teléfono y notas (APPOINTMENTS-F24, RESERVATIONS-F22; en Reservas, también lo apuntado a mano); queda la etiqueta de los huecos apartados de la bandeja retirada (appointments#314) |
-| Texto de los mensajes en el historial de automatizaciones y la cola de salida | hub | hub | el hub vacía lo terminado que nombra la ficha (hub#2467), pero no las copias de los mensajes, que no llevan la ficha (hub#2474, hub#2477): 90 días |
+| Texto de los mensajes en el historial de automatizaciones y la cola de salida | hub | hub | F10/F11: el hub vacía lo terminado de esas conversaciones, también las copias de cada mensaje (HUB-F249, HUB-F251) |
 | Mensajes aparcados, token de Meta, adjuntos en tránsito | SaaS | SaaS | mensajes sin recoger, sin caducidad (saas#1930) |
 | Texto que lee el asistente al contestar | proveedor de IA por el SaaS | SaaS | fuera de este módulo (L-13) |
 | Adjunto descargado en la bandeja | memoria del navegador | — | se suelta al cerrar el hilo |
