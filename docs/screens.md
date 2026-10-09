@@ -42,6 +42,16 @@ The **Open** action of a row loads the conversation (`whatsapp_inbox.conversatio
 messages (`whatsapp_inbox.messages.list`, oldest first) into a panel above the list. Requires
 `whatsapp_inbox.view_conversation`, the same as the list — an employee can read a thread.
 
+Opening a thread **leaves it read** (#290), like WhatsApp Web or Square Messages: the screen sends
+`whatsapp_inbox.conversations.mark_read` (same permission as reading) and the list's **Unread**
+goes back to none. A message that arrives while the thread is open is read too. If marking fails,
+the thread still shows and the count stays as it was.
+
+**Searching by phone** (#291). The search box and the **Phone** column filter compare a phone as a
+number, written any way: `600 111 222`, `+34 600 111 222` or `0034 600-111-222` find the
+conversation of `+34600111222`, and a part of the number (`600 555`) finds it too. A search with a
+letter in it (`Marta 2`) is a text search on the contact.
+
 Messages that carry no text (a location, a button reply) show the **kind** Meta reported instead of
 an empty bubble.
 
