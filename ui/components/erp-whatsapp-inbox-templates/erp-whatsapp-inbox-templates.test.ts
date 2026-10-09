@@ -35,6 +35,12 @@ const listados: number[] = [];
 /** What the door answers when it is READ. A test that wants a refusal replaces it with a thrower. */
 let respondeListado: () => Promise<Record<string, unknown>>;
 
+/** The names the door was asked to delete in Meta, call by call (whatsapp_inbox#296). */
+const borradosEnMeta: string[] = [];
+
+/** What the door answers to a delete. A test that wants a refusal replaces it with a thrower. */
+let respondeBorrado: (name: string) => Promise<void>;
+
 /** Every template row this hub holds, as `queries/templates_list.sql` PROJECTS them: `meta_status`
  *  already lowercased (or `not_sent` when there is no `meta_template_id`) and `meta_rejected_reason`
  *  never null. The refresh reads them all, not just the page on screen. */
@@ -54,6 +60,8 @@ beforeEach(() => {
   pasos.length = 0;
   puerta.length = 0;
   listados.length = 0;
+  borradosEnMeta.length = 0;
+  respondeBorrado = async () => undefined;
   respondePuerta = async () => ({ status: 'PENDING', meta_id: '77', rejected_reason: '' });
   // Meta holding NOTHING is the quiet default: a tab that syncs against an empty answer writes
   // nothing, so every battery written before whatsapp_inbox#134 goes on measuring what it measured.
@@ -78,6 +86,11 @@ beforeEach(() => {
         list: async () => {
           listados.push(listados.length + 1);
           return respondeListado();
+        },
+        remove: async (name: string) => {
+          borradosEnMeta.push(name);
+          pasos.push('door.remove');
+          return respondeBorrado(name);
         },
       },
     }),
@@ -2412,5 +2425,152 @@ describe('una imagen, un vídeo o un documento en la cabecera desde el panel (wh
     await el.updateComplete;
     expect(q(el, 'whatsapp-templates-submit'), 'guardar la registraría en Meta sin la imagen').toBeNull();
     expect(q(el, 'whatsapp-templates-managed-in-meta')).toBeTruthy();
+  });
+});
+
+// whatsapp_inbox#296 — WHATSAPP_INBOX-F31. Deleting a template only hid the row here: no DELETE ever
+// left for the platform (seen in the bench: fakecloud 0 DELETE), so Meta kept it live — sendable by
+// any flow, counting against the business's template quota — while the owner believed it gone. The
+// hub has had the door since HUB-F271 (`whatsappTemplates.remove(name)`); this screen never used it.
+describe('deleting a template deletes it in Meta too (whatsapp_inbox#296)', () => {
+  const EN_META = {
+    id: 't1', name: 'aviso_turno', language: 'es', category: 'UTILITY', header: '',
+    body: 'Tu turno es el {{1}}', footer: '', variables: '["fecha"]', header_example: '',
+    meta_template_id: '77', meta_status: 'approved', meta_rejected_reason: '', is_active: 1,
+  };
+  const SOLO_AQUI = { ...EN_META, id: 't2', name: 'borrador_local', meta_template_id: '', meta_status: 'not_sent' };
+
+  type Pantalla = HTMLElement & {
+    shadowRoot: ShadowRoot;
+    pendingDelete: Record<string, unknown> | null;
+    pageError: string;
+    updateComplete: Promise<unknown>;
+  };
+
+  async function pedirBorrado(row: Record<string, unknown>) {
+    const el = (await montar()) as Pantalla;
+    pasos.length = 0;
+    comandos.length = 0;
+    tabla(el)!.dispatchEvent(
+      new CustomEvent('rowAction', { detail: { actionId: 'delete', row }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    return el;
+  }
+
+  async function confirmar(el: Pantalla) {
+    byTestId(el, 'whatsapp-templates-delete-confirm')!.click();
+    for (let i = 0; i < 3; i += 1) {
+      await new Promise((r) => setTimeout(r, 0));
+      await el.updateComplete;
+    }
+  }
+
+  const borradosAqui = () => comandos.filter((c) => c.name === 'whatsapp_inbox.templates.delete');
+  const orden = () => pasos.filter((p) => p === 'door.remove' || p === 'whatsapp_inbox.templates.delete');
+
+  it('a template Meta has asks Meta FIRST, by name, and only then deletes it here', async () => {
+    filas = [EN_META];
+    const el = await pedirBorrado(EN_META);
+    await confirmar(el);
+
+    expect(borradosEnMeta, 'the delete never reached Meta').toEqual(['aviso_turno']);
+    expect(orden(), 'deleting here first loses the row the retry needs if Meta says no').toEqual([
+      'door.remove',
+      'whatsapp_inbox.templates.delete',
+    ]);
+    expect(borradosAqui()[0].payload).toEqual({ template_id: 't1' });
+    expect(el.pendingDelete).toBeNull();
+    expect(el.pageError).toBe('');
+  });
+
+  it('Meta saying no deletes NOTHING here and says, in words, that it is still there', async () => {
+    filas = [EN_META];
+    respondeBorrado = async () => {
+      throw refusal('meta_unreachable');
+    };
+    const el = await pedirBorrado(EN_META);
+    await confirmar(el);
+
+    expect(borradosAqui(), 'hidden here while Meta still sends it').toHaveLength(0);
+    expect(el.pageError, 'the refusal is swallowed').toBeTruthy();
+    expect(el.pageError, 'a bare code is not a sentence').not.toBe('meta_unreachable');
+    expect(byTestId(el, 'whatsapp-templates-error')?.textContent ?? '').toContain(el.pageError);
+    expect(byTestId(el, 'whatsapp-templates-delete-open-permissions'), 'a network failure is not a permission').toBeNull();
+  });
+
+  it('Meta no longer having it (`template_not_found`) is not a refusal: it is deleted here too', async () => {
+    filas = [EN_META];
+    respondeBorrado = async () => {
+      throw refusal('template_not_found');
+    };
+    const el = await pedirBorrado(EN_META);
+    await confirmar(el);
+
+    expect(borradosAqui(), 'a template Meta already dropped can never be deleted').toHaveLength(1);
+    expect(el.pageError).toBe('');
+  });
+
+  it('without the «Notifications» permission it says so and takes you to Settings → Permissions', async () => {
+    filas = [EN_META];
+    respondeBorrado = async () => {
+      throw refusal('capability_denied');
+    };
+    const push = vi.spyOn(window.history, 'pushState');
+    const el = await pedirBorrado(EN_META);
+    await confirmar(el);
+
+    expect(borradosAqui()).toHaveLength(0);
+    expect(el.pageError).toBeTruthy();
+    const open = byTestId(el, 'whatsapp-templates-delete-open-permissions');
+    expect(open, 'says what is missing but not where it is granted').not.toBeNull();
+    open!.click();
+    expect(push).toHaveBeenCalledWith({}, '', '/settings#permissions');
+    push.mockRestore();
+  });
+
+  it('a template Meta never saw is deleted only here: there is nothing to ask Meta', async () => {
+    filas = [SOLO_AQUI];
+    const el = await pedirBorrado(SOLO_AQUI);
+    await confirmar(el);
+
+    expect(borradosEnMeta).toHaveLength(0);
+    expect(borradosAqui()).toHaveLength(1);
+  });
+
+  it('a draft whose OTHER language went to Meta still asks Meta: Meta deletes by name', async () => {
+    const borradorEn = { ...SOLO_AQUI, id: 't3', name: 'aviso_turno', language: 'en' };
+    filas = [EN_META, borradorEn];
+    const el = await pedirBorrado(borradorEn);
+    await confirmar(el);
+
+    expect(borradosEnMeta).toEqual(['aviso_turno']);
+  });
+
+  it('the list failing to load deletes nothing anywhere', async () => {
+    filas = [EN_META];
+    const el = await pedirBorrado(EN_META);
+    const base = (globalThis as Record<string, unknown>).erplora as Record<string, unknown>;
+    base.queryAll = async () => {
+      throw refusal('cloud_unreachable');
+    };
+    await confirmar(el);
+
+    expect(borradosEnMeta).toHaveLength(0);
+    expect(borradosAqui()).toHaveLength(0);
+    expect(el.pageError).toBeTruthy();
+  });
+
+  it('the confirmation warns it goes in Meta too — every language, and the name is locked 30 days', async () => {
+    filas = [EN_META];
+    const el = await pedirBorrado(EN_META);
+    expect(el.shadowRoot.textContent).toContain('ui.confirmDeleteTemplateInMeta');
+  });
+
+  it('…and does not, for a template Meta never saw', async () => {
+    filas = [SOLO_AQUI];
+    const el = await pedirBorrado(SOLO_AQUI);
+    expect(el.shadowRoot.textContent).toContain('ui.confirmDeleteTemplate');
+    expect(el.shadowRoot.textContent).not.toContain('ui.confirmDeleteTemplateInMeta');
   });
 });

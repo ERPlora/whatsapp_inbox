@@ -215,7 +215,9 @@ def check_deleted_here_stays_deleted(db, base):
     if problems:
         return problems
     got, _ = listed(db, base)
-    if [r.split("|")[0] for r in got or []] != ["i-1"]:
+    # Deleting takes every language of the name (whatsapp_inbox#296: Meta deletes by name), so
+    # `i-1` — the same name in `es` — goes with `i-en`. Nothing of that name may come back.
+    if [r.split("|")[0] for r in got or []] != []:
         return [
             f"a template the owner deleted here came back on the next import, got {got!r}"
         ]

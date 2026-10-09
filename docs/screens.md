@@ -137,6 +137,16 @@ rows per page are kept. A refused create and an edit leave the list on the page 
 
 > Editing a template resets its Meta status to `pending`: Meta re-approves content.
 
+> **Deleting a template deletes it at Meta too (#296).** The row's **Delete** asks first, in the
+> page; when Meta holds the name (that row or another language of it), the question also says it goes
+> in Meta, in every language, cannot be undone and the name cannot be reused for 30 days. Confirming
+> asks Meta FIRST, through the hub's door (`whatsappTemplates.remove(name)`) — Meta deletes by name,
+> every language at once — and only then deletes here every language of that name. If Meta says no,
+> nothing is deleted here and a sentence above the list says the template is still in Meta and in
+> the list, and what to do (without the «Notifications» permission it says so, with **Open
+> Permissions**); if Meta no longer has it (`template_not_found`), it is deleted here. One Meta never
+> saw is deleted only here. The assistant cannot delete templates: the command deletes only here.
+
 > Meta's verdicts are refreshed once, when the tab opens — never on a timer. Meta names a template
 > by **name + language**. A template this hub sent to Meta that Meta no longer lists (deleted in
 > WhatsApp Manager) is marked `deleted` and kept, so the owner's text is not lost; only a fresh

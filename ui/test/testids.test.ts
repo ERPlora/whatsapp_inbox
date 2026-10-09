@@ -162,6 +162,9 @@ const COVERED: Record<
       'whatsapp-templates-category',
       'whatsapp-templates-delete-cancel',
       'whatsapp-templates-delete-confirm',
+      // The delete went to Meta: it says so, and its refusal for want of «Notifications» (whatsapp_inbox#296).
+      'whatsapp-templates-delete-in-meta',
+      'whatsapp-templates-delete-open-permissions',
       'whatsapp-templates-error',
       'whatsapp-templates-example',
       'whatsapp-templates-examples',

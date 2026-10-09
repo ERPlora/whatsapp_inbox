@@ -253,7 +253,22 @@
     "headerSampleTooLarge": "Ese archivo pasa de {max} MB, lo máximo que admite Meta para esta cabecera. Elige uno más pequeño.",
     "headerSampleKindMismatch": "El archivo que has elegido no es del tipo de cabecera seleccionado. Elige el tipo que corresponde al archivo, u otro archivo, y vuelve a guardar.",
     "headerNotForAuthentication": "Las plantillas de autenticación no pueden llevar imagen, vídeo ni documento en la cabecera. Elige una cabecera de texto u otra categoría.",
-    "headerMediaNeedsUpdate": "Poner una imagen, un vídeo o un documento en la cabecera necesita una versión más nueva de ERPlora en este hub. Llega con la próxima actualización."
+    "headerMediaNeedsUpdate": "Poner una imagen, un vídeo o un documento en la cabecera necesita una versión más nueva de ERPlora en este hub. Llega con la próxima actualización.",
+    "confirmDeleteTemplateInMeta": "Se borra también en Meta, en todos sus idiomas, y no se puede deshacer: Meta no deja usar este nombre otra vez hasta pasados 30 días.",
+    "deleteRefusalUnknown": "Meta no ha borrado la plantilla, y el motivo es uno que esta pantalla aún no conoce ({code}). Sigue en Meta y en esta lista: busca ese código en WhatsApp Manager o envíaselo a soporte.",
+    "deleteRefusalNoCode": "Meta no ha borrado la plantilla. Sigue en Meta y en esta lista: prueba a borrarla otra vez dentro de un rato.",
+    "deleteRefusal": {
+      "no_whatsapp_number": "Meta no ha borrado la plantilla: este negocio no tiene ningún número de WhatsApp conectado. Sigue en esta lista; conecta el número en Ajustes y vuelve a borrarla.",
+      "meta_rate_limited": "Meta está recibiendo demasiadas peticiones ahora mismo y no ha borrado la plantilla. Sigue en Meta y en esta lista: vuelve a probar dentro de unos minutos.",
+      "meta_permission_denied": "Meta no nos ha dejado borrar la plantilla: la conexión de WhatsApp no tiene permiso para gestionar plantillas. Sigue en Meta y en esta lista; vuelve a conectar WhatsApp en Ajustes o bórrala en WhatsApp Manager.",
+      "meta_unreachable": "Meta no ha contestado y la plantilla no se ha borrado. Sigue en Meta y en esta lista: vuelve a probar dentro de un momento.",
+      "meta_template_failed": "Meta se ha negado a borrar la plantilla. Sigue en Meta y en esta lista: bórrala en WhatsApp Manager o vuelve a probar más tarde.",
+      "cloud_rejected": "ERPlora no ha aceptado el borrado y la plantilla no se ha borrado en Meta. Sigue en esta lista: vuelve a probar y, si se repite, avisa a soporte.",
+      "cloud_unreachable": "Este dispositivo no llega a ERPlora ahora mismo, así que la plantilla no se ha borrado en Meta. Sigue en esta lista: revisa la conexión y vuelve a probar.",
+      "cloud_unreadable": "ERPlora ha contestado algo que esta pantalla no sabe leer, así que no sabemos si Meta ha borrado la plantilla. Sigue en esta lista: vuelve a probar dentro de un momento.",
+      "hub_not_enrolled": "Este negocio aún no está vinculado a ERPlora, así que la plantilla no se puede borrar en Meta. Sigue en esta lista: termina de vincularlo en Ajustes y vuelve a probar.",
+      "capability_denied": "No podemos borrar la plantilla en Meta: la Bandeja de WhatsApp necesita el permiso «Notificaciones», y está apagado. Sigue en Meta y en esta lista; enciende el permiso y vuelve a borrarla."
+    }
   },
   "errors": {
     "whatsapp_inbox.conversation_not_found": "Esa conversación no existe en este negocio.",

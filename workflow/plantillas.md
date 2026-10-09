@@ -70,16 +70,18 @@ Implicados: HUB-F269, HUB-F270, SAAS_WHATSAPP_INBOX-F17, SAAS_WHATSAPP_INBOX-F18
 QA: ninguno
 
 ### WHATSAPP_INBOX-F31 Borrar una plantilla
-Estado: parcial — borrar aquí no la borra en Meta (el hub ya tiene la puerta para hacerlo y el módulo no la usa)
+Estado: hecho
 Vertical: comun
 Actor: administrador
 Pantalla: Plantillas de Meta
 Pasos:
 1. Pulsar **Borrar** en la fila.
-2. Leer «¿Borrar esta plantilla?» con su nombre y pulsar **Borrar** (o **Cancelar**).
-3. La plantilla desaparece de la lista y no se vuelve a traer de Meta.
-Entra: la plantilla elegida.
-Sale: plantilla borrada aquí (se conserva marcada como borrada); aviso público de plantilla borrada.
-Si falla: «No se pudo borrar la plantilla» (o el motivo) encima de la lista.
+2. Leer «¿Borrar esta plantilla?» con su nombre; si Meta la tiene (esa fila u otro idioma del mismo nombre), también «Se borra también en Meta, en todos sus idiomas, y no se puede deshacer: Meta no deja usar este nombre otra vez hasta pasados 30 días.». Pulsar **Borrar** (o **Cancelar**).
+3. Si Meta la tiene, se borra primero en Meta por su nombre, todos los idiomas a la vez; después aquí, también todos los idiomas de ese nombre. Una que Meta nunca vio se borra solo aquí.
+4. La plantilla desaparece de la lista y no se vuelve a traer de Meta.
+Entra: la plantilla elegida; todas las plantillas del negocio (para saber si otro idioma del mismo nombre está en Meta).
+Sale: la plantilla borrada en Meta y aquí, en todos sus idiomas (aquí se conserva marcada como borrada); aviso público de plantilla borrada. El asistente no puede borrar plantillas: la orden solo borra aquí.
+Si falla: si Meta no la borra, aquí no se borra nada y encima de la lista se dice que sigue en Meta y en la lista y qué hacer, según el motivo («Meta no ha contestado y la plantilla no se ha borrado. Sigue en Meta y en esta lista: vuelve a probar dentro de un momento.», sin número conectado, demasiadas peticiones, sin permiso de Meta, sin conexión con ERPlora…; un motivo desconocido sale con su código); sin el permiso **Notificaciones** del hub lo dice y ofrece **Abrir Permisos** (**Ajustes → Permisos**). Si Meta ya no la tiene, se borra aquí sin más. Si no se pueden leer las plantillas, no se borra nada: «No se pudo borrar la plantilla». Límite (hub#2731): con Meta caído o rechazando, el hub aplana hoy el motivo a `cloud_rejected` y la frase que sale es «ERPlora no ha aceptado el borrado y la plantilla no se ha borrado en Meta…» en vez de la de Meta; la plantilla sigue igual de a salvo. Si el registro de erplora.com no tiene la plantilla aunque Meta sí, se da por borrada allí y se borra solo aquí (saas#2672).
 Implicados: HUB-F271
+Pendiente de enlazar: hub — HUB_SHELL-F167 (conceder un permiso a una app): adonde lleva **Abrir Permisos**
 QA: ninguno

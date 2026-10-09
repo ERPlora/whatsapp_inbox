@@ -5123,7 +5123,22 @@ var es_default = {
     headerSampleTooLarge: "Ese archivo pasa de {max} MB, lo m\xE1ximo que admite Meta para esta cabecera. Elige uno m\xE1s peque\xF1o.",
     headerSampleKindMismatch: "El archivo que has elegido no es del tipo de cabecera seleccionado. Elige el tipo que corresponde al archivo, u otro archivo, y vuelve a guardar.",
     headerNotForAuthentication: "Las plantillas de autenticaci\xF3n no pueden llevar imagen, v\xEDdeo ni documento en la cabecera. Elige una cabecera de texto u otra categor\xEDa.",
-    headerMediaNeedsUpdate: "Poner una imagen, un v\xEDdeo o un documento en la cabecera necesita una versi\xF3n m\xE1s nueva de ERPlora en este hub. Llega con la pr\xF3xima actualizaci\xF3n."
+    headerMediaNeedsUpdate: "Poner una imagen, un v\xEDdeo o un documento en la cabecera necesita una versi\xF3n m\xE1s nueva de ERPlora en este hub. Llega con la pr\xF3xima actualizaci\xF3n.",
+    confirmDeleteTemplateInMeta: "Se borra tambi\xE9n en Meta, en todos sus idiomas, y no se puede deshacer: Meta no deja usar este nombre otra vez hasta pasados 30 d\xEDas.",
+    deleteRefusalUnknown: "Meta no ha borrado la plantilla, y el motivo es uno que esta pantalla a\xFAn no conoce ({code}). Sigue en Meta y en esta lista: busca ese c\xF3digo en WhatsApp Manager o env\xEDaselo a soporte.",
+    deleteRefusalNoCode: "Meta no ha borrado la plantilla. Sigue en Meta y en esta lista: prueba a borrarla otra vez dentro de un rato.",
+    deleteRefusal: {
+      no_whatsapp_number: "Meta no ha borrado la plantilla: este negocio no tiene ning\xFAn n\xFAmero de WhatsApp conectado. Sigue en esta lista; conecta el n\xFAmero en Ajustes y vuelve a borrarla.",
+      meta_rate_limited: "Meta est\xE1 recibiendo demasiadas peticiones ahora mismo y no ha borrado la plantilla. Sigue en Meta y en esta lista: vuelve a probar dentro de unos minutos.",
+      meta_permission_denied: "Meta no nos ha dejado borrar la plantilla: la conexi\xF3n de WhatsApp no tiene permiso para gestionar plantillas. Sigue en Meta y en esta lista; vuelve a conectar WhatsApp en Ajustes o b\xF3rrala en WhatsApp Manager.",
+      meta_unreachable: "Meta no ha contestado y la plantilla no se ha borrado. Sigue en Meta y en esta lista: vuelve a probar dentro de un momento.",
+      meta_template_failed: "Meta se ha negado a borrar la plantilla. Sigue en Meta y en esta lista: b\xF3rrala en WhatsApp Manager o vuelve a probar m\xE1s tarde.",
+      cloud_rejected: "ERPlora no ha aceptado el borrado y la plantilla no se ha borrado en Meta. Sigue en esta lista: vuelve a probar y, si se repite, avisa a soporte.",
+      cloud_unreachable: "Este dispositivo no llega a ERPlora ahora mismo, as\xED que la plantilla no se ha borrado en Meta. Sigue en esta lista: revisa la conexi\xF3n y vuelve a probar.",
+      cloud_unreadable: "ERPlora ha contestado algo que esta pantalla no sabe leer, as\xED que no sabemos si Meta ha borrado la plantilla. Sigue en esta lista: vuelve a probar dentro de un momento.",
+      hub_not_enrolled: "Este negocio a\xFAn no est\xE1 vinculado a ERPlora, as\xED que la plantilla no se puede borrar en Meta. Sigue en esta lista: termina de vincularlo en Ajustes y vuelve a probar.",
+      capability_denied: "No podemos borrar la plantilla en Meta: la Bandeja de WhatsApp necesita el permiso \xABNotificaciones\xBB, y est\xE1 apagado. Sigue en Meta y en esta lista; enciende el permiso y vuelve a borrarla."
+    }
   },
   errors: {
     "whatsapp_inbox.conversation_not_found": "Esa conversaci\xF3n no existe en este negocio.",
@@ -5387,7 +5402,22 @@ var en_default = {
     headerSampleTooLarge: "That file is larger than {max} MB, the most Meta accepts for this header. Choose a smaller one.",
     headerSampleKindMismatch: "The file you chose is not the kind of header selected. Choose the kind that matches the file, or another file, and save again.",
     headerNotForAuthentication: "Authentication templates cannot have an image, video or document header. Choose a text header or another category.",
-    headerMediaNeedsUpdate: "An image, video or document in the header needs a newer version of ERPlora on this hub. It arrives with the next update."
+    headerMediaNeedsUpdate: "An image, video or document in the header needs a newer version of ERPlora on this hub. It arrives with the next update.",
+    confirmDeleteTemplateInMeta: "It is deleted in Meta too, in every language, and it cannot be undone: Meta does not let you use this name again for 30 days.",
+    deleteRefusalUnknown: "Meta has not deleted the template, and the reason is one this screen does not know yet ({code}). It is still in Meta and in this list: look that code up in WhatsApp Manager or send it to support.",
+    deleteRefusalNoCode: "Meta has not deleted the template. It is still in Meta and in this list: try deleting it again in a moment.",
+    deleteRefusal: {
+      no_whatsapp_number: "Meta has not deleted the template: this business has no WhatsApp number connected. It is still in this list; connect the number in Settings and delete it again.",
+      meta_rate_limited: "Meta is receiving too many requests right now and has not deleted the template. It is still in Meta and in this list: try again in a few minutes.",
+      meta_permission_denied: "Meta has not let us delete the template: the WhatsApp connection has no permission to manage templates. It is still in Meta and in this list; reconnect WhatsApp in Settings, or delete it in WhatsApp Manager.",
+      meta_unreachable: "Meta did not answer and the template has not been deleted. It is still in Meta and in this list: try again in a moment.",
+      meta_template_failed: "Meta refused to delete the template. It is still in Meta and in this list: delete it in WhatsApp Manager, or try again later.",
+      cloud_rejected: "ERPlora did not accept the delete and the template has not been deleted in Meta. It is still in this list: try again, and if it keeps happening contact support.",
+      cloud_unreachable: "This device cannot reach ERPlora right now, so the template has not been deleted in Meta. It is still in this list: check the connection and try again.",
+      cloud_unreadable: "ERPlora answered something this screen could not read, so we cannot tell whether Meta deleted the template. It is still in this list: try again in a moment.",
+      hub_not_enrolled: "This business is not linked to ERPlora yet, so the template cannot be deleted in Meta. It is still in this list: finish linking it in Settings and try again.",
+      capability_denied: "We cannot delete the template in Meta: WhatsApp Inbox needs the \xABNotifications\xBB permission, and it is turned off. It is still in Meta and in this list; turn the permission on and delete it again."
+    }
   },
   errors: {
     "whatsapp_inbox.conversation_not_found": "That conversation does not exist in this business.",
@@ -5524,9 +5554,9 @@ function doorErrorCode(e5) {
   const code = e5?.code;
   return typeof code === "string" ? code : "";
 }
-function textFor2(catalog, lang, key) {
+function textFor2(catalog, lang, key, bucketKey = "doorRefusal") {
   const ui = catalog[lang]?.ui;
-  const bucket = ui?.doorRefusal;
+  const bucket = ui?.[bucketKey];
   const text3 = key ? bucket?.[key] : void 0;
   return typeof text3 === "string" && text3.trim() ? text3 : "";
 }
@@ -5541,6 +5571,13 @@ function doorRefusalText(catalog, locale, e5) {
   const declared = textFor2(catalog, locale, code) || textFor2(catalog, SOURCE_LANG2, code);
   if (declared) return declared;
   const key = code ? "doorRefusalUnknown" : "doorRefusalNoCode";
+  return unknownText(catalog, locale, key, code) || unknownText(catalog, SOURCE_LANG2, key, code) || code;
+}
+function deleteRefusalText(catalog, locale, e5) {
+  const code = doorErrorCode(e5);
+  const declared = textFor2(catalog, locale, code, "deleteRefusal") || textFor2(catalog, SOURCE_LANG2, code, "deleteRefusal");
+  if (declared) return declared;
+  const key = code ? "deleteRefusalUnknown" : "deleteRefusalNoCode";
   return unknownText(catalog, locale, key, code) || unknownText(catalog, SOURCE_LANG2, key, code) || code;
 }
 
@@ -7140,6 +7177,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     this.tick = 0;
     this.editingId = "";
     this.pendingDelete = null;
+    this.deleteNeedsPermission = false;
     this.metaSyncNotice = "";
     this.metaSyncNeedsPermission = false;
     this.metaOnly = [];
@@ -7168,6 +7206,8 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     /* La vista llena el alto: el data-table ocupa el resto (scroll interno, pie fijo). */
     .page { display:flex; flex-direction:column; min-height:0; flex:1 1 auto; }
     .page > ok-data-table { flex:1 1 auto; min-height:0; }
+    /* A button straight in the page (the delete refusal's «Open Permissions», #296) keeps its own width. */
+    .page > ion-button { align-self:flex-start; }
     /* El alta va en el panel lateral de la tabla (estrecho) → columna, no fila. */
     .form { display:flex; flex-direction:column; gap:.7rem; }
     .form ion-button { align-self:flex-end; }
@@ -7710,14 +7750,38 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
       this.saving = false;
     }
   }
+  /** Whether Meta holds this template's NAME: the row, or any other language of it on screen, went
+   *  there. Meta deletes by name, so one copy in Meta is enough for the delete to reach it. */
+  nameIsInMeta(row, rows) {
+    return [row, ...rows.filter((r6) => r6.name === row.name)].some((r6) => typeof r6.meta_template_id === "string" && r6.meta_template_id.trim() !== "");
+  }
   /** Deleting asks first, in the page — never `window.confirm`, which a POS webview swallows. Same
-   *  in-page confirm panel `customers` uses for its tags. */
+   *  in-page confirm panel `customers` uses for its tags.
+   *
+   *  whatsapp_inbox#296 (F31): a template Meta has is deleted in Meta FIRST, through the door, and
+   *  only then here — the other order would hide here a template Meta goes on sending, with no row
+   *  left to retry from. Meta deletes by name, so it goes by name and takes every language here too
+   *  (`commands/template_delete.sql`). `template_not_found` means Meta has already dropped it: not
+   *  a refusal, the delete goes on. Any other «no» deletes nothing and says so. */
   async confirmDelete() {
     const row = this.pendingDelete;
     if (!row) return;
     this.saving = true;
     this.pageError = "";
+    this.deleteNeedsPermission = false;
     try {
+      const all = await erplora3().queryAll("whatsapp_inbox.templates.list");
+      if (this.nameIsInMeta(row, all)) {
+        try {
+          await erplora3().forModule("whatsapp_inbox").whatsappTemplates.remove(row.name);
+        } catch (e5) {
+          if (doorErrorCode(e5) !== "template_not_found") {
+            this.pageError = deleteRefusalText(CATALOG3, erplora3().locale, e5);
+            this.deleteNeedsPermission = isNotifyPermissionDenied(e5);
+            return;
+          }
+        }
+      }
       await erplora3().command("whatsapp_inbox.templates.delete", { template_id: row.id });
       if (this.editingId === row.id) {
         this.resetForm();
@@ -7737,6 +7801,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     if (ev.detail.actionId === "delete") {
       this.pendingDelete = row;
       this.pageError = "";
+      this.deleteNeedsPermission = false;
     }
   }
   /** pm#513: the refusal appears above «Save» — on a phone that can leave it off the sheet. Bring
@@ -7875,6 +7940,7 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     const t5 = (k2) => erplora3().t(CATALOG3, k2);
     return b2`<section class="panel">
       <p>${t5("ui.confirmDeleteTemplate")} <strong>${this.pendingDelete.name}</strong></p>
+      ${this.nameIsInMeta(this.pendingDelete, this.ctrl?.rows ?? []) ? b2`<p data-testid="whatsapp-templates-delete-in-meta">${t5("ui.confirmDeleteTemplateInMeta")}</p>` : A}
       <ion-button data-testid="whatsapp-templates-delete-confirm" size="small" class="tone-danger" ?disabled=${this.saving}
         @click=${() => this.confirmDelete()}>${t5("ui.delete")}</ion-button>
       <ion-button data-testid="whatsapp-templates-delete-cancel" size="small" fill="clear" @click=${() => this.pendingDelete = null}>${t5("ui.cancel")}</ion-button>
@@ -7884,7 +7950,9 @@ var _ErpWhatsappInboxTemplates = class _ErpWhatsappInboxTemplates extends i3 {
     const t5 = (k2) => erplora3().t(CATALOG3, k2);
     const locked = this.managedInMeta;
     return b2`<div class="page">
-        ${this.pageError ? b2`<p class="err" data-testid="whatsapp-templates-error">${this.pageError}</p>` : A}
+        ${this.pageError ? b2`<p class="err" data-testid="whatsapp-templates-error">${this.pageError}</p>
+              ${this.deleteNeedsPermission ? b2`<ion-button data-testid="whatsapp-templates-delete-open-permissions" size="small" fill="outline"
+                    @click=${() => openNotifyPermission()}>${t5("ui.notifyPermissionOpen")}</ion-button>` : A}` : A}
         ${this.ctrl?.error && !dataTableShowsLoadError() ? b2`<p class="err" data-testid="whatsapp-templates-load-error">${this.ctrl.error}</p>` : A}
         ${this.metaSyncNotice ? b2`<section class="panel"><p data-testid="whatsapp-templates-meta-sync-notice">${this.metaSyncNotice}</p>
               ${this.metaSyncNeedsPermission ? b2`<ion-button data-testid="whatsapp-templates-open-permissions" size="small" fill="outline"
@@ -7947,6 +8015,9 @@ __decorateClass([
 __decorateClass([
   r5()
 ], _ErpWhatsappInboxTemplates.prototype, "pendingDelete", 2);
+__decorateClass([
+  r5()
+], _ErpWhatsappInboxTemplates.prototype, "deleteNeedsPermission", 2);
 __decorateClass([
   r5()
 ], _ErpWhatsappInboxTemplates.prototype, "metaSyncNotice", 2);

@@ -88,9 +88,9 @@ export function doorErrorCode(e: unknown): string {
   return typeof code === 'string' ? code : '';
 }
 
-function textFor(catalog: Catalogs, lang: string, key: string): string {
+function textFor(catalog: Catalogs, lang: string, key: string, bucketKey = 'doorRefusal'): string {
   const ui = (catalog[lang] as { ui?: Record<string, unknown> } | undefined)?.ui;
-  const bucket = ui?.doorRefusal as Record<string, unknown> | undefined;
+  const bucket = ui?.[bucketKey] as Record<string, unknown> | undefined;
   const text = key ? bucket?.[key] : undefined;
   return typeof text === 'string' && text.trim() ? text : '';
 }
@@ -120,6 +120,44 @@ export function doorRefusalText(catalog: Catalogs, locale: string, e: unknown): 
   const declared = textFor(catalog, locale, code) || textFor(catalog, SOURCE_LANG, code);
   if (declared) return declared;
   const key = code ? 'doorRefusalUnknown' : 'doorRefusalNoCode';
+  return (
+    unknownText(catalog, locale, key, code) || unknownText(catalog, SOURCE_LANG, key, code) || code
+  );
+}
+
+/**
+ * Every code the door can answer a DELETE with (whatsapp_inbox#296): the SaaS's delete (F19 —
+ * `no_whatsapp_number` and Meta's own four), the runtime's envelope and the door's gate.
+ *
+ * `template_not_found` is deliberately NOT here: the SaaS says it when Meta no longer has a
+ * template of that name, which for a delete means «already gone there» — the screen goes on and
+ * deletes it here, it does not refuse. Written out for the same reason as the list above.
+ */
+export const META_DELETE_REFUSAL_CODES = [
+  'no_whatsapp_number',
+  'meta_rate_limited',
+  'meta_permission_denied',
+  'meta_unreachable',
+  'meta_template_failed',
+  'cloud_rejected',
+  'cloud_unreachable',
+  'cloud_unreadable',
+  'hub_not_enrolled',
+  'capability_denied',
+] as const;
+
+/**
+ * What the owner reads when Meta does not delete a template. Its own sentences, not the save's:
+ * those say «it stays saved here, save it again», which in front of a delete tells the owner to do
+ * the opposite. Every one of these says the template is STILL in Meta and in the list, and what to
+ * do. Same three outcomes as `doorRefusalText`: declared sentence, unknown code spliced in, no code.
+ */
+export function deleteRefusalText(catalog: Catalogs, locale: string, e: unknown): string {
+  const code = doorErrorCode(e);
+  const declared =
+    textFor(catalog, locale, code, 'deleteRefusal') || textFor(catalog, SOURCE_LANG, code, 'deleteRefusal');
+  if (declared) return declared;
+  const key = code ? 'deleteRefusalUnknown' : 'deleteRefusalNoCode';
   return (
     unknownText(catalog, locale, key, code) || unknownText(catalog, SOURCE_LANG, key, code) || code
   );

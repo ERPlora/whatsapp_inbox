@@ -252,7 +252,22 @@
     "headerSampleTooLarge": "That file is larger than {max} MB, the most Meta accepts for this header. Choose a smaller one.",
     "headerSampleKindMismatch": "The file you chose is not the kind of header selected. Choose the kind that matches the file, or another file, and save again.",
     "headerNotForAuthentication": "Authentication templates cannot have an image, video or document header. Choose a text header or another category.",
-    "headerMediaNeedsUpdate": "An image, video or document in the header needs a newer version of ERPlora on this hub. It arrives with the next update."
+    "headerMediaNeedsUpdate": "An image, video or document in the header needs a newer version of ERPlora on this hub. It arrives with the next update.",
+    "confirmDeleteTemplateInMeta": "It is deleted in Meta too, in every language, and it cannot be undone: Meta does not let you use this name again for 30 days.",
+    "deleteRefusalUnknown": "Meta has not deleted the template, and the reason is one this screen does not know yet ({code}). It is still in Meta and in this list: look that code up in WhatsApp Manager or send it to support.",
+    "deleteRefusalNoCode": "Meta has not deleted the template. It is still in Meta and in this list: try deleting it again in a moment.",
+    "deleteRefusal": {
+      "no_whatsapp_number": "Meta has not deleted the template: this business has no WhatsApp number connected. It is still in this list; connect the number in Settings and delete it again.",
+      "meta_rate_limited": "Meta is receiving too many requests right now and has not deleted the template. It is still in Meta and in this list: try again in a few minutes.",
+      "meta_permission_denied": "Meta has not let us delete the template: the WhatsApp connection has no permission to manage templates. It is still in Meta and in this list; reconnect WhatsApp in Settings, or delete it in WhatsApp Manager.",
+      "meta_unreachable": "Meta did not answer and the template has not been deleted. It is still in Meta and in this list: try again in a moment.",
+      "meta_template_failed": "Meta refused to delete the template. It is still in Meta and in this list: delete it in WhatsApp Manager, or try again later.",
+      "cloud_rejected": "ERPlora did not accept the delete and the template has not been deleted in Meta. It is still in this list: try again, and if it keeps happening contact support.",
+      "cloud_unreachable": "This device cannot reach ERPlora right now, so the template has not been deleted in Meta. It is still in this list: check the connection and try again.",
+      "cloud_unreadable": "ERPlora answered something this screen could not read, so we cannot tell whether Meta deleted the template. It is still in this list: try again in a moment.",
+      "hub_not_enrolled": "This business is not linked to ERPlora yet, so the template cannot be deleted in Meta. It is still in this list: finish linking it in Settings and try again.",
+      "capability_denied": "We cannot delete the template in Meta: WhatsApp Inbox needs the «Notifications» permission, and it is turned off. It is still in Meta and in this list; turn the permission on and delete it again."
+    }
   },
   "errors": {
     "whatsapp_inbox.conversation_not_found": "That conversation does not exist in this business.",

@@ -504,9 +504,6 @@
         "n": 1,
         "error": "whatsapp_inbox.template_not_found",
         "message": "That template does not exist in this business."
-      },
-      "ai": {
-        "description": "Soft-deletes a WhatsApp message template"
       }
     },
     "whatsapp_inbox.messages.ingest": {
