@@ -65,6 +65,8 @@ const COVERED: Record<
       'whatsapp-inbox-assign-error',
       'whatsapp-inbox-assign-submit',
       'whatsapp-inbox-assign-to',
+      // The month's allowance is spent and the automatic replies are paused (whatsapp_inbox#287).
+      'whatsapp-inbox-cap-reached',
       'whatsapp-inbox-detail-close',
       'whatsapp-inbox-detail-error',
       // Erasing the data of one number (whatsapp_inbox#263): the action, its in-page question,

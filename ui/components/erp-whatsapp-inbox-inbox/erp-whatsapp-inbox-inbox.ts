@@ -256,6 +256,10 @@ export class ErpWhatsappInboxInbox extends LitElement {
   /** The thread was erased: said on the page, since the thread itself is gone. */
   @state() eraseDone = false;
 
+  /** This month's allowance is spent (whatsapp_inbox#287): messages still land here, the
+   *  automatic replies are paused, and this is where the business has to learn it. */
+  @state() capReached = false;
+
   private ctrl!: ListController<Conversation>;
 
   private unsub?: () => void;
@@ -336,6 +340,7 @@ export class ErpWhatsappInboxInbox extends LitElement {
       sort: 'attention_first',
       dir: 'desc',
     });
+    void this.loadCap();
     await this.ctrl.load();
     try {
       const off1 = erplora().on('whatsapp_inbox.conversation.assigned', () => this.onDomainEvent());
@@ -356,7 +361,20 @@ export class ErpWhatsappInboxInbox extends LitElement {
   /** A new message must land in the thread the operator is READING, not only in the list. */
   private onDomainEvent() {
     void this.ctrl.load();
+    void this.loadCap();
     if (this.detail) void this.loadDetail(this.detail.id);
+  }
+
+  /** Asks whether this month's allowance is spent. A failed read paints nothing: the warning is
+   *  about the automatic replies, and the list below already says when the hub cannot be read. */
+  private async loadCap() {
+    try {
+      const rows = await erplora().query<{ cap_reached?: number | string }[]>('whatsapp_inbox.usage.cap_reached');
+      const row = Array.isArray(rows) ? rows[0] : undefined;
+      this.capReached = Number(row?.cap_reached) === 1;
+    } catch {
+      this.capReached = false;
+    }
   }
 
   // ── The thread ────────────────────────────────────────────────────────────
@@ -699,6 +717,9 @@ export class ErpWhatsappInboxInbox extends LitElement {
         </header>
         ${this.ctrl?.error && !dataTableShowsLoadError()
           ? html`<p class="err" data-testid="whatsapp-inbox-load-error">${this.ctrl.error}</p>`
+          : nothing}
+        ${this.capReached
+          ? html`<ok-inline-feedback data-testid="whatsapp-inbox-cap-reached" tone="warning" icon="alert-circle-outline">${t('ui.capReached')}</ok-inline-feedback>`
           : nothing}
         ${this.eraseDone
           ? html`<ok-inline-feedback data-testid="whatsapp-inbox-erase-done" tone="success" icon="checkmark-circle-outline">${t('ui.eraseNumberDone')}</ok-inline-feedback>`

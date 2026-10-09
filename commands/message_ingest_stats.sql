@@ -1,13 +1,10 @@
 -- Moves the conversation to the top of the inbox and marks it unread — but ONLY if the message
 -- before it is the one THIS execution wrote.
 --
--- The `EXISTS` on `:new_id` is the whole point, and it answers two different failures with one
--- question. `:new_id` is a fresh uuid the runtime mints per command execution, so the row only
--- exists if OUR insert landed:
+-- The `EXISTS` on `:new_id` is the whole point. `:new_id` is a fresh uuid the runtime mints per
+-- command execution, so the row only exists if OUR insert landed (the monthly cap no longer stops a
+-- message from landing, whatsapp_inbox#287):
 --
---   * free tier exhausted → the insert wrote 0 rows, and an `unread_count` that counts a message
---     nobody can open is a badge that never clears (the owner reads the thread and the number
---     stays)
 --   * duplicate `wa_message_id` → the insert was absorbed by `ON CONFLICT DO NOTHING`
 --     (whatsapp_inbox#30). Asking «does a message with this wa_message_id exist?» would answer yes
 --     — the FIRST delivery's row — and bump the badge for a message the thread already showed.
