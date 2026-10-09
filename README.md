@@ -68,7 +68,7 @@ gatea nada contesta «sí» a una auditoría que debería decir que no.
 | query | `templates.list` · `usage.get` | `manage_settings` (solo admin) |
 | command | `conversations.assign` · `templates.create/update/delete` | `manage_settings` |
 | command | `messages.ingest` | `manage_connections` |
-| emite | `message.received`, `conversation.assigned`, `conversation.link_pending`, `template.*` | — |
+| emite | `message.received`, `conversation.assigned`, `conversation.link_pending`, `conversation.anonymized`, `template.*` | — |
 | escucha | `hub.whatsapp.message_received` (core) · `customer.created` / `.updated` | — |
 
 Navegación: `erp-whatsapp-inbox-inbox` y `erp-whatsapp-inbox-settings` (que embebe `-templates`). La pestaña de solicitudes se retiró en #193 y todo lo que la alimentaba (commands, queries, permisos, eventos, tablas y `approval_mode`) en #206: una reserva pendiente se confirma en Citas.

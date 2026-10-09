@@ -47,6 +47,7 @@ CONTAINER = os.environ.get("ERPLORA_TEST_PG_CONTAINER", "erplora-test-pg-5433")
 ERASE = "whatsapp_inbox.conversations.erase"
 SHEET_ERASURE = "whatsapp_inbox._on_customer_anonymized"
 INGEST = "whatsapp_inbox._ingest_inbound_message"
+ERASED_EVENT = "whatsapp_inbox.conversation.anonymized"
 HUB = "hub-test"
 OTHER_HUB = "hub-other"
 CREATED = "2026-08-01T00:00:00+00:00"
@@ -283,6 +284,22 @@ def manifest_half():
         "the declared error is in the module's catalogue",
         True,
         expect.get("error") in MANIFEST.get("errors", {}),
+    )
+    print("\n== it tells the hub, so the hub forgets this thread's messages too (hub#2474) ==")
+    # The hub empties its own history (`_event_outbox`: the inbound copies with the number and the
+    # text) on an event named `<subject>.anonymized` carrying `<subject>_id`, and only for the
+    # emitter's OWN rows. The thread is ours and the payload is this command's: `conversation_id`.
+    check("it emits the erasure event", [ERASED_EVENT], cmd.get("emit"))
+    check(
+        "the event is declared among the module's emits",
+        True,
+        ERASED_EVENT in (MANIFEST.get("events", {}).get("emits") or []),
+    )
+    subject_key = ERASED_EVENT.removesuffix(".anonymized").rsplit(".", 1)[-1] + "_id"
+    check(
+        "the hub reads the subject id from a key the command's schema requires",
+        True,
+        subject_key in (schema.get("required") or []),
     )
     print("\n== one definition of «erased»: same SET as the erasure from the sheet ==")
     sheet = MANIFEST["commands"][SHEET_ERASURE]["sql"]

@@ -397,6 +397,9 @@
         "commands/conversation_erase.sql"
       ],
       "schema": "schemas/conversation_erase.json",
+      "emit": [
+        "whatsapp_inbox.conversation.anonymized"
+      ],
       "expect_rows": {
         "op": "min",
         "n": 1,
@@ -658,7 +661,8 @@
       "whatsapp_inbox.template.created",
       "whatsapp_inbox.template.updated",
       "whatsapp_inbox.template.deleted",
-      "whatsapp_inbox.conversation.link_pending"
+      "whatsapp_inbox.conversation.link_pending",
+      "whatsapp_inbox.conversation.anonymized"
     ]
   },
   "scheduled_tasks": [
