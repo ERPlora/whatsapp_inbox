@@ -68,18 +68,19 @@ Implicados: CUSTOMERS-F01, CUSTOMERS-F04, CUSTOMERS-F08, CUSTOMERS-F10, CUSTOMER
 QA: ninguno
 
 ### WHATSAPP_INBOX-F05 Leer una conversación
-Estado: parcial — abrir el hilo no baja «Sin leer» (nada lo baja salvo borrar), y la columna Contacto enseña el teléfono porque el nombre de perfil de WhatsApp no llega
+Estado: parcial — la columna Contacto enseña el teléfono porque el nombre de perfil de WhatsApp no llega al módulo (whatsapp_inbox#292, hub#2728, saas#2670)
 Vertical: comun
 Actor: empleado, responsable, administrador
 Pantalla: Bandeja de entrada
 Pasos:
-1. Abrir **Bandeja de WhatsApp → Bandeja de entrada**; buscar por contacto o teléfono o filtrar por columna si hace falta.
+1. Abrir **Bandeja de WhatsApp → Bandeja de entrada**; buscar por contacto o teléfono o filtrar por columna si hace falta. El teléfono se busca como número, escrito de cualquier forma: `600 111 222`, `+34 600 111 222` o `0034 600-111-222` encuentran a `+34600111222`, y una parte del número (`600 555`) también; lo que lleva alguna letra (`Marta 2`) se busca como texto. El filtro de la columna **Teléfono** compara igual.
 2. Pulsar **Abrir** en la fila (o tocar la fila).
 3. El hilo aparece encima de la lista, del mensaje más antiguo al más reciente, con la hora de cada uno; un mensaje sin texto ni adjunto (una ubicación, un botón) enseña el tipo que da Meta tal cual, en inglés (`location`, `button`…); y un mensaje del que no se sabe quién lo envió lleva «Mensaje no reconocido».
-4. Pulsar **Cerrar** para volver a la lista.
+4. Al abrirse, la conversación queda leída: **Sin leer** vuelve a «—» en la lista, que se refresca sola. Un mensaje que llega con el hilo abierto también queda leído.
+5. Pulsar **Cerrar** para volver a la lista.
 Entra: la conversación y sus mensajes de este negocio.
-Sale: nada; solo lee.
-Si falla: el motivo que devuelve el hub dentro del panel, o «No se pudo cargar la conversación» si no trae ninguno; la lista sigue disponible.
+Sale: **Sin leer** a cero en esa conversación (la orden de marcar leída, con el mismo permiso que leer la bandeja); nada más cambia.
+Si falla: el motivo que devuelve el hub dentro del panel, o «No se pudo cargar la conversación» si no trae ninguno; la lista sigue disponible. Si no se puede marcar leída, el hilo se ve igual y **Sin leer** se queda como estaba.
 Implicados: ninguno
 QA: WA-10 (discrepa)
 

@@ -108,7 +108,8 @@
           "customer_id",
           "phone_number_id",
           "contact_name",
-          "contact_phone"
+          "contact_phone",
+          "phone_match"
         ],
         "sort": [
           "id",
@@ -141,9 +142,6 @@
           },
           "contact_name": {
             "op": "eq"
-          },
-          "contact_phone": {
-            "op": "like"
           },
           "status": {
             "op": "eq"
@@ -342,6 +340,20 @@
       },
       "ai": {
         "description": "Assigns a WhatsApp conversation to an agent or team"
+      }
+    },
+    "whatsapp_inbox.conversations.mark_read": {
+      "permission": "whatsapp_inbox.view_conversation",
+      "transaction": true,
+      "sql": [
+        "commands/conversation_mark_read.sql"
+      ],
+      "schema": "schemas/conversation_mark_read.json",
+      "expect_rows": {
+        "op": "min",
+        "n": 1,
+        "error": "whatsapp_inbox.conversation_not_found",
+        "message": "That conversation does not exist in this business."
       }
     },
     "whatsapp_inbox.conversations.link_customer": {

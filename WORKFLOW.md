@@ -165,7 +165,7 @@ columnas en la misma entrega.
 | Un solo código de pantalla para las dos tarjetas: activar, desactivar, actualizar y el interruptor de confirmación | F14, F15, F16, F17, F18 |
 | Las mismas órdenes y consultas de este módulo dentro de las dos recetas: leer el tope del mes, recordar y releer la lista ofrecida, marcar «Necesita atención», unir la conversación a la ficha, y la lista de conversaciones como destinatario de cada respuesta. Cambiar una rompe las dos recetas | F13, F19, F20, F21, F24 |
 | La pausa en el tope del mes: los mismos tres primeros pasos en las dos recetas (leer el tope, marcar «Necesita atención», parar), y la batería de recetas los exige a las dos | F13, F20, F21, F24 |
-| La búsqueda de la conversación por el número exacto (`conversations.by_phone`): la usa la receta acompañante de la cita para encontrar a quién avisar; la lista de conversaciones ya no (su filtro de teléfono es «contiene» y es solo de la bandeja, F05) | F23 |
+| La búsqueda de la conversación por el número exacto (`conversations.by_phone`): la usa la receta acompañante de la cita para encontrar a quién avisar; la lista de conversaciones ya no (su búsqueda y su filtro de teléfono encuentran también una parte del número y son solo de la bandeja, F05) | F23 |
 | Acuse inmediato, disculpa fija y lista escrita: mismas piezas en las dos recetas | F19, F20, F21, F24 |
 | Plantillas de Meta | F27–F31 |
 
@@ -222,7 +222,7 @@ una plantilla (todas mandan texto libre dentro de las 24 h).
 | Destinatario de una respuesta: se lee de la conversación, nunca se teclea; el hub exige `+` | hecho | F21, F24 |
 | Comparar con la ficha de cliente como NÚMERO (sin `00` ni `0` troncal, prefijo del país del negocio) | parcial: regla propia, sin libphonenumber ni números ya normalizados; la tabla de prefijos está copiada aquí y en la búsqueda por teléfono de Clientes (CUSTOMERS-F10): un país nuevo se añade en los dos | F04 |
 | Teléfono de la ficha guardado en E.164 | hecho en Clientes (CUSTOMERS-F11): toda escritura de la ficha lo guarda en E.164 y una tarea programada reescribe las fichas antiguas; la que no se pudo reescribir se queda como estaba | F04, F23 |
-| Buscar en la bandeja por teléfono escrito de cualquier forma | parcial: compara texto; `600 111 222` no encuentra `+34600111222` | F05 |
+| Buscar en la bandeja por teléfono escrito de cualquier forma | hecho: el buscador y el filtro **Teléfono** comparan los dígitos sin los ceros de delante (`00` internacional, `0` troncal); `600 111 222` y `0034 600-111-222` encuentran `+34600111222`, y una parte del número también. No usa libphonenumber: un buscador tiene que encontrar también un trozo del número | F05 |
 | Encontrar la conversación de la clienta a partir del teléfono de su cita, para avisarla | hecho: solo con el número E.164 exacto de la cita, en este negocio; un teléfono incompleto, con espacios o sin `+` no se avisa y el run para en su propio paso («no es un número internacional»), nunca en la conversación de otra persona. Citas aún guarda sin formato internacional el teléfono cambiado a mano en la cita y la copia de las citas anteriores a CUSTOMERS-F11: esas no reciben el aviso (appointments#313) | F23 |
 | Botón de llamada de una plantilla con prefijo de país | parcial: no se valida en pantalla; lo rechaza el SaaS | F29, F30 |
 | Número del negocio conectado | hecho (lo da Meta; bloque del hub) | F01 |
@@ -232,8 +232,8 @@ una plantilla (todas mandan texto libre dentro de las 24 h).
 | Elemento | Estado | Flujo |
 |---|---|---|
 | Lista por actividad, no leídos, buscar, filtrar | hecho | F03, F05 |
-| Marcar como leída al abrir | no hecho: «Sin leer» no baja nunca | F05 |
-| Nombre de perfil de WhatsApp | no hecho: el aviso del hub no lo trae; Contacto enseña el teléfono | F05 |
+| Marcar como leída al abrir | hecho: abrir el hilo deja **Sin leer** a cero, también con un mensaje que llega con él abierto | F05 |
+| Nombre de perfil de WhatsApp | no hecho: erplora.com y el aviso del hub no lo traen; Contacto enseña el teléfono (whatsapp_inbox#292, hub#2728, saas#2670) | F05 |
 | Contestar desde el hub | no hecho (ver «Dudas abiertas») | F08 |
 | Asignar con selector y filtro de mis conversaciones | parcial: se teclea el id y no filtra | F07 |
 | Cerrar o reabrir una conversación a mano | no hecho: solo el borrado la cierra | — |
@@ -326,7 +326,6 @@ Se resuelven con `market-decision`; no las decide el worker.
 Contra `origin/main` v2.1.107 del módulo y `origin/develop` del hub (04/10/2026). Manda el código;
 lo de abajo está desfasado o contradice al código.
 
-- `docs/como-funciona.md` §4: «abrirla marca los mensajes como leídos» — ninguna orden baja «Sin leer» salvo borrar (F05).
 - `docs/como-funciona.md` §6: lo que el dueño contesta desde el móvil «todavía no aparece» — sí aparece en el hilo desde whatsapp_inbox#66 (F08).
 - `docs/como-funciona.md` §3 y §10: el bloque se llama «Canal» — en pantalla es «Tu número» (F01).
 - `docs/screens.md`: dos pestañas «Inbox» y «Templates» — el menú tiene Bandeja de entrada y Ajustes; Plantillas es un desplegable de Ajustes.
