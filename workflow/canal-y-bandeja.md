@@ -159,7 +159,7 @@ Pasos:
 Entra: la conversación elegida.
 Sale: mensajes, nombre, número, huecos ofrecidos y solicitudes antiguas vaciados; conversación cerrada y borrada. Si vuelve a escribir, empieza una conversación nueva. El módulo publica `whatsapp_inbox.conversation.anonymized` con el identificador de la conversación (nunca el número) y el hub vacía las copias de esos mensajes en su historial (HUB-F251).
 Si falla: «No se pudieron borrar los datos de este número» (o el motivo) en el panel; el hilo sigue abierto.
-Implicados: HUB-F251
+Implicados: HUB-F249, HUB-F251
 QA: WA-06 (discrepa), L-11
 
 ### WHATSAPP_INBOX-F11 Borrar los datos de una clienta desde su ficha
