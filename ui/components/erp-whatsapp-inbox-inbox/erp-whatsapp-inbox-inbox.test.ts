@@ -953,6 +953,8 @@ describe('erasing the data of one number from its thread (whatsapp_inbox#263)', 
     let release!: () => void;
     (globalThis as { erplora: { command: unknown } }).erplora.command = (name: string, payload: Record<string, unknown>) => {
       comandos.push({ name, payload });
+      // Only the erasure is held: opening a thread also marks it read (whatsapp_inbox#290).
+      if (name !== 'whatsapp_inbox.conversations.erase') return Promise.resolve({});
       return new Promise<void>((r) => { release = r; });
     };
     const el = (await montar()) as Wc;
@@ -1031,5 +1033,74 @@ describe('at the month cap the inbox says the automatic replies are paused (what
     await new Promise((r) => setTimeout(r, 0));
     await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
     expect(banner(el), 'the warning only appears after reloading the page').not.toBeNull();
+  });
+});
+
+describe('opening a thread leaves it read, like every inbox (whatsapp_inbox#290)', () => {
+  const MARK_READ = 'whatsapp_inbox.conversations.mark_read';
+  const listLoads = () => consultas.filter((q) => q.name === 'whatsapp_inbox.conversations.list').length;
+
+  /** `conversations.get` answers this conversation instead of the default one. */
+  function conversationIs(row: Record<string, unknown>) {
+    const g = globalThis as unknown as { erplora: { query: (n: string, p?: Record<string, unknown>) => Promise<unknown> } };
+    const base = g.erplora.query;
+    g.erplora.query = async (name, params = {}) => {
+      if (name === 'whatsapp_inbox.conversations.get') {
+        consultas.push({ name, params });
+        return [row];
+      }
+      return base(name, params);
+    };
+  }
+
+  it('opening a conversation with unread messages marks THAT conversation read', async () => {
+    const el = await montar();
+    await abrirConversacion(el);
+    const marked = comandos.filter((c) => c.name === MARK_READ);
+    expect(marked, 'opening the thread leaves «Unread» as it was: nothing marks it read').toHaveLength(1);
+    expect(marked[0].payload).toEqual({ conversation_id: 'c1' });
+  });
+
+  it('the list is asked again once it is marked, so «Unread» goes down without reloading the page', async () => {
+    const el = await montar();
+    const before = listLoads();
+    await abrirConversacion(el);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(listLoads(), 'the list keeps the old «Unread» after the thread was read').toBeGreaterThan(before);
+  });
+
+  it('a conversation with nothing unread is not marked again', async () => {
+    conversationIs({ ...CONVERSATION, unread_count: 0 });
+    const el = await montar();
+    await abrirConversacion(el);
+    expect(comandos.filter((c) => c.name === MARK_READ)).toHaveLength(0);
+  });
+
+  it('a mark that fails still shows the thread, with no error: the counter simply stays', async () => {
+    (globalThis as { erplora: { command: unknown } }).erplora.command = async (name: string, payload: Record<string, unknown>) => {
+      comandos.push({ name, payload });
+      if (name === MARK_READ) throw new Error('network');
+      return {};
+    };
+    const el = await montar();
+    await abrirConversacion(el);
+    expect(comandos.some((c) => c.name === MARK_READ)).toBe(true);
+    expect(el.shadowRoot.textContent, 'the thread was lost because it could not be marked read').toContain('Hola, quiero pedir cita');
+    expect(el.shadowRoot.textContent).not.toContain('ui.errLoadThread');
+  });
+
+  it('a message arriving in the open thread is read too: the thread is on screen', async () => {
+    let onMessage: (() => void) | undefined;
+    (globalThis as { erplora: { on: unknown } }).erplora.on = (name: string, fn: () => void) => {
+      if (name === 'whatsapp_inbox.message.received') onMessage = fn;
+      return () => {};
+    };
+    const el = await montar();
+    await abrirConversacion(el);
+    onMessage!();
+    await new Promise((r) => setTimeout(r, 0));
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(comandos.filter((c) => c.name === MARK_READ), 'a message read on screen still counts as unread').toHaveLength(2);
   });
 });

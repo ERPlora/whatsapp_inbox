@@ -401,6 +401,7 @@ export class ErpWhatsappInboxInbox extends LitElement {
       }
       this.detail = conversation;
       this.assignTo = conversation.assigned_to_id ?? '';
+      if (Number(conversation.unread_count) > 0) void this.markRead(conversation.id);
       // Oldest first: a thread is read downwards, which is the opposite of the query's default
       // (`created_at desc`, the right default for a list of latest activity).
       // whatsapp_inbox#39 — the conversation travels as `params`, NOT `filters`: the base SQL
@@ -422,6 +423,19 @@ export class ErpWhatsappInboxInbox extends LitElement {
       }
     } catch (e) {
       this.detailError = e instanceof Error ? e.message : erplora().t(CATALOG, 'ui.errLoadThread');
+    }
+  }
+
+  /** whatsapp_inbox#290 — a thread on screen is a thread read, like WhatsApp Web, Square Messages
+   *  or Shopify Inbox: «Unread» goes back to none and the list is asked again to show it. Also on a
+   *  message arriving in the open thread, since `onDomainEvent` reloads it. A mark that fails keeps
+   *  the thread on screen and says nothing: the list still shows the count, which is the truth. */
+  private async markRead(conversationId: string) {
+    try {
+      await erplora().command('whatsapp_inbox.conversations.mark_read', { conversation_id: conversationId });
+      await this.ctrl.load();
+    } catch {
+      /* the counter stays as it was, and the list says so */
     }
   }
 
