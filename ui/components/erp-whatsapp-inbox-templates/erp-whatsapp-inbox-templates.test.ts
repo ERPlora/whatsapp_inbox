@@ -5,7 +5,7 @@
 // así: el alta vive DENTRO de `ok-data-table`, detrás del «+» de su barra, que despliega el panel
 // `slot="create"`. Y el estado de Meta (pending|approved|rejected, dominio cerrado de la migración)
 // se filtra con un `select`, no tecleando el texto a pelo.
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { dataTableShowsLoadError } from '@erplora/module-sdk';
 import { META_TEMPLATE_STATES } from '../../lib/meta-template-status';
 
@@ -118,6 +118,9 @@ type Tabla = HTMLElement & {
 };
 const tabla = (el: HTMLElement & { shadowRoot: ShadowRoot }) =>
   el.shadowRoot.querySelector('ok-data-table') as Tabla | null;
+/** whatsapp_inbox#294: the notice's own controls, by `data-testid`. */
+const byTestId = (el: HTMLElement & { shadowRoot: ShadowRoot }, id: string) =>
+  el.shadowRoot.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
 
 describe('el alta vive DENTRO de la tabla (paridad con /employees e inventory)', () => {
   // Lo exigido sigue siendo lo mismo —hay un «+» en la barra de la tabla y abre el panel de
@@ -804,7 +807,7 @@ describe('al ABRIR la pestaña, el veredicto de Meta se pone al día (whatsapp_i
   it('si la puerta falla, la lista se sigue viendo y el aviso se pinta', async () => {
     filas = [EN_REVISION];
     respondeListado = async () => {
-      throw refusal('capability_denied');
+      throw refusal('cloud_unreachable');
     };
 
     const el = await montar();
@@ -815,6 +818,29 @@ describe('al ABRIR la pestaña, el veredicto de Meta se pone al día (whatsapp_i
       'la sincronización falló en silencio: el dueño cree que está viendo lo de ahora',
     ).toBeTruthy();
     expect(el.shadowRoot.textContent, 'el aviso no llega a pintarse').toContain('ui.metaSyncUnavailable');
+    expect(byTestId(el, 'whatsapp-templates-open-permissions'), 'a network failure is not a permission').toBeNull();
+  });
+
+  // whatsapp_inbox#294 — the door needs the hub's «Notifications» permission (`notify`, denied by
+  // default). Without it the door answered `capability_denied` and the notice said «we could not
+  // check with Meta… come back in a while»: waiting never fixes it, and it never said what was missing.
+  it('without the «Notifications» permission it says so, and takes you to the hub Settings → Permissions', async () => {
+    filas = [EN_REVISION];
+    respondeListado = async () => {
+      throw refusal('capability_denied');
+    };
+    const push = vi.spyOn(window.history, 'pushState');
+
+    const el = await montar();
+
+    expect(tabla(el)?.rows ?? [], 'the list disappeared').toHaveLength(1);
+    expect(el.shadowRoot.textContent).toContain('ui.notifyPermissionTemplates');
+    expect(el.shadowRoot.textContent, 'still blames Meta for a permission that is off').not.toContain('ui.metaSyncUnavailable');
+    const open = byTestId(el, 'whatsapp-templates-open-permissions');
+    expect(open, 'says what is missing but not where it is granted').not.toBeNull();
+    open!.click();
+    expect(push).toHaveBeenCalledWith({}, '', '/settings#permissions');
+    push.mockRestore();
   });
 
   // La otra mitad del fallo mudo, y la que NO tenía guardia (revisión de la PR #141): la puerta

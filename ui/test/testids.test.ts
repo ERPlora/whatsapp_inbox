@@ -83,7 +83,11 @@ const COVERED: Record<
       // device that cannot play a voice note or video (whatsapp_inbox#223).
       'whatsapp-inbox-media-cannot-play',
       'whatsapp-inbox-media-load',
+      // The attachment the hub would not serve because the module lacks the «Notifications»
+      // permission, and the button that takes an administrator to grant it (whatsapp_inbox#294).
+      'whatsapp-inbox-media-needs-permission',
       'whatsapp-inbox-media-open',
+      'whatsapp-inbox-media-open-permissions',
       'whatsapp-inbox-media-retry',
       'whatsapp-inbox-media-unavailable',
       // A customer the automation could not answer (whatsapp_inbox#238): the mark next to her
@@ -180,6 +184,8 @@ const COVERED: Record<
       'whatsapp-templates-meta-sync-notice',
       'whatsapp-templates-meta-verdict',
       'whatsapp-templates-name',
+      // The templates door refused for want of the «Notifications» permission (whatsapp_inbox#294).
+      'whatsapp-templates-open-permissions',
       'whatsapp-templates-submit',
     ],
     tables: ['whatsapp-templates-table'],

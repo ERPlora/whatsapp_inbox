@@ -14,6 +14,7 @@ import enLocale from '../../../locales/en.json';
 import { domainErrorText as declaredErrorText } from '../../lib/domain-error-text';
 import { businessTimezone, formatMessageTime } from '../../lib/message-time';
 import { mediaFileName, messageMedia, type MessageMedia } from '../../lib/message-media';
+import { isNotifyPermissionDenied, openNotifyPermission } from '../../lib/notify-permission';
 const CATALOG: Record<string, unknown> = { es: esLocale, en: enLocale };
 
 // erp-whatsapp-inbox-inbox — the list of conversations AND the thread you open from it.
@@ -82,7 +83,13 @@ interface Message {
 }
 
 /** One attachment's download, keyed by Meta's asset id. */
-type MediaState = { status: 'loading' } | { status: 'ready'; url: string } | { status: 'error' };
+/** `denied`: the door refused for want of the hub's «Notifications» permission (whatsapp_inbox#294),
+ *  which no retry fixes — the bubble says which permission instead of «could not load». */
+type MediaState =
+  | { status: 'loading' }
+  | { status: 'ready'; url: string }
+  | { status: 'error' }
+  | { status: 'denied' };
 
 /** Shown as soon as the thread opens, like any inbox; the rest wait for a tap, because every
  *  download is a round trip to Meta and a thread can hold a dozen voice notes. */
@@ -463,8 +470,8 @@ export class ErpWhatsappInboxInbox extends LitElement {
     let next: MediaState;
     try {
       next = { status: 'ready', url: URL.createObjectURL(await door.get(mediaId)) };
-    } catch {
-      next = { status: 'error' };
+    } catch (e) {
+      next = { status: isNotifyPermissionDenied(e) ? 'denied' : 'error' };
     }
     if (this.media[mediaId]?.status !== 'loading') {
       // The thread closed while it downloaded: nothing will show it, so do not keep it.
@@ -572,6 +579,13 @@ export class ErpWhatsappInboxInbox extends LitElement {
           </ion-button>`;
     } else if (state.status === 'loading') {
       content = html`<p class="note">${t('ui.mediaLoading')}</p>`;
+    } else if (state.status === 'denied') {
+      // Granting is the hub admin's switch; the module's own admin permission is the same people.
+      content = html`<p class="err" data-testid="whatsapp-inbox-media-needs-permission">${t('ui.notifyPermissionMedia')}</p>
+        ${can('whatsapp_inbox.manage_settings')
+          ? html`<ion-button data-testid="whatsapp-inbox-media-open-permissions" size="small" fill="outline"
+              @click=${() => openNotifyPermission()}>${t('ui.notifyPermissionOpen')}</ion-button>`
+          : html`<p class="note">${t('ui.notifyPermissionAskAdmin')}</p>`}`;
     } else if (state.status === 'error') {
       content = html`<p class="err">${t('ui.mediaError')}</p>
         <ion-button data-testid="whatsapp-inbox-media-retry" size="small" fill="clear"

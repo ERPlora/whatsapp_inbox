@@ -11,6 +11,7 @@ import esLocale from '../../../locales/es.json';
 import enLocale from '../../../locales/en.json';
 import { domainErrorText as declaredErrorText } from '../../lib/domain-error-text';
 import { doorRefusalText } from '../../lib/meta-door-refusal';
+import { isNotifyPermissionDenied, openNotifyPermission } from '../../lib/notify-permission';
 import {
   META_TEMPLATE_STATES,
   metaTemplateView,
@@ -290,6 +291,8 @@ export class ErpWhatsappInboxTemplates extends LitElement {
    *  `''` when the tab and Meta agree. It is NOT `formError`: nothing the owner did failed, and the
    *  list on screen is still worth reading — it is just not guaranteed to be today's. */
   @state() metaSyncNotice = '';
+  /** whatsapp_inbox#294: the notice is «the «Notifications» permission is off», with its way to the switch. */
+  @state() metaSyncNeedsPermission = false;
 
   /** Templates Meta holds that this hub could NOT bring in (whatsapp_inbox#140, #179), as
    *  `name (language)`, the two halves of Meta's identity: parts this module has no field for
@@ -555,6 +558,7 @@ export class ErpWhatsappInboxTemplates extends LitElement {
    */
   private async refreshMetaVerdicts(): Promise<void> {
     this.metaSyncNotice = '';
+    this.metaSyncNeedsPermission = false;
     this.metaOnly = [];
     let answer: { templates?: unknown; stale?: unknown };
     let rows: Template[];
@@ -564,11 +568,16 @@ export class ErpWhatsappInboxTemplates extends LitElement {
       // hold more templates than fit in one page. Refreshing only what is visible would leave the
       // very same “stuck on «En revisión»” bug one page over, where nobody would think to look.
       rows = await erplora().queryAll<Template>('whatsapp_inbox.templates.list');
-    } catch {
-      // The door said no (no WhatsApp number, capability not granted, SaaS unreachable…) or the
-      // list could not be read. Said out loud: a silent failure here leaves the owner believing
-      // the verdicts on screen are today's, which is the whole defect.
-      this.metaSyncNotice = erplora().t(CATALOG, 'ui.metaSyncUnavailable');
+    } catch (e) {
+      // The door said no (no WhatsApp number, SaaS unreachable…) or the list could not be read.
+      // Said out loud: a silent failure here leaves the owner believing the verdicts on screen are
+      // today's, which is the whole defect. A permission that is off is not «try again later»:
+      // waiting never fixes it, so it is named, with the way to the switch (whatsapp_inbox#294).
+      this.metaSyncNeedsPermission = isNotifyPermissionDenied(e);
+      this.metaSyncNotice = erplora().t(
+        CATALOG,
+        this.metaSyncNeedsPermission ? 'ui.notifyPermissionTemplates' : 'ui.metaSyncUnavailable',
+      );
       return;
     }
     // `stale` = the SaaS could not reach Meta and answered from store. Those verdicts are still the
@@ -1178,7 +1187,11 @@ export class ErpWhatsappInboxTemplates extends LitElement {
           ? html`<p class="err" data-testid="whatsapp-templates-load-error">${this.ctrl.error}</p>`
           : nothing}
         ${this.metaSyncNotice
-          ? html`<section class="panel"><p data-testid="whatsapp-templates-meta-sync-notice">${this.metaSyncNotice}</p></section>`
+          ? html`<section class="panel"><p data-testid="whatsapp-templates-meta-sync-notice">${this.metaSyncNotice}</p>
+              ${this.metaSyncNeedsPermission
+                ? html`<ion-button data-testid="whatsapp-templates-open-permissions" size="small" fill="outline"
+                    @click=${() => openNotifyPermission()}>${t('ui.notifyPermissionOpen')}</ion-button>`
+                : nothing}</section>`
           : nothing}
         ${this.metaOnly.length
           ? html`<section class="panel"><p data-testid="whatsapp-templates-meta-only">${erplora().t(CATALOG, 'ui.metaOnlyTemplates', { names: this.metaOnly.join(', ') })}</p></section>`

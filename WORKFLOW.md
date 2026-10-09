@@ -82,7 +82,8 @@ lista, del más antiguo al más reciente, con fotos y stickers en línea, notas 
 el administrador ve, dentro del hilo, **Asignada a** + **Asignar/Desasignar** y **Borrar datos de
 este número**. Vacía: «Sin conversaciones.»; cargando: «Cargando…»; error de lista: mensaje con
 reintento; error del hilo: el motivo que devuelva el hub o, si no trae ninguno, «No se pudo cargar
-la conversación». Con los mensajes del plan gastados este mes, encima de la lista: «Has usado todos
+la conversación»; un adjunto sin el permiso **Notificaciones** del hub lo dice en su burbuja, con
+**Abrir Permisos** para el administrador (F06). Con los mensajes del plan gastados este mes, encima de la lista: «Has usado todos
 los mensajes de WhatsApp de tu plan este mes. Los mensajes siguen llegando aquí, pero las respuestas
 automáticas están en pausa hasta el mes que viene o hasta que mejores el plan. Contesta desde la app
 WhatsApp Business del móvil.» (F13).
@@ -107,8 +108,9 @@ la barra y acciones **Editar** y **Borrar** por fila. Panel lateral con nombre, 
 **Cabecera** (Texto/Imagen/Vídeo/Documento (PDF)) y su archivo de ejemplo, **Cuerpo**, **Ejemplos
 de las variables**, **Botones**, el veredicto de Meta con lo que hay que hacer, y
 **Añadir**/**Guardar**. Las categorías salen como «Utility», «Marketing» y «Authentication».
-Avisos encima de la tabla: Meta no se pudo consultar; plantillas de WhatsApp Manager que no se
-pueden traer (con sus nombres). Vacía: «Sin plantillas.»
+Avisos encima de la tabla: Meta no se pudo consultar; falta el permiso **Notificaciones** del hub
+(con **Abrir Permisos**, F27); plantillas de WhatsApp Manager que no se pueden traer (con sus
+nombres). Vacía: «Sin plantillas.»
 
 Pantallas de otros que usan estos flujos: **Hub: Plan** (pestaña que el hub añade al módulo con el
 consumo del mes), **Hub: Campana de avisos** (barra superior, «Clientes de WhatsApp esperando

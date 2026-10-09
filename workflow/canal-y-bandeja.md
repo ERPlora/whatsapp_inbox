@@ -96,8 +96,9 @@ Pasos:
 4. Si el dispositivo no puede reproducirlo (notas de voz en Safari), el botón dice **Descargar** y la burbuja lo explica.
 Entra: el adjunto, pedido a la plataforma solo al abrir o al pulsar.
 Sale: nada; el archivo solo se guarda mientras el hilo está abierto.
-Si falla: «No se ha podido cargar el adjunto.» con **Reintentar**; en un hub sin esa puerta, «Este adjunto aún no se puede ver aquí…».
+Si falla: «No se ha podido cargar el adjunto.» con **Reintentar**; en un hub sin esa puerta, «Este adjunto aún no se puede ver aquí…». Si la Bandeja de WhatsApp no tiene el permiso **Notificaciones** del hub (apagado hasta que el dueño lo concede), la burbuja dice «Para enseñar los adjuntos, la Bandeja de WhatsApp necesita el permiso «Notificaciones», y está apagado.», sin **Reintentar**: el administrador ve **Abrir Permisos**, que lleva a **Ajustes → Permisos** del hub, y el resto lee «Pide a quien administra el hub que lo active en Ajustes → Permisos.».
 Implicados: HUB-F245, HUB-F267, HUB_SHELL-F130
+Pendiente de enlazar: hub — HUB_SHELL-F167 (conceder un permiso a una app): adonde lleva **Abrir Permisos**; su frase de «Notificaciones» aún no dice que la Bandeja lo necesita para ver adjuntos (hub#2729)
 QA: WA-10 (discrepa)
 
 ### WHATSAPP_INBOX-F07 Asignar una conversación a alguien del equipo

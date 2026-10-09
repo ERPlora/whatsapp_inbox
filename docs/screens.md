@@ -60,7 +60,9 @@ opens, with its caption. Tapping a photo opens it large, in a full-screen viewer
 every photo of the thread (arrows or the keys ← →) and closes with ✕ or Esc. A voice note or a video gets a **Play** button, and a document a
 **Download** button with its file name: they are fetched only when tapped, because every attachment
 travels from WhatsApp through the platform. While it loads the bubble says so; if it fails it says
-so and offers **Try again**. The file is kept only while the thread is open.
+so and offers **Try again** — unless the module lacks the hub's «Notifications» permission (#294):
+then the bubble names that permission, offers no retry, and an administrator gets **Open
+Permissions** (Settings → Permissions of the hub). The file is kept only while the thread is open.
 WhatsApp sends voice notes as OGG/Opus, which Safari on iPhone, iPad and older Macs cannot play
 (#223): on a device that cannot play it the button says **Download** instead of **Play**, and the
 bubble says the device cannot play it and hands over the file (with its `.ogg`, `.mp3`… extension)
